@@ -12,7 +12,7 @@
 <header class="top">
   <div class="top-in">
     <a class="brand" onclick="go('home')">
-      <svg viewBox="0 0 64 64" fill="none"><path d="M32 3 8 12v18c0 15 10 27 24 31 14-4 24-16 24-31V12L32 3Z" fill="#0f2a5f" stroke="#5aa2ff" stroke-width="3"/><path d="m32 17 4.6 9.4 10.4 1.5-7.5 7.3 1.8 10.3L32 40.6 22.7 45.5l1.8-10.3L17 27.9l10.4-1.5L32 17Z" fill="#f2b632"/></svg>
+      <img class="brand-logo" id="brandLogo" src="img/lspd-patch.png" alt="LSPD">
       <div><b id="brandName">LSPD</b><small id="brandSub">LOS SANTOS POLICE DEPT.</small></div>
     </a>
     <div class="spacer"></div>
@@ -88,6 +88,8 @@ function renderHome(){
   const logo = s.heroLogo == null ? "img/lspd-patch.png" : s.heroLogo;
   $("heroLogo").style.display = logo ? "" : "none";
   if (logo && $("heroLogo").getAttribute("src") !== logo) $("heroLogo").src = logo;
+  const brand = logo || "img/lspd-patch.png";   // header icon follows the home page logo
+  if ($("brandLogo").getAttribute("src") !== brand) $("brandLogo").src = brand;
   $("footer").textContent = s.footer || "";
   const ann = s.announcement || {};
   $("announce").style.display = ann.text ? "" : "none";
