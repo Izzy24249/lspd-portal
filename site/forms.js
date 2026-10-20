@@ -3,6 +3,8 @@
    Draws any form definition from the admin portal in the Excel-sheet style.
    ===================================================================== */
 window.Portal = (function () {
+  // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
+  const BACKEND_NEEDS = 6;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -201,7 +203,7 @@ window.Portal = (function () {
     const theme = hud ? "theme-hud" : form.theme === "dossier" ? "theme-dossier" : "theme-sheet";
     const wm = watermarkCSS(form);
     const wmOpacity = Math.min(Math.max(Number(form.watermarkOpacity) || (theme === "theme-sheet" ? 6 : 8), 2), 30) / 100;
-    const wmHTML = wm ? `<div class="wm" style="background-image:${wm};opacity:${wmOpacity}"></div>` : "";
+    const wmHTML = wm ? `<div class="wm ${form.watermarkMode === "repeat" ? "" : "single"}" style="background-image:${wm};opacity:${wmOpacity}"></div>` : "";
     mount.innerHTML = hud
       ? `<div class="paper-wrap theme-hud"><div class="paper hud">${wmHTML}<div class="hud-grid-bg"></div><div class="hud-scan"></div>
           ${blocks.map((b, i) => `<div class="hud-b k-${esc(b.type)}" data-b="${i}">${hudBlockHTML(b, form)}</div>`).join("")}${searchLists(form)}</div></div>`
@@ -471,5 +473,5 @@ window.Portal = (function () {
     return data.config;
   }
 
-  return { ENDPOINT, render, post, loadConfig, esc, todayISO, sentence };
+  return { ENDPOINT, BACKEND_NEEDS, render, post, loadConfig, esc, todayISO, sentence };
 })();

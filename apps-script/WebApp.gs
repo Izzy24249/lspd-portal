@@ -17,6 +17,9 @@
  * Webhook URLs never belong in this file (it is stored on GitHub).
  */
 
+// Bump when the website needs something new from this file. admin.html warns if this is behind.
+const BACKEND_VERSION = 6;
+
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
 const ADMINS_SHEET_ = "Portal Admins";
@@ -115,6 +118,7 @@ function publicConfig_() {
   const cfg = getConfig_();
   return {
     version: cfg.version,
+    backend: BACKEND_VERSION,
     settings: cfg.settings,
     forms: cfg.forms.filter(f => f.status !== "hidden")
   };
@@ -602,6 +606,7 @@ function handleAdmin_(d) {
       return {
         ok: true,
         me: { username: me.username, role: me.role },
+        backend: BACKEND_VERSION,
         config: cfg,
         webhooks: maskWebhooks_(),
         admins: isOwner ? getAdmins_().map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })) : [],
@@ -806,7 +811,7 @@ function validateConfig_(c) {
       if (!f.leaderboard.countField || !keys[f.leaderboard.countField]) throw new Error(f.title + ": pick which Discord ID field the leaderboard counts.");
     }
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
-    f.theme = ["dossier", "hud"].indexOf(f.theme) !== -1 ? f.theme : "sheet";
+    f.theme = /^[a-z][a-z0-9-]{1,20}$/.test(str_(f.theme)) ? str_(f.theme) : "sheet"; // any look the website offers
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
     if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");
     f.logoUrl = str_(f.logoUrl);
@@ -1247,7 +1252,7 @@ function defaultConfig_() {
         id: "cid", status: "live", icon: "🕵️", title: "CID Report Builder",
         description: "Detective case file: involved persons, evidence log, charges, checklist and narrative.",
         submitLabel: "Submit Case Report to Discord", copyText: true,
-        theme: "hud", logoUrl: "img/cid-logo.png", watermark: "custom", watermarkUrl: "img/cid-logo.png", watermarkOpacity: 7,
+        theme: "hud", logoUrl: "img/cid-logo.png", watermark: "custom", watermarkUrl: "img/cid-logo.png", watermarkOpacity: 11, watermarkMode: "single",
         webhookId: "cid-forum", color: "#eab308",
         embedTitle: "🕵️ LSPD CID Case Report — {cidCaseNo}", threadTitle: "{cidCaseNo} | {cidType}",
         archiveSheet: "CID Records",

@@ -315,12 +315,26 @@ $("logoutBtn").onclick = async () => {
 async function loadAll(keepEdits) {
   const res = await api("getAll");
   ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log;
+  showBackendWarning(res.backend || 0);
   if (!keepEdits) { CFG = res.config; VERSION = res.config.version; BASE = JSON.stringify(CFG); }
   $("loginView").style.display = "none"; $("bootMsg").style.display = "none"; $("appView").style.display = "";
   $("who").style.display = ""; $("whoName").textContent = ME.username;
   $("whoRole").textContent = ME.role; $("whoRole").className = "badge " + (ME.role === "owner" ? "owner" : "");
   if (EDIT && !CFG.forms.some(f => f.id === EDIT)) EDIT = null;
   dirty(); renderPage();
+}
+
+// Google is running an older WebApp.gs than this website needs -> saves can lose new settings.
+function showBackendWarning(have) {
+  let el = $("backendWarn");
+  if (have >= Portal.BACKEND_NEEDS) { if (el) el.remove(); return; }
+  if (!el) {
+    el = h("div", { id: "backendWarn", class: "maint", style: "text-align:left;margin-bottom:18px" });
+    $("appView").prepend(el);
+  }
+  el.innerHTML = "";
+  el.append(h("b", { text: "⚠️ Your Google Apps Script is out of date " }), "(running version " + (have || "1") + ", this site needs " + Portal.BACKEND_NEEDS + "). " +
+    "Some settings, like newer looks, will reset when you save. Fix: paste the latest WebApp.gs into Extensions → Apps Script, then Deploy → Manage deployments → pencil → New version → Deploy, and reload this page.");
 }
 
 $("saveBtn").onclick = async () => {
@@ -500,6 +514,7 @@ function pageEditor(page) {
       field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"], ["hud", "Futuristic HUD (glass, neon)"]] })),
       field("Watermark logo", bind(form, "watermark", { type: "select", structural: true, options: [["", "None"], ["cid", "LSPD CID seal (built in)"], ["custom", "My own image…"]] }))),
     form.watermark === "custom" ? field("Watermark image", bind(form, "watermarkUrl", { placeholder: "img/cid-logo.png" }), "A file on your site (like img/cid-logo.png) or an https:// link. Transparent PNGs look best.") : null,
+    form.watermark ? field("Watermark layout", bind(form, "watermarkMode", { type: "select", options: [["", "One big logo behind the form"], ["repeat", "Repeating down the page"]] })) : null,
     form.watermark ? field("Watermark strength (%)", bind(form, "watermarkOpacity", { type: "number", placeholder: form.theme === "dossier" ? "8" : "6", set: v => Number(v) || "" }), "2 = barely visible, 30 = strong.") : null));
 
   // ---- discord ----

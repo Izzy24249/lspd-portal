@@ -290,7 +290,7 @@ table.xl tr.sumrow .sep{margin:0 10px;opacity:.4}
 .hud .hud-grid-bg{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(120,180,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,180,255,.05) 1px,transparent 1px);background-size:36px 36px;-webkit-mask-image:radial-gradient(ellipse at 50% 0%,#000 30%,transparent 75%);mask-image:radial-gradient(ellipse at 50% 0%,#000 30%,transparent 75%)}
 .hud .hud-scan{position:absolute;left:0;right:0;top:-160px;height:160px;pointer-events:none;background:linear-gradient(180deg,transparent,rgba(34,211,238,.07),transparent);animation:hudscan 9s linear infinite}
 @keyframes hudscan{from{top:-160px}to{top:100%}}
-.hud .wm{filter:grayscale(1)}
+.hud .wm{filter:grayscale(.6) brightness(1.15)}
 .hud .hud-b{position:relative;z-index:1;margin-bottom:18px}
 .hud i.req{color:var(--hr);font-style:normal;margin-left:3px}
 
@@ -316,7 +316,7 @@ table.xl tr.sumrow .sep{margin:0 10px;opacity:.4}
 .hud-fields.n1{grid-template-columns:minmax(0,1fr)}
 .hud-fields.n3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .hud-fields.n4{grid-template-columns:repeat(4,minmax(0,1fr))}
-.hud-fields.strip{padding:16px;border-radius:18px;border:1px solid var(--hl);background:rgba(10,20,40,.45)}
+.hud-fields.strip{padding:16px;border-radius:18px;border:1px solid var(--hl);background:rgba(10,20,40,.32)}
 .hud-lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--hm);margin:0 0 8px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hud-ctl{display:flex;gap:8px;align-items:center}
 .hud-ctl>*{flex:1;min-width:0}
@@ -344,7 +344,7 @@ table.xl tr.sumrow .sep{margin:0 10px;opacity:.4}
 .hud-hint{color:var(--hm);font-size:12.5px;margin:-4px 0 12px;line-height:1.5}
 
 /* section cards */
-.hud-card{position:relative;overflow:hidden;background:linear-gradient(180deg,rgba(16,28,54,.7),rgba(9,17,34,.7));border:1px solid var(--hl);border-radius:20px;padding:18px 18px 16px;
+.hud-card{position:relative;overflow:hidden;background:linear-gradient(180deg,rgba(16,28,54,.5),rgba(9,17,34,.46));border:1px solid var(--hl);border-radius:20px;padding:18px 18px 16px;
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 24px 50px -36px rgba(0,0,0,.95)}
 .hud-card::before{content:"";position:absolute;left:18px;right:18px;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(34,211,238,.7),rgba(139,92,246,.6),transparent)}
 .hud-chead{display:flex;align-items:center;gap:12px;margin-bottom:14px}
@@ -357,7 +357,7 @@ table.xl tr.sumrow .sep{margin:0 10px;opacity:.4}
 .hud-progress{height:4px;border-radius:9px;background:rgba(255,255,255,.06);overflow:hidden;margin:-4px 0 14px}
 .hud-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--hc),var(--hv));box-shadow:0 0 14px var(--hc);transition:width .45s cubic-bezier(.2,.8,.2,1)}
 .hud-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.hud-check{position:relative;display:flex;gap:13px;align-items:flex-start;padding:13px 14px;border-radius:15px;border:1px solid var(--hl);background:rgba(5,11,24,.5);cursor:pointer;transition:.2s}
+.hud-check{position:relative;display:flex;gap:13px;align-items:flex-start;padding:13px 14px;border-radius:15px;border:1px solid var(--hl);background:rgba(5,11,24,.38);cursor:pointer;transition:.2s}
 .hud-check:hover{border-color:var(--hl2);transform:translateY(-1px)}
 .hud-check input{position:absolute;opacity:0;pointer-events:none}
 .hud-check .sw{flex:none;width:38px;height:22px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid var(--hl2);position:relative;margin-top:1px;transition:.25s}
@@ -372,7 +372,7 @@ table.xl tr.sumrow .sep{margin:0 10px;opacity:.4}
 /* repeating lists */
 .hud-rhead{display:grid;gap:10px;padding:0 12px 8px;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--hm)}
 .hud-rhead .r{text-align:right;padding-right:44px}
-.hud-row{display:grid;gap:10px;align-items:center;padding:9px;border-radius:15px;border:1px solid var(--hl);background:rgba(5,11,24,.55);margin-bottom:8px;animation:hudrow .28s ease;transition:border-color .2s}
+.hud-row{display:grid;gap:10px;align-items:center;padding:9px;border-radius:15px;border:1px solid var(--hl);background:rgba(5,11,24,.4);margin-bottom:8px;animation:hudrow .28s ease;transition:border-color .2s}
 .hud-row:hover{border-color:var(--hl2)}
 .paper.hud .hud-row input.g,.paper.hud .hud-row select.g{height:42px}
 @keyframes hudrow{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
@@ -414,3 +414,7 @@ table.xl tr.sumrow .sep{margin:0 10px;opacity:.4}
 }
 @media(min-width:761px) and (max-width:1000px){.hud-fields.n4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.hud .hud-scan,.hud-emblem .ring,.hud-status .pulse{animation:none}.hud-row{animation:none}}
+
+/* one big watermark logo, centred on screen behind the form (Look > Watermark layout) */
+.paper .wm.single{background-repeat:no-repeat;background-position:center center;background-size:auto min(82vh,92vw);background-attachment:fixed}
+@supports (-webkit-touch-callout:none){.paper .wm.single{background-attachment:scroll;background-position:center 120px;background-size:92% auto}} /* iPhone/iPad ignore fixed backgrounds */
