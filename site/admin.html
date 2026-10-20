@@ -459,7 +459,9 @@ function pageEditor(page) {
     h("button", { class: "btn ghost sm", onclick: () => { EDIT = null; renderPage(); } }, "← All forms"),
     h("span", { class: "badge " + form.status, text: STATUS_TXT[form.status] }),
     h("span", { class: "help", text: "Preview:" }), seg,
-    h("button", { class: "btn ghost sm", onclick: () => fullPreview(form) }, "⛶ Full-screen preview")));
+    h("button", { class: "btn ghost sm", onclick: () => fullPreview(form) }, "⛶ Full-screen preview"),
+    h("button", { class: "btn ghost sm", title: "Copy this whole form as text (backup or share)", onclick: () => exportForm(form) }, "⇩ Export"),
+    h("button", { class: "btn ghost sm", title: "Replace this form with a pasted export", onclick: () => importForm(form) }, "⇧ Import")));
 
   const left = h("div", { style: "display:grid;gap:14px" });
   const right = h("div", { class: "preview" },
@@ -519,9 +521,9 @@ function pageEditor(page) {
       h("div", { class: "subhead" }, h("b", { text: "Rule " + (i + 1) }), ctrls(form.tags.rules, i)),
       h("div", { class: "g2" },
         field("If field", bind(r, "field", { type: "select", options: ruleFieldOpts })),
-        field("Condition", bind(r, "op", { type: "select", structural: true, options: [["contains", "contains"], ["equals", "equals exactly"], ["filled", "is filled in"], ["anyChecked", "any row is ticked (lists)"]] }))),
+        field("Condition", bind(r, "op", { type: "select", structural: true, options: [["contains", "contains"], ["equals", "equals exactly"], ["filled", "is filled in"], ["hasRows", "has any rows (lists)"], ["anyChecked", "any row is ticked (lists)"]] }))),
       h("div", { class: "g2" },
-        ["filled", "anyChecked"].includes(r.op) ? h("div") : field("Text", bind(r, "value", { placeholder: "PASS" })),
+        ["filled", "anyChecked", "hasRows"].includes(r.op) ? h("div") : field("Text", bind(r, "value", { placeholder: "PASS" })),
         field("Then add tag ID", bind(r, "tag", { placeholder: "1441894255034630226" })))));
   });
   tagBody.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { form.tags.rules.push({ field: "", op: "contains", value: "", tag: "" }); changed(true); } }, "+ Add tag rule")));
@@ -682,6 +684,45 @@ function jumpToBlock(e) {
   card.scrollIntoView({ behavior: "smooth", block: "start" });
   const first = card.querySelector(".bb input, .bb textarea, .bb select");
   if (first) setTimeout(() => first.focus({ preventScroll: true }), 400);
+}
+
+function exportForm(form) {
+  const text = JSON.stringify(form, null, 2);
+  modal(close => {
+    const ta = h("textarea", { rows: 14, readonly: true, style: "font-family:ui-monospace,Consolas,monospace;font-size:.75rem" });
+    ta.value = text;
+    const copy = h("button", { type: "button", class: "btn primary", onclick: async () => {
+      try { await navigator.clipboard.writeText(text); } catch (e) { ta.select(); document.execCommand("copy"); }
+      toast("Form copied. Keep it somewhere safe as a backup.", "ok"); close();
+    } }, "Copy to clipboard");
+    return h("div", { style: "display:grid;gap:14px" }, h("h3", { text: "Export: " + form.title }),
+      h("p", { class: "help", text: "This is the complete form. Paste it into Import on any form to copy it, or keep it as a backup before big changes." }),
+      ta, h("div", { class: "actions", style: "margin-top:0" }, h("button", { type: "button", class: "btn ghost", onclick: close }, "Close"), copy));
+  });
+}
+function importForm(form) {
+  modal(close => {
+    const ta = h("textarea", { rows: 14, placeholder: "Paste an exported form here…", style: "font-family:ui-monospace,Consolas,monospace;font-size:.75rem" });
+    const keepId = h("input", { type: "checkbox", checked: true });
+    const msg = h("div", { class: "msg" });
+    return h("form", { style: "display:grid;gap:14px", onsubmit: e => {
+      e.preventDefault();
+      let data;
+      try { data = JSON.parse(ta.value.trim()); } catch (err) { msg.textContent = "That isn't a valid export (the text must start with { and end with })."; return; }
+      if (!data || typeof data !== "object" || !Array.isArray(data.blocks) || !data.title) { msg.textContent = "That doesn't look like a form export (no title or blocks)."; return; }
+      if (!confirm("Replace everything in \"" + form.title + "\" with the pasted form? (Nothing is live until you press Save & publish.)")) return;
+      const id = form.id;
+      Object.keys(form).forEach(k => delete form[k]);
+      Object.assign(form, data);
+      if (keepId.checked || !data.id || CFG.forms.some(f => f !== form && f.id === data.id)) form.id = id;
+      EDIT = form.id; close(); changed(true);
+      toast("Imported. Check the preview, then Save & publish.", "ok");
+    } },
+      h("h3", { text: "Import into: " + form.title }),
+      h("p", { class: "help", text: "Replaces this form's layout and settings with a pasted export. You can review it in the preview before publishing, or press Discard to undo." }),
+      ta, h("label", { class: "tog" }, keepId, "Keep this form's ID (" + form.id + ") so its link, drafts and sheet tab stay the same"),
+      h("div", { class: "actions", style: "margin-top:0" }, h("button", { type: "button", class: "btn ghost", onclick: close }, "Cancel"), h("button", { class: "btn primary" }, "Import")), msg);
+  });
 }
 
 function fullPreview(form) {

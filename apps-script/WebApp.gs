@@ -303,6 +303,9 @@ function fillTemplate_(tpl, values) {
 }
 
 function ruleMatches_(r, values, repeaters) {
+  if (r.op === "hasRows") { // a list (e.g. Vehicles) has at least one filled-in row
+    return (repeaters[r.field] || []).some(row => Object.keys(row).some(k => typeof row[k] === "string" && str_(row[k])));
+  }
   if (r.op === "anyChecked") {
     return (repeaters[r.field] || []).some(row => Object.keys(row).some(k => row[k] === true));
   }
@@ -849,6 +852,12 @@ function menuResetForms() {
 // =====================================================================
 // DEFAULT FORMS (used the first time, and by "Reset forms to defaults")
 // =====================================================================
+// Charge list (from the LSPD report builder) and vehicle colours. Edit freely in admin.html afterwards.
+const CHARGES_ = ["Speeding ($250)", "Reckless Driving ($1,000)", "Illegal Parking ($250)", "Running Red Light/Stop Sign ($250)",
+  "Driving Under the Influence ($3,000)", "No Driver's License ($1,000)", "No Insurance ($250)", "No Registration ($250)",
+  "No Seatbelt ($250)", "No License Plate ($250)", "Towing Without a License ($500)", "Other Violation (fine varies)"];
+const VEHICLE_COLORS_ = ["White", "Black", "Silver", "Gray", "Red", "Blue", "Green", "Yellow", "Orange", "Brown", "Beige", "Gold", "Purple", "Maroon"];
+
 function defaultConfig_() {
   const items = arr => arr.map(x => ({ topic: x[0], standard: x[1] }));
   return {
@@ -965,9 +974,14 @@ function defaultConfig_() {
                        { id: "desc", label: "Description", type: "text" },
                        { id: "serial", label: "Serial # / Where Found", type: "text" } ],
             check: { id: "logged", label: "Logged in CAD" } },
+          { type: "repeater", id: "vehicles", title: "VEHICLES INVOLVED", addLabel: "+ Add Vehicle",
+            columns: [ { id: "plate", label: "Plate / Tag", type: "text", placeholder: "46EEK572" },
+                       { id: "color", label: "Color", type: "select", options: VEHICLE_COLORS_ },
+                       { id: "makeModel", label: "Make / Model", type: "text", placeholder: "Bravado Buffalo" } ],
+            check: { id: "plateRun", label: "Plate Run" } },
           { type: "repeater", id: "charges", title: "CHARGES", addLabel: "+ Add Charge",
             columns: [ { id: "suspect", label: "Suspect", type: "text" },
-                       { id: "charge", label: "Charge / Penal Code", type: "text", placeholder: "PC 211 - Robbery" },
+                       { id: "charge", label: "Charge", type: "select", options: CHARGES_ },
                        { id: "count", label: "Counts", type: "text", placeholder: "1" } ],
             check: { id: "warrant", label: "Warrant Req." } },
           { type: "checklist", id: "cidChecklist", title: "INVESTIGATIVE CHECKLIST", colTopic: "Task", colStandard: "Standard", colCheck: "Done", items: items([
