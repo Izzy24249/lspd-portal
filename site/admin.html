@@ -659,9 +659,37 @@ function blockBody(form, b) {
         field("Hint under the title", bind(b, "hint")),
         h("div", { class: "g2" }, field("Max characters", bind(b, "maxLength", { type: "number", set: v => Number(v) || 1000 }), "Up to 8000."),
           h("div", { style: "display:grid;gap:8px;align-self:end;padding-bottom:6px" }, toggle(b, "required", "Required"), toggle(b, "followUp", "Post as its own message(s) in the thread"))));
+      out.push(guideEditor(form, b));
       break;
   }
   return out;
+}
+
+// "Writing guide" for a big text box: step buttons with sentence starters, tips and live checks
+function guideEditor(form, b) {
+  b.guide = b.guide || { on: false, steps: [], tips: [], mention: [], keywords: [] };
+  const g = b.guide;
+  const box = h("div", { class: "sub" }, h("div", { class: "subhead" }, h("b", { text: "Writing guide for officers" })), toggle(g, "on", "Show a writing guide above this box", true));
+  if (!g.on) return box;
+  const refs = formKeys(form).filter(k => !["checklist", "longtext"].includes(k.type)).map(k => k.type === "repeater" ? "{" + k.id + ".name}" : "{" + k.id + "}");
+  box.append(h("p", { class: "help", text: "Each step is a button. Clicking it adds the sentence starter where the officer is typing. Use {fieldId} to fill in their answers, {list.column} for names from a list, or {list.column?column=Value} for only some rows (e.g. {persons.name?role=Suspect}). Anything in [brackets] is for the officer to replace." }),
+    h("div", { class: "chips" }, refs.map(r => h("span", { class: "chip", text: r }))));
+  g.steps = g.steps || [];
+  g.steps.forEach((st, i) => box.append(h("div", { class: "sub" },
+    h("div", { class: "subhead" }, h("b", { text: "Step " + (i + 1) }), ctrls(g.steps, i)),
+    h("div", { class: "g2" }, field("Button label", bind(st, "label")), field("What to cover (shown on hover)", bind(st, "help"))),
+    field("Sentence starter", bind(st, "starter", { type: "textarea", rows: 2 })))));
+  box.append(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { g.steps.push({ label: "New step", help: "", starter: "" }); changed(true); } }, "+ Add step")));
+  box.append(field("Tips (one per line)", bind(g, "tips", { type: "textarea", rows: 4, get: linesGet, set: linesSet })));
+  box.append(field("Must mention (one per line:  Label | {reference})", bind(g, "mention", { type: "textarea", rows: 2,
+    get: v => (v || []).map(m => m.label + " | " + m.ref).join("\n"),
+    set: v => linesSet(v).map(l => { const p = l.split("|"); return { label: p[0].trim(), ref: (p[1] || "").trim() }; }).filter(m => m.label && m.ref) }),
+    "Ticks green once every value appears in the text, e.g. Names every suspect | {persons.name?role=Suspect}"));
+  box.append(field("Keyword checks (one per line:  Label | word, other word)", bind(g, "keywords", { type: "textarea", rows: 2,
+    get: v => (v || []).map(k => k.label + " | " + (k.words || []).join(", ")).join("\n"),
+    set: v => linesSet(v).map(l => { const p = l.split("|"); return { label: p[0].trim(), words: (p[1] || "").split(",").map(w => w.trim()).filter(Boolean) }; }).filter(k => k.label && k.words.length) }),
+    "Ticks green when any of the words appear, e.g. Miranda noted | miranda"));
+  return box;
 }
 
 // settings for a "Pick from another list" column, e.g. Suspect <- Involved Persons where Role = Suspect

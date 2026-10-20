@@ -131,10 +131,26 @@ window.Portal = (function () {
         return `<tr class="gap3"><td colspan="4"></td></tr>
           <tr class="modhead"><td colspan="4">${esc(b.title)}${req(b)}</td></tr>` +
           (b.hint ? `<tr class="notehint"><td colspan="4">${esc(b.hint)}</td></tr>` : "") +
+          (hasGuide(b) ? `<tr class="guiderow"><td colspan="4">${guideHTML(b)}</td></tr>` : "") +
           `<tr class="txrow"><td colspan="4"><textarea class="g ${(b.maxLength || 1000) <= 1500 ? "short" : ""}" data-f="${esc(b.id)}" maxlength="${b.maxLength || 1000}"></textarea></td></tr>
           <tr class="cnt"><td colspan="4" data-count="${esc(b.id)}">0 / ${b.maxLength || 1000}</td></tr>`;
     }
     return "";
+  }
+
+  // ===================== NARRATIVE WRITING GUIDE (big text box option) =====================
+  const hasGuide = b => b.guide && b.guide.on && ((b.guide.steps || []).length || (b.guide.tips || []).length);
+  function guideHTML(b) {
+    const g = b.guide, steps = g.steps || [], tips = g.tips || [];
+    return `<div class="nguide" data-guide="${esc(b.id)}">
+      <div class="ng-top"><span class="ng-title">✍️ Writing guide</span>
+        ${steps.length ? `<button type="button" class="ng-btn" data-outline="${esc(b.id)}">Insert full outline</button>` : ""}
+        ${tips.length ? `<button type="button" class="ng-btn ghost" data-tips="${esc(b.id)}">Tips</button>` : ""}</div>
+      ${steps.length ? `<div class="ng-steps">${steps.map((st, i) => `<button type="button" class="ng-step" data-step="${i}" data-for="${esc(b.id)}" data-help="${esc(st.help || "")}"><b>${i + 1}</b>${esc(st.label)}</button>`).join("")}</div>
+      <div class="ng-help" data-ghelp="${esc(b.id)}">Click a step to add its sentence starter, then type over the <b>[brackets]</b>. Hover a step to see what to cover.</div>` : ""}
+      ${tips.length ? `<ul class="ng-tips" data-gtips="${esc(b.id)}" hidden>${tips.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+      <div class="ng-checks" data-gchecks="${esc(b.id)}"></div>
+    </div>`;
   }
 
   // ===================== FUTURISTIC HUD LAYOUT (form Look = "hud") =====================
@@ -186,6 +202,7 @@ window.Portal = (function () {
         return `<section class="hud-card">
           <header class="hud-chead"><h3>${esc(b.title)}${req(b)}</h3><span class="hud-chip" data-count="${esc(b.id)}">0 / ${b.maxLength || 1000}</span></header>
           ${b.hint ? `<div class="hud-hint">${esc(b.hint)}</div>` : ""}
+          ${hasGuide(b) ? guideHTML(b) : ""}
           <textarea class="g hud-ta ${(b.maxLength || 1000) <= 1500 ? "short" : ""}" data-f="${esc(b.id)}" maxlength="${b.maxLength || 1000}" placeholder="Type here…"></textarea>
         </section>`;
     }
@@ -301,8 +318,68 @@ window.Portal = (function () {
       return order.map(g => `<b>${esc(g)}</b>: ${groups[g].m} months · $${groups[g].f.toLocaleString("en-US")}`).join("<span class='sep'>|</span>");
     }
 
+    // {fieldId} -> that answer; {list.col} -> names from a list; {list.col?filterCol=Value} -> only matching rows
+    function rowsOf(id) {
+      return qa(`.dyn[data-rep="${CSS.escape(id)}"]`).map(tr => {
+        const o = {}; tr.querySelectorAll("[data-k]").forEach(el => o[el.dataset.k] = el.type === "checkbox" ? el.checked : el.value.trim()); return o;
+      });
+    }
+    function refValues(a, col, fcol, fval) {
+      if (col) return rowsOf(a).filter(r => !fcol || String(r[fcol] || "").toLowerCase() === String(fval).toLowerCase()).map(r => r[col]).filter(Boolean);
+      const f = fieldDefs.find(x => x.id === a), el = q(`[data-f="${CSS.escape(a)}"]`);
+      let v = el ? el.value.trim() : "";
+      if (v && f && f.type === "date") v = new Date(v + "T00:00").toLocaleDateString("en-US");
+      return v ? [v] : [];
+    }
+    const nice = arr => arr.length < 3 ? arr.join(" and ") : arr.slice(0, -1).join(", ") + " and " + arr[arr.length - 1];
+    const REF = /\{(\w+)(?:\.(\w+))?(?:\?(\w+)=([^}]+))?\}/g;
+    function fillStarter(tpl) {
+      return String(tpl || "").replace(REF, (m, a, col, fcol, fval) => {
+        const vals = refValues(a, col, fcol, fval);
+        if (vals.length) return nice(vals);
+        const f = fieldDefs.find(x => x.id === a);
+        return "[" + (fval ? fval.toLowerCase() + " name" : (f ? String(f.label || a).replace(/[:(].*$/, "").trim().toLowerCase() : (col || a))) + "]";
+      });
+    }
+    function insertText(ta, text) {
+      // add after the paragraph the cursor is in (never split a sentence)
+      const caret = Math.min(ta.dataset.caret != null ? +ta.dataset.caret : ta.value.length, ta.value.length);
+      const nextBreak = ta.value.indexOf("\n\n", caret);
+      const start = nextBreak === -1 ? ta.value.length : nextBreak;
+      const before = ta.value.slice(0, start).replace(/\s+$/, ""), after = ta.value.slice(start);
+      const sep = before ? "\n\n" : "";
+      ta.value = (before + sep + text + (after.trim() ? "\n\n" + after.replace(/^\s+/, "") : "")).slice(0, Number(ta.maxLength) > 0 ? ta.maxLength : 1e6);
+      const from = before.length + sep.length, br = ta.value.indexOf("[", from), end = br > -1 ? ta.value.indexOf("]", br) : -1;
+      ta.focus();
+      if (br > -1 && end > br && br < from + text.length) ta.setSelectionRange(br, end + 1); // select the first [bracket] to type over
+      else ta.setSelectionRange(from + text.length, from + text.length);
+      ta.dataset.caret = ta.selectionEnd;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    ["keyup", "mouseup", "select", "input"].forEach(ev => root.addEventListener(ev, e => {
+      if (e.target.tagName === "TEXTAREA") e.target.dataset.caret = e.target.selectionEnd;
+    }));
+    function guideChecks(b) {
+      const g = b.guide, t = (q(`[data-f="${CSS.escape(b.id)}"]`) || {}).value || "", low = t.toLowerCase(), out = [];
+      out.push(["Written in first person", /\b(I|my|me)\b/.test(t)]);
+      out.push(["Includes times", /\b\d{3,4}\s*(hrs|hours)\b|\b\d{1,2}:\d{2}\b/i.test(t)]);
+      (g.mention || []).forEach(m => {
+        const mm = /\{(\w+)(?:\.(\w+))?(?:\?(\w+)=([^}]+))?\}/.exec(m.ref || "");
+        if (!mm) return;
+        const vals = refValues(mm[1], mm[2], mm[3], mm[4]);
+        if (vals.length) out.push([m.label, vals.every(v => low.includes(v.toLowerCase()))]);
+      });
+      (g.keywords || []).forEach(k => out.push([k.label, (k.words || []).some(w => w && low.includes(String(w).toLowerCase()))]));
+      if (t.trim()) out.push(["No [brackets] left", !/\[[^\]\n]{1,80}\]/.test(t)]);
+      return out;
+    }
+
     function refresh() {
       blocks.forEach(b => {
+        if (b.type === "longtext" && hasGuide(b)) {
+          const box = q(`[data-gchecks="${CSS.escape(b.id)}"]`);
+          if (box) box.innerHTML = guideChecks(b).map(([l, ok]) => `<span class="ng-chk${ok ? " ok" : ""}">${ok ? "✓" : "○"} ${esc(l)}</span>`).join("");
+        }
         if (b.type === "repeater") {
           fillLinks(b);
           const sr = b.totals && b.totals.on && q(`[data-sum="${CSS.escape(b.id)}"]`);
@@ -331,8 +408,28 @@ window.Portal = (function () {
     }
 
     // ---- events ----
+    root.addEventListener("mouseover", e => {
+      const st = e.target.closest("[data-step]");
+      if (st && st.dataset.help) { const h = q(`[data-ghelp="${CSS.escape(st.dataset.for)}"]`); if (h) h.textContent = "Step " + (+st.dataset.step + 1) + ": " + st.dataset.help; }
+    });
     root.addEventListener("click", e => {
       const t = e.target;
+      const step = t.closest("[data-step]");
+      if (step) {
+        const b = blocks.find(x => x.id === step.dataset.for), st = b.guide.steps[+step.dataset.step];
+        insertText(q(`[data-f="${CSS.escape(b.id)}"]`), fillStarter(st.starter));
+        step.classList.add("used"); return;
+      }
+      const outline = t.closest("[data-outline]");
+      if (outline) {
+        const b = blocks.find(x => x.id === outline.dataset.outline), ta = q(`[data-f="${CSS.escape(b.id)}"]`);
+        if (ta.value.trim() && !confirm("Add the full outline below what you've already written?")) return;
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        insertText(ta, b.guide.steps.map(st => fillStarter(st.starter)).join("\n\n"));
+        return;
+      }
+      const tips = t.closest("[data-tips]");
+      if (tips) { const ul = q(`[data-gtips="${CSS.escape(tips.dataset.tips)}"]`); ul.hidden = !ul.hidden; tips.classList.toggle("on", !ul.hidden); return; }
       const add = t.closest("[data-add]");
       if (add) {
         const tr = addRow(repeaters.find(b => b.id === add.dataset.add));
