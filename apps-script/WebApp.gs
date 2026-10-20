@@ -773,7 +773,10 @@ function validateConfig_(c) {
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
     f.theme = f.theme === "dossier" ? "dossier" : "sheet";
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
-    if (f.watermark === "custom" && !/^https:\/\/[^\s"'()<>\\]+$/.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image link must start with https:// and contain no spaces or quotes.");
+    const IMG_RE = /^(https:\/\/[^\s"'()<>\\]+|(?!.*\.\.)[A-Za-z0-9_\-\/.]+\.(png|jpe?g|webp|gif|svg))$/i;
+    if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");
+    f.logoUrl = str_(f.logoUrl);
+    if (f.logoUrl && !IMG_RE.test(f.logoUrl)) throw new Error(f.title + ": the header logo must be a file like img/logo.png or an https:// link (no spaces or quotes).");
     out.forms.push(f);
   });
   return out;
@@ -926,7 +929,7 @@ function defaultConfig_() {
         id: "cid", status: "live", icon: "🕵️", title: "CID Report Builder",
         description: "Detective case file: involved persons, evidence log, charges, checklist and narrative.",
         submitLabel: "Submit Case Report to Discord", copyText: true,
-        theme: "dossier", watermark: "cid", watermarkUrl: "", watermarkOpacity: 8,
+        theme: "dossier", logoUrl: "img/cid-logo.png", watermark: "custom", watermarkUrl: "img/cid-logo.png", watermarkOpacity: 7,
         webhookId: "cid-forum", color: "#eab308",
         embedTitle: "🕵️ LSPD CID Case Report — {cidCaseNo}", threadTitle: "{cidCaseNo} | {cidType}",
         archiveSheet: "CID Records",

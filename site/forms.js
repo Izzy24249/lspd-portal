@@ -34,9 +34,12 @@ window.Portal = (function () {
       <text x="200" y="540" font-size="64" letter-spacing="18">LSPD</text>
       <text x="200" y="590" font-size="30" letter-spacing="22">C · I · D</text>
     </g></svg>`;
+  // image links: https URLs, or files on this site like img/cid-logo.png
+  const IMG_RE = /^(https:\/\/[^\s"'()<>\\]+|(?!.*\.\.)[A-Za-z0-9_\-\/.]+\.(png|jpe?g|webp|gif|svg))$/i;
+  const okImg = u => IMG_RE.test(String(u || ""));
   function watermarkCSS(form) {
     if (form.watermark === "cid") return `url('data:image/svg+xml,${encodeURIComponent(CID_SEAL.replace(/\s+/g, " "))}')`;
-    if (form.watermark === "custom" && /^https:\/\/[^\s"'()<>\\]+$/.test(form.watermarkUrl || "")) return `url('${form.watermarkUrl}')`;
+    if (form.watermark === "custom" && okImg(form.watermarkUrl)) return `url('${form.watermarkUrl}')`;
     return "";
   }
 
@@ -64,10 +67,11 @@ window.Portal = (function () {
   }
   const req = f => f.required ? ' <i class="req">*</i>' : "";
 
-  function blockHTML(b) {
+  function blockHTML(b, form) {
     switch (b.type) {
       case "banner":
-        return `<tr class="banner"><td colspan="4" class="t1">${esc(b.title)}</td></tr>` +
+        return (form && okImg(form.logoUrl) ? `<tr class="banner logo"><td colspan="4"><img class="flogo" src="${esc(form.logoUrl)}" alt=""></td></tr>` : "") +
+          `<tr class="banner"><td colspan="4" class="t1">${esc(b.title)}</td></tr>` +
           (b.subtitle ? `<tr class="banner"><td colspan="4" class="t2">${esc(b.subtitle)}</td></tr>` : "") +
           `<tr class="gap3"><td colspan="4"></td></tr>`;
       case "fields": {
@@ -128,7 +132,7 @@ window.Portal = (function () {
     const wmOpacity = Math.min(Math.max(Number(form.watermarkOpacity) || (theme === "theme-dossier" ? 8 : 6), 2), 30) / 100;
     mount.innerHTML = `<div class="paper-wrap ${theme}"><div class="paper ${theme}">${wm ? `<div class="wm" style="background-image:${wm};opacity:${wmOpacity}"></div>` : ""}<table class="xl">
       <colgroup><col style="width:26.6%"><col style="width:35%"><col style="width:21.1%"><col style="width:17.3%"></colgroup>
-      <tbody>${blocks.map(blockHTML).join("")}</tbody></table></div></div>`;
+      <tbody>${blocks.map(b => blockHTML(b, form)).join("")}</tbody></table></div></div>`;
     const root = mount.querySelector("table");
     const q = sel => root.querySelector(sel);
     const qa = sel => [...root.querySelectorAll(sel)];

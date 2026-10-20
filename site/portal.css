@@ -224,7 +224,7 @@ table.xl tr.rl td{white-space:pre-line}
   background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:28px 28px}
 .paper.theme-dossier .wm{opacity:.085}
 .theme-dossier table.xl td{border-color:#252b36}
-.theme-dossier table.xl tr.banner td{background:linear-gradient(180deg,#07090c,#15110a);color:#f5d27a;border-color:#07090c}
+.theme-dossier table.xl tr.banner td{background:#0b0d11;color:#f5d27a;border-color:#07090c}
 .theme-dossier table.xl tr.banner td.t1{font-family:"Courier New",ui-monospace,monospace;letter-spacing:.14em;font-size:18px;padding:18px 175px 8px;position:relative}
 .theme-dossier table.xl tr.banner td.t1::before{content:"CASE FILE";position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:10px;letter-spacing:.3em;color:#d4a017;border:1px solid rgba(212,160,23,.5);padding:4px 8px}
 .theme-dossier table.xl tr.banner td.t1::after{content:"CONFIDENTIAL";position:absolute;right:16px;top:50%;transform:translateY(-50%) rotate(-8deg);font-size:12px;font-weight:900;letter-spacing:.22em;color:#ef4444;border:2px solid #ef4444;padding:4px 8px;opacity:.85}
@@ -260,3 +260,8 @@ table.xl tr.rl td{white-space:pre-line}
 .theme-dossier .xck .bx svg{stroke:#111}
 .theme-dossier i.req{color:#ef4444}
 @media(max-width:700px){.theme-dossier table.xl tr.banner td.t1{padding:16px 12px 8px}.theme-dossier table.xl tr.banner td.t1::before,.theme-dossier table.xl tr.banner td.t1::after{display:none}}
+
+/* header logo above a form's title (form setting "Header logo") */
+table.xl tr.banner.logo td{padding:20px 0 2px}
+.paper .flogo{width:124px;height:124px;object-fit:contain;display:block;margin:0 auto;filter:drop-shadow(0 8px 20px rgba(0,0,0,.55))}
+.paper .wm{filter:grayscale(1)}

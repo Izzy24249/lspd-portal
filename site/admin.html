@@ -456,10 +456,11 @@ function pageEditor(page) {
 
   // ---- look ----
   left.append(sec("Look", false,
+    field("Header logo (shown above the title)", bind(form, "logoUrl", { placeholder: "img/cid-logo.png" }), "Leave blank for none. Use a file in the site's img folder (img/cid-logo.png is the CID seal) or an https:// link."),
     h("div", { class: "g2" },
       field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"]] })),
       field("Watermark logo", bind(form, "watermark", { type: "select", structural: true, options: [["", "None"], ["cid", "LSPD CID seal (built in)"], ["custom", "My own image…"]] }))),
-    form.watermark === "custom" ? field("Image link (https)", bind(form, "watermarkUrl", { placeholder: "https://your-site.com/logo.png" }), "Upload a PNG to your InfinityFree site (or Discord) and paste its link. Transparent PNGs look best.") : null,
+    form.watermark === "custom" ? field("Watermark image", bind(form, "watermarkUrl", { placeholder: "img/cid-logo.png" }), "A file on your site (like img/cid-logo.png) or an https:// link. Transparent PNGs look best.") : null,
     form.watermark ? field("Watermark strength (%)", bind(form, "watermarkOpacity", { type: "number", placeholder: form.theme === "dossier" ? "8" : "6", set: v => Number(v) || "" }), "2 = barely visible, 30 = strong.") : null));
 
   // ---- discord ----
