@@ -7,12 +7,14 @@
  * Paste the Web App URL into ENDPOINT in index.html.
  *
  * The Discord webhooks live in Script Properties (server side), never in the website or in GitHub.
- * Your old submitAcademyLogButton() can stay or be deleted; this replaces it for the website.
+ * This file replaces ALL of your old script. Delete the old code (including any old onOpen()),
+ * then paste this whole file in. Only ONE onOpen() may exist in the project.
  */
 
 // ====== CONFIG ======
 // Webhook URLs are secrets, so they are NOT stored in this file (it lives on GitHub).
-// Set them in Apps Script: Project Settings (gear icon) > Script Properties > Add script property:
+// Easiest: in the Google Sheet use the "🚔 LSPD Portal" menu > Set ... webhook.
+// (They are stored in Project Settings > Script Properties under these names:)
 //   FORUM_WEBHOOK_URL        academy forum channel webhook
 //   LEADERBOARD_WEBHOOK_URL  leaderboard channel webhook
 //   CID_WEBHOOK_URL          CID forum channel webhook
@@ -440,4 +442,63 @@ function discordPost_(webhookUrl, payload, threadId) {
   let body = null;
   try { body = JSON.parse(res.getContentText()); } catch (e) {}
   return { ok: true, body: body };
+}
+
+// =====================================================================
+// SETUP MENU (in the Google Sheet: "🚔 LSPD Portal" menu at the top)
+// Lets you paste/replace webhooks without opening Project Settings.
+// If you see the menu missing, reload the Sheet once.
+// =====================================================================
+const WEBHOOK_KEYS_ = [
+  ["FORUM_WEBHOOK_URL",       "Academy forum webhook"],
+  ["LEADERBOARD_WEBHOOK_URL", "Leaderboard channel webhook"],
+  ["CID_WEBHOOK_URL",         "CID forum webhook"]
+];
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu("🚔 LSPD Portal")
+    .addItem("Set Academy forum webhook", "setForumWebhook")
+    .addItem("Set Leaderboard webhook", "setLeaderboardWebhook")
+    .addItem("Set CID forum webhook", "setCidWebhook")
+    .addSeparator()
+    .addItem("Check webhooks", "checkWebhooks")
+    .addToUi();
+}
+
+function setForumWebhook()       { promptWebhook_("FORUM_WEBHOOK_URL", "Academy forum webhook"); }
+function setLeaderboardWebhook() { promptWebhook_("LEADERBOARD_WEBHOOK_URL", "Leaderboard channel webhook"); }
+function setCidWebhook()         { promptWebhook_("CID_WEBHOOK_URL", "CID forum webhook"); }
+
+function promptWebhook_(key, label) {
+  const ui = SpreadsheetApp.getUi();
+  const current = PROPS_.getProperty(key);
+  const r = ui.prompt("Set " + label,
+    (current ? "A webhook is already saved. Pasting a new one replaces it.\n\n" : "") +
+    "Paste the Discord webhook URL (Channel > Edit > Integrations > Webhooks > Copy Webhook URL):",
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const url = r.getResponseText().trim();
+  if (!/^https:\/\/(ptb\.|canary\.)?discord(app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(url)) {
+    ui.alert("That doesn't look like a Discord webhook URL. Nothing was saved.");
+    return;
+  }
+  const check = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (check.getResponseCode() !== 200) {
+    ui.alert("Discord rejected that webhook (" + check.getResponseCode() + "). It may have been deleted or regenerated. Nothing was saved.");
+    return;
+  }
+  PROPS_.setProperty(key, url);
+  const name = JSON.parse(check.getContentText()).name || "webhook";
+  ui.alert("✅ Saved " + label + " (\"" + name + "\").\n\nNo redeploy needed: the website uses it on the next submission.");
+}
+
+function checkWebhooks() {
+  const lines = WEBHOOK_KEYS_.map(([key, label]) => {
+    const url = PROPS_.getProperty(key);
+    if (!url) return "❌ " + label + ": not set";
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return "❌ " + label + ": Discord says invalid (" + res.getResponseCode() + ")";
+    return "✅ " + label + ": OK (\"" + (JSON.parse(res.getContentText()).name || "webhook") + "\")";
+  });
+  SpreadsheetApp.getUi().alert("Webhook status\n\n" + lines.join("\n"));
 }
