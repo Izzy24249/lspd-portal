@@ -686,6 +686,7 @@ function pageSettings(page) {
   page.append(head("Portal settings", "Branding and site-wide notices. Use Save & publish at the bottom when done."));
   page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
     h("h3", { text: "Branding" }),
+    field("Home page logo (shown above the title)", bind(s, "heroLogo", { placeholder: "img/lspd-patch.png" }), "A file in the site's img folder or an https:// link. Clear it to show no logo."),
     h("div", { class: "g2" }, field("Portal name", bind(s, "portalName", { max: 40 })), field("Subtitle under the name", bind(s, "portalSub", { max: 60 }))),
     h("div", { class: "g2" }, field("Small gold tag above the title", bind(s, "heroTag", { max: 60 })), field("Footer text", bind(s, "footer", { max: 120 }))),
     field("Home page intro line", bind(s, "heroText", { max: 300 }))));

@@ -124,6 +124,8 @@ function publicConfig_() {
 // WEBHOOKS (Script Properties, never sent to the website)
 // =====================================================================
 const LEGACY_WEBHOOK_KEYS_ = { "academy-forum": "FORUM_WEBHOOK_URL", "leaderboard": "LEADERBOARD_WEBHOOK_URL", "cid-forum": "CID_WEBHOOK_URL" };
+// image links: https URLs, or files on the site like img/cid-logo.png
+const IMG_RE = /^(https:\/\/[^\s"'()<>\\]+|(?!.*\.\.)[A-Za-z0-9_\-\/.]+\.(png|jpe?g|webp|gif|svg))$/i;
 const WEBHOOK_RE_ = /^https:\/\/(ptb\.|canary\.)?discord(app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/;
 
 function getWebhooks_() {
@@ -726,9 +728,11 @@ function validateConfig_(c) {
     heroTag: clip_(str_(s.heroTag), 60),
     heroText: clip_(str_(s.heroText), 300),
     footer: clip_(str_(s.footer), 120),
+    heroLogo: s.heroLogo == null ? "img/lspd-patch.png" : str_(s.heroLogo),
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
     maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) }
   };
+  if (out.settings.heroLogo && !IMG_RE.test(out.settings.heroLogo)) throw new Error("Home page logo must be a file like img/logo.png or an https:// link.");
   c.forms.forEach(f => {
     const id = str_(f.id);
     if (!/^[a-z][a-z0-9-]{1,30}$/.test(id)) throw new Error("Form ID \"" + id + "\" must be 2-31 lowercase letters, numbers or dashes, starting with a letter.");
@@ -773,7 +777,6 @@ function validateConfig_(c) {
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
     f.theme = f.theme === "dossier" ? "dossier" : "sheet";
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
-    const IMG_RE = /^(https:\/\/[^\s"'()<>\\]+|(?!.*\.\.)[A-Za-z0-9_\-\/.]+\.(png|jpe?g|webp|gif|svg))$/i;
     if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");
     f.logoUrl = str_(f.logoUrl);
     if (f.logoUrl && !IMG_RE.test(f.logoUrl)) throw new Error(f.title + ": the header logo must be a file like img/logo.png or an https:// link (no spaces or quotes).");
@@ -855,6 +858,7 @@ function defaultConfig_() {
       heroTag: "OFFICIAL FORMS PORTAL",
       heroText: "Select a form below to file an official record to Discord.",
       footer: "LOS SANTOS POLICE DEPARTMENT · INTERNAL USE ONLY",
+      heroLogo: "img/lspd-patch.png",
       announcement: { text: "", style: "info" },
       maintenance: { on: false, message: "The forms portal is down for maintenance. Please try again shortly." }
     },

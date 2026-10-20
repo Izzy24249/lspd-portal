@@ -24,6 +24,7 @@
   <!-- HOME -->
   <section class="view active" id="view-home">
     <div class="hero">
+      <img class="hero-logo" id="heroLogo" src="img/lspd-patch.png" alt="">
       <span class="tag" id="heroTag">OFFICIAL FORMS PORTAL</span>
       <h1 id="heroName">LSPD</h1>
       <p id="heroText">Select a form below to file an official record to Discord.</p>
@@ -84,6 +85,9 @@ function renderHome(){
   $("heroTag").textContent = s.heroTag || "";
   $("heroTag").style.display = s.heroTag ? "" : "none";
   $("heroText").textContent = s.heroText || "";
+  const logo = s.heroLogo == null ? "img/lspd-patch.png" : s.heroLogo;
+  $("heroLogo").style.display = logo ? "" : "none";
+  if (logo && $("heroLogo").getAttribute("src") !== logo) $("heroLogo").src = logo;
   $("footer").textContent = s.footer || "";
   const ann = s.announcement || {};
   $("announce").style.display = ann.text ? "" : "none";

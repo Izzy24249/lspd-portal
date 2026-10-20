@@ -265,3 +265,8 @@ table.xl tr.rl td{white-space:pre-line}
 table.xl tr.banner.logo td{padding:20px 0 2px}
 .paper .flogo{width:124px;height:124px;object-fit:contain;display:block;margin:0 auto;filter:drop-shadow(0 8px 20px rgba(0,0,0,.55))}
 .paper .wm{filter:grayscale(1)}
+
+/* home page patch above the title (Portal Settings > Home page logo) */
+.hero-logo{display:block;margin:0 auto 18px;height:clamp(150px,24vw,230px);width:auto;
+  filter:drop-shadow(0 0 22px rgba(47,123,255,.45)) drop-shadow(0 14px 30px rgba(0,0,0,.6));animation:patchin .6s ease both}
+@keyframes patchin{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
