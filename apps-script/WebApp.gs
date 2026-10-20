@@ -209,18 +209,39 @@ function handleSubmit_(d) {
       archiveCols.push({ id: b.id, label: b.title || b.id, value: done + "/" + items.length + " done" +
         (done < items.length ? " | missing: " + items.filter(it => st[it.topic] !== true).map(it => it.topic).join(", ") : "") });
     } else if (b.type === "repeater") {
-      const rows = (repeaters[b.id] || []).filter(r => (b.columns || []).some(c => c.type !== "select" && str_(r[c.id])));
-      const lines = rows.map((r, i) => {
-        const parts = (b.columns || []).map((c, ci) => {
-          const v = str_(r[c.id]) || "—";
-          return ci === 0 ? "**" + v + "**" : v;
+      const cols = b.columns || [];
+      const rows = (repeaters[b.id] || []).filter(r => cols.some(c => c.type !== "select" && c.type !== "link" && str_(r[c.id])));
+      const checkTxt = r => !(b.check && b.check.id) ? "" : r[b.check.id] ? " ✅ " + (b.check.label || "") : " ▫️ no " + (b.check.label || "check");
+      let lines;
+      if (b.groupBy && cols.some(c => c.id === b.groupBy)) {
+        // one heading per suspect (or whatever the list is grouped by), their rows underneath
+        const groups = {}, order = [];
+        rows.forEach(r => { const g = str_(r[b.groupBy]) || "Unassigned"; if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(r); });
+        lines = [];
+        order.forEach(g => {
+          let head = "**" + g + "**";
+          if (b.totals && b.totals.on) {
+            const t = groups[g].reduce((a, r) => { const x = sentence_(r[b.totals.col], r[b.totals.countCol]); a.m += x.months; a.f += x.fine; return a; }, { m: 0, f: 0 });
+            head += " — " + t.m + " months · $" + t.f.toLocaleString("en-US");
+          }
+          lines.push(head);
+          groups[g].forEach(r => {
+            const parts = cols.filter(c => c.id !== b.groupBy).map(c => {
+              const v = str_(r[c.id]);
+              return c.id === (b.totals && b.totals.countCol) ? (v && v !== "1" ? "×" + v : "") : v;
+            }).filter(Boolean);
+            lines.push(clip_("　• " + (parts.join(" ") || "—") + (b.check && b.check.id && r[b.check.id] ? " ✅ " + (b.check.label || "") : ""), 1000));
+          });
         });
-        let line = "`" + (i + 1) + "` " + parts.join(" · ");
-        if (b.check && b.check.id) line += r[b.check.id] ? " ✅ " + (b.check.label || "") : " ▫️ no " + (b.check.label || "check");
-        return clip_(line, 1000);
-      });
+      } else {
+        lines = rows.map((r, i) => clip_("`" + (i + 1) + "` " + cols.map((c, ci) => { const v = str_(r[c.id]) || "—"; return ci === 0 ? "**" + v + "**" : v; }).join(" · ") + checkTxt(r), 1000));
+        if (b.totals && b.totals.on && rows.length) {
+          const t = rows.reduce((a, r) => { const x = sentence_(r[b.totals.col], r[b.totals.countCol]); a.m += x.months; a.f += x.fine; return a; }, { m: 0, f: 0 });
+          lines.push("**Total: " + t.m + " months · $" + t.f.toLocaleString("en-US") + "**");
+        }
+      }
       addListFields_(embedFields, clip_(b.title || "List", 240), lines);
-      archiveCols.push({ id: b.id, label: b.title || b.id, value: rows.map(r => (b.columns || []).map(c => str_(r[c.id])).filter(Boolean).join(" / ") + (b.check && r[b.check.id] ? " [" + b.check.label + "]" : "")).join("; ") });
+      archiveCols.push({ id: b.id, label: b.title || b.id, value: rows.map(r => cols.map(c => str_(r[c.id])).filter(Boolean).join(" / ") + (b.check && r[b.check.id] ? " [" + b.check.label + "]" : "")).join("; ") });
     } else if (b.type === "longtext") {
       const v = str_(values[b.id]).substring(0, b.maxLength || 8000);
       if (b.followUp) {
@@ -276,6 +297,13 @@ function handleSubmit_(d) {
     try { updateLeaderboard_(form); } catch (e) { warning = warning || "leaderboard not updated: " + errMsg_(e); }
   }
   return warning ? { ok: true, warning: warning } : { ok: true };
+}
+
+// Reads "(Felony, 18 Months - $9,000 Fine)" style charges; count multiplies it.
+function sentence_(text, count) {
+  const m = /(\d+)\s*Months?/i.exec(String(text || "")), f = /\$\s*([\d,]+)\s*Fine/i.exec(String(text || ""));
+  const n = Math.max(1, parseInt(count, 10) || 1);
+  return { months: m ? +m[1] * n : 0, fine: f ? +f[1].replace(/,/g, "") * n : 0 };
 }
 
 function allFields_(form) {
@@ -1257,7 +1285,8 @@ function defaultConfig_() {
                        { id: "makeModel", label: "Make / Model", type: "text", placeholder: "Bravado Buffalo" } ],
             check: { id: "plateRun", label: "Plate Run" } },
           { type: "repeater", id: "charges", title: "CHARGES", addLabel: "+ Add Charge",
-            columns: [ { id: "suspect", label: "Suspect", type: "text" },
+            groupBy: "suspect", totals: { on: true, col: "charge", countCol: "count" },
+            columns: [ { id: "suspect", label: "Suspect", type: "link", source: "persons", sourceCol: "name", filterCol: "role", filterValue: "Suspect" },
                        { id: "charge", label: "Charge (type to search)", type: "search", options: CHARGES_, placeholder: "Start typing, e.g. robbery" },
                        { id: "count", label: "Counts", type: "text", placeholder: "1" } ],
             check: { id: "warrant", label: "Warrant Req." } },

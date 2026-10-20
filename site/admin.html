@@ -612,17 +612,27 @@ function blockBody(form, b) {
         out.push(h("div", { class: "sub" },
           h("div", { class: "subhead" }, h("b", { text: "Column " + (ci + 1) }), ctrls(b.columns, ci)),
           h("div", { class: "g3" }, field("Header", bind(c, "label")), field("ID", keyInput(form, c, "id")),
-            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"]] }))),
+            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"], ["link", "Pick from another list (e.g. suspects)"]] }))),
+          c.type === "link" ? linkEditor(form, b, c) : null,
           c.type === "select" || c.type === "search"
             ? field("Options (one per line)" + ((c.options || []).length ? " · " + c.options.length + " options" : ""), bind(c, "options", { type: "textarea", rows: c.type === "search" ? 8 : 4, get: linesGet, set: linesSet }),
                 c.type === "search" ? "Officers type to filter this list and pick one, or type their own text if it's not listed." : null)
             : null,
-          c.type !== "select" ? field("Placeholder", bind(c, "placeholder")) : null));
+          c.type !== "select" && c.type !== "link" ? field("Placeholder", bind(c, "placeholder")) : null));
       });
       if (b.columns.length < 3) out.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { b.columns.push({ id: "col" + (b.columns.length + 1), label: "Column", type: "text" }); changed(true); } }, "+ Add column")));
       const on = { v: !!b.check.id };
       out.push(h("label", { class: "tog" }, h("input", { type: "checkbox", checked: on.v, onchange: e => { b.check = e.target.checked ? { id: "checked", label: "Done" } : { id: "", label: "" }; changed(true); } }), "Tick box at the end of each row"));
       if (b.check.id) out.push(h("div", { class: "g2" }, field("Tick column header", bind(b.check, "label")), field("Tick ID", keyInput(form, b.check, "id"))));
+      {
+        const colOpts = b.columns.map(c => [c.id, c.label || c.id]);
+        out.push(field("In Discord, group rows by", bind(b, "groupBy", { type: "select", options: [["", "— don't group —"]].concat(colOpts) }), "e.g. group charges under each suspect."));
+        b.totals = b.totals || { on: false, col: "", countCol: "" };
+        out.push(toggle(b.totals, "on", "Add up sentence totals (reads “N Months” and “$N Fine” in the text)", true));
+        if (b.totals.on) out.push(h("div", { class: "g2" },
+          field("Read sentences from", bind(b.totals, "col", { type: "select", options: [["", "— column —"]].concat(colOpts) })),
+          field("Multiply by (count)", bind(b.totals, "countCol", { type: "select", options: [["", "— none —"]].concat(colOpts) }))));
+      }
       break;
     case "longtext":
       out.push(h("div", { class: "g2" }, field("Title", bind(b, "title")), field("ID", keyInput(form, b, "id"))),
@@ -632,6 +642,19 @@ function blockBody(form, b) {
       break;
   }
   return out;
+}
+
+// settings for a "Pick from another list" column, e.g. Suspect <- Involved Persons where Role = Suspect
+function linkEditor(form, b, c) {
+  const lists = form.blocks.filter(x => x.type === "repeater" && x !== b);
+  const src = lists.find(x => x.id === c.source);
+  const srcCols = src ? src.columns.map(x => [x.id, x.label || x.id]) : [];
+  return h("div", { class: "g3" },
+    field("Take names from list", bind(c, "source", { type: "select", structural: true, options: [["", "— list —"]].concat(lists.map(x => [x.id, x.title || x.id])) })),
+    field("Show column", bind(c, "sourceCol", { type: "select", options: [["", "— column —"]].concat(srcCols) })),
+    field("Only rows where", h("div", { style: "display:flex;gap:6px" },
+      bind(c, "filterCol", { type: "select", options: [["", "any row"]].concat(srcCols) }),
+      bind(c, "filterValue", { placeholder: "Suspect" }))));
 }
 
 function fieldCard(form, b, f, fi) {

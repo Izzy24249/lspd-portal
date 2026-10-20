@@ -273,3 +273,8 @@ table.xl tr.banner.logo td{padding:20px 0 2px}
 
 /* header patch next to the LSPD name */
 .brand .brand-logo{height:46px;width:auto;display:block;filter:drop-shadow(0 0 8px rgba(47,123,255,.55))}
+
+/* sentence totals under a list (e.g. CID charges) */
+table.xl tr.sumrow td{background:#FFF8E1;font-weight:600;font-size:13px;padding:8px 12px;color:#5b4300}
+table.xl tr.sumrow .sep{margin:0 10px;opacity:.4}
+.theme-dossier table.xl tr.sumrow td{background:rgba(212,160,23,.1);color:#f5d27a;border-color:#3a3220}

@@ -43,6 +43,13 @@ window.Portal = (function () {
     return "";
   }
 
+  // Reads "(Felony, 18 Months - $9,000 Fine)" style charges; count multiplies it.
+  function sentence(text, count) {
+    const m = /(\d+)\s*Months?/i.exec(text || ""), f = /\$\s*([\d,]+)\s*Fine/i.exec(text || "");
+    const n = Math.max(1, parseInt(count, 10) || 1);
+    return { any: !!(m || f), months: m ? +m[1] * n : 0, fine: f ? +f[1].replace(/,/g, "") * n : 0 };
+  }
+
   // "Searchable list" columns: a text box with type-to-filter suggestions (HTML datalist)
   const listId = (b, c) => "dl-" + b.id + "-" + c.id;
   function searchLists(form) {
@@ -115,6 +122,7 @@ window.Portal = (function () {
           <tr class="colhdr">${cols.map((c, i) => `<td colspan="${sp[i]}">${esc(c.label)}</td>`).join("")}<td>${esc(b.check && b.check.id ? b.check.label : "")}</td></tr>
           <tr class="empty" data-empty="${esc(b.id)}"><td colspan="4">None added.</td></tr>
           <tr class="anchor" data-anchor="${esc(b.id)}" style="display:none"><td colspan="4"></td></tr>
+          ${b.totals && b.totals.on ? `<tr class="sumrow" data-sum="${esc(b.id)}" style="display:none"><td colspan="4"></td></tr>` : ""}
           <tr class="addrow"><td colspan="4"><button type="button" class="mini" data-add="${esc(b.id)}">${esc(b.addLabel || "+ Add Row")}</button></td></tr>`;
       }
       case "longtext":
@@ -158,12 +166,20 @@ window.Portal = (function () {
       const cols = (b.columns || []).slice(0, 3), sp = cols.length === 3 ? [1, 1, 1] : cols.length === 2 ? [1, 2] : [3];
       const tr = document.createElement("tr");
       tr.className = "dyn"; tr.dataset.rep = b.id;
-      tr.innerHTML = cols.map((c, i) => c.type === "select"
+      tr.innerHTML = cols.map((c, i) => c.type === "link"
+          ? `<td colspan="${sp[i]}"><select class="g c" data-k="${esc(c.id)}" data-link="1"></select></td>`
+          : c.type === "select"
           ? `<td colspan="${sp[i]}"><select class="g c" data-k="${esc(c.id)}">${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select></td>`
           : `<td colspan="${sp[i]}"><input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"${c.type === "search" ? ` list="${esc(listId(b, c))}" autocomplete="off"` : ""}></td>`).join("") +
         `<td class="act"><div class="actcell">${b.check && b.check.id ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
+      // a new row's "pick from list" boxes default to the previous row's choice (same suspect)
+      const prev = qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"]`).pop();
+      tr.querySelectorAll("select[data-link]").forEach(el => {
+        el.dataset.v = vals ? (vals[el.dataset.k] || "") : (prev ? prev.querySelector(`[data-k="${CSS.escape(el.dataset.k)}"]`).value : "");
+      });
       if (vals) tr.querySelectorAll("[data-k]").forEach(el => {
         const v = vals[el.dataset.k];
+        if (el.dataset.link) return;
         if (el.type === "checkbox") el.checked = !!v; else if (v != null) { el.value = v; if (el.list) el.title = v; }
       });
       q(`[data-anchor="${CSS.escape(b.id)}"]`).before(tr);
@@ -171,8 +187,54 @@ window.Portal = (function () {
       return tr;
     }
 
+    // values from another list in this form, e.g. the names of rows whose Role is "Suspect"
+    function linkChoices(c) {
+      const seen = new Set();
+      qa(`tr.dyn[data-rep="${CSS.escape(c.source || "")}"]`).forEach(tr => {
+        const get = k => { const el = tr.querySelector(`[data-k="${CSS.escape(k)}"]`); return el ? el.value.trim() : ""; };
+        if (c.filterCol && c.filterValue && get(c.filterCol).toLowerCase() !== String(c.filterValue).toLowerCase()) return;
+        const v = get(c.sourceCol || ""); if (v) seen.add(v);
+      });
+      return [...seen];
+    }
+    function fillLinks(b) {
+      (b.columns || []).filter(c => c.type === "link").forEach(c => {
+        const choices = linkChoices(c);
+        qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"] select[data-k="${CSS.escape(c.id)}"]`).forEach(sel => {
+          let cur = sel.dataset.v != null ? sel.dataset.v : sel.value;
+          delete sel.dataset.v;
+          if (!cur && choices.length) cur = choices[0];
+          const opts = choices.includes(cur) || !cur ? choices.slice() : [cur].concat(choices);
+          const key = opts.join("\u0001");
+          if (sel.dataset.opts !== key) {
+            sel.innerHTML = opts.length ? opts.map(o => `<option>${esc(o)}</option>`).join("")
+              : `<option value="">— add a ${esc(String(c.filterValue || "person").toLowerCase())} above —</option>`;
+            sel.dataset.opts = key;
+          }
+          sel.value = cur || "";
+        });
+      });
+    }
+    function totalsHTML(b) {
+      const t = b.totals, groups = {}, order = [];
+      qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => {
+        const get = k => { const el = tr.querySelector(`[data-k="${CSS.escape(k)}"]`); return el ? el.value.trim() : ""; };
+        const s = sentence(get(t.col), get(t.countCol));
+        if (!s.any) return;
+        const g = (b.groupBy && get(b.groupBy)) || "Total";
+        if (!groups[g]) { groups[g] = { m: 0, f: 0 }; order.push(g); }
+        groups[g].m += s.months; groups[g].f += s.fine;
+      });
+      return order.map(g => `<b>${esc(g)}</b>: ${groups[g].m} months · $${groups[g].f.toLocaleString("en-US")}`).join("<span class='sep'>|</span>");
+    }
+
     function refresh() {
       blocks.forEach(b => {
+        if (b.type === "repeater") {
+          fillLinks(b);
+          const sr = b.totals && b.totals.on && q(`[data-sum="${CSS.escape(b.id)}"]`);
+          if (sr) { const html = totalsHTML(b); sr.style.display = html ? "" : "none"; sr.firstElementChild.innerHTML = "⚖️ Sentence total — " + html; }
+        }
         if (b.type === "checklist") {
           const boxes = qa(`[data-chk="${CSS.escape(b.id)}"]`);
           boxes.forEach(x => x.closest("tr").classList.toggle("done", x.checked));
@@ -336,5 +398,5 @@ window.Portal = (function () {
     return data.config;
   }
 
-  return { ENDPOINT, render, post, loadConfig, esc, todayISO };
+  return { ENDPOINT, render, post, loadConfig, esc, todayISO, sentence };
 })();
