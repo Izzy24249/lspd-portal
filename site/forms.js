@@ -43,6 +43,13 @@ window.Portal = (function () {
     return "";
   }
 
+  // "Searchable list" columns: a text box with type-to-filter suggestions (HTML datalist)
+  const listId = (b, c) => "dl-" + b.id + "-" + c.id;
+  function searchLists(form) {
+    return (form.blocks || []).filter(b => b.type === "repeater").map(b => (b.columns || []).filter(c => c.type === "search").map(c =>
+      `<datalist id="${esc(listId(b, c))}">${(c.options || []).map(o => `<option value="${esc(o)}"></option>`).join("")}</datalist>`).join("")).join("");
+  }
+
   // how many of the sheet's 4 columns each item spans
   function spans(n) { return n >= 4 ? [1, 1, 1, 1] : n === 3 ? [1, 2, 1] : n === 2 ? [2, 2] : [4]; }
 
@@ -132,7 +139,7 @@ window.Portal = (function () {
     const wmOpacity = Math.min(Math.max(Number(form.watermarkOpacity) || (theme === "theme-dossier" ? 8 : 6), 2), 30) / 100;
     mount.innerHTML = `<div class="paper-wrap ${theme}"><div class="paper ${theme}">${wm ? `<div class="wm" style="background-image:${wm};opacity:${wmOpacity}"></div>` : ""}<table class="xl">
       <colgroup><col style="width:26.6%"><col style="width:35%"><col style="width:21.1%"><col style="width:17.3%"></colgroup>
-      ${blocks.map((b, i) => `<tbody data-b="${i}">${blockHTML(b, form)}</tbody>`).join("")}</table></div></div>`;
+      ${blocks.map((b, i) => `<tbody data-b="${i}">${blockHTML(b, form)}</tbody>`).join("")}</table>${searchLists(form)}</div></div>`;
     const root = mount.querySelector("table");
     const q = sel => root.querySelector(sel);
     const qa = sel => [...root.querySelectorAll(sel)];
@@ -153,11 +160,11 @@ window.Portal = (function () {
       tr.className = "dyn"; tr.dataset.rep = b.id;
       tr.innerHTML = cols.map((c, i) => c.type === "select"
           ? `<td colspan="${sp[i]}"><select class="g c" data-k="${esc(c.id)}">${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select></td>`
-          : `<td colspan="${sp[i]}"><input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"></td>`).join("") +
+          : `<td colspan="${sp[i]}"><input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"${c.type === "search" ? ` list="${esc(listId(b, c))}" autocomplete="off"` : ""}></td>`).join("") +
         `<td class="act"><div class="actcell">${b.check && b.check.id ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
       if (vals) tr.querySelectorAll("[data-k]").forEach(el => {
         const v = vals[el.dataset.k];
-        if (el.type === "checkbox") el.checked = !!v; else if (v != null) el.value = v;
+        if (el.type === "checkbox") el.checked = !!v; else if (v != null) { el.value = v; if (el.list) el.title = v; }
       });
       q(`[data-anchor="${CSS.escape(b.id)}"]`).before(tr);
       refresh();
@@ -204,7 +211,7 @@ window.Portal = (function () {
       const td = t.closest("td.ck");
       if (td && !t.closest("label")) td.querySelector("input").click();
     });
-    root.addEventListener("input", () => { refresh(); changed(); });
+    root.addEventListener("input", e => { if (e.target.list) e.target.title = e.target.value; refresh(); changed(); });
     root.addEventListener("change", () => { refresh(); changed(); });
 
     // ---- data ----

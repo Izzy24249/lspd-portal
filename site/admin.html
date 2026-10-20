@@ -612,9 +612,12 @@ function blockBody(form, b) {
         out.push(h("div", { class: "sub" },
           h("div", { class: "subhead" }, h("b", { text: "Column " + (ci + 1) }), ctrls(b.columns, ci)),
           h("div", { class: "g3" }, field("Header", bind(c, "label")), field("ID", keyInput(form, c, "id")),
-            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"]] }))),
-          c.type === "select" ? field("Options (one per line)", bind(c, "options", { type: "textarea", rows: 4, get: linesGet, set: linesSet }))
-                              : field("Placeholder", bind(c, "placeholder"))));
+            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"]] }))),
+          c.type === "select" || c.type === "search"
+            ? field("Options (one per line)" + ((c.options || []).length ? " · " + c.options.length + " options" : ""), bind(c, "options", { type: "textarea", rows: c.type === "search" ? 8 : 4, get: linesGet, set: linesSet }),
+                c.type === "search" ? "Officers type to filter this list and pick one, or type their own text if it's not listed." : null)
+            : null,
+          c.type !== "select" ? field("Placeholder", bind(c, "placeholder")) : null));
       });
       if (b.columns.length < 3) out.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { b.columns.push({ id: "col" + (b.columns.length + 1), label: "Column", type: "text" }); changed(true); } }, "+ Add column")));
       const on = { v: !!b.check.id };
