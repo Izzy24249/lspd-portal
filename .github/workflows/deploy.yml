@@ -1,0 +1,39 @@
+# Uploads everything in /site to InfinityFree's htdocs folder on every push to main.
+# Only changed files are uploaded (the action keeps a small state file on the server).
+#
+# Required repo secrets (Settings > Secrets and variables > Actions > New repository secret):
+#   FTP_SERVER    e.g. ftpupload.net        (InfinityFree control panel > FTP Details > FTP Hostname)
+#   FTP_USERNAME  e.g. if0_12345678         (FTP Username)
+#   FTP_PASSWORD  your hosting account password (FTP Password, "Show")
+
+name: Deploy to InfinityFree
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/deploy.yml"]
+  workflow_dispatch: # lets you re-run it by hand from the Actions tab
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Upload site/ to htdocs over FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          port: 21
+          local-dir: ./site/
+          server-dir: /htdocs/
+          timeout: 120000

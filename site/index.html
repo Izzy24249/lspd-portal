@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LSPD</title>
+<style>
+  :root{
+    --bg:#070b14; --panel:#0e1627; --panel2:#121d33; --line:#1f2e4d;
+    --text:#e8eefc; --muted:#8fa0c4; --blue:#2f7bff; --blue2:#5aa2ff;
+    --gold:#f2b632; --green:#2ecc71; --red:#ff4d5e; --yellow:#f5c542;
+    --radius:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;
+    background-image:
+      radial-gradient(900px 500px at 85% -10%,rgba(47,123,255,.22),transparent 60%),
+      radial-gradient(700px 400px at -10% 10%,rgba(242,182,50,.10),transparent 60%),
+      linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+    background-size:auto,auto,44px 44px,44px 44px;
+    background-attachment:fixed;
+  }
+  /* police light bar */
+  .lightbar{height:4px;background:linear-gradient(90deg,var(--red),var(--red) 20%,var(--blue) 50%,var(--blue) 80%,var(--red));background-size:200% 100%;animation:sweep 3s linear infinite}
+  @keyframes sweep{to{background-position:200% 0}}
+
+  header.top{
+    position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);
+    background:rgba(7,11,20,.75);border-bottom:1px solid var(--line);
+  }
+  .top-in{max-width:1100px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:14px}
+  .brand{display:flex;align-items:center;gap:12px;cursor:pointer;text-decoration:none;color:inherit}
+  .brand svg{width:38px;height:38px;filter:drop-shadow(0 0 10px rgba(47,123,255,.6))}
+  .brand b{font-size:1.5rem;letter-spacing:.28em;font-weight:900}
+  .brand small{display:block;font-size:.62rem;letter-spacing:.22em;color:var(--muted);margin-top:-2px}
+  .spacer{flex:1}
+  .pill{font-size:.72rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted);display:flex;gap:8px;align-items:center}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+
+  main{max-width:1100px;margin:0 auto;padding:34px 22px 90px}
+  .view{display:none;animation:fade .35s ease}
+  .view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* HOME */
+  .hero{text-align:center;padding:36px 0 34px}
+  .hero h1{font-size:clamp(2.6rem,8vw,5rem);letter-spacing:.35em;font-weight:900;
+    background:linear-gradient(180deg,#fff,#7fb0ff);-webkit-background-clip:text;background-clip:text;color:transparent;padding-left:.35em}
+  .hero p{color:var(--muted);margin-top:10px;letter-spacing:.08em}
+  .hero .tag{display:inline-block;margin-bottom:14px;font-size:.7rem;letter-spacing:.3em;color:var(--gold);border:1px solid rgba(242,182,50,.4);padding:6px 14px;border-radius:999px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;margin-top:20px}
+  .card{
+    position:relative;background:linear-gradient(160deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);border-radius:var(--radius);padding:24px;cursor:pointer;
+    transition:.25s;overflow:hidden;
+  }
+  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--gold));opacity:0;transition:.25s}
+  .card:hover{transform:translateY(-4px);border-color:var(--blue);box-shadow:0 18px 40px -18px rgba(47,123,255,.55)}
+  .card:hover::before{opacity:1}
+  .card .ico{font-size:1.8rem;width:54px;height:54px;border-radius:14px;display:grid;place-items:center;background:rgba(47,123,255,.12);border:1px solid rgba(47,123,255,.3);margin-bottom:16px}
+  .card h3{font-size:1.1rem;margin-bottom:6px}
+  .card p{color:var(--muted);font-size:.88rem;line-height:1.5}
+  .card .go{margin-top:16px;font-size:.8rem;color:var(--blue2);font-weight:700;letter-spacing:.08em}
+  .card.soon{opacity:.55;cursor:not-allowed}
+  .card.soon:hover{transform:none;border-color:var(--line);box-shadow:none}
+  .card.soon .go{color:var(--muted)}
+
+  /* FORM */
+  .crumbs{color:var(--muted);font-size:.85rem;margin-bottom:18px}
+  .crumbs a{color:var(--blue2);cursor:pointer;text-decoration:none}
+  .form-title{margin-bottom:24px}
+  .form-title h2{font-size:clamp(1.3rem,3vw,1.8rem);letter-spacing:.04em}
+  .form-title p{color:var(--muted);margin-top:6px;font-size:.92rem}
+  .sec{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin-bottom:18px}
+  .sec h3{font-size:.85rem;letter-spacing:.18em;color:var(--blue2);margin-bottom:18px;display:flex;align-items:center;gap:10px;text-transform:uppercase}
+  .sec h3 em{font-style:normal;color:var(--muted);letter-spacing:.05em;text-transform:none;margin-left:auto;font-size:.78rem}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:700px){.row{grid-template-columns:1fr}}
+  label.f{display:block}
+  label.f span{display:block;font-size:.76rem;font-weight:600;color:var(--muted);margin-bottom:7px;letter-spacing:.04em}
+  label.f span i{color:var(--red);font-style:normal}
+  input[type=text],input[type=date],select,textarea{
+    width:100%;background:#0a1120;border:1px solid var(--line);color:var(--text);
+    border-radius:11px;padding:12px 14px;font:inherit;font-size:.95rem;outline:none;transition:.2s
+  }
+  input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(47,123,255,.2)}
+  input.err,select.err{border-color:var(--red);box-shadow:0 0 0 3px rgba(255,77,94,.18)}
+  textarea{min-height:130px;resize:vertical;line-height:1.5}
+  .with-btn{display:flex;gap:8px}
+  .btn{border:0;cursor:pointer;font:inherit;font-weight:700;border-radius:11px;padding:12px 18px;transition:.2s;font-size:.9rem}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+  .btn.ghost:hover{border-color:var(--blue);color:var(--blue2)}
+  .btn.primary{background:linear-gradient(135deg,var(--blue),#1b57d6);color:#fff;box-shadow:0 10px 28px -10px rgba(47,123,255,.9)}
+  .btn.primary:hover{transform:translateY(-2px)}
+  .btn:disabled{opacity:.6;cursor:wait;transform:none}
+
+  .rules{display:grid;gap:10px;margin-bottom:18px}
+  .rule{background:rgba(242,182,50,.07);border:1px solid rgba(242,182,50,.28);border-radius:11px;padding:12px 14px;font-size:.88rem;line-height:1.5}
+  .rule b{color:var(--gold)}
+  .warn{background:rgba(255,77,94,.08);border:1px solid rgba(255,77,94,.35);border-radius:11px;padding:12px 14px;font-size:.88rem;line-height:1.5;margin-bottom:16px}
+
+  .progress{height:6px;background:#0a1120;border-radius:999px;overflow:hidden;margin-bottom:16px}
+  .progress div{height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--green));transition:.3s}
+  .check{display:flex;gap:14px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;cursor:pointer;transition:.2s;background:#0a1120}
+  .check:hover{border-color:#2c4474}
+  .check.on{border-color:rgba(46,204,113,.55);background:rgba(46,204,113,.06)}
+  .check input{display:none}
+  .box{flex:none;width:24px;height:24px;border-radius:7px;border:2px solid #34466e;display:grid;place-items:center;transition:.2s;margin-top:2px}
+  .check.on .box{background:var(--green);border-color:var(--green)}
+  .box svg{width:14px;height:14px;stroke:#04120a;stroke-width:3.4;fill:none;opacity:0;transform:scale(.5);transition:.2s}
+  .check.on .box svg{opacity:1;transform:none}
+  .check b{display:block;font-size:.93rem;margin-bottom:3px}
+  .check p{color:var(--muted);font-size:.83rem;line-height:1.5}
+
+  .actions{display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px}
+  .count{font-size:.75rem;color:var(--muted);text-align:right;margin-top:6px}
+  .count.over{color:var(--red)}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translate(-50%,30px);opacity:0;pointer-events:none;
+    background:var(--panel2);border:1px solid var(--line);padding:14px 20px;border-radius:12px;z-index:50;
+    box-shadow:0 20px 50px rgba(0,0,0,.6);transition:.3s;max-width:92vw;font-size:.92rem}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast.ok{border-color:var(--green)} .toast.bad{border-color:var(--red)}
+
+  /* setup banner */
+  .setup{background:rgba(242,182,50,.08);border:1px solid rgba(242,182,50,.4);border-radius:12px;padding:12px 16px;margin-bottom:18px;font-size:.86rem;display:none}
+  footer{text-align:center;color:var(--muted);font-size:.75rem;padding:30px 0 10px;letter-spacing:.12em}
+
+  /* ===== Academy sheet (mirrors the Excel checklist) ===== */
+  .paper-wrap{overflow-x:auto;border-radius:6px;box-shadow:0 30px 70px -25px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.06)}
+  .paper{min-width:780px;background:#fff;color:#111;font-family:Calibri,"Segoe UI",Arial,sans-serif}
+  table.xl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+  table.xl td{padding:6px 10px;border:1px solid #D9D9D9;vertical-align:middle;line-height:1.35;word-wrap:break-word}
+  table.xl tr.banner td{background:#1B2A4A;color:#fff;text-align:center;border-color:#1B2A4A}
+  table.xl td.t1{font-weight:700;font-size:19px;padding:12px 10px 6px;letter-spacing:.02em}
+  table.xl td.t2{font-style:italic;font-size:13px;padding:2px 10px 12px}
+  table.xl tr.gap3 td{height:12px;padding:0;border:0}
+  table.xl tr.gap2 td{height:6px;padding:0;border:0}
+  table.xl tr.inrow td{border:0;padding:3px 6px}
+  table.xl td.lbl{text-align:right;font-weight:700;font-size:13px}
+  .paper input.g,.paper select.g{width:100%;height:32px;background:#EFEFEF;border:1px solid #D9D9D9;border-radius:0;color:#111;font:inherit;font-size:14px;padding:4px 8px;outline:none;box-shadow:none}
+  .paper input.g:focus,.paper select.g:focus{background:#fff;border-color:#4A607A;box-shadow:0 0 0 2px rgba(74,96,122,.35)}
+  .paper input.g.err,.paper select.g.err{border-color:#d00;background:#ffecec}
+  .paper .c{text-align:center;text-align-last:center}
+  table.xl tr.hdr1 td{background:#4A607A;color:#fff;font-weight:700;text-align:center;padding:7px}
+  table.xl tr.sess td{text-align:center;background:#fff;padding:4px 6px}
+  table.xl td.c{font-size:13px}
+  table.xl td.datecell{background:#F4F6F9}
+  .paper .datecell input.g{width:calc(100% - 78px);display:inline-block;vertical-align:middle}
+  .datecell button{vertical-align:middle;margin-left:4px;height:32px;padding:0 10px;border:1px solid #4A607A;background:#fff;color:#334D6E;font-weight:700;font-size:12px;cursor:pointer}
+  .datecell button:hover{background:#334D6E;color:#fff}
+  table.xl tr.golden td{color:#1B2A4A;font-weight:700;padding:6px 10px}
+  table.xl tr.warnrow td.wn{color:#f00;font-weight:700;font-style:italic;font-size:13.5px}
+  table.xl tr.warnrow td.cadlbl{font-weight:700;font-style:italic;text-align:center;border-color:#000}
+  table.xl tr.warnrow td{padding:4px 8px}
+  table.xl tr.rl td{font-style:italic;font-size:13px}
+  table.xl tr.modhead td{background:#4A607A;color:#fff;font-weight:700;font-size:14px;padding:7px 10px;position:relative}
+  table.xl tr.modhead td .mc{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:600;opacity:.85}
+  table.xl tr.colhdr td{background:#334D6E;color:#fff;font-weight:700;text-align:center;padding:6px}
+  table.xl tr.item td{background:#fff}
+  table.xl tr.item.z td{background:#F2F5F9}
+  table.xl tr.item td.ck{text-align:center;padding:0;cursor:pointer}
+  table.xl tr.item:hover td{background:#E8EEF7}
+  table.xl tr.item.done td{background:#EAF6EE}
+  table.xl tr.item td.topic{font-size:13px}
+  .xck{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-height:36px;cursor:pointer}
+  .xck input{position:absolute;opacity:0;pointer-events:none}
+  .xck .bx{width:20px;height:20px;border:2px solid #7d8aa0;background:#fff;border-radius:3px;display:grid;place-items:center;transition:.15s}
+  .xck .bx svg{width:13px;height:13px;stroke:#fff;stroke-width:3.4;fill:none;opacity:0}
+  .xck input:checked + .bx{background:#1e8449;border-color:#1e8449}
+  .xck input:checked + .bx svg{opacity:1}
+  .xck input:focus-visible + .bx{box-shadow:0 0 0 3px rgba(47,123,255,.5)}
+  table.xl tr.notehint td{font-style:italic;font-size:12px;color:#444}
+  table.xl tr.noterow td{padding:0;height:34px}
+  table.xl tr.noterow input{width:100%;height:34px;border:0;background:#fff;font:inherit;font-size:14px;padding:4px 10px;outline:none;color:#111}
+  table.xl tr.noterow input:focus{background:#FFFBE6}
+  .actions{margin-top:20px;align-items:center}
+  .draftstat{margin-right:auto;font-size:.8rem;color:var(--muted);transition:.3s}
+  .draftstat.on{color:var(--green)}
+
+  /* ===== CID Report Builder (same paper style) ===== */
+  table.xl td.ctr{text-align:center}
+  .paper .with-gen{display:flex;gap:4px}
+  .paper .with-gen input.g{flex:1;min-width:0}
+  .paper .mini{height:32px;padding:0 10px;border:1px solid #4A607A;background:#fff;color:#334D6E;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .paper .mini:hover{background:#334D6E;color:#fff}
+  table.xl tr.dyn td{background:#fff;padding:3px 4px}
+  table.xl tr.dyn:nth-child(even) td{background:#F2F5F9}
+  table.xl tr.dyn td.act{padding:0 6px}
+  .paper .actcell{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .paper .actcell .xck{width:auto;flex:1;min-height:34px}
+  .paper .rm{width:28px;height:28px;border:1px solid #D9D9D9;background:#fff;color:#b33;font-weight:700;cursor:pointer;font-size:14px;line-height:1}
+  .paper .rm:hover{background:#b33;border-color:#b33;color:#fff}
+  table.xl tr.addrow td{padding:4px;background:#F4F6F9;text-align:left}
+  table.xl tr.empty td{text-align:center;color:#888;font-style:italic;background:#fff}
+  .paper textarea.g{width:100%;min-height:200px;background:#fff;border:0;color:#111;font:inherit;font-size:14px;line-height:1.5;padding:10px 12px;outline:none;resize:vertical;border-radius:0;box-shadow:none}
+  .paper textarea.g:focus{background:#FFFBE6}
+  .paper textarea.g.short{min-height:90px}
+  .paper textarea.g.err{background:#ffecec;box-shadow:inset 0 0 0 2px #d00}
+  table.xl tr.txrow td{padding:0}
+  table.xl tr.cnt td{text-align:right;font-size:11.5px;color:#666;padding:3px 10px;border-top:0}
+  table.xl tr.cnt td.over{color:#d00;font-weight:700}
+</style>
+</head>
+<body>
+<div class="lightbar"></div>
+
+<header class="top">
+  <div class="top-in">
+    <a class="brand" onclick="go('home')">
+      <svg viewBox="0 0 64 64" fill="none"><path d="M32 3 8 12v18c0 15 10 27 24 31 14-4 24-16 24-31V12L32 3Z" fill="#0f2a5f" stroke="#5aa2ff" stroke-width="3"/><path d="m32 17 4.6 9.4 10.4 1.5-7.5 7.3 1.8 10.3L32 40.6 22.7 45.5l1.8-10.3L17 27.9l10.4-1.5L32 17Z" fill="#f2b632"/></svg>
+      <div><b>LSPD</b><small>LOS SANTOS POLICE DEPT.</small></div>
+    </a>
+    <div class="spacer"></div>
+    <div class="pill"><span class="dot"></span> Records Portal</div>
+  </div>
+</header>
+
+<main>
+  <!-- HOME -->
+  <section class="view active" id="view-home">
+    <div class="hero">
+      <span class="tag">OFFICIAL FORMS PORTAL</span>
+      <h1>LSPD</h1>
+      <p>Select a form below to file an official record to Discord.</p>
+    </div>
+    <div class="grid" id="formGrid"></div>
+  </section>
+
+  <!-- ACADEMY FORM -->
+  <section class="view" id="view-academy">
+    <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; Academy Evaluation</div>
+    <div class="setup" id="setupBanner">⚠️ <b>Not connected yet.</b> Set <code>ENDPOINT</code> near the top of the script in this file to your Apps Script Web App URL.</div>
+
+    <form id="academyForm" novalidate autocomplete="off">
+      <div class="paper-wrap"><div class="paper">
+        <table class="xl">
+          <colgroup><col style="width:26.6%"><col style="width:35%"><col style="width:21.1%"><col style="width:17.3%"></colgroup>
+          <tbody>
+            <tr class="banner"><td colspan="4" class="t1">LSPD - 1-HOUR 30-MINUTE MANDATORY ACADEMY TRAINING CHECKLIST</td></tr>
+            <tr class="banner"><td colspan="4" class="t2">Streamlined Single-Session Academy: Covers CAD, Traffic Stops, Code 5, Investigation, Medical, and SOPs.</td></tr>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="inrow">
+              <td class="lbl">Trainee callsign (L-8XX | J. Doe ):</td>
+              <td><input class="g" type="text" id="traineeCallsign"></td>
+              <td class="lbl">Trainee Discord ID:</td>
+              <td><input class="g" type="text" id="traineeDiscordId" inputmode="numeric"></td>
+            </tr>
+            <tr class="gap2"><td colspan="4"></td></tr>
+            <tr class="inrow">
+              <td class="lbl">Instructor Callsign: ( L-XXX | J. Doe )</td>
+              <td><input class="g" type="text" id="ftoCallsign"></td>
+              <td class="lbl">Instructor Discord ID:</td>
+              <td><input class="g" type="text" id="ftoDiscordId" inputmode="numeric"></td>
+            </tr>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="hdr1">
+              <td>Training Session</td><td colspan="2">Date Completed</td><td>Final Result</td>
+            </tr>
+            <tr class="sess">
+              <td class="c">1-Hour 30-Min Combined Academy Session</td>
+              <td colspan="2" class="datecell"><input class="g c" type="date" id="dateCompleted"><button type="button" id="todayBtn" title="Stamp today's date">Today</button></td>
+              <td>
+                <select class="g c" id="finalResult">
+                  <option value=""></option>
+                  <option>- PASSED</option>
+                  <option>- FAILED</option>
+                  <option>- Half Way Completed</option>
+                </select>
+              </td>
+            </tr>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="golden"><td colspan="4">FTO GOLDEN RULES</td></tr>
+            <tr class="warnrow">
+              <td colspan="2" class="wn">Fingerprint all Trainee and Check profile record.<br>&nbsp;&nbsp;- if felon, do not continue training. Mark on drop down and submit this form</td>
+              <td class="cadlbl">CAD - Trainee Name Check:</td>
+              <td>
+                <select class="g c" id="cadCheck">
+                  <option value=""></option>
+                  <option>✅ Clear - No Record</option>
+                  <option>🟡 Record - Misdemeanor only</option>
+                  <option>❌ No Go - Has Felony</option>
+                </select>
+              </td>
+            </tr>
+            <tr class="rl"><td colspan="4">Rule #1 (Embrace Live Chaos): Active server calls take priority. Use them as live teaching moments. Do not penalize for server unpredictability.</td></tr>
+            <tr class="rl"><td colspan="4">Rule #2 (Keep Moving): Except during Module 1, never stay parked for more than 3 minutes. Teach while on patrol.</td></tr>
+            <tr class="rl"><td colspan="4">Rule #3 (Action Required): Need at least 1 arrest and 1 citation.</td></tr>
+          </tbody>
+          <tbody id="modules"></tbody>
+          <tbody>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="modhead"><td colspan="4">INSTRUCTOR PERFORMANCE NOTES &amp; FEEDBACK</td></tr>
+            <tr class="notehint"><td colspan="4">Note any areas of improvement, strengths, or remediation required below:</td></tr>
+            <tr class="noterow"><td colspan="4"><input class="noteLine" type="text" maxlength="250"></td></tr>
+            <tr class="noterow"><td colspan="4"><input class="noteLine" type="text" maxlength="250"></td></tr>
+            <tr class="noterow"><td colspan="4"><input class="noteLine" type="text" maxlength="250"></td></tr>
+            <tr class="noterow"><td colspan="4"><input class="noteLine" type="text" maxlength="250"></td></tr>
+          </tbody>
+        </table>
+      </div></div>
+
+      <div class="actions">
+        <span id="draftStatus" class="draftstat"></span>
+        <button type="button" class="btn ghost" id="clearBtn">Clear Form</button>
+        <button type="submit" class="btn primary" id="submitBtn">Submit Official Record to Discord</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- CID REPORT BUILDER -->
+  <section class="view" id="view-cid">
+    <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; CID Report Builder</div>
+
+    <form id="cidForm" novalidate autocomplete="off">
+      <div class="paper-wrap"><div class="paper">
+        <table class="xl">
+          <colgroup><col style="width:26.6%"><col style="width:35%"><col style="width:21.1%"><col style="width:17.3%"></colgroup>
+          <tbody>
+            <tr class="banner"><td colspan="4" class="t1">LSPD - CRIMINAL INVESTIGATION DIVISION (CID) CASE REPORT</td></tr>
+            <tr class="banner"><td colspan="4" class="t2">Detective case file: involved persons, evidence chain, charges, investigative checklist, and narrative.</td></tr>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="inrow">
+              <td class="lbl">CID Case Number:</td>
+              <td><div class="with-gen"><input class="g" type="text" id="cidCaseNo" placeholder="CID-2026-XXXX"><button type="button" class="mini" id="cidGenBtn" title="Generate a case number">Generate</button></div></td>
+              <td class="lbl">CAD Case #:</td>
+              <td><input class="g" type="text" id="cidCadNo"></td>
+            </tr>
+            <tr class="gap2"><td colspan="4"></td></tr>
+            <tr class="inrow">
+              <td class="lbl">Lead Detective: ( L-XXX | J. Doe )</td>
+              <td><input class="g" type="text" id="cidLead"></td>
+              <td class="lbl">Lead Detective Discord ID:</td>
+              <td><input class="g" type="text" id="cidLeadId" inputmode="numeric"></td>
+            </tr>
+            <tr class="gap2"><td colspan="4"></td></tr>
+            <tr class="inrow">
+              <td class="lbl">Assisting Units:</td>
+              <td><input class="g" type="text" id="cidAssist" placeholder="L-112, L-245 …"></td>
+              <td class="lbl">Supervisor Notified:</td>
+              <td><input class="g" type="text" id="cidSupervisor"></td>
+            </tr>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="hdr1"><td>Case Type</td><td>Incident Date</td><td>Location / Postal</td><td>Case Status</td></tr>
+            <tr class="sess">
+              <td><select class="g c" id="cidType"></select></td>
+              <td class="datecell"><input class="g c" type="date" id="cidDate"><button type="button" id="cidTodayBtn" title="Stamp today's date">Today</button></td>
+              <td><input class="g c" type="text" id="cidLocation" placeholder="Postal 388"></td>
+              <td><select class="g c" id="cidStatus"></select></td>
+            </tr>
+          </tbody>
+
+          <tbody id="cidDyn"></tbody>
+
+          <tbody>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="modhead" id="cidChkHead"><td colspan="4">INVESTIGATIVE CHECKLIST<span class="mc">0 / 0</span></td></tr>
+            <tr class="colhdr"><td>Task</td><td colspan="2">Standard</td><td>Done</td></tr>
+          </tbody>
+          <tbody id="cidChecks"></tbody>
+
+          <tbody>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="modhead"><td colspan="4">CASE NARRATIVE</td></tr>
+            <tr class="notehint"><td colspan="4">Who, what, when, where, how. Write in first person, chronological order, per the LSPD report-writing standard.</td></tr>
+            <tr class="txrow"><td colspan="4"><textarea class="g" id="cidNarrative" maxlength="8000"></textarea></td></tr>
+            <tr class="cnt"><td colspan="4" id="cidNarrCount">0 / 8000</td></tr>
+            <tr class="gap3"><td colspan="4"></td></tr>
+            <tr class="modhead"><td colspan="4">FOLLOW-UP / NEXT STEPS</td></tr>
+            <tr class="notehint"><td colspan="4">Outstanding leads, pending warrants, evidence awaiting results, who owns the next action.</td></tr>
+            <tr class="txrow"><td colspan="4"><textarea class="g short" id="cidFollowup" maxlength="1000"></textarea></td></tr>
+          </tbody>
+        </table>
+      </div></div>
+
+      <div class="actions">
+        <span id="cidDraftStatus" class="draftstat"></span>
+        <button type="button" class="btn ghost" id="cidCopyBtn" title="Copy a plain-text version for CAD">Copy as Text</button>
+        <button type="button" class="btn ghost" id="cidClearBtn">Clear Form</button>
+        <button type="submit" class="btn primary" id="cidSubmitBtn">Submit Case Report to Discord</button>
+      </div>
+    </form>
+  </section>
+  <footer>LOS SANTOS POLICE DEPARTMENT · INTERNAL USE ONLY</footer>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= CONFIG ================= */
+// Paste your Apps Script Web App URL here (Deploy → New deployment → Web app).
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
+
+/* ================= FORM LIST (add more here) ================= */
+const FORMS = [
+  { id:"academy", icon:"🎓", title:"Academy Evaluation", desc:"1-hour 30-minute mandatory academy training checklist and FTO sign-off.", ready:true },
+  { id:"cid", icon:"🕵️", title:"CID Report Builder", desc:"Detective case file: involved persons, evidence log, charges, checklist and narrative.", ready:true },
+  { id:"ridealong", icon:"🚓", title:"Ride-Along Report", desc:"Coming soon.", ready:false },
+  { id:"incident", icon:"📋", title:"Incident Report", desc:"Coming soon.", ready:false },
+  { id:"arrest", icon:"🚨", title:"Arrest Report", desc:"Coming soon.", ready:false },
+  { id:"citation", icon:"🧾", title:"Citation Log", desc:"Coming soon.", ready:false },
+  { id:"discipline", icon:"⚖️", title:"Commendation / Discipline", desc:"Coming soon.", ready:false }
+];
+
+/* ================= ACADEMY MODULES (matches sheet) ================= */
+const MODULES = [
+  { title:"MODULE 1: SOP, USE OF FORCE & CASE LAW (20 MIN)", items:[
+    ["Ethics & Chain of Command","Covers Integrity, Respect, Selfless Service, and proper reporting hierarchy."],
+    ["Use of Force Continuum","Governed by Reasonableness, Necessity, Proportionality. Covers 5 Tiers: Presence, Verbalization, Empty-Hand, Less-Lethal (Taser/Beanbag), and Lethal Force (IMMEDIATE THREAT)."],
+    ["California State Law Scope","This city we enforce California Law - if it's a law in California we must follow as well."],
+    ["Supreme Court Case Law","Brief review of Terry v. Ohio (Stop & Frisk), Carroll v. Ohio (Auto Exception), Mapp v. Ohio (Exclusionary Rule), and Tennessee v. Garner (IMMEDIATE THREAT standard). Refer to DOC file for further explanation."],
+    ["Bodycam & 3rd-Party Recording","Mandatory on-duty bodycam usage (/bodycam) or mandatory 3rd-party recording software (strictly required for OIS)."]
+  ]},
+  { title:"MODULE 2: CAD, RADIO & TRAFFIC STOPS (25 MIN)", items:[
+    ["CAD & MDT System Mastery","Navigating CAD tabs, running profiles, vehicles, and weapon serial numbers; filing Reports vs. Cases."],
+    ["Radio Protocols & Ten-Codes","RTO discipline, callsign formatting, 10-41/10-8, and military phonetics for plate checks."],
+    ["Traffic Stops (10-11) & Radar","Cruiser positioning (1.5-2 car lengths, 40° offset for Officer's Alleyway), safe B-post approach, Teach and avoid the Deadly Zone, and Wraith ARS 2X radar operation."],
+    ["Citations & Ticketing","Drafting and issuing citations using /citation, inventory physical handoff, unpaid fine rules (5-day doubling under Postal 388), and tag DMV registration Postal 697, 745, or 040."]
+  ]},
+  { title:"MODULE 3: INVESTIGATION, ARREST WORKFLOW & MEDICAL (30 MIN)", items:[
+    ["Evidence Gathering","Using flashlights/cameras for evidence (Casing, Blood, Vehicle fragments), talk about how to do vehicle fingerprint sweeps, and serial number checks."],
+    ["5-Day Felon Rule & Weapons","Teach correctly seizing weapons tied to felonies vs. returning Civ firearms under the 5-day felon rules. If the weapon is illegal, always seized."],
+    ["Complete Arrest Pipeline","Lawful detention, probable cause, searching, cuffing, transport, booking photo, CAD Case creation, automated fees/sentences (max limits: 55 mos / $60,000 fine), state jail transfer."],
+    ["Miranda & Report Writing","Talk about when you are required to read the suspect their Miranda Rights. Talk about the LSPD Standard for report writing."],
+    ["Medical Menu & Triage","Teach how to use the medical menu. Always check for SAFR on channel 9."]
+  ]},
+  { title:"MODULE 4: TACTICAL CODE 5 & FINAL CATCH-UP (15 MIN)", items:[
+    ["Catch-Up & Review Block","Finish covering any material not yet reviewed. Find a quiet place and complete all unchecked requirements."],
+    ["Code 5 Formation & Roles","Three-car felony stop formation, officer roles (C1-C4), verbal commands, and suspect prone positioning."],
+    ["Pursuits & Scene Control","10-80 / 10-70 callouts, primary/secondary radio handoffs, P.I.T. requests, and cone/flare taper layouts."]
+  ]}
+];
+
+/* ================= HELPERS ================= */
+const $ = id => document.getElementById(id);
+function toast(msg, type){
+  const t = $("toast"); t.textContent = msg; t.className = "toast show " + (type||"");
+  clearTimeout(toast._t); toast._t = setTimeout(()=> t.className="toast", 4200);
+}
+function go(view){
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  $("view-"+view).classList.add("active");
+  location.hash = view === "home" ? "" : view;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function todayISO(){
+  const d = new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+  return d.toISOString().slice(0,10);
+}
+
+/* ================= BUILD HOME ================= */
+$("formGrid").innerHTML = FORMS.map(f => `
+  <div class="card ${f.ready?"":"soon"}" ${f.ready?`onclick="go('${f.id}')"`:""}>
+    <div class="ico">${f.icon}</div>
+    <h3>${f.title}</h3><p>${f.desc}</p>
+    <div class="go">${f.ready?"OPEN FORM →":"COMING SOON"}</div>
+  </div>`).join("");
+
+/* ================= BUILD MODULES (same layout as the sheet) ================= */
+const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+$("modules").innerHTML = MODULES.map((m,mi)=>`
+  <tr class="gap3"><td colspan="4"></td></tr>
+  <tr class="modhead" data-mod="${mi}"><td colspan="4">${m.title}<span class="mc">0 / ${m.items.length}</span></td></tr>
+  <tr class="colhdr"><td>Training Topic</td><td colspan="2">Core Requirement &amp; Standard</td><td>Check-Off</td></tr>
+  ${m.items.map((it,ii)=>`
+  <tr class="item ${ii%2?'z':''}" data-mi="${mi}">
+    <td class="topic">${it[0]}</td>
+    <td colspan="2">${it[1]}</td>
+    <td class="ck"><label class="xck"><input type="checkbox" data-m="${mi}" data-i="${ii}"><span class="bx">${CHECK_SVG}</span></label></td>
+  </tr>`).join("")}`).join("");
+
+function refreshProgress(){
+  MODULES.forEach((m,mi)=>{
+    const boxes = document.querySelectorAll(`input[data-m="${mi}"]`);
+    const done = [...boxes].filter(b=>b.checked).length;
+    document.querySelector(`tr.modhead[data-mod="${mi}"] .mc`).textContent = done + " / " + boxes.length;
+    boxes.forEach(b=>b.closest("tr").classList.toggle("done", b.checked));
+  });
+}
+$("modules").addEventListener("change", refreshProgress);
+// clicking anywhere in the Check-Off cell toggles (the label only covers part of it)
+$("modules").addEventListener("click", e=>{
+  const td = e.target.closest("td.ck");
+  if(td && !e.target.closest("label")) td.querySelector("input").click();
+});
+
+
+$("todayBtn").onclick = ()=> $("dateCompleted").value = todayISO();
+$("dateCompleted").value = todayISO();
+
+/* ================= CLEAR ================= */
+function clearForm(){
+  $("academyForm").reset();
+  clearDraft();
+  $("dateCompleted").value = todayISO();
+  document.querySelectorAll(".err").forEach(e=>e.classList.remove("err"));
+  refreshProgress();
+}
+$("clearBtn").onclick = ()=>{ if(confirm("Clear everything on this form?")) clearForm(); };
+
+/* ================= SUBMIT ================= */
+$("academyForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  document.querySelectorAll(".err").forEach(x=>x.classList.remove("err"));
+
+  const trainee = $("traineeCallsign"), ftoId = $("ftoDiscordId");
+  let bad = false;
+  if(!trainee.value.trim()){ trainee.classList.add("err"); bad = true; toast("Missing Info: Trainee Callsign is empty.","bad"); }
+  else if(!ftoId.value.trim()){ ftoId.classList.add("err"); bad = true; toast("Missing Info: Instructor Discord ID is empty.","bad"); }
+  if(bad) return;
+
+  if(ENDPOINT.startsWith("PASTE_")){ $("setupBanner").style.display="block"; toast("Set your ENDPOINT URL first.","bad"); return; }
+
+  const payload = {
+    form: "academy",
+    traineeCallsign: trainee.value.trim(),
+    traineeDiscordId: $("traineeDiscordId").value.trim(),
+    ftoCallsign: $("ftoCallsign").value.trim(),
+    ftoDiscordId: ftoId.value.trim(),
+    dateCompleted: $("dateCompleted").value,
+    finalResult: $("finalResult").value,
+    cadCheck: $("cadCheck").value,
+    notes: [...document.querySelectorAll(".noteLine")].map(i=>i.value.trim()).filter(Boolean).join("\n"),
+    modules: MODULES.map((m,mi)=>({
+      title: m.title,
+      items: m.items.map((it,ii)=>({
+        topic: it[0],
+        checked: document.querySelector(`input[data-m="${mi}"][data-i="${ii}"]`).checked
+      }))
+    }))
+  };
+
+  const btn = $("submitBtn"); btn.disabled = true; btn.textContent = "Sending…";
+  try{
+    // text/plain avoids a CORS preflight, which Apps Script web apps don't answer.
+    const res = await fetch(ENDPOINT, { method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if(data.ok){
+      toast("Success: Official Record posted to Discord and Leaderboard updated!","ok");
+      clearForm();
+    } else {
+      toast("Error: " + (data.error || "Unknown error"),"bad");
+    }
+  }catch(err){
+    toast("Failed to send: " + err.message,"bad");
+  }finally{
+    btn.disabled = false; btn.textContent = "Submit Official Record to Discord";
+  }
+});
+
+/* ================= AUTO-SAVE DRAFT (this browser only) ================= */
+const DRAFT_KEY = "lspd_academy_draft_v1";
+const DRAFT_IDS = ["traineeCallsign","traineeDiscordId","ftoCallsign","ftoDiscordId","dateCompleted","finalResult","cadCheck"];
+function draftStatus(msg){
+  const el = $("draftStatus"); el.textContent = msg; el.classList.toggle("on", !!msg);
+}
+function collectDraft(){
+  const d = { f:{}, c:[], n:[] };
+  DRAFT_IDS.forEach(id => d.f[id] = $(id).value);
+  d.c = [...document.querySelectorAll("#modules input[type=checkbox]")].map(b=>b.checked);
+  d.n = [...document.querySelectorAll(".noteLine")].map(i=>i.value);
+  return d;
+}
+function draftIsEmpty(d){
+  return !DRAFT_IDS.some(id => id !== "dateCompleted" && d.f[id]) && !d.c.some(Boolean) && !d.n.some(Boolean);
+}
+function saveDraft(){
+  try{
+    const d = collectDraft();
+    if(draftIsEmpty(d)){ localStorage.removeItem(DRAFT_KEY); draftStatus(""); return; }
+    d.t = Date.now();
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+    draftStatus("✓ Draft auto-saved");
+  }catch(e){ /* storage blocked (private mode etc.) – form still works */ }
+}
+function clearDraft(){
+  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+  draftStatus("");
+}
+function restoreDraft(){
+  try{
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if(!raw) return;
+    const d = JSON.parse(raw);
+    DRAFT_IDS.forEach(id => { if(d.f && d.f[id] != null) $(id).value = d.f[id]; });
+    document.querySelectorAll("#modules input[type=checkbox]").forEach((b,i)=> b.checked = !!(d.c && d.c[i]));
+    document.querySelectorAll(".noteLine").forEach((el,i)=> el.value = (d.n && d.n[i]) || "");
+    refreshProgress();
+    if(!draftIsEmpty(d)){
+      toast("Restored your unsaved draft from " + new Date(d.t).toLocaleString(), "ok");
+      draftStatus("✓ Draft restored");
+    }
+  }catch(e){}
+}
+let _draftTimer;
+function queueSave(){ clearTimeout(_draftTimer); draftStatus("Saving…"); _draftTimer = setTimeout(saveDraft, 400); }
+$("academyForm").addEventListener("input", queueSave);
+$("academyForm").addEventListener("change", queueSave);
+$("todayBtn").addEventListener("click", queueSave);
+window.addEventListener("beforeunload", ()=>{ clearTimeout(_draftTimer); if($("view-academy").classList.contains("active")) saveDraft(); });
+restoreDraft();
+
+/* =====================================================================
+   CID REPORT BUILDER
+   ===================================================================== */
+const CID_TYPES = ["Homicide","Attempted Murder","Armed Robbery","Bank / Store Robbery","Burglary","Grand Theft Auto",
+  "Narcotics","Weapons Trafficking","Assault / Battery","Kidnapping","Fraud / Forgery","Gang Activity",
+  "Officer-Involved Shooting","Other"];
+const CID_STATUSES = ["🟢 Open - Active","🟡 Pending Warrant","🔵 Closed - Arrest","⚪ Closed - Cleared","⚫ Cold Case"];
+
+// Repeating sections. Edit labels/options freely; "key" values are what get sent to the backend.
+const CID_SECTIONS = [
+  { key:"persons", title:"INVOLVED PERSONS", add:"+ Add Person", headers:["Role","Name / DOB","Notes (State ID, ties, injuries)","Profile Run"],
+    cols:[ {k:"role", opts:["Suspect","Victim","Witness","Person of Interest","Complainant"]}, {k:"name", ph:"John Doe · 01/01/1990"}, {k:"notes", ph:""} ], check:"profileRun" },
+  { key:"evidence", title:"EVIDENCE LOG", add:"+ Add Evidence", headers:["Type","Description","Serial # / Where Found","Logged in CAD"],
+    cols:[ {k:"type", opts:["Shell Casing","Blood Sample","Fingerprint","Firearm","Narcotics","Vehicle / Fragment","Bodycam / Video","Photograph","Document","Other"]}, {k:"desc", ph:""}, {k:"serial", ph:""} ], check:"logged" },
+  { key:"charges", title:"CHARGES", add:"+ Add Charge", headers:["Suspect","Charge / Penal Code","Counts","Warrant Req."],
+    cols:[ {k:"suspect", ph:""}, {k:"charge", ph:"PC 211 - Robbery"}, {k:"count", ph:"1"} ], check:"warrant" }
+];
+
+const CID_CHECKS = [
+  ["Scene Secured & Documented","Perimeter set, scene photographed, bodycam running from arrival."],
+  ["Evidence Collected & Logged","Casings, blood, prints and fragments collected and entered into CAD evidence."],
+  ["Prints & Serials Run","Fingerprints run through CAD; weapon and vehicle serial numbers checked."],
+  ["Statements Taken","Victim and witness statements obtained and summarised in the narrative."],
+  ["Suspect Profiles Checked","All suspects run in CAD for priors, open warrants and the 5-day felon rule."],
+  ["Footage Reviewed","Own and assisting units' bodycam / recordings reviewed and referenced."],
+  ["Warrant / Arrest Action","Warrant requested or arrest made where probable cause exists."],
+  ["Supervisor Notified","CID supervisor briefed on case status and next steps."]
+];
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+$("cidType").innerHTML = '<option value=""></option>' + CID_TYPES.map(t=>`<option>${esc(t)}</option>`).join("");
+$("cidStatus").innerHTML = '<option value=""></option>' + CID_STATUSES.map(t=>`<option>${esc(t)}</option>`).join("");
+
+// Section scaffolding (header + column header + rows container + add button)
+$("cidDyn").innerHTML = CID_SECTIONS.map(s=>`
+  <tr class="gap3"><td colspan="4"></td></tr>
+  <tr class="modhead"><td colspan="4">${s.title}<span class="mc" id="cidCnt-${s.key}">0</span></td></tr>
+  <tr class="colhdr">${s.headers.map(h=>`<td>${esc(h)}</td>`).join("")}</tr>
+  <tr class="empty" id="cidEmpty-${s.key}"><td colspan="4">None added.</td></tr>
+  <tr class="anchor" id="cidAnchor-${s.key}" style="display:none"><td colspan="4"></td></tr>
+  <tr class="addrow"><td colspan="4"><button type="button" class="mini" data-add="${s.key}">${s.add}</button></td></tr>
+`).join("");
+
+function cidAddRow(key, vals){
+  const s = CID_SECTIONS.find(x=>x.key===key);
+  const tr = document.createElement("tr");
+  tr.className = "dyn"; tr.dataset.sec = key;
+  tr.innerHTML = s.cols.map(c => c.opts
+      ? `<td><select class="g c" data-k="${c.k}">${c.opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></td>`
+      : `<td><input class="g" type="text" data-k="${c.k}" maxlength="200" placeholder="${esc(c.ph||"")}"></td>`).join("")
+    + `<td class="act"><div class="actcell"><label class="xck"><input type="checkbox" data-k="${s.check}"><span class="bx">${CHECK_SVG}</span></label><button type="button" class="rm" title="Remove row">✕</button></div></td>`;
+  if(vals) tr.querySelectorAll("[data-k]").forEach(el=>{
+    const v = vals[el.dataset.k];
+    if(el.type === "checkbox") el.checked = !!v; else if(v != null) el.value = v;
+  });
+  $("cidAnchor-"+key).before(tr);
+  cidRefreshCounts();
+  return tr;
+}
+function cidRows(key){
+  return [...document.querySelectorAll(`#cidDyn tr.dyn[data-sec="${key}"]`)].map(tr=>{
+    const o = {};
+    tr.querySelectorAll("[data-k]").forEach(el => o[el.dataset.k] = el.type==="checkbox" ? el.checked : el.value.trim());
+    return o;
+  });
+}
+function cidRowHasData(o){ return Object.entries(o).some(([k,v]) => typeof v === "string" && v && !CID_SECTIONS.some(s=>s.cols[0].opts && s.cols[0].k===k)); }
+function cidRefreshCounts(){
+  CID_SECTIONS.forEach(s=>{
+    const n = document.querySelectorAll(`#cidDyn tr.dyn[data-sec="${s.key}"]`).length;
+    $("cidCnt-"+s.key).textContent = n + (n===1 ? " entry" : " entries");
+    $("cidEmpty-"+s.key).style.display = n ? "none" : "";
+  });
+}
+$("cidDyn").addEventListener("click", e=>{
+  const add = e.target.closest("[data-add]");
+  if(add){ const tr = cidAddRow(add.dataset.add); (tr.querySelector("input[type=text]")||tr.querySelector("select")).focus(); cidQueueSave(); return; }
+  const rm = e.target.closest(".rm");
+  if(rm){ rm.closest("tr").remove(); cidRefreshCounts(); cidQueueSave(); }
+});
+
+// Checklist (same look as the academy modules)
+$("cidChecks").innerHTML = CID_CHECKS.map((c,i)=>`
+  <tr class="item ${i%2?'z':''}">
+    <td class="topic">${esc(c[0])}</td><td colspan="2">${esc(c[1])}</td>
+    <td class="ck"><label class="xck"><input type="checkbox" data-cid-chk="${i}"><span class="bx">${CHECK_SVG}</span></label></td>
+  </tr>`).join("");
+function cidRefreshChecks(){
+  const boxes = [...document.querySelectorAll("[data-cid-chk]")];
+  boxes.forEach(b=>b.closest("tr").classList.toggle("done", b.checked));
+  document.querySelector("#cidChkHead .mc").textContent = boxes.filter(b=>b.checked).length + " / " + boxes.length;
+}
+$("cidChecks").addEventListener("change", cidRefreshChecks);
+$("cidChecks").addEventListener("click", e=>{
+  const td = e.target.closest("td.ck");
+  if(td && !e.target.closest("label")) td.querySelector("input").click();
+});
+
+// Narrative counter
+function cidCount(){
+  const n = $("cidNarrative").value.length, cell = $("cidNarrCount");
+  cell.textContent = n + " / 8000"; cell.classList.toggle("over", n > 7600);
+}
+$("cidNarrative").addEventListener("input", cidCount);
+
+// Case number + date
+function cidGenCaseNo(){
+  const d = new Date(), p = n => String(n).padStart(2,"0");
+  return `CID-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${String(Math.floor(Math.random()*9000)+1000)}`;
+}
+$("cidGenBtn").onclick = ()=>{ $("cidCaseNo").value = cidGenCaseNo(); $("cidCaseNo").classList.remove("err"); cidQueueSave(); };
+$("cidTodayBtn").onclick = ()=>{ $("cidDate").value = todayISO(); cidQueueSave(); };
+$("cidDate").value = todayISO();
+
+// Collect everything
+const CID_IDS = ["cidCaseNo","cidCadNo","cidLead","cidLeadId","cidAssist","cidSupervisor","cidType","cidDate","cidLocation","cidStatus","cidNarrative","cidFollowup"];
+function cidCollect(){
+  const v = id => $(id).value.trim();
+  const sections = {};
+  CID_SECTIONS.forEach(s => sections[s.key] = cidRows(s.key).filter(cidRowHasData));
+  return {
+    form: "cid",
+    caseNumber: v("cidCaseNo"), cadCase: v("cidCadNo"),
+    leadCallsign: v("cidLead"), leadDiscordId: v("cidLeadId"),
+    assisting: v("cidAssist"), supervisor: v("cidSupervisor"),
+    caseType: v("cidType"), incidentDate: v("cidDate"), location: v("cidLocation"), status: v("cidStatus"),
+    persons: sections.persons, evidence: sections.evidence, charges: sections.charges,
+    checklist: CID_CHECKS.map((c,i)=>({ task:c[0], done: document.querySelector(`[data-cid-chk="${i}"]`).checked })),
+    narrative: $("cidNarrative").value.trim(), followup: $("cidFollowup").value.trim()
+  };
+}
+
+// Plain-text version (for pasting into CAD)
+function cidToText(d){
+  const L = [];
+  const dt = d.incidentDate ? new Date(d.incidentDate+"T00:00").toLocaleDateString("en-US") : "";
+  L.push("LSPD CRIMINAL INVESTIGATION DIVISION — CASE REPORT", "=".repeat(52));
+  L.push(`Case #: ${d.caseNumber}${d.cadCase ? "   |   CAD #: "+d.cadCase : ""}`);
+  L.push(`Type: ${d.caseType || "-"}   |   Status: ${d.status || "-"}`);
+  L.push(`Date: ${dt || "-"}   |   Location: ${d.location || "-"}`);
+  L.push(`Lead Detective: ${d.leadCallsign || "-"}`);
+  if(d.assisting) L.push(`Assisting: ${d.assisting}`);
+  if(d.supervisor) L.push(`Supervisor Notified: ${d.supervisor}`);
+  const block = (title, rows, fmt) => { if(rows.length){ L.push("", title + ":"); rows.forEach((r,i)=>L.push(`  ${i+1}. ${fmt(r)}`)); } };
+  block("INVOLVED PERSONS", d.persons, r => `[${r.role}] ${r.name || "Unknown"}${r.notes ? " — "+r.notes : ""}${r.profileRun ? " (profile run)" : ""}`);
+  block("EVIDENCE", d.evidence, r => `[${r.type}] ${r.desc || "-"}${r.serial ? " — "+r.serial : ""}${r.logged ? " (logged in CAD)" : " (NOT LOGGED)"}`);
+  block("CHARGES", d.charges, r => `${r.suspect || "Unknown"}: ${r.charge || "-"}${r.count ? " x"+r.count : ""}${r.warrant ? " (warrant requested)" : ""}`);
+  L.push("", "CHECKLIST:"); d.checklist.forEach(c => L.push(`  [${c.done ? "X" : " "}] ${c.task}`));
+  L.push("", "NARRATIVE:", d.narrative || "-");
+  if(d.followup) L.push("", "FOLLOW-UP:", d.followup);
+  return L.join("\n");
+}
+$("cidCopyBtn").onclick = async ()=>{
+  const text = cidToText(cidCollect());
+  try{ await navigator.clipboard.writeText(text); toast("Case report copied as plain text.","ok"); }
+  catch(e){
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); toast("Case report copied as plain text.","ok"); }catch(_){ toast("Copy blocked by the browser.","bad"); }
+    ta.remove();
+  }
+};
+
+// Clear
+function cidClear(){
+  $("cidForm").reset();
+  document.querySelectorAll("#cidDyn tr.dyn").forEach(tr=>tr.remove());
+  $("cidDate").value = todayISO();
+  document.querySelectorAll("#cidForm .err").forEach(e=>e.classList.remove("err"));
+  cidRefreshCounts(); cidRefreshChecks(); cidCount(); cidClearDraft();
+}
+$("cidClearBtn").onclick = ()=>{ if(confirm("Clear everything on this case report?")) cidClear(); };
+
+// Submit
+$("cidForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  document.querySelectorAll("#cidForm .err").forEach(x=>x.classList.remove("err"));
+  const required = [["cidCaseNo","Case Number"],["cidLead","Lead Detective"],["cidLeadId","Lead Detective Discord ID"],["cidType","Case Type"],["cidStatus","Case Status"],["cidNarrative","Case Narrative"]];
+  const miss = required.find(([id]) => !$(id).value.trim());
+  if(miss){ $(miss[0]).classList.add("err"); $(miss[0]).focus(); toast("Missing Info: " + miss[1] + " is empty.","bad"); return; }
+  if(!/^\d{15,21}$/.test($("cidLeadId").value.trim())){ $("cidLeadId").classList.add("err"); toast("Discord ID should be the 17–20 digit number (Developer Mode → Copy User ID).","bad"); return; }
+
+  const payload = cidCollect();
+  const btn = $("cidSubmitBtn"); btn.disabled = true; btn.textContent = "Sending…";
+  try{
+    const res = await fetch(ENDPOINT, { method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if(data.ok){
+      toast(data.warning ? "Posted, with a warning: " + data.warning : "Success: Case " + payload.caseNumber + " filed to Discord!", data.warning ? "bad" : "ok");
+      cidClear();
+    } else toast("Error: " + (data.error || "Unknown error"),"bad");
+  }catch(err){
+    toast("Failed to send: " + err.message,"bad");
+  }finally{
+    btn.disabled = false; btn.textContent = "Submit Case Report to Discord";
+  }
+});
+
+// Auto-save draft (this browser only)
+const CID_DRAFT_KEY = "lspd_cid_draft_v1";
+function cidDraftStatus(msg){ const el = $("cidDraftStatus"); el.textContent = msg; el.classList.toggle("on", !!msg); }
+function cidDraftData(){
+  const d = { f:{}, rows:{}, c:[] };
+  CID_IDS.forEach(id => d.f[id] = $(id).value);
+  CID_SECTIONS.forEach(s => d.rows[s.key] = cidRows(s.key));
+  d.c = [...document.querySelectorAll("[data-cid-chk]")].map(b=>b.checked);
+  return d;
+}
+function cidDraftEmpty(d){
+  return !CID_IDS.some(id => id !== "cidDate" && d.f[id]) && !Object.values(d.rows).some(r=>r.length) && !d.c.some(Boolean);
+}
+function cidSaveDraft(){
+  try{
+    const d = cidDraftData();
+    if(cidDraftEmpty(d)){ localStorage.removeItem(CID_DRAFT_KEY); cidDraftStatus(""); return; }
+    d.t = Date.now(); localStorage.setItem(CID_DRAFT_KEY, JSON.stringify(d)); cidDraftStatus("✓ Draft auto-saved");
+  }catch(e){}
+}
+function cidClearDraft(){ try{ localStorage.removeItem(CID_DRAFT_KEY); }catch(e){} cidDraftStatus(""); }
+function cidRestoreDraft(){
+  try{
+    const raw = localStorage.getItem(CID_DRAFT_KEY); if(!raw) return;
+    const d = JSON.parse(raw);
+    CID_IDS.forEach(id => { if(d.f && d.f[id] != null) $(id).value = d.f[id]; });
+    CID_SECTIONS.forEach(s => ((d.rows||{})[s.key] || []).forEach(r => cidAddRow(s.key, r)));
+    document.querySelectorAll("[data-cid-chk]").forEach((b,i)=> b.checked = !!(d.c && d.c[i]));
+    cidRefreshChecks(); cidCount();
+    if(!cidDraftEmpty(d)){
+      cidDraftStatus("✓ Draft restored");
+      if(location.hash === "#cid") toast("Restored your unsaved case report from " + new Date(d.t).toLocaleString(), "ok");
+    }
+  }catch(e){}
+}
+let _cidTimer;
+function cidQueueSave(){ clearTimeout(_cidTimer); cidDraftStatus("Saving…"); _cidTimer = setTimeout(cidSaveDraft, 400); }
+$("cidForm").addEventListener("input", cidQueueSave);
+$("cidForm").addEventListener("change", cidQueueSave);
+window.addEventListener("beforeunload", ()=>{ clearTimeout(_cidTimer); if($("view-cid").classList.contains("active")) cidSaveDraft(); });
+cidRefreshCounts(); cidRefreshChecks(); cidCount();
+cidRestoreDraft();
+
+/* deep link (#academy, #cid, …) */
+const _hash = location.hash.slice(1);
+if(_hash && $("view-"+_hash)) go(_hash);
+</script>
+</body>
+</html>
