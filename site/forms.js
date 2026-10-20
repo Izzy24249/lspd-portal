@@ -139,6 +139,17 @@ window.Portal = (function () {
   }
 
   // ===================== NARRATIVE WRITING GUIDE (big text box option) =====================
+  // Built-in guides, used when a text box with this ID has never had a guide saved
+  // (so the CID narrative gets its guide without importing anything).
+  const DEFAULT_GUIDES = { cidNarrative: {"on": true, "steps": [{"label": "Call / Dispatch", "help": "How did you get involved? When, where, and who sent you?", "starter": "On {cidDate} at approximately [time] hours, I [was dispatched / responded] to {cidLocation} regarding a reported {cidType}."}, {"label": "Arrival", "help": "What did you see, hear and smell when you arrived? Who was there?", "starter": "Upon arrival, I observed [describe the scene, the people present and anything out of place]."}, {"label": "Contacts & statements", "help": "Who did you speak to and what did they tell you? Quote key words exactly.", "starter": "I made contact with {persons.name?role=Victim}, who stated \"[their words]\"."}, {"label": "Investigation", "help": "What did you do to find out what happened? CAD checks, prints, serials, footage, canvassing.", "starter": "During my investigation, I [ran / checked / reviewed] [what you did], which showed [what you found]."}, {"label": "Evidence", "help": "What did you collect, where exactly was it found, and was it logged in CAD?", "starter": "I located [evidence] at [where it was found]. I collected it and logged it into CAD evidence."}, {"label": "Suspect & arrest", "help": "How was the suspect identified? What was your probable cause? When was Miranda read?", "starter": "I identified {persons.name?role=Suspect} as the suspect(s) based on [probable cause]. I placed {persons.name?role=Suspect} under arrest at approximately [time] hours and read Miranda rights at [time] hours."}, {"label": "Outcome", "help": "How did it end? Transport, booking, and what is still open.", "starter": "{persons.name?role=Suspect} was transported to [location] and booked. This case remains [open / closed] pending [next steps]."}], "tips": ["Write in first person and past tense: \"I observed\", not \"Officer observed\" or \"I observe\".", "Tell it in the order it happened, with times (e.g. 2315 hours).", "Stick to facts you saw, heard, or were told. Leave out opinions like \"he looked guilty\".", "Quote important statements word for word in \"quotation marks\".", "Say how you know each fact: \"I saw\", \"the victim stated\", \"CAD showed\".", "Explain your probable cause for every stop, search and arrest.", "Note when Miranda rights were read if anyone was questioned in custody.", "Re-read it once: would someone who wasn't there understand exactly what happened?"], "mention": [{"label": "Names every suspect", "ref": "{persons.name?role=Suspect}"}, {"label": "Mentions the location", "ref": "{cidLocation}"}], "keywords": [{"label": "Probable cause explained", "words": ["probable cause", "based on", "because"]}, {"label": "Miranda noted", "words": ["miranda"]}]} };
+  function withDefaults(form) {
+    let changed = false;
+    const blocks = (form.blocks || []).map(b => {
+      if (b.type === "longtext" && b.guide === undefined && DEFAULT_GUIDES[b.id]) { changed = true; return Object.assign({}, b, { guide: JSON.parse(JSON.stringify(DEFAULT_GUIDES[b.id])) }); }
+      return b;
+    });
+    return changed ? Object.assign({}, form, { blocks: blocks }) : form;
+  }
   const hasGuide = b => b.guide && b.guide.on && ((b.guide.steps || []).length || (b.guide.tips || []).length);
   function guideHTML(b) {
     const g = b.guide, steps = g.steps || [], tips = g.tips || [];
@@ -215,6 +226,7 @@ window.Portal = (function () {
    */
   function render(form, mount, opts) {
     opts = opts || {};
+    form = withDefaults(form);
     const blocks = form.blocks || [];
     const hud = form.theme === "hud";
     const theme = hud ? "theme-hud" : form.theme === "dossier" ? "theme-dossier" : "theme-sheet";
@@ -570,5 +582,5 @@ window.Portal = (function () {
     return data.config;
   }
 
-  return { ENDPOINT, BACKEND_NEEDS, render, post, loadConfig, esc, todayISO, sentence };
+  return { ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, render, post, loadConfig, esc, todayISO, sentence };
 })();

@@ -316,7 +316,11 @@ async function loadAll(keepEdits) {
   const res = await api("getAll");
   ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log;
   showBackendWarning(res.backend || 0);
-  if (!keepEdits) { CFG = res.config; VERSION = res.config.version; BASE = JSON.stringify(CFG); }
+  if (!keepEdits) {
+    CFG = res.config; VERSION = res.config.version;
+    CFG.forms = CFG.forms.map(f => Portal.withDefaults(f));   // built-in guides for forms saved before guides existed
+    BASE = JSON.stringify(CFG);
+  }
   $("loginView").style.display = "none"; $("bootMsg").style.display = "none"; $("appView").style.display = "";
   $("who").style.display = ""; $("whoName").textContent = ME.username;
   $("whoRole").textContent = ME.role; $("whoRole").className = "badge " + (ME.role === "owner" ? "owner" : "");
