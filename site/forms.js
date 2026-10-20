@@ -135,6 +135,61 @@ window.Portal = (function () {
     return "";
   }
 
+  // ===================== FUTURISTIC HUD LAYOUT (form Look = "hud") =====================
+  // column widths: "narrow" | "normal" | "wide" (searchable lists default to wide)
+  const colW = c => ({ narrow: ".45fr", wide: "2.1fr" }[c.width || (c.type === "search" ? "wide" : "normal")] || "1fr");
+  const hudCols = b => (b.columns || []).slice(0, 3).map(c => "minmax(0," + colW(c) + ")").join(" ") + " " + (b.check && b.check.id ? "minmax(118px,auto)" : "44px");
+  function hudField(f) {
+    if (f.type === "static") return `<div class="hud-field"><span class="hud-lbl">${esc(f.label)}</span><div class="hud-static">${esc(f.text || "")}</div></div>`;
+    return `<div class="hud-field"><span class="hud-lbl">${esc(String(f.label || "").replace(/:\s*$/, ""))}${req(f)}</span><div class="hud-ctl">${inputHTML(f)}</div></div>`;
+  }
+  function hudBlockHTML(b, form) {
+    switch (b.type) {
+      case "banner":
+        return `<div class="hud-hero">
+          ${form && okImg(form.logoUrl) ? `<div class="hud-emblem"><span class="ring"></span><span class="ring r2"></span><img src="${esc(form.logoUrl)}" alt=""></div>` : ""}
+          <div class="hud-htext"><div class="hud-kicker">LSPD · SECURE REPORT TERMINAL</div><h2>${esc(b.title)}</h2>${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ""}</div>
+          <div class="hud-status"><span class="pulse"></span>LINK SECURE</div>
+        </div>`;
+      case "fields":
+      case "strip": {
+        const fs = b.fields || [];
+        return `<div class="hud-fields n${Math.min(fs.length, 4)}${b.type === "strip" ? " strip" : ""}">${fs.map(hudField).join("")}</div>`;
+      }
+      case "text":
+        if (b.style === "warning") return `<div class="hud-alert"><span class="ic">⚠</span><div>${esc(b.text)}</div></div>`;
+        if (b.style === "heading") return `<div class="hud-heading">${esc(b.text)}</div>`;
+        if (b.style === "hint") return `<div class="hud-hint">${esc(b.text)}</div>`;
+        return `<div class="hud-note">${esc(b.text)}</div>`;
+      case "checklist":
+        return `<section class="hud-card">
+          <header class="hud-chead"><h3>${esc(b.title)}</h3><span class="hud-chip" data-cc="${esc(b.id)}">0 / ${(b.items || []).length}</span></header>
+          <div class="hud-progress"><i data-pbar="${esc(b.id)}"></i></div>
+          <div class="hud-checks">${(b.items || []).map(it => `
+            <label class="item hud-check"><input type="checkbox" data-chk="${esc(b.id)}" data-topic="${esc(it.topic)}"><span class="sw"></span>
+              <span class="t"><b>${esc(it.topic)}</b>${it.standard ? `<small>${esc(it.standard)}</small>` : ""}</span></label>`).join("")}
+          </div></section>`;
+      case "repeater": {
+        const cols = (b.columns || []).slice(0, 3);
+        return `<section class="hud-card">
+          <header class="hud-chead"><h3>${esc(b.title)}</h3><span class="hud-chip" data-rc="${esc(b.id)}">0 entries</span></header>
+          <div class="hud-rhead" style="grid-template-columns:${hudCols(b)}">${cols.map(c => `<span>${esc(c.label)}</span>`).join("")}<span class="r">${esc(b.check && b.check.id ? b.check.label : "")}</span></div>
+          <div class="hud-empty" data-empty="${esc(b.id)}">Nothing added yet.</div>
+          <div class="anchor" data-anchor="${esc(b.id)}" style="display:none"></div>
+          ${b.totals && b.totals.on ? `<div class="hud-sum" data-sum="${esc(b.id)}" style="display:none"><span></span></div>` : ""}
+          <button type="button" class="hud-add" data-add="${esc(b.id)}"><span>＋</span>${esc(String(b.addLabel || "Add Row").replace(/^\+\s*/, ""))}</button>
+        </section>`;
+      }
+      case "longtext":
+        return `<section class="hud-card">
+          <header class="hud-chead"><h3>${esc(b.title)}${req(b)}</h3><span class="hud-chip" data-count="${esc(b.id)}">0 / ${b.maxLength || 1000}</span></header>
+          ${b.hint ? `<div class="hud-hint">${esc(b.hint)}</div>` : ""}
+          <textarea class="g hud-ta ${(b.maxLength || 1000) <= 1500 ? "short" : ""}" data-f="${esc(b.id)}" maxlength="${b.maxLength || 1000}" placeholder="Type here…"></textarea>
+        </section>`;
+    }
+    return "";
+  }
+
   /**
    * Render a form definition into `mount`. Returns a controller.
    * opts: { draft: true|false, onStatus(msg) }
@@ -142,13 +197,18 @@ window.Portal = (function () {
   function render(form, mount, opts) {
     opts = opts || {};
     const blocks = form.blocks || [];
-    const theme = form.theme === "dossier" ? "theme-dossier" : "theme-sheet";
+    const hud = form.theme === "hud";
+    const theme = hud ? "theme-hud" : form.theme === "dossier" ? "theme-dossier" : "theme-sheet";
     const wm = watermarkCSS(form);
-    const wmOpacity = Math.min(Math.max(Number(form.watermarkOpacity) || (theme === "theme-dossier" ? 8 : 6), 2), 30) / 100;
-    mount.innerHTML = `<div class="paper-wrap ${theme}"><div class="paper ${theme}">${wm ? `<div class="wm" style="background-image:${wm};opacity:${wmOpacity}"></div>` : ""}<table class="xl">
+    const wmOpacity = Math.min(Math.max(Number(form.watermarkOpacity) || (theme === "theme-sheet" ? 6 : 8), 2), 30) / 100;
+    const wmHTML = wm ? `<div class="wm" style="background-image:${wm};opacity:${wmOpacity}"></div>` : "";
+    mount.innerHTML = hud
+      ? `<div class="paper-wrap theme-hud"><div class="paper hud">${wmHTML}<div class="hud-grid-bg"></div><div class="hud-scan"></div>
+          ${blocks.map((b, i) => `<div class="hud-b k-${esc(b.type)}" data-b="${i}">${hudBlockHTML(b, form)}</div>`).join("")}${searchLists(form)}</div></div>`
+      : `<div class="paper-wrap ${theme}"><div class="paper ${theme}">${wmHTML}<table class="xl">
       <colgroup><col style="width:26.6%"><col style="width:35%"><col style="width:21.1%"><col style="width:17.3%"></colgroup>
       ${blocks.map((b, i) => `<tbody data-b="${i}">${blockHTML(b, form)}</tbody>`).join("")}</table>${searchLists(form)}</div></div>`;
-    const root = mount.querySelector("table");
+    const root = mount.querySelector(".paper");
     const q = sel => root.querySelector(sel);
     const qa = sel => [...root.querySelectorAll(sel)];
     const repeaters = blocks.filter(b => b.type === "repeater");
@@ -164,16 +224,27 @@ window.Portal = (function () {
 
     function addRow(b, vals) {
       const cols = (b.columns || []).slice(0, 3), sp = cols.length === 3 ? [1, 1, 1] : cols.length === 2 ? [1, 2] : [3];
-      const tr = document.createElement("tr");
-      tr.className = "dyn"; tr.dataset.rep = b.id;
-      tr.innerHTML = cols.map((c, i) => c.type === "link"
-          ? `<td colspan="${sp[i]}"><select class="g c" data-k="${esc(c.id)}" data-link="1"></select></td>`
+      const ctl = c => c.type === "link"
+          ? `<select class="g c" data-k="${esc(c.id)}" data-link="1"></select>`
           : c.type === "select"
-          ? `<td colspan="${sp[i]}"><select class="g c" data-k="${esc(c.id)}">${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select></td>`
-          : `<td colspan="${sp[i]}"><input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"${c.type === "search" ? ` list="${esc(listId(b, c))}" autocomplete="off"` : ""}></td>`).join("") +
-        `<td class="act"><div class="actcell">${b.check && b.check.id ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
+          ? `<select class="g c" data-k="${esc(c.id)}">${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select>`
+          : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"${c.type === "search" ? ` list="${esc(listId(b, c))}" autocomplete="off"` : ""}>`;
+      const hasCheck = b.check && b.check.id;
+      let tr;
+      if (hud) {
+        tr = document.createElement("div");
+        tr.className = "dyn hud-row"; tr.dataset.rep = b.id;
+        tr.style.gridTemplateColumns = hudCols(b);
+        tr.innerHTML = cols.map(c => `<div class="cell" data-label="${esc(c.label)}">${ctl(c)}</div>`).join("") +
+          `<div class="act">${hasCheck ? `<label class="hud-tick" title="${esc(b.check.label)}"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx"></span><em>${esc(b.check.label)}</em></label>` : ""}<button type="button" class="rm" title="Remove row">✕</button></div>`;
+      } else {
+        tr = document.createElement("tr");
+        tr.className = "dyn"; tr.dataset.rep = b.id;
+        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}">${ctl(c)}</td>`).join("") +
+          `<td class="act"><div class="actcell">${hasCheck ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
+      }
       // a new row's "pick from list" boxes default to the previous row's choice (same suspect)
-      const prev = qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"]`).pop();
+      const prev = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).pop();
       tr.querySelectorAll("select[data-link]").forEach(el => {
         el.dataset.v = vals ? (vals[el.dataset.k] || "") : (prev ? prev.querySelector(`[data-k="${CSS.escape(el.dataset.k)}"]`).value : "");
       });
@@ -190,7 +261,7 @@ window.Portal = (function () {
     // values from another list in this form, e.g. the names of rows whose Role is "Suspect"
     function linkChoices(c) {
       const seen = new Set();
-      qa(`tr.dyn[data-rep="${CSS.escape(c.source || "")}"]`).forEach(tr => {
+      qa(`.dyn[data-rep="${CSS.escape(c.source || "")}"]`).forEach(tr => {
         const get = k => { const el = tr.querySelector(`[data-k="${CSS.escape(k)}"]`); return el ? el.value.trim() : ""; };
         if (c.filterCol && c.filterValue && get(c.filterCol).toLowerCase() !== String(c.filterValue).toLowerCase()) return;
         const v = get(c.sourceCol || ""); if (v) seen.add(v);
@@ -200,7 +271,7 @@ window.Portal = (function () {
     function fillLinks(b) {
       (b.columns || []).filter(c => c.type === "link").forEach(c => {
         const choices = linkChoices(c);
-        qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"] select[data-k="${CSS.escape(c.id)}"]`).forEach(sel => {
+        qa(`.dyn[data-rep="${CSS.escape(b.id)}"] select[data-k="${CSS.escape(c.id)}"]`).forEach(sel => {
           let cur = sel.dataset.v != null ? sel.dataset.v : sel.value;
           delete sel.dataset.v;
           if (!cur && choices.length) cur = choices[0];
@@ -217,7 +288,7 @@ window.Portal = (function () {
     }
     function totalsHTML(b) {
       const t = b.totals, groups = {}, order = [];
-      qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => {
+      qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => {
         const get = k => { const el = tr.querySelector(`[data-k="${CSS.escape(k)}"]`); return el ? el.value.trim() : ""; };
         const s = sentence(get(t.col), get(t.countCol));
         if (!s.any) return;
@@ -237,12 +308,14 @@ window.Portal = (function () {
         }
         if (b.type === "checklist") {
           const boxes = qa(`[data-chk="${CSS.escape(b.id)}"]`);
-          boxes.forEach(x => x.closest("tr").classList.toggle("done", x.checked));
+          boxes.forEach(x => x.closest(".item").classList.toggle("done", x.checked));
+          const pb = q(`[data-pbar="${CSS.escape(b.id)}"]`);
+          if (pb) pb.style.width = (boxes.length ? Math.round(100 * boxes.filter(x => x.checked).length / boxes.length) : 0) + "%";
           const cc = q(`[data-cc="${CSS.escape(b.id)}"]`);
           if (cc) cc.textContent = boxes.filter(x => x.checked).length + " / " + boxes.length;
         }
         if (b.type === "repeater") {
-          const n = qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"]`).length;
+          const n = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).length;
           q(`[data-rc="${CSS.escape(b.id)}"]`).textContent = n + (n === 1 ? " entry" : " entries");
           q(`[data-empty="${CSS.escape(b.id)}"]`).style.display = n ? "none" : "";
         }
@@ -265,7 +338,7 @@ window.Portal = (function () {
         changed(); return;
       }
       const rm = t.closest(".rm");
-      if (rm) { rm.closest("tr").remove(); refresh(); changed(); return; }
+      if (rm) { rm.closest(".dyn").remove(); refresh(); changed(); return; }
       const today = t.closest("[data-today]");
       if (today) { q(`[data-f="${CSS.escape(today.dataset.today)}"]`).value = todayISO(); changed(); return; }
       const gen = t.closest("[data-gen]");
@@ -285,7 +358,7 @@ window.Portal = (function () {
         qa(`[data-chk="${CSS.escape(b.id)}"]`).forEach(x => checklists[b.id][x.dataset.topic] = x.checked);
       });
       repeaters.forEach(b => {
-        reps[b.id] = qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"]`).map(tr => {
+        reps[b.id] = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).map(tr => {
           const o = {};
           tr.querySelectorAll("[data-k]").forEach(el => o[el.dataset.k] = el.type === "checkbox" ? el.checked : el.value.trim());
           return o;
@@ -322,7 +395,7 @@ window.Portal = (function () {
 
     function clear() {
       qa("input,select,textarea").forEach(el => { if (el.type === "checkbox") el.checked = false; else el.value = ""; });
-      qa("tr.dyn").forEach(tr => tr.remove());
+      qa(".dyn").forEach(tr => tr.remove());
       qa(".err").forEach(x => x.classList.remove("err"));
       setDefaults(); refresh(); clearDraft();
     }

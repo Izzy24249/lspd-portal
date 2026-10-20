@@ -806,7 +806,7 @@ function validateConfig_(c) {
       if (!f.leaderboard.countField || !keys[f.leaderboard.countField]) throw new Error(f.title + ": pick which Discord ID field the leaderboard counts.");
     }
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
-    f.theme = f.theme === "dossier" ? "dossier" : "sheet";
+    f.theme = ["dossier", "hud"].indexOf(f.theme) !== -1 ? f.theme : "sheet";
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
     if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");
     f.logoUrl = str_(f.logoUrl);
@@ -1247,7 +1247,7 @@ function defaultConfig_() {
         id: "cid", status: "live", icon: "🕵️", title: "CID Report Builder",
         description: "Detective case file: involved persons, evidence log, charges, checklist and narrative.",
         submitLabel: "Submit Case Report to Discord", copyText: true,
-        theme: "dossier", logoUrl: "img/cid-logo.png", watermark: "custom", watermarkUrl: "img/cid-logo.png", watermarkOpacity: 7,
+        theme: "hud", logoUrl: "img/cid-logo.png", watermark: "custom", watermarkUrl: "img/cid-logo.png", watermarkOpacity: 7,
         webhookId: "cid-forum", color: "#eab308",
         embedTitle: "🕵️ LSPD CID Case Report — {cidCaseNo}", threadTitle: "{cidCaseNo} | {cidType}",
         archiveSheet: "CID Records",
@@ -1288,7 +1288,7 @@ function defaultConfig_() {
             groupBy: "suspect", totals: { on: true, col: "charge", countCol: "count" },
             columns: [ { id: "suspect", label: "Suspect", type: "link", source: "persons", sourceCol: "name", filterCol: "role", filterValue: "Suspect" },
                        { id: "charge", label: "Charge (type to search)", type: "search", options: CHARGES_, placeholder: "Start typing, e.g. robbery" },
-                       { id: "count", label: "Counts", type: "text", placeholder: "1" } ],
+                       { id: "count", label: "Counts", type: "text", placeholder: "1", width: "narrow" } ],
             check: { id: "warrant", label: "Warrant Req." } },
           { type: "checklist", id: "cidChecklist", title: "INVESTIGATIVE CHECKLIST", colTopic: "Task", colStandard: "Standard", colCheck: "Done", items: items([
             ["Scene Secured & Documented", "Perimeter set, scene photographed, bodycam running from arrival."],

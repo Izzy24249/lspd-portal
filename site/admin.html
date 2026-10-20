@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>LSPD Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="portal.css">
 <style>
   main.adm{max-width:1500px;padding:24px 22px 120px}
@@ -76,9 +77,12 @@
   .seg button+button{border-left:1px solid var(--line)}
   .seg button.on{background:rgba(47,123,255,.18);color:var(--text)}
   .seg button:hover{color:var(--text)}
-  #previewMount tbody[data-b]{cursor:pointer}
+  #previewMount [data-b]{cursor:pointer}
   #previewMount tbody[data-b]:hover td{box-shadow:inset 0 0 0 999px rgba(47,123,255,.10)}
   #previewMount tbody[data-b].sel td{box-shadow:inset 0 0 0 999px rgba(242,182,50,.16)}
+  #previewMount .hud-b{border-radius:20px;transition:outline-color .2s}
+  #previewMount .hud-b:hover{outline:2px dashed rgba(47,123,255,.55);outline-offset:5px}
+  #previewMount .hud-b.sel{outline:2px solid rgba(242,182,50,.8);outline-offset:5px}
   .blk.flash{animation:flash 1.4s ease}
   @keyframes flash{0%,60%{border-color:var(--gold);box-shadow:0 0 0 3px rgba(242,182,50,.35)}100%{border-color:var(--line);box-shadow:none}}
   .fullprev{position:fixed;inset:0;z-index:70;background:rgba(3,6,12,.92);overflow:auto;padding:24px 16px 60px;display:none}
@@ -493,7 +497,7 @@ function pageEditor(page) {
   left.append(sec("Look", false,
     field("Header logo (shown above the title)", bind(form, "logoUrl", { placeholder: "img/cid-logo.png" }), "Leave blank for none. Use a file in the site's img folder (img/cid-logo.png is the CID seal) or an https:// link."),
     h("div", { class: "g2" },
-      field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"]] })),
+      field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"], ["hud", "Futuristic HUD (glass, neon)"]] })),
       field("Watermark logo", bind(form, "watermark", { type: "select", structural: true, options: [["", "None"], ["cid", "LSPD CID seal (built in)"], ["custom", "My own image…"]] }))),
     form.watermark === "custom" ? field("Watermark image", bind(form, "watermarkUrl", { placeholder: "img/cid-logo.png" }), "A file on your site (like img/cid-logo.png) or an https:// link. Transparent PNGs look best.") : null,
     form.watermark ? field("Watermark strength (%)", bind(form, "watermarkOpacity", { type: "number", placeholder: form.theme === "dossier" ? "8" : "6", set: v => Number(v) || "" }), "2 = barely visible, 30 = strong.") : null));
@@ -613,6 +617,7 @@ function blockBody(form, b) {
           h("div", { class: "subhead" }, h("b", { text: "Column " + (ci + 1) }), ctrls(b.columns, ci)),
           h("div", { class: "g3" }, field("Header", bind(c, "label")), field("ID", keyInput(form, c, "id")),
             field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"], ["link", "Pick from another list (e.g. suspects)"]] }))),
+          field("Width (Futuristic HUD look)", bind(c, "width", { type: "select", options: [["", c.type === "search" ? "Auto (wide)" : "Auto (normal)"], ["narrow", "Narrow"], ["normal", "Normal"], ["wide", "Wide"]] })),
           c.type === "link" ? linkEditor(form, b, c) : null,
           c.type === "select" || c.type === "search"
             ? field("Options (one per line)" + ((c.options || []).length ? " · " + c.options.length + " options" : ""), bind(c, "options", { type: "textarea", rows: c.type === "search" ? 8 : 4, get: linesGet, set: linesSet }),
@@ -688,6 +693,7 @@ function fitPreview() {
   const mount = $("previewMount"), wrap = mount && mount.querySelector(".paper-wrap");
   if (!wrap) return;
   wrap.style.zoom = "";
+  if (wrap.classList.contains("theme-hud")) return; // the HUD look reflows itself, no shrinking needed
   const z = Math.min(1, (mount.clientWidth - 2) / 800);
   if (z < 1) wrap.style.zoom = z.toFixed(3);
 }
@@ -695,12 +701,12 @@ window.addEventListener("resize", () => { clearTimeout(fitPreview._t); fitPrevie
 
 // click a part of the preview -> open that block's settings
 function jumpToBlock(e) {
-  const tb = e.target.closest("tbody[data-b]");
+  const tb = e.target.closest("[data-b]");
   if (!tb) return;
   e.preventDefault();
   const i = Number(tb.dataset.b), form = CFG.forms.find(f => f.id === EDIT), b = form && form.blocks[i];
   if (!b) return;
-  document.querySelectorAll("#previewMount tbody.sel").forEach(x => x.classList.remove("sel"));
+  document.querySelectorAll("#previewMount .sel").forEach(x => x.classList.remove("sel"));
   tb.classList.add("sel");
   const sec = $("blocksSec"); if (sec) sec.open = true;
   const card = document.querySelector('details.blk[data-bi="' + i + '"]');
