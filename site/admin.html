@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>LSPD Admin</title>
+<link rel="stylesheet" href="portal.css">
+<style>
+  main.adm{max-width:1500px;padding:24px 22px 120px}
+  .pill.admin{color:var(--gold);border-color:rgba(242,182,50,.4)}
+  .who{font-size:.8rem;color:var(--muted);display:flex;gap:10px;align-items:center}
+  .who b{color:var(--text)}
+  .btn.sm{padding:8px 12px;font-size:.8rem;border-radius:9px}
+  .btn.danger{background:transparent;border:1px solid rgba(255,77,94,.45);color:#ff8a95}
+  .btn.danger:hover{background:rgba(255,77,94,.12)}
+  .btn.gold{background:linear-gradient(135deg,var(--gold),#d99a12);color:#1a1200}
+  .ibtn{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:.85rem;flex:none}
+  .ibtn:hover{border-color:var(--blue);color:var(--text)}
+  .ibtn.x:hover{border-color:var(--red);color:var(--red)}
+  .ibtn:disabled{opacity:.3;cursor:default}
+
+  /* login */
+  .login{max-width:400px;margin:60px auto 0}
+  .login .sec h2{font-size:1.2rem;margin-bottom:4px}
+  .login .sec p{color:var(--muted);font-size:.85rem;margin-bottom:18px}
+  .login label.f{margin-bottom:14px}
+  .login .btn{width:100%}
+  .msg{font-size:.85rem;margin-top:12px;color:#ff8a95;min-height:1.2em}
+
+  /* layout */
+  .layout{display:grid;grid-template-columns:210px 1fr;gap:22px;align-items:start}
+  nav.side{position:sticky;top:90px;display:grid;gap:4px}
+  nav.side button{all:unset;cursor:pointer;padding:11px 14px;border-radius:11px;color:var(--muted);font-weight:600;font-size:.9rem;display:flex;gap:10px;align-items:center}
+  nav.side button:hover{background:var(--panel2);color:var(--text)}
+  nav.side button.on{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);color:var(--text)}
+  nav.side .sep{height:1px;background:var(--line);margin:8px 4px}
+  @media(max-width:900px){.layout{grid-template-columns:1fr} nav.side{position:static;grid-template-columns:repeat(3,1fr)} nav.side .sep{display:none}}
+
+  .pagehead{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+  .pagehead h2{font-size:1.35rem}
+  .pagehead p{color:var(--muted);font-size:.86rem;flex-basis:100%}
+  .pagehead .spacer{flex:1}
+
+  /* tables */
+  table.list{width:100%;border-collapse:collapse;font-size:.88rem}
+  table.list th{text-align:left;color:var(--muted);font-weight:600;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--line)}
+  table.list td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  table.list tr:last-child td{border-bottom:0}
+  table.list .acts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+  .tablewrap{overflow-x:auto}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:.8rem;color:var(--muted)}
+  .badge{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:999px;border:1px solid var(--line);text-transform:uppercase}
+  .badge.live{color:var(--green);border-color:rgba(46,204,113,.45)}
+  .badge.soon{color:var(--gold);border-color:rgba(242,182,50,.45)}
+  .badge.hidden{color:var(--muted)}
+  .badge.owner{color:var(--gold);border-color:rgba(242,182,50,.45)}
+  .formrow .ic{font-size:1.4rem;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:rgba(47,123,255,.12);border:1px solid rgba(47,123,255,.3)}
+  .formrow .t b{display:block}
+  .empty-note{color:var(--muted);font-size:.88rem;padding:14px 4px}
+
+  /* editor */
+  .editor{display:grid;grid-template-columns:minmax(380px,520px) 1fr;gap:20px;align-items:start}
+  @media(max-width:1150px){.editor{grid-template-columns:1fr}}
+  .preview{position:sticky;top:84px;max-height:calc(100vh - 110px);overflow:auto;border-radius:12px}
+  .preview .ptitle{font-size:.75rem;letter-spacing:.18em;color:var(--muted);margin:0 0 10px;text-transform:uppercase;display:flex;gap:10px;align-items:center}
+  details.sec{padding:0}
+  details.sec>summary{list-style:none;cursor:pointer;padding:16px 20px;font-size:.82rem;letter-spacing:.16em;color:var(--blue2);font-weight:700;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+  details.sec>summary::-webkit-details-marker{display:none}
+  details.sec>summary::after{content:"▸";margin-left:auto;color:var(--muted);transition:.2s}
+  details.sec[open]>summary::after{transform:rotate(90deg)}
+  details.sec>.body{padding:0 20px 20px;display:grid;gap:14px}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  @media(max-width:600px){.g2,.g3{grid-template-columns:1fr}}
+  label.f small{display:block;color:var(--muted);font-size:.74rem;margin-top:5px;line-height:1.4}
+  .admin input[type=text],.admin input[type=password],.admin input[type=number],.admin select,.admin textarea{padding:9px 11px;font-size:.88rem;border-radius:9px}
+  .admin textarea{min-height:70px}
+  input[type=password],input[type=number]{width:100%;background:#0a1120;border:1px solid var(--line);color:var(--text);border-radius:11px;padding:12px 14px;font:inherit;outline:none}
+  input[type=color]{width:100%;height:38px;background:#0a1120;border:1px solid var(--line);border-radius:9px;padding:3px;cursor:pointer}
+  .tog{display:flex;align-items:center;gap:10px;font-size:.86rem;cursor:pointer;user-select:none}
+  .tog input{width:18px;height:18px;accent-color:var(--blue)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-family:ui-monospace,Consolas,monospace;font-size:.74rem;background:#0a1120;border:1px solid var(--line);border-radius:6px;padding:3px 7px;color:var(--blue2);cursor:pointer}
+  .chip:hover{border-color:var(--blue)}
+  .help{font-size:.8rem;color:var(--muted);line-height:1.5}
+
+  .blk{border:1px solid var(--line);border-radius:12px;background:#0b1323}
+  .blk>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px}
+  .blk>summary::-webkit-details-marker{display:none}
+  .blk .ty{font-size:.66rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:6px;background:rgba(47,123,255,.15);color:var(--blue2);flex:none}
+  .blk .sm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.86rem}
+  .blk .bb{padding:4px 12px 14px;display:grid;gap:12px}
+  .sub{border:1px dashed #2a3c60;border-radius:10px;padding:12px;display:grid;gap:10px;background:rgba(255,255,255,.015)}
+  .subhead{display:flex;align-items:center;gap:6px}
+  .subhead b{font-size:.8rem;flex:1;color:var(--muted)}
+  .addbar{display:flex;gap:8px;align-items:center}
+  .addbar select{flex:1}
+
+  .savebar{position:fixed;left:50%;bottom:18px;transform:translate(-50%,120px);transition:.3s;z-index:40;
+    background:var(--panel2);border:1px solid var(--gold);border-radius:14px;padding:12px 14px 12px 18px;display:flex;gap:12px;align-items:center;box-shadow:0 20px 50px rgba(0,0,0,.6);max-width:94vw}
+  .savebar.show{transform:translate(-50%,0)}
+  .savebar span{font-size:.88rem;color:var(--gold);font-weight:600}
+  .result{font-size:.82rem;color:var(--muted)}
+  .result.ok{color:var(--green)} .result.bad{color:#ff8a95}
+  .modal{position:fixed;inset:0;background:rgba(3,6,12,.7);backdrop-filter:blur(4px);display:none;place-items:center;z-index:60;padding:16px}
+  .modal.show{display:grid}
+  .modal .sec{width:min(480px,100%);margin:0}
+</style>
+</head>
+<body class="admin">
+<div class="lightbar"></div>
+<header class="top">
+  <div class="top-in" style="max-width:1500px">
+    <a class="brand" href="index.html">
+      <svg viewBox="0 0 64 64" fill="none"><path d="M32 3 8 12v18c0 15 10 27 24 31 14-4 24-16 24-31V12L32 3Z" fill="#0f2a5f" stroke="#5aa2ff" stroke-width="3"/><path d="m32 17 4.6 9.4 10.4 1.5-7.5 7.3 1.8 10.3L32 40.6 22.7 45.5l1.8-10.3L17 27.9l10.4-1.5L32 17Z" fill="#f2b632"/></svg>
+      <div><b>LSPD</b><small>MANAGE PORTAL</small></div>
+    </a>
+    <div class="spacer"></div>
+    <div class="who" id="who" style="display:none"><span>Signed in as <b id="whoName"></b> <span class="badge" id="whoRole"></span></span><button class="btn ghost sm" id="logoutBtn">Log out</button></div>
+    <div class="pill admin" id="adminPill"><span class="dot" style="background:var(--gold);box-shadow:0 0 10px var(--gold)"></span> Admin</div>
+  </div>
+</header>
+
+<main class="adm">
+  <!-- LOGIN -->
+  <section id="loginView" class="login" style="display:none">
+    <form class="sec" id="loginForm" autocomplete="on">
+      <h2>Admin sign-in</h2>
+      <p>Manage forms, webhooks and portal settings.</p>
+      <label class="f"><span>Username</span><input type="text" id="lgUser" autocomplete="username" required></label>
+      <label class="f"><span>Password</span><input type="password" id="lgPass" autocomplete="current-password" required></label>
+      <button class="btn primary" id="lgBtn">Sign in</button>
+      <div class="msg" id="lgMsg"></div>
+    </form>
+    <p class="help" style="text-align:center">First time? The Google Sheet owner creates the first account from the sheet menu <b>🚔 LSPD Portal → Create / reset admin account</b>.</p>
+  </section>
+
+  <!-- APP -->
+  <section id="appView" style="display:none">
+    <div class="layout">
+      <nav class="side" id="nav">
+        <button data-tab="forms">📝 Forms</button>
+        <button data-tab="webhooks">🔗 Webhooks</button>
+        <button data-tab="settings">⚙️ Portal Settings</button>
+        <div class="sep"></div>
+        <button data-tab="admins">👮 Admins</button>
+        <button data-tab="activity">🕘 Activity Log</button>
+        <button data-tab="account">🔑 My Account</button>
+      </nav>
+      <div id="page"></div>
+    </div>
+  </section>
+  <div class="loading" id="bootMsg">Loading…</div>
+</main>
+
+<div class="savebar" id="savebar">
+  <span>● Unsaved changes</span>
+  <button class="btn ghost sm" id="discardBtn">Discard</button>
+  <button class="btn gold sm" id="saveBtn">Save &amp; publish</button>
+</div>
+<div class="modal" id="modal"><div class="sec" id="modalBody"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="forms.js"></script>
+<script>
+/* =====================================================================
+   STATE + API
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+let TOKEN = null;
+try { TOKEN = sessionStorage.getItem("lspd_admin_token"); } catch (e) {}
+let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [];
+let TAB = "forms", EDIT = null;           // EDIT = id of form being edited
+const OPEN = new WeakSet();               // which block cards are expanded
+
+function toast(msg, type) {
+  const t = $("toast"); t.textContent = msg; t.className = "toast show " + (type || "");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.className = "toast", 4800);
+}
+async function api(action, data) {
+  const res = await Portal.post(Object.assign({ action: action, token: TOKEN }, data || {}));
+  if (res.error === "AUTH") { signedOut(res.message); throw new Error(res.message); }
+  if (!res.ok) throw new Error(res.message || res.error || "Request failed");
+  return res;
+}
+const clone = o => JSON.parse(JSON.stringify(o));
+function isDirty() { return CFG && JSON.stringify(CFG) !== BASE; }
+function dirty() { $("savebar").classList.toggle("show", isDirty()); }
+
+/* =====================================================================
+   DOM HELPERS
+   ===================================================================== */
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  Object.entries(attrs || {}).forEach(([k, v]) => {
+    if (v == null || v === false) return;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "value") el.value = v;
+    else if (k === "checked") el.checked = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  });
+  kids.flat(Infinity).forEach(k => { if (k == null || k === false) return; el.append(k.nodeType ? k : document.createTextNode(k)); });
+  return el;
+}
+function field(label, control, hint) {
+  return h("label", { class: "f" }, h("span", { text: label }), control, hint ? h("small", { text: hint }) : null);
+}
+// bound inputs: write straight into the config object, then refresh preview / save bar
+function bind(obj, key, opts) {
+  opts = opts || {};
+  let el;
+  if (opts.type === "textarea") el = h("textarea", { rows: opts.rows || 3, placeholder: opts.placeholder });
+  else if (opts.type === "select") {
+    el = h("select", {}, opts.options.map(o => h("option", { value: o[0], text: o[1] })));
+  } else el = h("input", { type: opts.type || "text", placeholder: opts.placeholder, maxlength: opts.max });
+  const get = opts.get || (v => v == null ? "" : v), set = opts.set || (v => v);
+  el.value = get(obj[key]);
+  el.addEventListener(opts.type === "select" ? "change" : "input", () => {
+    obj[key] = set(el.value);
+    if (opts.reflect && el.value !== get(obj[key])) el.value = get(obj[key]);
+    changed(opts.structural);
+  });
+  return el;
+}
+function toggle(obj, key, label, structural) {
+  const cb = h("input", { type: "checkbox", checked: !!obj[key], onchange: () => { obj[key] = cb.checked; changed(structural); } });
+  return h("label", { class: "tog" }, cb, label);
+}
+const linesGet = v => (v || []).join("\n");
+const linesSet = v => v.split("\n").map(s => s.trim()).filter(Boolean);
+
+let previewTimer;
+function changed(structural) {
+  dirty();
+  if (structural) renderPage(true);
+  else { clearTimeout(previewTimer); previewTimer = setTimeout(renderPreview, 250); }
+}
+function move(arr, i, d) { const j = i + d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; }
+function ctrls(arr, i, opts) {
+  opts = opts || {};
+  const stop = fn => e => { e.preventDefault(); e.stopPropagation(); fn(); };
+  return h("span", { style: "display:flex;gap:4px" },
+    h("button", { type: "button", class: "ibtn", title: "Move up", disabled: i === 0, onclick: stop(() => { move(arr, i, -1); changed(true); }) }, "↑"),
+    h("button", { type: "button", class: "ibtn", title: "Move down", disabled: i === arr.length - 1, onclick: stop(() => { move(arr, i, 1); changed(true); }) }, "↓"),
+    opts.dup ? h("button", { type: "button", class: "ibtn", title: "Duplicate", onclick: stop(() => { arr.splice(i + 1, 0, opts.dup(arr[i])); changed(true); }) }, "⧉") : null,
+    h("button", { type: "button", class: "ibtn x", title: "Remove", onclick: stop(() => { if (!opts.confirm || confirm(opts.confirm)) { arr.splice(i, 1); changed(true); } }) }, "✕"));
+}
+function modal(build) {
+  const body = $("modalBody"); body.innerHTML = "";
+  const close = () => $("modal").classList.remove("show");
+  body.append(build(close));
+  $("modal").classList.add("show");
+  const first = body.querySelector("input,select,textarea"); if (first) first.focus();
+}
+$("modal").addEventListener("click", e => { if (e.target.id === "modal") $("modal").classList.remove("show"); });
+
+/* =====================================================================
+   AUTH + LOADING
+   ===================================================================== */
+function signedOut(msg) {
+  TOKEN = null; try { sessionStorage.removeItem("lspd_admin_token"); } catch (e) {}
+  $("appView").style.display = "none"; $("who").style.display = "none"; $("bootMsg").style.display = "none";
+  $("loginView").style.display = ""; $("lgMsg").textContent = msg || ""; $("lgUser").focus();
+  $("savebar").classList.remove("show");
+}
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("lgBtn").disabled = true; $("lgMsg").textContent = "";
+  try {
+    const res = await Portal.post({ action: "login", username: $("lgUser").value.trim(), password: $("lgPass").value });
+    if (!res.ok) throw new Error(res.error);
+    TOKEN = res.token; try { sessionStorage.setItem("lspd_admin_token", TOKEN); } catch (e) {}
+    $("lgPass").value = "";
+    await loadAll();
+  } catch (err) { $("lgMsg").textContent = err.message; }
+  finally { $("lgBtn").disabled = false; }
+});
+$("logoutBtn").onclick = async () => {
+  if (isDirty() && !confirm("You have unsaved changes. Log out anyway?")) return;
+  try { await api("logout"); } catch (e) {}
+  CFG = null; signedOut("Signed out.");
+};
+
+async function loadAll(keepEdits) {
+  const res = await api("getAll");
+  ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log;
+  if (!keepEdits) { CFG = res.config; VERSION = res.config.version; BASE = JSON.stringify(CFG); }
+  $("loginView").style.display = "none"; $("bootMsg").style.display = "none"; $("appView").style.display = "";
+  $("who").style.display = ""; $("whoName").textContent = ME.username;
+  $("whoRole").textContent = ME.role; $("whoRole").className = "badge " + (ME.role === "owner" ? "owner" : "");
+  if (EDIT && !CFG.forms.some(f => f.id === EDIT)) EDIT = null;
+  dirty(); renderPage();
+}
+
+$("saveBtn").onclick = async () => {
+  const btn = $("saveBtn"); btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const res = await Portal.post({ action: "saveConfig", token: TOKEN, config: CFG, baseVersion: VERSION });
+    if (res.error === "AUTH") { signedOut(res.message); return; }
+    if (res.error === "CONFLICT") {
+      if (confirm(res.message + "\n\nReload now?")) await loadAll();
+      return;
+    }
+    if (!res.ok) throw new Error(res.error);
+    const editIndex = EDIT ? CFG.forms.findIndex(f => f.id === EDIT) : -1;
+    CFG = res.config; VERSION = CFG.version; BASE = JSON.stringify(CFG);
+    if (editIndex > -1 && CFG.forms[editIndex]) EDIT = CFG.forms[editIndex].id;
+    dirty(); renderPage(true);
+    toast("Saved. The live portal now shows these changes.", "ok");
+    loadAll(true).catch(() => {});  // refresh activity log
+  } catch (err) { toast(err.message, "bad"); }
+  finally { btn.disabled = false; btn.textContent = "Save & publish"; }
+};
+$("discardBtn").onclick = () => {
+  if (!confirm("Throw away all unsaved changes?")) return;
+  CFG = JSON.parse(BASE);
+  if (EDIT && !CFG.forms.some(f => f.id === EDIT)) EDIT = null;
+  dirty(); renderPage();
+};
+window.addEventListener("beforeunload", e => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
+
+/* =====================================================================
+   PAGES
+   ===================================================================== */
+$("nav").addEventListener("click", e => {
+  const b = e.target.closest("[data-tab]"); if (!b) return;
+  TAB = b.dataset.tab; if (TAB !== "forms") EDIT = null; renderPage();
+});
+function renderPage(keepScroll) {
+  const y = window.scrollY;
+  document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
+  const page = $("page"); page.innerHTML = "";
+  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
+  if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
+}
+function head(title, desc, ...right) {
+  return h("div", { class: "pagehead" }, h("h2", { text: title }), h("div", { class: "spacer" }), right, desc ? h("p", { text: desc }) : null);
+}
+const STATUS_TXT = { live: "Live", soon: "Coming soon", hidden: "Hidden" };
+
+/* ---------------- FORMS LIST ---------------- */
+function pageForms(page) {
+  page.append(head("Forms", "Live forms appear on the portal home page. Coming-soon forms show as greyed-out cards. Hidden forms are only visible here. Drag order = home page order.",
+    h("button", { class: "btn primary sm", onclick: newForm }, "+ New form")));
+  const body = h("div", { class: "sec" });
+  if (!CFG.forms.length) body.append(h("div", { class: "empty-note", text: "No forms yet." }));
+  const tbl = h("table", { class: "list" });
+  CFG.forms.forEach((f, i) => {
+    tbl.append(h("tr", { class: "formrow" },
+      h("td", { style: "width:52px" }, h("div", { class: "ic", text: f.icon || "📄" })),
+      h("td", { class: "t" }, h("b", { text: f.title }), h("span", { class: "mono", text: f.id + " · " + (f.blocks || []).length + " blocks" + (f.webhookId ? " · → " + hookName(f.webhookId) : " · no webhook") })),
+      h("td", {}, h("span", { class: "badge " + f.status, text: STATUS_TXT[f.status] || f.status })),
+      h("td", {}, h("div", { class: "acts" },
+        h("button", { class: "btn ghost sm", onclick: () => { EDIT = f.id; renderPage(); } }, "Edit"),
+        ctrls(CFG.forms, i, { dup: dupForm, confirm: "Delete \"" + f.title + "\"? Its past submissions stay in the sheet." })))));
+  });
+  body.append(h("div", { class: "tablewrap" }, tbl));
+  page.append(body);
+}
+function hookName(id) { const w = HOOKS.find(x => x.id === id); return w ? w.name : id + " (missing!)"; }
+function uniqueFormId(base) { let id = base, n = 2; while (CFG.forms.some(f => f.id === id)) id = base + "-" + n++; return id; }
+function dupForm(f) { const c = clone(f); c.id = uniqueFormId(f.id + "-copy"); c.title = f.title + " (copy)"; c.status = "hidden"; if (c.leaderboard) c.leaderboard.messageId = ""; return c; }
+function newForm() {
+  const id = uniqueFormId("new-form");
+  CFG.forms.push({
+    id: id, status: "hidden", icon: "📄", title: "New Form", description: "",
+    submitLabel: "Submit to Discord", copyText: false, webhookId: "", color: "#3498db",
+    embedTitle: "{callsign}", threadTitle: "{callsign}", archiveSheet: "",
+    tags: { base: [], rules: [] },
+    leaderboard: { enabled: false, countField: "", webhookId: "", messageId: "", title: "", heading: "" },
+    blocks: [
+      { type: "banner", title: "LSPD - NEW FORM", subtitle: "Describe what this form is for." },
+      { type: "fields", fields: [
+        { id: "callsign", label: "Callsign: ( L-XXX | J. Doe )", type: "text", required: true },
+        { id: "discordId", label: "Discord ID:", type: "discord_id", required: true }] },
+      { type: "longtext", id: "notes", title: "NOTES", hint: "", maxLength: 1000, required: false, followUp: false }
+    ]
+  });
+  EDIT = id; changed(); renderPage();
+}
+
+/* ---------------- FORM EDITOR ---------------- */
+const BLOCK_TYPES = {
+  banner: "Title banner", fields: "Field row (1–2 fields)", strip: "Header strip (1–4 fields)", text: "Text / rule line",
+  checklist: "Checklist", repeater: "Repeating list (add rows)", longtext: "Big text box"
+};
+const FIELD_TYPES = [["text", "Text"], ["select", "Dropdown"], ["date", "Date"], ["discord_id", "Discord user ID"], ["number", "Number"], ["case_number", "Case number (Generate button)"], ["static", "Fixed text (not an input)"]];
+
+function formKeys(form) {
+  const keys = [];
+  (form.blocks || []).forEach(b => {
+    if (b.type === "fields" || b.type === "strip") (b.fields || []).forEach(f => { if (f.type !== "static") keys.push({ id: f.id, label: f.label, type: f.type }); });
+    if (b.type === "longtext") keys.push({ id: b.id, label: b.title, type: "longtext" });
+    if (b.type === "repeater") keys.push({ id: b.id, label: b.title, type: "repeater" });
+    if (b.type === "checklist") keys.push({ id: b.id, label: b.title, type: "checklist" });
+  });
+  return keys;
+}
+function uniqueKey(form, base) {
+  const used = new Set();
+  (form.blocks || []).forEach(b => { if (b.id) used.add(b.id); (b.fields || []).forEach(f => used.add(f.id)); });
+  let k = base, n = 2; while (used.has(k)) k = base + n++;
+  return k;
+}
+function newBlock(form, type) {
+  switch (type) {
+    case "banner": return { type, title: "SECTION TITLE", subtitle: "" };
+    case "fields": return { type, fields: [{ id: uniqueKey(form, "field"), label: "Label:", type: "text" }] };
+    case "strip": return { type, fields: [{ id: uniqueKey(form, "field"), label: "Column", type: "text" }] };
+    case "text": return { type, style: "rule", text: "Rule #1: …" };
+    case "checklist": return { type, id: uniqueKey(form, "checklist"), title: "CHECKLIST", colTopic: "Topic", colStandard: "Standard", colCheck: "Done", items: [{ topic: "First item", standard: "What is expected." }] };
+    case "repeater": return { type, id: uniqueKey(form, "list"), title: "LIST", addLabel: "+ Add Row", columns: [{ id: "name", label: "Name", type: "text" }], check: { id: "", label: "" } };
+    case "longtext": return { type, id: uniqueKey(form, "text"), title: "NOTES", hint: "", maxLength: 1000, required: false, followUp: false };
+  }
+}
+function blockSummary(b) {
+  if (b.type === "fields" || b.type === "strip") return (b.fields || []).map(f => (f.label || f.id).replace(/:\s*$/, "")).join(" · ");
+  return b.title || b.text || "";
+}
+
+function pageEditor(page) {
+  const form = CFG.forms.find(f => f.id === EDIT);
+  if (!form) { EDIT = null; return pageForms(page); }
+  form.tags = form.tags || { base: [], rules: [] };
+  form.leaderboard = form.leaderboard || { enabled: false };
+  form.blocks = form.blocks || [];
+
+  page.append(head(form.title, "",
+    h("button", { class: "btn ghost sm", onclick: () => { EDIT = null; renderPage(); } }, "← All forms"),
+    h("span", { class: "badge " + form.status, text: STATUS_TXT[form.status] })));
+
+  const left = h("div", { style: "display:grid;gap:14px" });
+  const right = h("div", { class: "preview" }, h("div", { class: "ptitle" }, "Live preview", h("span", { class: "mono", text: "(what officers will see)" })), h("div", { id: "previewMount" }));
+  page.append(h("div", { class: "editor" }, left, right));
+
+  const sec = (title, open, ...kids) => h("details", { class: "sec", open: open }, h("summary", { text: title }), h("div", { class: "body" }, kids));
+
+  // ---- general ----
+  const idInput = h("input", { type: "text", value: form.id, maxlength: 31 });
+  idInput.addEventListener("change", () => {
+    const v = idInput.value.trim().toLowerCase();
+    if (!/^[a-z][a-z0-9-]{1,30}$/.test(v)) { toast("Form ID: lowercase letters, numbers and dashes, starting with a letter.", "bad"); idInput.value = form.id; return; }
+    if (CFG.forms.some(f => f !== form && f.id === v)) { toast("Another form already uses that ID.", "bad"); idInput.value = form.id; return; }
+    form.id = v; EDIT = v; changed();
+  });
+  left.append(sec("General", true,
+    h("div", { class: "g2" }, field("Form title", bind(form, "title", { max: 80 })), field("Icon (emoji)", bind(form, "icon", { max: 8 }))),
+    field("Card description (home page)", bind(form, "description", { type: "textarea", rows: 2 })),
+    h("div", { class: "g2" },
+      field("Status", bind(form, "status", { type: "select", structural: true, options: [["live", "Live: officers can submit"], ["soon", "Coming soon card"], ["hidden", "Hidden"]] })),
+      field("Form ID", idInput, "Used in the link (index.html#" + form.id + ") and the sheet. Avoid changing once live.")),
+    h("div", { class: "g2" }, field("Submit button text", bind(form, "submitLabel", { max: 60 })), h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(form, "copyText", "Show “Copy as Text” button")))));
+
+  // ---- look ----
+  left.append(sec("Look", false,
+    h("div", { class: "g2" },
+      field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"]] })),
+      field("Watermark logo", bind(form, "watermark", { type: "select", structural: true, options: [["", "None"], ["cid", "LSPD CID seal (built in)"], ["custom", "My own image…"]] }))),
+    form.watermark === "custom" ? field("Image link (https)", bind(form, "watermarkUrl", { placeholder: "https://your-site.com/logo.png" }), "Upload a PNG to your InfinityFree site (or Discord) and paste its link. Transparent PNGs look best.") : null,
+    form.watermark ? field("Watermark strength (%)", bind(form, "watermarkOpacity", { type: "number", placeholder: form.theme === "dossier" ? "8" : "6", set: v => Number(v) || "" }), "2 = barely visible, 30 = strong.") : null));
+
+  // ---- discord ----
+  const keys = formKeys(form);
+  const hookOpts = [["", "— choose a webhook —"]].concat(HOOKS.map(w => [w.id, w.name + (w.kind === "text" ? " (text channel)" : " (forum)")]));
+  const chipRow = target => h("div", { class: "chips" }, keys.filter(k => !["repeater", "checklist", "longtext"].includes(k.type)).map(k =>
+    h("span", { class: "chip", title: "Insert " + k.label, onclick: () => { target.value += "{" + k.id + "}"; target.dispatchEvent(new Event("input")); } }, "{" + k.id + "}")));
+  const embedT = bind(form, "embedTitle", { placeholder: "🚔 Record — {callsign}" }), threadT = bind(form, "threadTitle", { placeholder: "{callsign}" });
+  left.append(sec("Discord & sheet", true,
+    field("Post to webhook", bind(form, "webhookId", { type: "select", options: hookOpts, structural: true }), HOOKS.length ? "Add or fix webhooks in the Webhooks tab." : "No webhooks yet: add one in the Webhooks tab first."),
+    field("Embed title", embedT), chipRow(embedT),
+    field("Forum thread name", threadT, "Only used for forum-channel webhooks. Click a {field} to insert the officer's answer."), chipRow(threadT),
+    h("div", { class: "g2" }, field("Embed colour", bind(form, "color", { type: "color" })), field("Sheet tab for submissions", bind(form, "archiveSheet", { placeholder: form.title }), "Created automatically on first submission."))));
+
+  // ---- tags ----
+  const tagBody = [];
+  tagBody.push(h("p", { class: "help", text: "Forum tags are added to the thread automatically (max 5). Get a tag ID with Discord Developer Mode: right-click the tag in the forum's settings → Copy ID." }));
+  tagBody.push(field("Always add these tag IDs", bind(form.tags, "base", { get: v => (v || []).join(", "), set: v => v.split(/[\s,]+/).filter(Boolean) }), "Separate several with commas."));
+  const ruleFieldOpts = [["", "— field —"]].concat(keys.filter(k => k.type !== "checklist").map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "") + " (" + k.id + ")"]));
+  form.tags.rules = form.tags.rules || [];
+  form.tags.rules.forEach((r, i) => {
+    tagBody.push(h("div", { class: "sub" },
+      h("div", { class: "subhead" }, h("b", { text: "Rule " + (i + 1) }), ctrls(form.tags.rules, i)),
+      h("div", { class: "g2" },
+        field("If field", bind(r, "field", { type: "select", options: ruleFieldOpts })),
+        field("Condition", bind(r, "op", { type: "select", structural: true, options: [["contains", "contains"], ["equals", "equals exactly"], ["filled", "is filled in"], ["anyChecked", "any row is ticked (lists)"]] }))),
+      h("div", { class: "g2" },
+        ["filled", "anyChecked"].includes(r.op) ? h("div") : field("Text", bind(r, "value", { placeholder: "PASS" })),
+        field("Then add tag ID", bind(r, "tag", { placeholder: "1441894255034630226" })))));
+  });
+  tagBody.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { form.tags.rules.push({ field: "", op: "contains", value: "", tag: "" }); changed(true); } }, "+ Add tag rule")));
+  left.append(sec("Forum tags (" + ((form.tags.base || []).length + form.tags.rules.length) + ")", false, tagBody));
+
+  // ---- leaderboard ----
+  const lb = form.leaderboard;
+  const lbBody = [toggle(lb, "enabled", "Keep a monthly leaderboard for this form", true)];
+  if (lb.enabled) {
+    lbBody.push(
+      h("div", { class: "g2" },
+        field("Count submissions per", bind(lb, "countField", { type: "select", options: [["", "— Discord ID field —"]].concat(keys.filter(k => k.type === "discord_id").map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")])) })),
+        field("Post leaderboard to", bind(lb, "webhookId", { type: "select", options: hookOpts }))),
+      field("Leaderboard title", bind(lb, "title", { placeholder: form.title + " - Monthly Leaderboard" })),
+      field("Text above the rankings", bind(lb, "heading", { type: "textarea", rows: 3 })),
+      field("Existing message ID (optional)", bind(lb, "messageId", { placeholder: "leave blank to post a new one" }), "The leaderboard edits this one Discord message instead of posting new ones."),
+      h("div", {}, h("button", { class: "btn ghost sm", onclick: async e => {
+        if (isDirty()) return toast("Save your changes first.", "bad");
+        e.target.disabled = true;
+        try { await api("leaderboardRefresh", { formId: form.id }); toast("Leaderboard refreshed in Discord.", "ok"); } catch (err) { toast(err.message, "bad"); }
+        e.target.disabled = false;
+      } }, "Refresh leaderboard now")));
+  }
+  left.append(sec("Leaderboard" + (lb.enabled ? " (on)" : ""), false, lbBody));
+
+  // ---- blocks ----
+  const blocksBody = [h("p", { class: "help", text: "Blocks are drawn top to bottom. Each answer box has an ID: the sheet column and {placeholders} use it, so keep IDs stable once a form is live." })];
+  form.blocks.forEach((b, i) => blocksBody.push(blockCard(form, b, i)));
+  const addSel = h("select", {}, Object.entries(BLOCK_TYPES).map(([k, v]) => h("option", { value: k, text: v })));
+  blocksBody.push(h("div", { class: "addbar" }, addSel, h("button", { class: "btn primary sm", onclick: () => {
+    const b = newBlock(form, addSel.value); OPEN.add(b); form.blocks.push(b); changed(true);
+  } }, "+ Add block")));
+  left.append(sec("Blocks (" + form.blocks.length + ")", true, blocksBody));
+
+  renderPreview();
+}
+
+function blockCard(form, b, i) {
+  const d = h("details", { class: "blk", open: OPEN.has(b) },
+    h("summary", {}, h("span", { class: "ty", text: b.type }), h("span", { class: "sm", text: blockSummary(b) || "—" }),
+      ctrls(form.blocks, i, { dup: x => { const c = clone(x); renameKeys(form, c); return c; }, confirm: "Remove this block?" })),
+    h("div", { class: "bb" }, blockBody(form, b)));
+  d.addEventListener("toggle", () => d.open ? OPEN.add(b) : OPEN.delete(b));
+  return d;
+}
+function renameKeys(form, b) {
+  if (b.id) b.id = uniqueKey(form, b.id);
+  (b.fields || []).forEach(f => f.id = uniqueKey(form, f.id));
+}
+function keyInput(form, obj, key) {
+  return bind(obj, key, { max: 40, reflect: true, set: v => v.replace(/[^A-Za-z0-9_]/g, "") });
+}
+
+function blockBody(form, b) {
+  const out = [];
+  switch (b.type) {
+    case "banner":
+      out.push(field("Title", bind(b, "title")), field("Subtitle (italic line)", bind(b, "subtitle")));
+      break;
+    case "text":
+      out.push(field("Style", bind(b, "style", { type: "select", options: [["rule", "Italic rule line"], ["warning", "Red warning"], ["heading", "Bold heading"], ["hint", "Small hint"]] })),
+        field("Text", bind(b, "text", { type: "textarea", rows: 3 })));
+      break;
+    case "fields":
+    case "strip": {
+      const max = b.type === "fields" ? 2 : 4;
+      out.push(h("p", { class: "help", text: b.type === "fields" ? "Label on the left, answer box on the right. Up to 2 per row." : "Blue header bar with labels above the boxes, like the Training Session row. Up to 4." }));
+      b.fields.forEach((f, fi) => out.push(fieldCard(form, b, f, fi)));
+      if (b.fields.length < max) out.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { b.fields.push({ id: uniqueKey(form, "field"), label: b.type === "fields" ? "Label:" : "Column", type: "text" }); changed(true); } }, "+ Add field")));
+      break;
+    }
+    case "checklist":
+      out.push(h("div", { class: "g2" }, field("Title", bind(b, "title")), field("ID", keyInput(form, b, "id"))),
+        h("div", { class: "g3" }, field("Column 1 header", bind(b, "colTopic")), field("Column 2 header", bind(b, "colStandard")), field("Tick column", bind(b, "colCheck"))));
+      b.items.forEach((it, ii) => out.push(h("div", { class: "sub" },
+        h("div", { class: "subhead" }, h("b", { text: "Item " + (ii + 1) }), ctrls(b.items, ii)),
+        field("Topic", bind(it, "topic")), field("Requirement / standard", bind(it, "standard", { type: "textarea", rows: 2 })))));
+      out.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { b.items.push({ topic: "New item", standard: "" }); changed(true); } }, "+ Add item")));
+      break;
+    case "repeater":
+      b.check = b.check || { id: "", label: "" };
+      out.push(h("div", { class: "g3" }, field("Title", bind(b, "title")), field("ID", keyInput(form, b, "id")), field("Add-button text", bind(b, "addLabel"))));
+      b.columns.forEach((c, ci) => {
+        out.push(h("div", { class: "sub" },
+          h("div", { class: "subhead" }, h("b", { text: "Column " + (ci + 1) }), ctrls(b.columns, ci)),
+          h("div", { class: "g3" }, field("Header", bind(c, "label")), field("ID", keyInput(form, c, "id")),
+            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"]] }))),
+          c.type === "select" ? field("Options (one per line)", bind(c, "options", { type: "textarea", rows: 4, get: linesGet, set: linesSet }))
+                              : field("Placeholder", bind(c, "placeholder"))));
+      });
+      if (b.columns.length < 3) out.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { b.columns.push({ id: "col" + (b.columns.length + 1), label: "Column", type: "text" }); changed(true); } }, "+ Add column")));
+      const on = { v: !!b.check.id };
+      out.push(h("label", { class: "tog" }, h("input", { type: "checkbox", checked: on.v, onchange: e => { b.check = e.target.checked ? { id: "checked", label: "Done" } : { id: "", label: "" }; changed(true); } }), "Tick box at the end of each row"));
+      if (b.check.id) out.push(h("div", { class: "g2" }, field("Tick column header", bind(b.check, "label")), field("Tick ID", keyInput(form, b.check, "id"))));
+      break;
+    case "longtext":
+      out.push(h("div", { class: "g2" }, field("Title", bind(b, "title")), field("ID", keyInput(form, b, "id"))),
+        field("Hint under the title", bind(b, "hint")),
+        h("div", { class: "g2" }, field("Max characters", bind(b, "maxLength", { type: "number", set: v => Number(v) || 1000 }), "Up to 8000."),
+          h("div", { style: "display:grid;gap:8px;align-self:end;padding-bottom:6px" }, toggle(b, "required", "Required"), toggle(b, "followUp", "Post as its own message(s) in the thread"))));
+      break;
+  }
+  return out;
+}
+
+function fieldCard(form, b, f, fi) {
+  const kids = [
+    h("div", { class: "subhead" }, h("b", { text: "Field " + (fi + 1) }), ctrls(b.fields, fi)),
+    h("div", { class: "g2" }, field("Label", bind(f, "label")), field("ID", keyInput(form, f, "id"))),
+    h("div", { class: "g2" }, field("Type", bind(f, "type", { type: "select", structural: true, options: FIELD_TYPES })),
+      f.type === "static" ? h("div") : h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(f, "required", "Required")))
+  ];
+  if (f.type === "select") kids.push(field("Options (one per line)", bind(f, "options", { type: "textarea", rows: 4, get: linesGet, set: linesSet }), "Tag rules can match words in these, e.g. “PASS”."));
+  if (["text", "number", "discord_id", "case_number"].includes(f.type)) kids.push(field("Placeholder (grey example text)", bind(f, "placeholder")));
+  if (f.type === "case_number") kids.push(field("Prefix", bind(f, "prefix", { placeholder: "CID" }), "Generate makes e.g. PREFIX-20261020-4821."));
+  if (f.type === "static") kids.push(field("Text shown", bind(f, "text")));
+  if (f.type === "date") kids.push(toggle(f, "defaultToday", "Fill in today's date automatically"));
+  return h("div", { class: "sub" }, kids);
+}
+
+function renderPreview() {
+  const mount = $("previewMount");
+  if (!mount) return;
+  const form = CFG.forms.find(f => f.id === EDIT);
+  if (!form) return;
+  try {
+    Portal.render(form, mount, { draft: false });
+    if (!(form.blocks || []).length) mount.innerHTML = '<div class="empty-note">Add a block to see the form.</div>';
+  } catch (e) { mount.innerHTML = '<div class="empty-note">Preview error: ' + Portal.esc(e.message) + '</div>'; }
+}
+
+/* ---------------- WEBHOOKS ---------------- */
+function pageWebhooks(page) {
+  page.append(head("Webhooks", "Discord webhook URLs are stored privately in Google (never on the website or GitHub). Changes here save immediately. To get a URL: Discord channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy Webhook URL.",
+    h("button", { class: "btn primary sm", onclick: () => webhookModal(null) }, "+ Add webhook")));
+  const body = h("div", { class: "sec" });
+  if (!HOOKS.length) body.append(h("div", { class: "empty-note", text: "No webhooks yet." }));
+  else {
+    const tbl = h("table", { class: "list" }, h("tr", {}, ["Name", "Channel type", "Used by", "URL", ""].map(t => h("th", { text: t }))));
+    HOOKS.forEach(w => {
+      const users = CFG.forms.filter(f => f.webhookId === w.id).map(f => f.title)
+        .concat(CFG.forms.filter(f => f.leaderboard && f.leaderboard.enabled && f.leaderboard.webhookId === w.id).map(f => f.title + " leaderboard"));
+      const result = h("div", { class: "result" });
+      const test = async send => {
+        result.className = "result"; result.textContent = send ? "Sending…" : "Checking…";
+        try { const r = await api("webhookTest", { id: w.id, send: send }); result.className = "result " + (r.valid ? "ok" : "bad"); result.textContent = r.message; }
+        catch (e) { result.className = "result bad"; result.textContent = e.message; }
+      };
+      tbl.append(h("tr", {},
+        h("td", {}, h("b", { text: w.name }), h("div", { class: "mono", text: w.id }), result),
+        h("td", { text: w.kind === "text" ? "Text channel" : "Forum" }),
+        h("td", { class: "help", text: users.join(", ") || "—" }),
+        h("td", { class: "mono", text: w.hint }),
+        h("td", {}, h("div", { class: "acts" },
+          h("button", { class: "btn ghost sm", onclick: () => test(false) }, "Check"),
+          h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Post a test message to " + w.name + "?")) test(true); } }, "Send test"),
+          h("button", { class: "btn ghost sm", onclick: () => webhookModal(w) }, "Edit"),
+          h("button", { class: "btn danger sm", onclick: async () => {
+            if (!confirm("Delete webhook \"" + w.name + "\"?")) return;
+            try { HOOKS = (await api("webhookDelete", { id: w.id })).webhooks; toast("Webhook deleted.", "ok"); renderPage(true); } catch (e) { toast(e.message, "bad"); }
+          } }, "Delete")))));
+    });
+    body.append(h("div", { class: "tablewrap" }, tbl));
+  }
+  page.append(body);
+}
+function webhookModal(w) {
+  modal(close => {
+    const name = h("input", { type: "text", value: w ? w.name : "", maxlength: 60, placeholder: "e.g. CID Forum" });
+    const kind = h("select", {}, h("option", { value: "forum", text: "Forum channel (creates a thread per submission)" }), h("option", { value: "text", text: "Text channel (plain messages, e.g. leaderboard)" }));
+    kind.value = w ? w.kind : "forum";
+    const url = h("input", { type: "password", autocomplete: "off", placeholder: w ? "Leave blank to keep the current URL" : "https://discord.com/api/webhooks/…" });
+    const msg = h("div", { class: "msg" });
+    const btn = h("button", { class: "btn primary" }, w ? "Save" : "Add webhook");
+    const f = h("form", { style: "display:grid;gap:14px", onsubmit: async e => {
+      e.preventDefault(); btn.disabled = true; msg.textContent = "Checking with Discord…"; msg.style.color = "var(--muted)";
+      try {
+        const r = await api("webhookSave", { webhook: { id: w && w.id, name: name.value, kind: kind.value, url: url.value.trim() } });
+        HOOKS = r.webhooks; close(); toast("Webhook saved" + (r.discordName ? " (posts as \"" + r.discordName + "\")" : "") + ".", "ok"); renderPage(true);
+      } catch (err) { msg.style.color = ""; msg.textContent = err.message; }
+      btn.disabled = false;
+    } },
+      h("h3", { text: w ? "Edit webhook" : "Add webhook", style: "font-size:1.05rem" }),
+      field("Name (just for you)", name), field("Channel type", kind), field("Webhook URL", url, "Hidden as you paste. It's checked with Discord before saving."),
+      h("div", { class: "actions", style: "margin-top:0" }, h("button", { type: "button", class: "btn ghost", onclick: close }, "Cancel"), btn), msg);
+    return f;
+  });
+}
+
+/* ---------------- SETTINGS ---------------- */
+function pageSettings(page) {
+  const s = CFG.settings = CFG.settings || {};
+  s.announcement = s.announcement || { text: "", style: "info" };
+  s.maintenance = s.maintenance || { on: false, message: "" };
+  page.append(head("Portal settings", "Branding and site-wide notices. Use Save & publish at the bottom when done."));
+  page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
+    h("h3", { text: "Branding" }),
+    h("div", { class: "g2" }, field("Portal name", bind(s, "portalName", { max: 40 })), field("Subtitle under the name", bind(s, "portalSub", { max: 60 }))),
+    h("div", { class: "g2" }, field("Small gold tag above the title", bind(s, "heroTag", { max: 60 })), field("Footer text", bind(s, "footer", { max: 120 }))),
+    field("Home page intro line", bind(s, "heroText", { max: 300 }))));
+  page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
+    h("h3", { text: "Announcement" }),
+    field("Message on the home page (blank = none)", bind(s.announcement, "text", { type: "textarea", rows: 3 })),
+    field("Style", bind(s.announcement, "style", { type: "select", options: [["info", "Blue (info)"], ["warning", "Gold (important)"]] }))));
+  page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
+    h("h3", { text: "Maintenance mode" }),
+    h("p", { class: "help", text: "Shows a red notice and blocks all submissions until turned off. Officers' drafts are kept in their browser." }),
+    toggle(s.maintenance, "on", "Maintenance mode is ON"),
+    field("Message", bind(s.maintenance, "message", { type: "textarea", rows: 2 }))));
+}
+
+/* ---------------- ADMINS ---------------- */
+function pageAdmins(page) {
+  page.append(head("Admins", ME.role === "owner" ? "Owners can manage admin accounts. Admins can do everything else." : "",
+    ME.role === "owner" ? h("button", { class: "btn primary sm", onclick: addAdminModal }, "+ Add admin") : null));
+  if (ME.role !== "owner") { page.append(h("div", { class: "sec empty-note", text: "Only an owner can view and manage admin accounts." })); return; }
+  const tbl = h("table", { class: "list" }, h("tr", {}, ["Username", "Role", "Last login", ""].map(t => h("th", { text: t }))));
+  ADMINS.forEach(a => {
+    const role = h("select", { style: "width:auto" }, h("option", { value: "admin", text: "Admin" }), h("option", { value: "owner", text: "Owner" }));
+    role.value = a.role;
+    role.onchange = async () => {
+      try { await api("adminRole", { username: a.username, role: role.value }); a.role = role.value; toast("Role updated.", "ok"); }
+      catch (e) { toast(e.message, "bad"); role.value = a.role; }
+    };
+    tbl.append(h("tr", {},
+      h("td", {}, h("b", { text: a.username }), a.username === ME.username ? h("span", { class: "mono", text: "  (you)" }) : null),
+      h("td", {}, a.username === ME.username ? h("span", { class: "badge owner", text: a.role }) : role),
+      h("td", { class: "help", text: a.lastLogin ? new Date(a.lastLogin).toLocaleString() : "never" }),
+      h("td", {}, h("div", { class: "acts" },
+        h("button", { class: "btn ghost sm", onclick: () => resetModal(a) }, "Reset password"),
+        a.username === ME.username ? null : h("button", { class: "btn danger sm", onclick: async () => {
+          if (!confirm("Remove " + a.username + "? They are signed out immediately.")) return;
+          try { await api("adminRemove", { username: a.username }); await loadAll(true); toast("Admin removed.", "ok"); } catch (e) { toast(e.message, "bad"); }
+        } }, "Remove")))));
+  });
+  page.append(h("div", { class: "sec" }, h("div", { class: "tablewrap" }, tbl)));
+}
+function addAdminModal() {
+  modal(close => {
+    const u = h("input", { type: "text", maxlength: 32, autocomplete: "off" }), p = h("input", { type: "password", autocomplete: "new-password" });
+    const r = h("select", {}, h("option", { value: "admin", text: "Admin" }), h("option", { value: "owner", text: "Owner (can manage admins)" }));
+    const msg = h("div", { class: "msg" });
+    return h("form", { style: "display:grid;gap:14px", onsubmit: async e => {
+      e.preventDefault();
+      try { await api("adminAdd", { username: u.value, password: p.value, role: r.value }); close(); await loadAll(true); toast("Admin added. Send them their login privately.", "ok"); }
+      catch (err) { msg.textContent = err.message; }
+    } }, h("h3", { text: "Add admin" }), field("Username", u, "3-32 letters, numbers, dot, dash or underscore."), field("Temporary password", p, "At least 8 characters. They can change it under My Account."), field("Role", r),
+      h("div", { class: "actions", style: "margin-top:0" }, h("button", { type: "button", class: "btn ghost", onclick: close }, "Cancel"), h("button", { class: "btn primary" }, "Add admin")), msg);
+  });
+}
+function resetModal(a) {
+  modal(close => {
+    const p = h("input", { type: "password", autocomplete: "new-password" }), msg = h("div", { class: "msg" });
+    return h("form", { style: "display:grid;gap:14px", onsubmit: async e => {
+      e.preventDefault();
+      try { await api("adminReset", { username: a.username, password: p.value }); close(); toast("Password reset for " + a.username + ".", "ok"); }
+      catch (err) { msg.textContent = err.message; }
+    } }, h("h3", { text: "Reset password: " + a.username }), field("New password", p, "At least 8 characters."),
+      h("div", { class: "actions", style: "margin-top:0" }, h("button", { type: "button", class: "btn ghost", onclick: close }, "Cancel"), h("button", { class: "btn primary" }, "Reset")), msg);
+  });
+}
+
+/* ---------------- ACTIVITY ---------------- */
+function pageActivity(page) {
+  page.append(head("Activity log", "Every sign-in and change made through this portal (last 200). The full log is the “Admin Log” tab in the Google Sheet.",
+    h("button", { class: "btn ghost sm", onclick: async () => { try { await loadAll(true); } catch (e) { toast(e.message, "bad"); } } }, "Refresh")));
+  const tbl = h("table", { class: "list" }, h("tr", {}, ["When", "Admin", "Action", "Detail"].map(t => h("th", { text: t }))));
+  LOG.forEach(l => tbl.append(h("tr", {}, h("td", { class: "help", style: "white-space:nowrap", text: new Date(l.when).toLocaleString() }), h("td", { text: l.user }), h("td", { text: l.action }), h("td", { class: "help", text: l.detail }))));
+  page.append(h("div", { class: "sec" }, LOG.length ? h("div", { class: "tablewrap" }, tbl) : h("div", { class: "empty-note", text: "Nothing yet." })));
+}
+
+/* ---------------- ACCOUNT ---------------- */
+function pageAccount(page) {
+  page.append(head("My account", "Signed in as " + ME.username + " (" + ME.role + ")."));
+  const cur = h("input", { type: "password", autocomplete: "current-password" }), nx = h("input", { type: "password", autocomplete: "new-password" }), cf = h("input", { type: "password", autocomplete: "new-password" });
+  const msg = h("div", { class: "msg" });
+  page.append(h("form", { class: "sec", style: "display:grid;gap:14px;max-width:460px", onsubmit: async e => {
+    e.preventDefault(); msg.textContent = "";
+    if (nx.value !== cf.value) { msg.textContent = "New passwords don't match."; return; }
+    try { await api("changePassword", { current: cur.value, next: nx.value }); cur.value = nx.value = cf.value = ""; toast("Password changed.", "ok"); }
+    catch (err) { msg.textContent = err.message; }
+  } }, h("h3", { text: "Change password" }), field("Current password", cur), field("New password", nx, "At least 8 characters."), field("Confirm new password", cf),
+    h("div", {}, h("button", { class: "btn primary" }, "Change password")), msg));
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+if (TOKEN) loadAll().catch(e => signedOut(e.message === "Failed to fetch" ? "Can't reach the server." : ""));
+else signedOut("");
+</script>
+</body>
+</html>
