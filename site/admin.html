@@ -60,9 +60,31 @@
   .empty-note{color:var(--muted);font-size:.88rem;padding:14px 4px}
 
   /* editor */
-  .editor{display:grid;grid-template-columns:minmax(380px,520px) 1fr;gap:20px;align-items:start}
-  @media(max-width:1150px){.editor{grid-template-columns:1fr}}
-  .preview{position:sticky;top:84px;max-height:calc(100vh - 110px);overflow:auto;border-radius:12px}
+  .editor{display:grid;gap:20px;align-items:start}
+  .editor.side{grid-template-columns:minmax(380px,1fr) minmax(380px,1fr)}
+  .editor.below,.editor.off{grid-template-columns:minmax(0,860px)}
+  .editor.off .preview{display:none}
+  .editor>div,.g2>*,.g3>*,label.f,.sub,.blk,details.sec{min-width:0}
+  .editor input,.editor select,.editor textarea{max-width:100%;min-width:0}
+  .editor.side .g3{grid-template-columns:1fr 1fr}
+  .preview{background:var(--bg);box-shadow:-14px 0 24px -18px rgba(0,0,0,.8)}
+  .preview{border-radius:12px}
+  .editor.side .preview{position:sticky;top:84px;max-height:calc(100vh - 110px);overflow:auto}
+  @media(max-width:1150px){.editor.side{grid-template-columns:minmax(0,860px)} .editor.side .preview{position:static;max-height:none}}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{all:unset;cursor:pointer;padding:7px 12px;font-size:.78rem;font-weight:700;color:var(--muted)}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{background:rgba(47,123,255,.18);color:var(--text)}
+  .seg button:hover{color:var(--text)}
+  #previewMount tbody[data-b]{cursor:pointer}
+  #previewMount tbody[data-b]:hover td{box-shadow:inset 0 0 0 999px rgba(47,123,255,.10)}
+  #previewMount tbody[data-b].sel td{box-shadow:inset 0 0 0 999px rgba(242,182,50,.16)}
+  .blk.flash{animation:flash 1.4s ease}
+  @keyframes flash{0%,60%{border-color:var(--gold);box-shadow:0 0 0 3px rgba(242,182,50,.35)}100%{border-color:var(--line);box-shadow:none}}
+  .fullprev{position:fixed;inset:0;z-index:70;background:rgba(3,6,12,.92);overflow:auto;padding:24px 16px 60px;display:none}
+  .fullprev.show{display:block}
+  .fullprev .in{max-width:1100px;margin:0 auto}
+  .fullprev .bar{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:var(--muted);font-size:.85rem}
   .preview .ptitle{font-size:.75rem;letter-spacing:.18em;color:var(--muted);margin:0 0 10px;text-transform:uppercase;display:flex;gap:10px;align-items:center}
   details.sec{padding:0}
   details.sec>summary{list-style:none;cursor:pointer;padding:16px 20px;font-size:.82rem;letter-spacing:.16em;color:var(--blue2);font-weight:700;text-transform:uppercase;display:flex;align-items:center;gap:10px}
@@ -172,6 +194,8 @@ let TOKEN = null;
 try { TOKEN = sessionStorage.getItem("lspd_admin_token"); } catch (e) {}
 let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [];
 let TAB = "forms", EDIT = null;           // EDIT = id of form being edited
+let PV = "side";                          // preview layout: side | below | off
+try { PV = localStorage.getItem("lspd_admin_preview") || "side"; } catch (e) {}
 const OPEN = new WeakSet();               // which block cards are expanded
 
 function toast(msg, type) {
@@ -428,13 +452,22 @@ function pageEditor(page) {
   form.leaderboard = form.leaderboard || { enabled: false };
   form.blocks = form.blocks || [];
 
+  const seg = h("div", { class: "seg", title: "Where the live preview goes" },
+    [["side", "Side by side"], ["below", "Below"], ["off", "Off"]].map(([k, t]) =>
+      h("button", { type: "button", class: PV === k ? "on" : "", onclick: () => { PV = k; try { localStorage.setItem("lspd_admin_preview", k); } catch (e) {} renderPage(true); } }, t)));
   page.append(head(form.title, "",
     h("button", { class: "btn ghost sm", onclick: () => { EDIT = null; renderPage(); } }, "← All forms"),
-    h("span", { class: "badge " + form.status, text: STATUS_TXT[form.status] })));
+    h("span", { class: "badge " + form.status, text: STATUS_TXT[form.status] }),
+    h("span", { class: "help", text: "Preview:" }), seg,
+    h("button", { class: "btn ghost sm", onclick: () => fullPreview(form) }, "⛶ Full-screen preview")));
 
   const left = h("div", { style: "display:grid;gap:14px" });
-  const right = h("div", { class: "preview" }, h("div", { class: "ptitle" }, "Live preview", h("span", { class: "mono", text: "(what officers will see)" })), h("div", { id: "previewMount" }));
-  page.append(h("div", { class: "editor" }, left, right));
+  const right = h("div", { class: "preview" },
+    h("div", { class: "ptitle" }, "Live preview", h("span", { class: "mono", text: "click any part to edit it" })),
+    h("div", { id: "previewMount", onclick: e => jumpToBlock(e) }));
+  const editorEl = h("div", { class: "editor " + PV }, left, right);
+  page.append(editorEl);
+  if (PV === "below") editorEl.append(editorEl.removeChild(right)); // keeps order explicit
 
   const sec = (title, open, ...kids) => h("details", { class: "sec", open: open }, h("summary", { text: title }), h("div", { class: "body" }, kids));
 
@@ -521,13 +554,15 @@ function pageEditor(page) {
   blocksBody.push(h("div", { class: "addbar" }, addSel, h("button", { class: "btn primary sm", onclick: () => {
     const b = newBlock(form, addSel.value); OPEN.add(b); form.blocks.push(b); changed(true);
   } }, "+ Add block")));
-  left.append(sec("Blocks (" + form.blocks.length + ")", true, blocksBody));
+  const blocksSec = sec("Blocks (" + form.blocks.length + ")", true, blocksBody);
+  blocksSec.id = "blocksSec";
+  left.append(blocksSec);
 
   renderPreview();
 }
 
 function blockCard(form, b, i) {
-  const d = h("details", { class: "blk", open: OPEN.has(b) },
+  const d = h("details", { class: "blk", open: OPEN.has(b), "data-bi": i },
     h("summary", {}, h("span", { class: "ty", text: b.type }), h("span", { class: "sm", text: blockSummary(b) || "—" }),
       ctrls(form.blocks, i, { dup: x => { const c = clone(x); renameKeys(form, c); return c; }, confirm: "Remove this block?" })),
     h("div", { class: "bb" }, blockBody(form, b)));
@@ -617,7 +652,52 @@ function renderPreview() {
   try {
     Portal.render(form, mount, { draft: false });
     if (!(form.blocks || []).length) mount.innerHTML = '<div class="empty-note">Add a block to see the form.</div>';
+    fitPreview();
   } catch (e) { mount.innerHTML = '<div class="empty-note">Preview error: ' + Portal.esc(e.message) + '</div>'; }
+}
+// shrink the 780px-wide sheet to fit the preview column instead of scrolling sideways
+function fitPreview() {
+  const mount = $("previewMount"), wrap = mount && mount.querySelector(".paper-wrap");
+  if (!wrap) return;
+  wrap.style.zoom = "";
+  const z = Math.min(1, (mount.clientWidth - 2) / 800);
+  if (z < 1) wrap.style.zoom = z.toFixed(3);
+}
+window.addEventListener("resize", () => { clearTimeout(fitPreview._t); fitPreview._t = setTimeout(fitPreview, 150); });
+
+// click a part of the preview -> open that block's settings
+function jumpToBlock(e) {
+  const tb = e.target.closest("tbody[data-b]");
+  if (!tb) return;
+  e.preventDefault();
+  const i = Number(tb.dataset.b), form = CFG.forms.find(f => f.id === EDIT), b = form && form.blocks[i];
+  if (!b) return;
+  document.querySelectorAll("#previewMount tbody.sel").forEach(x => x.classList.remove("sel"));
+  tb.classList.add("sel");
+  const sec = $("blocksSec"); if (sec) sec.open = true;
+  const card = document.querySelector('details.blk[data-bi="' + i + '"]');
+  if (!card) return;
+  OPEN.add(b); card.open = true;
+  card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
+  const first = card.querySelector(".bb input, .bb textarea, .bb select");
+  if (first) setTimeout(() => first.focus({ preventScroll: true }), 400);
+}
+
+function fullPreview(form) {
+  let fp = $("fullprev");
+  if (!fp) {
+    fp = h("div", { class: "fullprev", id: "fullprev" },
+      h("div", { class: "in" },
+        h("div", { class: "bar" }, h("b", { id: "fpTitle", style: "color:var(--text);font-size:1rem" }), h("span", { class: "spacer", style: "flex:1" }),
+          "Press Esc to close", h("button", { class: "btn ghost sm", onclick: () => fp.classList.remove("show") }, "✕ Close")),
+        h("div", { id: "fpMount" })));
+    document.body.append(fp);
+    document.addEventListener("keydown", e => { if (e.key === "Escape") fp.classList.remove("show"); });
+  }
+  $("fpTitle").textContent = form.title + " (preview)";
+  Portal.render(form, $("fpMount"), { draft: false });
+  fp.classList.add("show"); fp.scrollTop = 0;
 }
 
 /* ---------------- WEBHOOKS ---------------- */

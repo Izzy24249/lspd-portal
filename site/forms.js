@@ -132,7 +132,7 @@ window.Portal = (function () {
     const wmOpacity = Math.min(Math.max(Number(form.watermarkOpacity) || (theme === "theme-dossier" ? 8 : 6), 2), 30) / 100;
     mount.innerHTML = `<div class="paper-wrap ${theme}"><div class="paper ${theme}">${wm ? `<div class="wm" style="background-image:${wm};opacity:${wmOpacity}"></div>` : ""}<table class="xl">
       <colgroup><col style="width:26.6%"><col style="width:35%"><col style="width:21.1%"><col style="width:17.3%"></colgroup>
-      <tbody>${blocks.map(b => blockHTML(b, form)).join("")}</tbody></table></div></div>`;
+      ${blocks.map((b, i) => `<tbody data-b="${i}">${blockHTML(b, form)}</tbody>`).join("")}</table></div></div>`;
     const root = mount.querySelector("table");
     const q = sel => root.querySelector(sel);
     const qa = sel => [...root.querySelectorAll(sel)];
