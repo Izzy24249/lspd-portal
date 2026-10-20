@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>LSPD Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="portal.css">
+<link rel="stylesheet" href="portal.css?v=202610200937">
 <style>
   main.adm{max-width:1500px;padding:24px 22px 120px}
   .pill.admin{color:var(--gold);border-color:rgba(242,182,50,.4)}
@@ -188,7 +188,7 @@
 <div class="modal" id="modal"><div class="sec" id="modalBody"></div></div>
 <div class="toast" id="toast"></div>
 
-<script src="forms.js"></script>
+<script src="forms.js?v=202610200937"></script>
 <script>
 /* =====================================================================
    STATE + API
@@ -318,7 +318,7 @@ async function loadAll(keepEdits) {
   showBackendWarning(res.backend || 0);
   if (!keepEdits) {
     CFG = res.config; VERSION = res.config.version;
-    CFG.forms = CFG.forms.map(f => Portal.withDefaults(f));   // built-in guides for forms saved before guides existed
+    if (typeof Portal.withDefaults === "function") CFG.forms = CFG.forms.map(f => Portal.withDefaults(f)); // built-in guides for forms saved before guides existed
     BASE = JSON.stringify(CFG);
   }
   $("loginView").style.display = "none"; $("bootMsg").style.display = "none"; $("appView").style.display = "";
