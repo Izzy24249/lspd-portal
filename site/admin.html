@@ -917,6 +917,8 @@ function pageSettings(page) {
       field("Roster Google Sheet link", bind(s.roster, "url", { placeholder: "https://docs.google.com/spreadsheets/d/…  (blank = this spreadsheet)" }), "Paste the link from your browser's address bar."),
       field("Tabs to read", bind(s.roster, "tab", { placeholder: s.roster.url ? "blank = all tabs" : "Roster" }), "Blank = all tabs of the linked sheet. Or list tabs: Patrol, CID, SWAT")),
     (() => { if (s.roster.requireId === undefined) s.roster.requireId = true; return toggle(s.roster, "requireId", "Only list people who have a Discord ID (hide everyone else)"); })(),
+    (() => { if (s.roster.exclude === undefined) s.roster.exclude = "former, removed, inactive, resigned, terminated, fired, retired, archive, onboarding, pending, applicant, blacklist, dismissed";
+      return field("Leave out people marked as", bind(s.roster, "exclude", { type: "textarea", rows: 2 }), "Comma-separated words. Tabs, section headings (e.g. a \"FORMER MEMBERS\" row) and Status cells containing any of these are skipped. Crossed-out and hidden rows are always skipped."); })(),
     h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
       h("button", { class: "btn ghost sm", onclick: async e => {
         if (isDirty()) return toast("Save & publish first, then test.", "bad");
@@ -926,7 +928,7 @@ function pageSettings(page) {
           const shown = s.roster.requireId === false ? r.people : r.people.filter(p => /^\d{15,21}$/.test(p.id || ""));
           Portal.setRoster(shown);
           rosterOut.textContent = (r.error ? "❌ " + r.error : "✅ " + shown.length + " people available in the pickers, from " + r.source + "." + (shown.length < r.people.length ? " (" + (r.people.length - shown.length) + " hidden because they have no Discord ID.)" : "")) +
-            ((r.tabs || []).length ? "\n" + r.tabs.map(t => "  • " + t.tab + ": " + (t.skipped ? "skipped (" + t.skipped + ")" : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : ""))).join("\n") : "") +
+            ((r.tabs || []).length ? "\n" + r.tabs.map(t => "  • " + t.tab + ": " + (t.skipped ? "skipped (" + t.skipped + ")" : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : "") + (t.left ? ", " + t.left + " left out (former / onboarding / crossed out / hidden)" : ""))).join("\n") : "") +
             (r.people.length ? "\nFirst few: " + r.people.slice(0, 5).map(p => p.name + (p.id ? " (" + p.id + ")" : " (no ID)")).join(", ") : "") +
             (r.warnings.length ? "\n⚠️ " + r.warnings.slice(0, 6).join("\n⚠️ ") + (r.warnings.length > 6 ? "\n…and " + (r.warnings.length - 6) + " more" : "") : "");
         } catch (err) { rosterOut.textContent = "❌ " + err.message; }

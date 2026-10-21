@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 11;
+const BACKEND_VERSION = 12;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -138,6 +138,8 @@ function rosterForPickers_() {
   return r.requireId === false ? people : people.filter(p => /^\d{15,21}$/.test(p.id || ""));
 }
 
+const ROSTER_EXCLUDE_DEFAULT = "former, removed, inactive, resigned, terminated, fired, retired, archive, onboarding, pending, applicant, blacklist, dismissed";
+
 function getRoster_(fresh) {
   const cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get("portal_roster"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
@@ -158,12 +160,17 @@ function getRoster_(fresh) {
     }
     out.source = (linked ? "linked sheet \"" + book.getName() + "\"" : "this spreadsheet") + " → " + (all ? "all tabs" : sheets.map(x => "\"" + x.getName() + "\"").join(", "));
     const byKey = {};
+    // words that mean "not a current member": tabs, section headings, status cells containing these are left out
+    const EXCL = str_(r.exclude === undefined ? ROSTER_EXCLUDE_DEFAULT : r.exclude).toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
+    const isOut = t => { t = String(t || "").toLowerCase(); return EXCL.some(w => t.indexOf(w) !== -1); };
     sheets.forEach(sh => {
-      const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "" };
+      const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "", left: 0 };
       out.tabs.push(info);
+      if (isOut(tabName)) { info.skipped = "tab name marks former/onboarding members"; return; }
       if (sh.getLastRow() < 2) { info.skipped = "empty"; return; }
       const range = sh.getRange(1, 1, Math.min(sh.getLastRow(), 2000), Math.min(sh.getLastColumn(), 30));
       const raw = range.getValues(), shown = range.getDisplayValues();
+      let lines = null; try { lines = range.getFontLines(); } catch (e) {}
       // find the header row in the first 15 rows (allows title rows above it)
       let hr = -1, idCol = -1, nameCol = -1, callCol = -1;
       for (let i = 0; i < Math.min(15, shown.length) && hr < 0; i++) {
@@ -177,7 +184,21 @@ function getRoster_(fresh) {
       if (hr < 0) { info.skipped = "no header row with a Name/Callsign column"; return; }
       const head = shown[hr].map(h => String(h).toLowerCase());
       const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
+      const statusCols = head.map((h, i) => /status|state|active|standing/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
+      let inOutSection = false;
       for (let i = hr + 1; i < shown.length; i++) {
+        const filled = shown[i].filter(c => str_(c)).length;
+        // section heading row (one cell of text, e.g. "FORMER MEMBERS" / "ACTIVE ROSTER")
+        if (filled === 1 && !(idCol >= 0 && str_(shown[i][idCol]))) {
+          const t = str_(shown[i].find(c => str_(c)));
+          const heading = isOut(t) || (/[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t)) || /member|roster|division|section|command|staff|personnel|active/i.test(t);
+          if (heading) { inOutSection = isOut(t); continue; }
+        }
+        if (!filled) continue;
+        const why = inOutSection ? "section" : statusCols.some(c => isOut(shown[i][c])) ? "status" :
+          (lines && lines[i] && (lines[i][nameCol] === "line-through" || (callCol >= 0 && lines[i][callCol] === "line-through"))) ? "crossed out" :
+          (sh.isRowHiddenByUser(i + 1) || sh.isRowHiddenByFilter(i + 1)) ? "hidden row" : "";
+        if (why) { info.left++; continue; }
         const nm = str_(shown[i][nameCol]), cs = callCol >= 0 ? str_(shown[i][callCol]) : "";
         const name = cs && nm ? (nm.indexOf(cs) === -1 ? cs + " | " + nm : nm) : (nm || cs);   // "L-104 | Duzen"
         let id = idCol >= 0 ? str_(shown[i][idCol]).replace(/[^0-9]/g, "") : "";
@@ -943,7 +964,8 @@ function validateConfig_(c) {
     heroLogo: s.heroLogo == null ? "img/lspd-patch.png" : str_(s.heroLogo),
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
     maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) },
-    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300), requireId: !(s.roster && s.roster.requireId === false) }
+    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300), requireId: !(s.roster && s.roster.requireId === false),
+      exclude: s.roster && s.roster.exclude !== undefined ? clip_(str_(s.roster.exclude), 500) : ROSTER_EXCLUDE_DEFAULT }
   };
   if (out.settings.roster.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.url)) throw new Error("Roster sheet link must be a Google Sheets link (https://docs.google.com/spreadsheets/d/...).");
   if (out.settings.heroLogo && !IMG_RE.test(out.settings.heroLogo)) throw new Error("Home page logo must be a file like img/logo.png or an https:// link.");
