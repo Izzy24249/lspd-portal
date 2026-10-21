@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 7;
+const BACKEND_VERSION = 8;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -272,51 +272,53 @@ function handleSubmit_(d) {
   const embeds = packEmbeds_(embedFields, title, color);
   const isForum = webhook.kind !== "text";
 
-  // ---- everything in ONE post: detail cards + narrative cards (Discord: max 10 cards, 6000 characters per post) ----
+  // ---- ONE post when it fits; otherwise post 1 = full case report, then the narrative on its own ----
+  // (Discord: max 10 cards and ~6000 characters per post, 4096 per card description)
   const LIMIT = 5900;
   const sizeOf = e => (e.title || "").length + (e.description || "").length + (e.fields || []).reduce((n, f) => n + f.name.length + f.value.length, 0);
-  const extra = followTexts.map(t => ({ title: clip_("📝 " + t.title, 256), description: t.text, color: color }));
-  const wanted = embeds.concat(extra);
-  const sent = [];
-  let used = 0, cut = false;
-  for (let i = 0; i < wanted.length; i++) {
-    const e = wanted[i], isText = i >= embeds.length;
-    if (sent.length < 10 && used + sizeOf(e) <= LIMIT && (!e.description || e.description.length <= 4096)) { sent.push(e); used += sizeOf(e); continue; }
-    cut = true;
-    if (isText && sent.length < 10) {
-      // shorten the narrative to the space left in this post; the full text goes in the attached file
-      const note = "\n\n*… continued in the attached file*";
-      const room = Math.min(4096, LIMIT - used - e.title.length) - note.length;
-      if (room > 300) {
-        let part = e.description.substring(0, room);
-        const stop = Math.max(part.lastIndexOf("\n"), part.lastIndexOf(". "));
-        if (stop > room * 0.6) part = part.substring(0, stop + 1);
-        const short = { title: e.title, description: part + note, color: color };
-        sent.push(short); used += sizeOf(short);
-      } else if (used + e.title.length + 40 <= LIMIT) {
-        const short = { title: e.title, description: "*See the attached file for the full text.*", color: color };
-        sent.push(short); used += sizeOf(short);
-      }
-    }
+  const total = list => list.reduce((n, e) => n + sizeOf(e), 0);
+  const textCards = followTexts.map(t => ({ title: clip_("📝 " + t.title, 256), description: t.text, color: color }));
+  const allCards = embeds.concat(textCards);
+  const messages = [];
+  if (allCards.length <= 10 && total(allCards) <= LIMIT && textCards.every(c => c.description.length <= 4096)) {
+    messages.push(allCards);                                   // everything fits: a single post
+  } else {
+    // group the report cards into as few posts as possible
+    let cur = [];
+    embeds.forEach(e => { if (cur.length && (cur.length >= 10 || total(cur) + sizeOf(e) > LIMIT)) { messages.push(cur); cur = []; } cur.push(e); });
+    if (cur.length) messages.push(cur);
+    // then each narrative as its own post(s), split at paragraph/sentence breaks
+    followTexts.forEach(t => {
+      // pack the text into as few posts as possible (a post can stack cards up to the size limit)
+      const posts = [];
+      let cur = [], size = 0;
+      chunk_(t.text, 4000).forEach(part => {
+        if (cur.length && size + part.length + 40 > LIMIT) { posts.push(cur); cur = []; size = 0; }
+        cur.push(part); size += part.length + 40;
+      });
+      if (cur.length) posts.push(cur);
+      posts.forEach((parts, pi) => messages.push(parts.map((part, ci) => {
+        const card = { description: part, color: color };
+        if (ci === 0) card.title = clip_("📝 " + t.title + (posts.length > 1 ? " (" + (pi + 1) + "/" + posts.length + ")" : ""), 256);
+        return card;
+      })));
+    });
   }
 
-  const first = { embeds: sent, allowed_mentions: { parse: [] } };
+  const first = { embeds: messages[0], allowed_mentions: { parse: [] } };
   if (isForum) {
     first.thread_name = clip_(fillTemplate_(form.threadTitle || form.title, values) || form.title, 100);
     if (tags.length) first.applied_tags = tags;
   }
-  let file = null;
-  if (cut) {
-    // complete report as a text file attached to the same post, so nothing is ever lost
-    const lines = [title, "=".repeat(Math.min(60, title.length)), ""];
-    embedFields.forEach(f => lines.push(f.name.replace(/\*\*/g, "") + ":", f.value.replace(/\*\*|`/g, ""), ""));
-    followTexts.forEach(t => lines.push(t.title.toUpperCase() + ":", t.text, ""));
-    const fname = (fillTemplate_(form.threadTitle || form.title, values) || form.id).replace(/[^\w.-]+/g, "_").substring(0, 60) + "_full-report.txt";
-    file = Utilities.newBlob(lines.join("\n"), "text/plain", fname);
-  }
-  const r1 = discordPost_(webhook.url, first, null, file);
+  const r1 = discordPost_(webhook.url, first, null);
   if (!r1.ok) return { ok: false, error: r1.error };
+  const threadId = isForum && r1.body ? r1.body.channel_id : null;
   let warning = "";
+  for (let i = 1; i < messages.length; i++) {
+    Utilities.sleep(350); // stay under Discord's webhook rate limit
+    const r = discordPost_(webhook.url, { embeds: messages[i], allowed_mentions: { parse: [] } }, threadId);
+    if (!r.ok) { warning = "the case report posted, but part " + (i + 1) + " failed: " + r.error; break; }
+  }
 
   // ---- archive + leaderboard (after Discord so a failed post isn't logged as filed) ----
   archiveRow_(form, archiveCols);
