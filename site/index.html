@@ -33,6 +33,7 @@
     </div>
     <div class="maint" id="maint" style="display:none"></div>
     <div class="announce" id="announce" style="display:none"></div>
+    <div class="stale" id="stale" style="display:none"></div>
     <div id="formGrid"><div class="loading">Loading forms…</div></div>
     <div id="programs"></div>
   </section>
@@ -270,7 +271,9 @@ Portal.loadConfig().then(cfg => {
   try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
   if(changed) apply(cfg);
   else if(rosterChanged){ CONFIG = cfg; if (Portal.setRoster) Portal.setRoster(cfg.roster || []); if (Portal.setRosters) Portal.setRosters(cfg.rosters || {}); }   // fresh roster, no form reload needed
+  $("stale").style.display = "none";
 }).catch(err => {
+  if(CONFIG){ $("stale").style.display = ""; $("stale").innerHTML = "⚠️ Couldn't get the latest forms from the server, so this is the last saved copy. <a onclick=\"location.reload()\">Try again</a><small>" + Portal.esc(err.message) + "</small>"; }
   if(!CONFIG) $("formGrid").innerHTML = '<div class="loading">Could not load forms. Check your connection and refresh.<br><small>' + Portal.esc(err.message) + '</small></div>';
 });
 </script>

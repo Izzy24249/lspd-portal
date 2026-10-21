@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 25;
+  const BACKEND_NEEDS = 26;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -780,7 +780,11 @@ window.Portal = (function () {
     return res.json();
   }
   async function loadConfig() {
-    const res = await fetch(ENDPOINT + "?action=config&t=" + Date.now());
+    const ac = typeof AbortController === "function" ? new AbortController() : null, timer = ac && setTimeout(() => ac.abort(), 30000);
+    let res;
+    try { res = await fetch(ENDPOINT + "?action=config&t=" + Date.now(), ac ? { signal: ac.signal } : undefined); }
+    catch (e) { throw new Error(e.name === "AbortError" ? "Google took too long to answer (30s)." : e.message); }
+    finally { if (timer) clearTimeout(timer); }
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "Could not load forms");
     if (!data.config) throw new Error("The Apps Script backend is out of date: paste the new WebApp.gs and deploy a new version.");

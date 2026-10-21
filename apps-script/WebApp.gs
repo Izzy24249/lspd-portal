@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 25;
+const BACKEND_VERSION = 26;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1043,7 +1043,7 @@ function updateHoursBoard_(cfg) {
 // =====================================================================
 const PROMO_DEFAULT_ = {
   on: true, title: "SGT Promotion Tracker", subtitle: "Corporal requirements for promotion to Sergeant. Progress updates automatically when a report is filed.",
-  rosterTabId: null, rosterTabName: "FTO - Roster", col: "C", match: "L-5##", tigDays: 14, tigCol: "",
+  rosterTabId: null, rosterTabName: "FTO - Roster", col: "C", match: "L-5##", tigDays: 14, tigCol: "G", tigTabId: null, tigTabName: "LSPD Personnel Roster",
   tasks: [
     { id: "gomWitness", title: "Witness a Global Operation Manual Training", need: 1, desc: "Sit in on a GOM training hosted by a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a Global Operation Manual Training" }] },
     { id: "gomLead", title: "Lead a GOM Training with a SGT+ hosting", need: 1, desc: "Run the training while a SGT+ hosts and observes.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Lead a GOM Training with a SGT+ hosting" }] },
@@ -1061,6 +1061,8 @@ function cleanPromo_(p) {
     col: /^[A-Za-z]{1,2}$/.test(str_(p.col)) ? str_(p.col).toUpperCase() : "C",
     match: clip_(str_(p.match) || "L-5##", 40), tigDays: Math.max(0, Math.min(365, parseInt(p.tigDays, 10) || 0)),
     tigCol: /^[A-Za-z]{1,2}$/.test(str_(p.tigCol)) ? str_(p.tigCol).toUpperCase() : "",
+    tigTabId: p.tigTabId != null && p.tigTabId !== "" && isFinite(Number(p.tigTabId)) ? Number(p.tigTabId) : null,
+    tigTabName: String(p.tigTabName == null ? PROMO_DEFAULT_.tigTabName : p.tigTabName).substring(0, 100),
     tasks: []
   };
   const ids = {};
@@ -1097,10 +1099,12 @@ function promoRe_(pattern) {
   const p = str_(pattern).toUpperCase().replace(/[^A-Z0-9#*]/g, "");
   return new RegExp("^" + p.replace(/#/g, "\\d").replace(/\*/g, "[A-Z0-9]*") + "$");
 }
-function promoTabId_(pc) {
-  if (pc.rosterTabId != null) return pc.rosterTabId;
-  const want = str_(pc.rosterTabName).toLowerCase();
-  const sh = rosterBook_().getSheets().find(x => x.getName() === pc.rosterTabName) || rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want);
+function promoTabId_(pc, which) {
+  const id = which === "tig" ? pc.tigTabId : pc.rosterTabId, name = which === "tig" ? pc.tigTabName : pc.rosterTabName;
+  if (id != null) return id;
+  if (!str_(name)) return null;
+  const want = str_(name).toLowerCase();
+  const sh = rosterBook_().getSheets().find(x => x.getName() === name) || rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want);
   return sh ? sh.getSheetId() : null;
 }
 // CPLs on the roster: [{ key, callsign, name, id, tigDate }]
@@ -1108,8 +1112,14 @@ function promoCandidates_(fresh) {
   const pc = promoCfg_();
   const tabId = promoTabId_(pc);
   if (tabId == null) return { error: "Roster tab \"" + pc.rosterTabName + "\" not found in the roster sheet.", list: [] };
-  const cols = [pc.col].concat(pc.tigCol ? [pc.tigCol] : []).filter((x, i, a) => a.indexOf(x) === i).sort();
+  // time in grade: a column on another tab (e.g. LSPD Personnel Roster col G), matched by Discord ID / callsign / name
+  const tigTab = pc.tigCol ? promoTabId_(pc, "tig") : null;
+  const ownTab = pc.tigTabId == null && !str_(pc.tigTabName);            // no other tab named: the column is on the CPL tab itself
+  const sameTab = !!pc.tigCol && (ownTab || tigTab === tabId);
+  const cols = [pc.col].concat(sameTab ? [pc.tigCol] : []).filter((x, i, a) => a.indexOf(x) === i).sort();
   const tab = getRosterTab_(tabId, !!fresh, cols);
+  let tigPeople = [];
+  if (pc.tigCol && !sameTab && tigTab != null) { try { tigPeople = getRosterTab_(tigTab, !!fresh, [pc.tigCol]).people || []; } catch (e) {} }
   const re = promoRe_(pc.match), list = [], seen = {};
   (tab.people || []).forEach(p => {
     const cs = str_(p.more && p.more[pc.col]);
@@ -1117,7 +1127,13 @@ function promoCandidates_(fresh) {
     const name = p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name.replace(cs, "").trim();
     const key = p.id || "CS:" + callKey_(cs);
     if (seen[key]) return; seen[key] = 1;
-    list.push({ key: key, callsign: cs, name: name || p.name, id: p.id || "", tigRaw: pc.tigCol ? str_(p.more && p.more[pc.tigCol]) : "" });
+    let tigRaw = sameTab ? str_(p.more && p.more[pc.tigCol]) : "";
+    if (!sameTab && tigPeople.length) {
+      const ck = callKey_(cs), nk = nameKey_(name || p.name);
+      const m = (p.id && tigPeople.find(x => x.id === p.id)) || tigPeople.find(x => callKey_(x.name) === ck) || (nk && tigPeople.find(x => nameKey_(x.name) === nk));
+      if (m) tigRaw = str_(m.more && m.more[pc.tigCol]);
+    }
+    list.push({ key: key, callsign: cs, name: name || p.name, id: p.id || "", tigRaw: tigRaw });
   });
   list.sort((a, b) => a.callsign.localeCompare(b.callsign, undefined, { numeric: true }));
   return { error: tab.error || "", list: list, tab: tab.tab };
@@ -1205,7 +1221,10 @@ function promoView_(admin) {
   base.candidates = cr.list.map(c => {
     const credits = byKey[c.key] || [];
     let sinceDate = since[c.key] || "", sinceSrc = sinceDate ? "set" : "";
-    if (!sinceDate && c.tigRaw) { const d = new Date(c.tigRaw); if (!isNaN(d)) { sinceDate = ymd_(d); sinceSrc = "roster"; } }
+    if (!sinceDate && c.tigRaw) {
+      if (/^\d{1,4}$/.test(c.tigRaw.trim())) { const d = new Date(today.getTime() - Number(c.tigRaw) * 864e5); sinceDate = ymd_(d); sinceSrc = "roster"; }   // a day count
+      else { const d = new Date(c.tigRaw); if (!isNaN(d)) { sinceDate = ymd_(d); sinceSrc = "roster"; } }               // a date
+    }
     if (!sinceDate && seen[c.key]) { sinceDate = seen[c.key]; sinceSrc = "first seen"; }
     const tig = sinceDate ? Math.max(0, Math.round((today - parseYmd_(sinceDate)) / 864e5)) : null;
     const tasks = {};

@@ -1379,7 +1379,7 @@ function drawCands(box, P) {
       c.complete ? h("span", { class: "badge owner", text: "READY" }) : null, h("span", { class: "help", text: open ? "▲" : "▼" })));
     if (open) {
       const sinceIn = h("input", { type: "date", value: c.since || "" });
-      card.append(h("div", { class: "pc-since" }, h("span", { class: "help", text: "CPL since" + (c.sinceSrc ? " (" + c.sinceSrc + ")" : "") + ":" }), sinceIn,
+      card.append(h("div", { class: "pc-since" }, h("span", { class: "help", text: "CPL since" + (c.sinceSrc ? " (" + (c.sinceSrc === "roster" ? "from roster" : c.sinceSrc) + ")" : "") + ":" }), sinceIn,
         h("button", { class: "btn ghost sm", onclick: () => promoAct("promoSince", { key: c.key, date: sinceIn.value }, box) }, "Set date")));
       P.tasks.forEach(t => {
         const s = c.tasks[t.id];
@@ -1418,7 +1418,16 @@ function drawSetup(box) {
       field("Callsign column", bind(p, "col", { max: 2, set: v => v.trim().toUpperCase() })),
       field("Corporal callsigns look like", bind(p, "match", { placeholder: "L-5##" }), "# = any digit. L-5## matches L-501 … L-599."),
       field("Days time in grade before the final step", bind(p, "tigDays", { type: "number", set: v => Number(v) || 0 }))),
-    field("Roster column with the date they made CPL (optional)", bind(p, "tigCol", { max: 2, placeholder: "e.g. F", set: v => v.trim().toUpperCase() }), "Blank = use the date you set per person above (or the day the portal first saw them).")));
+    (() => {
+      const tigSel = h("select", { onchange: () => { const t = ((ROSTER_TABS && ROSTER_TABS.tabs) || []).find(x => String(x.id) === tigSel.value); p.tigTabId = t ? t.id : null; p.tigTabName = t ? t.name : ""; changed(); } });
+      const fill = () => { tigSel.innerHTML = ""; [["", "— same tab as above —"]].concat(((ROSTER_TABS && ROSTER_TABS.tabs) || []).map(t => [String(t.id), t.name])).forEach(o => tigSel.append(h("option", { value: o[0], text: o[1] })));
+        const byName = ((ROSTER_TABS && ROSTER_TABS.tabs) || []).find(x => x.name.trim().toLowerCase() === String(p.tigTabName || "").trim().toLowerCase());
+        tigSel.value = p.tigTabId != null ? String(p.tigTabId) : byName ? String(byName.id) : ""; };
+      fill(); setTimeout(fill, 1500);
+      return h("div", { class: "g2" },
+        field("Time in grade comes from tab", tigSel, "Matched to each CPL by Discord ID, callsign or name."),
+        field("…column", bind(p, "tigCol", { max: 2, placeholder: "G", set: v => v.trim().toUpperCase() }), "A date (when they made CPL) or a number of days. Blank = use the date set per person above."));
+    })()));
   const tb = h("div", { class: "sec", style: "display:grid;gap:12px" }, h("h3", { text: "Requirements" }),
     h("p", { class: "help", text: "Each requirement counts reports: pick the form, the box the corporal's name is in, and (optionally) a box that must contain some text. A report can also count toward several requirements." }));
   p.tasks.forEach((t, i) => {
