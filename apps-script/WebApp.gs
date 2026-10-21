@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 15;
+const BACKEND_VERSION = 16;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -211,8 +211,10 @@ function getRoster_(fresh) {
     const book = linked ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
     const masterTab = r.verify && r.verify.on ? str_(r.verify.tab) : "";
     // which tabs: ticked list, or blank = every tab (linked sheet) / "Roster" (this spreadsheet)
-    const want = str_(r.tab);
-    const picked = Array.isArray(r.tabs) ? r.tabs.map(str_).filter(Boolean) : [];
+    // The tab checklist decides. (The old "Tabs to read" text is only used by settings saved before the checklist existed.)
+    const useList = Array.isArray(r.tabs);
+    const want = useList ? "" : str_(r.tab);
+    const picked = useList ? r.tabs.map(str_).filter(Boolean) : [];
     const all = !picked.length && (want === "*" || want.toLowerCase() === "all" || (!want && linked));
     const names = all ? null : picked.length ? picked : (want || "Roster").split(",").map(x => x.trim()).filter(Boolean);
     let sheets = book.getSheets();
@@ -1035,7 +1037,7 @@ function validateConfig_(c) {
     heroLogo: s.heroLogo == null ? "img/lspd-patch.png" : str_(s.heroLogo),
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
     maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) },
-    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300),
+    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: s.roster && Array.isArray(s.roster.tabs) ? "" : clip_(str_(s.roster && s.roster.tab), 300),
       tabs: (s.roster && Array.isArray(s.roster.tabs) ? s.roster.tabs : []).map(t => clip_(str_(t), 100)).filter(Boolean).slice(0, 60),
       verify: { on: !!(s.roster && s.roster.verify && s.roster.verify.on), tab: clip_(str_(s.roster && s.roster.verify && s.roster.verify.tab), 100), url: clip_(str_(s.roster && s.roster.verify && s.roster.verify.url), 300) }, requireId: !(s.roster && s.roster.requireId === false),
       exclude: s.roster && s.roster.exclude !== undefined ? clip_(str_(s.roster.exclude), 500) : ROSTER_EXCLUDE_DEFAULT }

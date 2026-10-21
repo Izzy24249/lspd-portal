@@ -353,8 +353,12 @@ $("saveBtn").onclick = async () => {
     }
     if (!res.ok) throw new Error(res.error);
     const editIndex = EDIT ? CFG.forms.findIndex(f => f.id === EDIT) : -1;
+    const sentRoster = JSON.stringify(((CFG.settings || {}).roster || {}).tabs || []);
     CFG = res.config; VERSION = CFG.version; BASE = JSON.stringify(CFG);
     if (editIndex > -1 && CFG.forms[editIndex]) EDIT = CFG.forms[editIndex].id;
+    if (sentRoster !== JSON.stringify(((CFG.settings || {}).roster || {}).tabs || [])) {
+      setTimeout(() => toast("Heads up: Google didn't keep your roster tab choices. Your Apps Script is out of date. Paste the latest WebApp.gs and deploy a New version.", "bad"), 1600);
+    }
     dirty(); renderPage(true);
     toast("Saved. The live portal now shows these changes.", "ok");
     loadAll(true).catch(() => {});  // refresh activity log
@@ -900,6 +904,7 @@ function rosterTabPicker(r) {
     r.tabs = String(r.tab || "").split(",").map(x => x.trim()).filter(x => x && x !== "*" && x.toLowerCase() !== "all");
     if (!r.url && r.tabs.length === 1 && r.tabs[0] === "Roster") r.tabs = [];
   }
+  if (r.tab) { r.tab = ""; changed(); }   // old "Tabs to read" text: the checklist replaces it (press Save & publish once)
   const box = h("div", { class: "sub" });
   const draw = () => {
     box.innerHTML = "";
