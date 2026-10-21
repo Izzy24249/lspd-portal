@@ -161,6 +161,7 @@ window.addEventListener("beforeunload", ()=>{ if(ctrl && current) ctrl.saveDraft
 function apply(cfg){
   CONFIG = cfg;
   if (Portal.setRoster) Portal.setRoster(cfg.roster || []);
+  if (Portal.setRosters) Portal.setRosters(cfg.rosters || {});
   renderHome();
   const h = location.hash.slice(1);
   if(h) go(h);
@@ -169,10 +170,10 @@ function apply(cfg){
 try{ const c = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); if(c) apply(c); }catch(e){}
 Portal.loadConfig().then(cfg => {
   const changed = !CONFIG || CONFIG.version !== cfg.version;
-  const rosterChanged = !CONFIG || JSON.stringify(CONFIG.roster || []) !== JSON.stringify(cfg.roster || []);
+  const rosterChanged = !CONFIG || JSON.stringify([CONFIG.roster || [], CONFIG.rosters || {}]) !== JSON.stringify([cfg.roster || [], cfg.rosters || {}]);
   try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
   if(changed) apply(cfg);
-  else if(rosterChanged){ CONFIG = cfg; if (Portal.setRoster) Portal.setRoster(cfg.roster || []); }   // fresh roster, no form reload needed
+  else if(rosterChanged){ CONFIG = cfg; if (Portal.setRoster) Portal.setRoster(cfg.roster || []); if (Portal.setRosters) Portal.setRosters(cfg.rosters || {}); }   // fresh roster, no form reload needed
 }).catch(err => {
   if(!CONFIG) $("formGrid").innerHTML = '<div class="loading">Could not load forms. Check your connection and refresh.<br><small>' + Portal.esc(err.message) + '</small></div>';
 });

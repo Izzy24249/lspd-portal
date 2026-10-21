@@ -539,3 +539,7 @@ table.xl tr.guiderow td{padding:0;background:#F8FAFC}
 .paper.hud .ofc-chip{background:linear-gradient(135deg,rgba(34,211,238,.25),rgba(139,92,246,.25));border:1px solid rgba(34,211,238,.45);color:#e6f0ff;padding:4px 4px 4px 11px}
 .paper.hud .ofc-x{background:rgba(255,255,255,.1)}
 .paper.hud .ofc-in::placeholder{color:#4b5d80}
+
+/* single "officer from roster" field: one tag, input hidden once someone is picked */
+.ofc.full .ofc-in{display:none}
+.ofc.single .ofc-chip{font-size:13px}

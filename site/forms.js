@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 18;
+  const BACKEND_NEEDS = 19;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -74,8 +74,9 @@ window.Portal = (function () {
         return `<div class="with-gen"><input class="g${c}" type="text" maxlength="60" data-f="${esc(f.id)}"${ph}><button type="button" class="mini" data-gen="${esc(f.id)}" data-prefix="${esc(f.prefix || "")}">Generate</button></div>`;
       case "static":
         return esc(f.text || "");
+      case "officer":
       case "officers":
-        return `<div class="ofc" data-ofc="${esc(f.id)}"><input type="hidden" data-f="${esc(f.id)}"><span class="ofc-chips"></span><input type="text" class="ofc-in" data-ofcin="${esc(f.id)}" autocomplete="off" placeholder="${ROSTER.length ? "Search the roster or type a Discord ID…" : "Type a name or Discord ID, then Enter…"}"></div>`;
+        return `<div class="ofc${f.type === "officer" ? " single" : ""}" data-ofc="${esc(f.id)}"${f.type === "officer" ? ' data-max="1"' : ""}><input type="hidden" data-f="${esc(f.id)}"><span class="ofc-chips"></span><input type="text" class="ofc-in" data-ofcin="${esc(f.id)}" autocomplete="off" placeholder="${f.type === "officer" ? "Search the roster…" : (fieldRoster(f) || ROSTER).length ? "Search the roster or type a Discord ID…" : "Type a name or Discord ID, then Enter…"}"></div>`;
       case "discord_id":
       case "number":
         return `<input class="g${c}" type="text" inputmode="${f.roster ? "text" : "numeric"}" maxlength="${f.type === "discord_id" ? (f.roster ? 80 : 21) : 30}" data-f="${esc(f.id)}"${ph}${rosterAttrs(f)}>`;
@@ -142,8 +143,11 @@ window.Portal = (function () {
   }
 
   // ===================== ROSTER + SEARCH PICKER POPUP =====================
-  let ROSTER = [];   // [{name, id, extra}] from the Roster sheet (set by the page after loading config)
+  let ROSTER = [];   // [{name, id, extra}] older single roster (fields without a roster tab chosen)
+  let ROSTERS = {};  // { tabId: [{name, id, extra}] } each field picks its own roster tab
   function setRoster(list) { ROSTER = Array.isArray(list) ? list.filter(p => p && (p.name || p.id)) : []; }
+  function setRosters(map) { ROSTERS = map && typeof map === "object" ? map : {}; }
+  const fieldRoster = f => f && f.rosterTabId != null && f.rosterTabId !== "" ? (ROSTERS[f.rosterTabId] || []) : null;
   const CLASS_RE = /^(.*?)\s*\(((?:Felony|Misdemeanor|Infraction))[^)]*\)\s*$/i;
   function chargeItem(o) {
     const m = CLASS_RE.exec(o), x = sentence(o, 1);
@@ -152,8 +156,8 @@ window.Portal = (function () {
     return { label: m[1], value: o, sub: sub, badge: m[2][0].toUpperCase(), cls: m[2].toLowerCase(), search: o.toLowerCase() };
   }
   // optional division filter, e.g. "CID, Detectives" (matches the roster tab names)
-  const rosterItems = only => ROSTER.filter(p => {
-    const want = String(only || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  const rosterItems = (only, f) => (fieldRoster(f) || ROSTER).filter(p => {
+    const want = fieldRoster(f) ? [] : String(only || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
     if (!want.length) return true;
     const has = String(p.division || "").toLowerCase().split(",").map(x => x.trim()).filter(Boolean);
     // "CID" also matches a tab called "Criminal Investigation Division"
@@ -188,7 +192,9 @@ window.Portal = (function () {
     let list = PK.items.filter(it => !PK.exclude || !PK.exclude(it));
     if (toks.length) {
       list = list.filter(it => toks.every(t => it.search.indexOf(t) !== -1));
-      list.sort((a, b) => (b.label.toLowerCase().startsWith(toks[0]) ? 1 : 0) - (a.label.toLowerCase().startsWith(toks[0]) ? 1 : 0));
+      // best first: name starts with what you typed > name contains every word > matched only via rank/ID
+      const q1 = q.trim(), score = it => { const l = it.label.toLowerCase(); return (l.startsWith(q1) ? 4 : 0) + (toks.every(t => l.indexOf(t) !== -1) ? 2 : 0) + (l.startsWith(toks[0]) ? 1 : 0); };
+      list = list.map((it, i) => ({ it, i, s: score(it) })).sort((a, b) => b.s - a.s || a.i - b.i).map(x => x.it);
     }
     PK.list = list.slice(0, 80);
     if (PK.idx >= PK.list.length) PK.idx = PK.list.length - 1;
@@ -471,15 +477,23 @@ window.Portal = (function () {
     function renderOfc() {
       qa("[data-ofc]").forEach(box => {
         const hid = box.querySelector("[data-f]"), chips = box.querySelector(".ofc-chips");
+        const f = fieldDefs.find(x => x.id === hid.dataset.f), list = parseOfc(hid.value);
+        box.classList.toggle("full", box.dataset.max === "1" && list.length >= 1);
+        if (f && f.type === "officer" && f.fillId) {                // keep the linked Discord ID box in step
+          const t = q(`[data-f="${CSS.escape(f.fillId)}"]`), want = list[0] ? list[0].id : "";
+          if (t && t.value !== want && (want || t.dataset.filled)) { t.value = want; t.dataset.filled = want ? "1" : ""; t.classList.remove("err"); }
+        }
         if (chips.dataset.k === hid.value) return;
         chips.dataset.k = hid.value;
         chips.innerHTML = parseOfc(hid.value).map((o, i) => `<span class="ofc-chip" title="${esc(o.id ? "Discord ID " + o.id : "No Discord ID (won't be mentioned)")}">${esc(o.name || "@" + o.id)}${o.id ? "" : " <i>no ID</i>"}<b class="ofc-x" data-i="${i}" title="Remove">×</b></span>`).join("");
       });
     }
     function ofcAdd(id, entry) {
-      const hid = q(`[data-f="${CSS.escape(id)}"]`), list = parseOfc(hid.value);
+      const hid = q(`[data-f="${CSS.escape(id)}"]`), box = hid.closest("[data-ofc]");
+      let list = parseOfc(hid.value);
       if (list.some(o => (entry.id && o.id === entry.id) || (!entry.id && o.name.toLowerCase() === entry.name.toLowerCase()))) return;
-      list.push(entry); hid.value = fmtOfc(list);
+      if (box.dataset.max === "1") { list = [entry]; pkClose(); } else list.push(entry);
+      hid.value = fmtOfc(list);
       hid.dispatchEvent(new Event("change", { bubbles: true }));
     }
     function pickerFor(el) {
@@ -492,14 +506,15 @@ window.Portal = (function () {
       if (el.dataset.ofcin) {
         const id = el.dataset.ofcin, hid = q(`[data-f="${CSS.escape(id)}"]`);
         const of = fieldDefs.find(x => x.id === id);
-        const strict = of && of.rosterStrict && ROSTER.length;
-        return { multi: true, strict: strict, items: rosterItems(of && of.rosterDivisions), noun: "on the roster", emptyText: strict ? "Not on the roster. Only roster officers can be added." : ROSTER.length ? "Not on the roster. Press Enter to add it as typed (paste a Discord ID to mention them)." : "Type a name, or paste a Discord ID, then press Enter.",
+        const list = rosterItems(of && of.rosterDivisions, of);
+        const strict = of && (of.rosterStrict || (fieldRoster(of) && !of.allowTyped)) && list.length;
+        return { multi: true, strict: strict, items: list, noun: "on the roster", emptyText: strict ? "Not on the roster. Only roster officers can be added." : ROSTER.length ? "Not on the roster. Press Enter to add it as typed (paste a Discord ID to mention them)." : "Type a name, or paste a Discord ID, then press Enter.",
           exclude: it => parseOfc(hid.value).some(o => o.id ? o.id === it.id : o.name === it.label),
-          onPick: it => { if (!it) return; ofcAdd(id, { name: it.label, id: it.id || "" }); el.value = ""; PK.typed = false; PK.idx = -1; pkRender(); } };
+          onPick: it => { if (!it) return; ofcAdd(id, { name: it.label, id: it.id || "" }); el.value = ""; if (PK) { PK.typed = false; PK.idx = -1; pkRender(); } } };
       }
       if (el.dataset.roster) {
         const f = fieldDefs.find(x => x.id === el.dataset.f), isId = f && f.type === "discord_id";
-        return { items: rosterItems(f && f.rosterDivisions), noun: "on the roster", emptyText: "Not on the roster. What you typed will be kept.",
+        return { items: rosterItems(f && f.rosterDivisions, f), noun: "on the roster", emptyText: "Not on the roster. What you typed will be kept.",
           onPick: it => { if (!it) return;
             el.value = isId ? (it.id || "") : it.label;
             if (el.dataset.fill && it.id) { const t = q(`[data-f="${CSS.escape(el.dataset.fill)}"]`); if (t) { t.value = it.id; t.classList.remove("err"); } }
@@ -664,7 +679,7 @@ window.Portal = (function () {
         const el = q(`[data-f="${CSS.escape(f.id)}"]`);
         const v = el ? el.value.trim() : "";
         if (f.required && !v) { el.classList.add("err"); el.focus(); return (f.label || f.id).replace(/[:(].*$/, "").trim() + " is required."; }
-        if (v && f.roster && f.rosterStrict && ROSTER.length && !rosterItems(f.rosterDivisions).some(it => (f.type === "discord_id" ? it.id : it.label) === v)) {
+        if (v && f.roster && f.rosterStrict && (fieldRoster(f) || ROSTER).length && !rosterItems(f.rosterDivisions, f).some(it => (f.type === "discord_id" ? it.id : it.label) === v)) {
           el.classList.add("err"); el.focus(); return (f.label || f.id).replace(/[:(].*$/, "").trim() + ": pick a name from the roster list.";
         }
         if (v && f.type === "discord_id" && !/^\d{15,21}$/.test(v)) { el.classList.add("err"); el.focus(); return "Discord IDs are the 17-20 digit number (Developer Mode → right-click user → Copy User ID)."; }
@@ -750,5 +765,5 @@ window.Portal = (function () {
     return data.config;
   }
 
-  return { ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, setRoster, render, post, loadConfig, esc, todayISO, sentence };
+  return { ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, setRoster, setRosters, render, post, loadConfig, esc, todayISO, sentence };
 })();

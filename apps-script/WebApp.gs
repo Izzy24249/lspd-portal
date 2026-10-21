@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 18;
+const BACKEND_VERSION = 19;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -125,7 +125,8 @@ function publicConfig_() {
     version: cfg.version,
     backend: BACKEND_VERSION,
     settings: cfg.settings,
-    roster: (() => { try { return rosterForPickers_().map(p => ({ name: p.name, id: p.id, extra: p.extra, division: p.division })); } catch (e) { return []; } })(),
+    rosters: rostersFor_(cfg.forms.filter(f => f.status !== "hidden")),
+    roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_().map(p => ({ name: p.name, id: p.id, extra: p.extra, division: p.division })) : []; } catch (e) { return []; } })(),
     forms: cfg.forms.filter(f => f.status !== "hidden")
   };
 }
@@ -141,6 +142,51 @@ function rosterForPickers_() {
   const cfg = getConfig_(), r = (cfg.settings && cfg.settings.roster) || {};
   const people = getRoster_().people;
   return r.requireId === false ? people : people.filter(p => /^\d{15,21}$/.test(p.id || ""));
+}
+
+// ---- One roster tab -> people (each form field picks its own tab) ----
+function rosterBook_() {
+  const r = ((getConfig_().settings || {}).roster) || {};
+  return str_(r.url) ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
+}
+function getRosterTab_(tabId, fresh) {
+  const key = "roster_tab_" + tabId, cache = CacheService.getScriptCache();
+  if (!fresh) { const hit = cache.get(key); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const r = ((getConfig_().settings || {}).roster) || {};
+  const out = { tab: "", people: [], warnings: [], error: "", left: 0, noId: 0 };
+  try {
+    const sh = rosterBook_().getSheets().find(x => x.getSheetId() === Number(tabId));
+    if (!sh) out.error = "That roster tab no longer exists in the roster sheet.";
+    else {
+      out.tab = sh.getName();
+      const EXCL = str_(r.exclude === undefined ? ROSTER_EXCLUDE_DEFAULT : r.exclude).toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
+      const isOut = t => { t = String(t || "").toLowerCase(); return EXCL.some(w => t.indexOf(w) !== -1); };
+      const info = { tab: out.tab, people: 0, noId: 0, skipped: "", left: 0 };
+      const rows = readRosterTab_(sh, isOut, info, out.warnings);
+      if (info.skipped) out.error = "Tab \"" + out.tab + "\": " + info.skipped + ".";
+      out.left = info.left; out.noId = info.noId;
+      const seen = {};
+      rows.forEach(p => {
+        if (r.requireId !== false && !p.id) return;                    // only people with a Discord ID
+        const k = p.id || p.name.toLowerCase(); if (seen[k]) return; seen[k] = 1;
+        out.people.push({ name: clip_(p.name, 80), id: p.id, extra: clip_(p.extra, 80) });
+      });
+    }
+  } catch (e) { out.error = "Couldn't open the roster sheet: " + errMsg_(e); }
+  const js = JSON.stringify(out);
+  if (js.length < 95000) cache.put(key, js, 900);
+  return out;
+}
+// every roster tab used by a field on these forms -> { tabId: [people] }
+function rostersFor_(forms) {
+  const ids = {};
+  forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") ids[fd.rosterTabId] = 1; })));
+  const out = {};
+  Object.keys(ids).forEach(id => { try { out[id] = getRosterTab_(id).people; } catch (e) { out[id] = []; } });
+  return out;
+}
+function usesOldRoster_(forms) {
+  return forms.some(f => (f.blocks || []).some(b => (b.fields || []).some(fd => (fd.roster || fd.type === "officers" || fd.type === "officer") && (fd.rosterTabId == null || fd.rosterTabId === ""))));
 }
 
 const ROSTER_EXCLUDE_DEFAULT = "former, removed, inactive, resigned, terminated, fired, retired, archive, onboarding, pending, applicant, blacklist, dismissed";
@@ -371,6 +417,13 @@ function handleSubmit_(d) {
   const checklists = d.checklists || {};
   const repeaters = d.repeaters || {};
 
+  // an "officer" pick carries its Discord ID: copy it into the linked Discord ID field (tags, leaderboards, required checks)
+  allFields_(form).forEach(f => {
+    if (f.type === "officer" && f.fillId && !str_(values[f.fillId])) {
+      const m = /\((\d{15,21})\)\s*$/.exec(str_(values[f.id])); if (m) values[f.fillId] = m[1];
+    }
+  });
+
   // ---- validate against the server's copy of the form (never trust the page) ----
   const fields = allFields_(form);
   for (const f of fields) {
@@ -396,6 +449,7 @@ function handleSubmit_(d) {
         const label = cleanLabel_(f.label || f.id);
         const prev = lines[lines.length - 1];
         // "Lead Detective Discord ID" right after "Lead Detective" -> one line: L-104 | Duzen · @Duzen
+        if (f.type === "discord_id" && prev && prev.value.indexOf("<@" + v + ">") !== -1) return;   // officer pick already mentions them
         if (f.type === "discord_id" && prev && !prev.mention && prev.type !== "discord_id" && sameSubject_(prev.label, label)) {
           prev.mention = v;
           const short = prev.label.replace(/\s*call\s*sign\s*$/i, "").trim();       // "Trainee callsign" -> "Trainee"
@@ -589,6 +643,7 @@ function officersText_(v) {
 
 function displayValue_(f, v) {
   if (!v) return "—";
+  if (f.type === "officer") return officersText_(v).split("\n")[0];
   if (f.type === "officers") { const t = officersText_(v); return t.indexOf("\n") !== -1 ? "\n" + t.split("\n").map(x => "　› " + x).join("\n") : t; }
   if (f.type === "discord_id") return "<@" + v + ">";
   if (f.type === "case_number") return "`" + v + "`";
@@ -600,7 +655,7 @@ function displayValue_(f, v) {
 }
 
 function fillTemplate_(tpl, values) {
-  return String(tpl || "").replace(/\{(\w+)\}/g, (m, k) => str_(values[k])).replace(/\s*\|\s*(\|\s*)+/g, " | ").replace(/^\s*\|\s*|\s*\|\s*$/g, "").trim();
+  return String(tpl || "").replace(/\{(\w+)\}/g, (m, k) => str_(values[k]).replace(/\s*\(\d{15,21}\)/g, "")).replace(/\s*\|\s*(\|\s*)+/g, " | ").replace(/^\s*\|\s*|\s*\|\s*$/g, "").trim();
 }
 
 function ruleMatches_(r, values, repeaters) {
@@ -885,7 +940,8 @@ function handleAdmin_(d) {
         me: { username: me.username, role: me.role },
         backend: BACKEND_VERSION,
         config: cfg,
-        roster: (() => { try { return rosterForPickers_(); } catch (e) { return []; } })(),
+        rosters: rostersFor_(cfg.forms),
+        roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_() : []; } catch (e) { return []; } })(),
         webhooks: maskWebhooks_(),
         admins: isOwner ? getAdmins_().map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })) : [],
         log: readLog_(200)
@@ -901,6 +957,8 @@ function handleAdmin_(d) {
       next.version = Number(cur.version) + 1;
       writeConfig_(next, me.username);
       CacheService.getScriptCache().remove("portal_roster");
+      const tabKeys = []; next.forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") tabKeys.push("roster_tab_" + fd.rosterTabId); })));
+      if (tabKeys.length) CacheService.getScriptCache().removeAll(tabKeys);
       logAdmin_(me.username, "save config", diffSummary_(cur, next));
       return { ok: true, config: next };
     }
@@ -965,6 +1023,11 @@ function handleAdmin_(d) {
         return { ok: true, valid: true, message: "Test message posted by \"" + info.name + "\"." };
       }
       return { ok: true, valid: true, message: "Valid: posts as \"" + info.name + "\"." };
+    }
+
+    case "rosterPreview": {
+      const r = getRosterTab_(d.tabId, true);
+      return { ok: true, preview: r };
     }
 
     case "rosterTabs": {
@@ -1049,7 +1112,7 @@ function maskWebhooks_() {
 // Server-side checks so a broken or malicious save can't wreck the live portal.
 function validateConfig_(c) {
   if (!c || !Array.isArray(c.forms)) throw new Error("Invalid config.");
-  const FIELD_TYPES = ["text", "number", "date", "select", "discord_id", "case_number", "static", "officers"];
+  const FIELD_TYPES = ["text", "number", "date", "select", "discord_id", "case_number", "static", "officers", "officer"];
   const BLOCK_TYPES = ["banner", "fields", "strip", "text", "checklist", "repeater", "longtext"];
   const formIds = {};
   const out = { settings: {}, forms: [] };
@@ -1098,6 +1161,7 @@ function validateConfig_(c) {
           if (FIELD_TYPES.indexOf(fd.type) === -1) fd.type = "text";
           fd.id = key(fd.id, fd.label || "field");
           if (fd.type === "select" && !(fd.options || []).length) throw new Error(f.title + ": dropdown \"" + (fd.label || fd.id) + "\" has no options.");
+          if (fd.rosterTabId != null && fd.rosterTabId !== "") { fd.rosterTabId = Number(fd.rosterTabId); if (!isFinite(fd.rosterTabId)) delete fd.rosterTabId; }
         });
       }
       if (b.type === "checklist") { b.id = key(b.id, b.title || "checklist"); b.items = (b.items || []).filter(it => str_(it.topic)); }
@@ -1573,10 +1637,10 @@ function defaultConfig_() {
             { id: "cidCaseNo", label: "CID Case Number:", type: "case_number", prefix: "CID", required: true },
             { id: "cidCadNo", label: "CAD Case #:", type: "text" } ] },
           { type: "fields", fields: [
-            { id: "cidLead", label: "Lead Detective: ( L-XXX | J. Doe )", type: "text", required: true, roster: true, fillId: "cidLeadId", rosterDivisions: "CID" },
+            { id: "cidLead", label: "Lead Detective:", type: "officer", required: true, fillId: "cidLeadId" },
             { id: "cidLeadId", label: "Lead Detective Discord ID:", type: "discord_id", required: true } ] },
           { type: "fields", fields: [
-            { id: "cidAssist", label: "Assisting Officers:", type: "officers" },
+            { id: "cidAssist", label: "Assisting Detectives:", type: "officers" },
             { id: "cidSupervisor", label: "Supervisor Notified:", type: "text", roster: true } ] },
           { type: "strip", fields: [
             { id: "cidType", label: "Case Type", type: "select", required: true, options: ["Homicide", "Attempted Murder", "Armed Robbery", "Bank / Store Robbery", "Burglary", "Grand Theft Auto", "Narcotics", "Weapons Trafficking", "Assault / Battery", "Kidnapping", "Fraud / Forgery", "Gang Activity", "Officer-Involved Shooting", "Other"] },
