@@ -725,11 +725,13 @@ function fieldCard(form, b, f, fi) {
   if (f.type === "date") kids.push(toggle(f, "defaultToday", "Fill in today's date automatically"));
   if (f.type === "text" || f.type === "discord_id") {
     kids.push(toggle(f, "roster", "Suggest names from the roster (Portal Settings → Roster)", true));
+    if (f.roster) kids.push(field("Only show people from these divisions (optional)", bind(f, "rosterDivisions", { placeholder: "e.g. CID, Detectives" }), "Roster tab names, separated by commas. Blank = everyone."));
     if (f.roster && f.type === "text") {
       const ids = formKeys(form).filter(k => k.type === "discord_id");
       kids.push(field("When a name is picked, also fill in", bind(f, "fillId", { type: "select", options: [["", "— nothing —"]].concat(ids.map(k => [k.id, (k.label || k.id).replace(/[:(].*$/, "").trim()])) }), "Fills that Discord ID box automatically from the roster."));
     }
   }
+  if (f.type === "officers") kids.push(field("Only show people from these divisions (optional)", bind(f, "rosterDivisions", { placeholder: "blank = everyone" }), "Roster tab names, separated by commas."));
   if (f.type === "officers") kids.push(h("p", { class: "help", text: "Officers add people as tags: search the roster, or type a name / paste a Discord ID and press Enter. Everyone with an ID is mentioned in the Discord post." }));
   return h("div", { class: "sub" }, kids);
 }
@@ -908,10 +910,10 @@ function pageSettings(page) {
   const rosterOut = h("div", { class: "help", style: "white-space:pre-line" });
   page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
     h("h3", { text: "Roster (names + Discord IDs for the pickers)" }),
-    h("p", { class: "help", text: "Officers can search this list in name boxes and the Assisting Officers field, and their Discord ID fills in automatically. Put a tab named Roster in this Google Sheet with a header row like:  Name | Discord ID | Rank  (format the Discord ID column as Plain text first). Or link a different Google Sheet below." }),
+    h("p", { class: "help", text: "Officers can search this list in name boxes and the Assisting Officers field, and their Discord ID fills in automatically. Use your existing roster sheet (one tab per division works: the tab name becomes the division), or a tab named Roster in this spreadsheet. Each tab needs a header row with a Name or Callsign column and a Discord ID column (format it as Plain text)." }),
     h("div", { class: "g2" },
-      field("Tab name", bind(s.roster, "tab", { placeholder: "Roster" })),
-      field("Different Google Sheet (optional)", bind(s.roster, "url", { placeholder: "https://docs.google.com/spreadsheets/d/…" }), "Leave blank to use this spreadsheet.")),
+      field("Roster Google Sheet link", bind(s.roster, "url", { placeholder: "https://docs.google.com/spreadsheets/d/…  (blank = this spreadsheet)" }), "Paste the link from your browser's address bar."),
+      field("Tabs to read", bind(s.roster, "tab", { placeholder: s.roster.url ? "blank = all tabs" : "Roster" }), "Blank = all tabs of the linked sheet. Or list tabs: Patrol, CID, SWAT")),
     h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
       h("button", { class: "btn ghost sm", onclick: async e => {
         if (isDirty()) return toast("Save & publish first, then test.", "bad");
@@ -920,6 +922,7 @@ function pageSettings(page) {
           const r = (await api("rosterTest")).roster;
           Portal.setRoster(r.people);
           rosterOut.textContent = (r.error ? "❌ " + r.error : "✅ " + r.people.length + " people loaded from " + r.source + ".") +
+            ((r.tabs || []).length ? "\n" + r.tabs.map(t => "  • " + t.tab + ": " + (t.skipped ? "skipped (" + t.skipped + ")" : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : ""))).join("\n") : "") +
             (r.people.length ? "\nFirst few: " + r.people.slice(0, 5).map(p => p.name + (p.id ? " (" + p.id + ")" : " (no ID)")).join(", ") : "") +
             (r.warnings.length ? "\n⚠️ " + r.warnings.slice(0, 6).join("\n⚠️ ") + (r.warnings.length > 6 ? "\n…and " + (r.warnings.length - 6) + " more" : "") : "");
         } catch (err) { rosterOut.textContent = "❌ " + err.message; }

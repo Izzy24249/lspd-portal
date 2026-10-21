@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 9;
+const BACKEND_VERSION = 10;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -120,7 +120,7 @@ function publicConfig_() {
     version: cfg.version,
     backend: BACKEND_VERSION,
     settings: cfg.settings,
-    roster: (() => { try { return getRoster_().people.map(p => ({ name: p.name, id: p.id, extra: p.extra })); } catch (e) { return []; } })(),
+    roster: (() => { try { return getRoster_().people.map(p => ({ name: p.name, id: p.id, extra: p.extra, division: p.division })); } catch (e) { return []; } })(),
     forms: cfg.forms.filter(f => f.status !== "hidden")
   };
 }
@@ -135,32 +135,67 @@ function getRoster_(fresh) {
   const cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get("portal_roster"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   const cfg = getConfig_(), r = (cfg.settings && cfg.settings.roster) || {};
-  const out = { people: [], warnings: [], source: "", error: "" };
+  const out = { people: [], warnings: [], tabs: [], source: "", error: "" };
   try {
-    const book = str_(r.url) ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
-    const tab = str_(r.tab) || "Roster";
-    const sh = book.getSheetByName(tab);
-    out.source = (str_(r.url) ? "linked sheet" : "this spreadsheet") + " → tab \"" + tab + "\"";
-    if (!sh) { out.error = "No tab named \"" + tab + "\" was found in the " + (str_(r.url) ? "linked sheet" : "spreadsheet") + "."; }
-    else if (sh.getLastRow() >= 2) {
-      const range = sh.getDataRange(), raw = range.getValues(), shown = range.getDisplayValues();
-      const head = shown[0].map(h => String(h).toLowerCase());
-      let idCol = head.findIndex(h => /discord/.test(h) && /\bid\b/.test(h));
-      if (idCol < 0) idCol = head.findIndex(h => /\bid\b/.test(h));
-      const nameCol = head.findIndex((h, i) => i !== idCol && /name|callsign|officer|member/.test(h) && !/\bid\b/.test(h));
-      const extraCols = head.map((h, i) => /rank|division|unit|badge|title|department/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
-      if (idCol < 0 || nameCol < 0) out.error = "Header row needs a \"Name\" column and a \"Discord ID\" column.";
-      else for (let i = 1; i < raw.length; i++) {
-        const name = str_(shown[i][nameCol]);
-        let id = str_(shown[i][idCol]).replace(/[^0-9]/g, "");
-        if (!name && !id) continue;
-        if (typeof raw[i][idCol] === "number") { out.warnings.push("Row " + (i + 1) + " (" + (name || "?") + "): the Discord ID is stored as a number, so Google Sheets has rounded it. Format the column as Plain text and paste the ID again."); id = ""; }
-        else if (id && !/^\d{15,21}$/.test(id)) { out.warnings.push("Row " + (i + 1) + " (" + (name || "?") + "): \"" + shown[i][idCol] + "\" is not a Discord ID."); id = ""; }
-        out.people.push({ name: clip_(name || "(no name)", 80), id: id, extra: clip_(extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), 80) });
-      }
+    const linked = !!str_(r.url);
+    const book = linked ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
+    // which tabs: blank or * = every tab (linked sheet) / "Roster" (this spreadsheet); otherwise a comma list
+    const want = str_(r.tab);
+    const all = want === "*" || want.toLowerCase() === "all" || (!want && linked);
+    const names = all ? null : (want || "Roster").split(",").map(x => x.trim()).filter(Boolean);
+    let sheets = book.getSheets().filter(sh => !sh.isSheetHidden());
+    if (names) {
+      const missing = names.filter(n => !book.getSheetByName(n));
+      if (missing.length) out.warnings.push("Tab(s) not found: " + missing.join(", "));
+      sheets = names.map(n => book.getSheetByName(n)).filter(Boolean);
     }
+    out.source = (linked ? "linked sheet \"" + book.getName() + "\"" : "this spreadsheet") + " → " + (all ? "all tabs" : sheets.map(x => "\"" + x.getName() + "\"").join(", "));
+    const byKey = {};
+    sheets.forEach(sh => {
+      const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "" };
+      out.tabs.push(info);
+      if (sh.getLastRow() < 2) { info.skipped = "empty"; return; }
+      const range = sh.getRange(1, 1, Math.min(sh.getLastRow(), 2000), Math.min(sh.getLastColumn(), 30));
+      const raw = range.getValues(), shown = range.getDisplayValues();
+      // find the header row in the first 15 rows (allows title rows above it)
+      let hr = -1, idCol = -1, nameCol = -1, callCol = -1;
+      for (let i = 0; i < Math.min(15, shown.length) && hr < 0; i++) {
+        const head = shown[i].map(h => String(h).toLowerCase().trim());
+        let ic = head.findIndex(h => /discord/.test(h) && /\bid\b|identifier|snowflake/.test(h));
+        if (ic < 0) ic = head.findIndex(h => /^(discord )?id$/.test(h) || h === "discord");
+        const cc = head.findIndex((h, j) => j !== ic && /call ?sign|unit ?#|badge ?#/.test(h));
+        const nc = head.findIndex((h, j) => j !== ic && j !== cc && /name|officer|member/.test(h) && !/\bid\b|discord/.test(h));
+        if (nc >= 0 || cc >= 0) { hr = i; idCol = ic; nameCol = nc >= 0 ? nc : cc; callCol = nc >= 0 ? cc : -1; }
+      }
+      if (hr < 0) { info.skipped = "no header row with a Name/Callsign column"; return; }
+      const head = shown[hr].map(h => String(h).toLowerCase());
+      const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
+      for (let i = hr + 1; i < shown.length; i++) {
+        const nm = str_(shown[i][nameCol]), cs = callCol >= 0 ? str_(shown[i][callCol]) : "";
+        const name = cs && nm ? (nm.indexOf(cs) === -1 ? cs + " | " + nm : nm) : (nm || cs);   // "L-104 | Duzen"
+        let id = idCol >= 0 ? str_(shown[i][idCol]).replace(/[^0-9]/g, "") : "";
+        if (!name && !id) continue;
+        if (!name && id) continue;                                  // stray number in an empty row
+        if (idCol >= 0 && typeof raw[i][idCol] === "number" && raw[i][idCol] > 1e14) {
+          out.warnings.push(tabName + " row " + (i + 1) + " (" + name + "): Discord ID is stored as a number, so Google Sheets rounded it. Format that column as Plain text and paste the ID again.");
+          id = "";
+        } else if (id && !/^\d{15,21}$/.test(id)) id = "";
+        const extra = extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · ");
+        const key = id || name.toLowerCase();
+        if (byKey[key]) {                                           // same person in two divisions
+          if (byKey[key].divisions.indexOf(tabName) === -1) byKey[key].divisions.push(tabName);
+        } else {
+          byKey[key] = { name: clip_(name, 80), id: id, rank: clip_(extra, 60), divisions: [tabName] };
+          out.people.push(byKey[key]);
+        }
+        info.people++; if (!id) info.noId++;
+      }
+    });
+    // a plain "Roster" tab isn't a division
+    out.people.forEach(p => { p.division = p.divisions.filter(d => !/^roster$/i.test(d)).join(", "); p.extra = clip_([p.division, p.rank].filter(Boolean).join(" · "), 100); delete p.divisions; });
+    if (!out.people.length && !out.error) out.error = "No officers found. Each tab needs a header row with a Name (or Callsign) column, and ideally a Discord ID column.";
   } catch (e) {
-    out.error = "Couldn't open the roster sheet: " + errMsg_(e) + " (check the link, and that the Google account running the script can open it).";
+    out.error = "Couldn't open the roster sheet: " + errMsg_(e) + " (check the link, and that the Google account running the script can open that sheet).";
   }
   const js = JSON.stringify(out);
   if (js.length < 95000) cache.put("portal_roster", js, 300);
@@ -901,7 +936,7 @@ function validateConfig_(c) {
     heroLogo: s.heroLogo == null ? "img/lspd-patch.png" : str_(s.heroLogo),
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
     maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) },
-    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 60) || "Roster" }
+    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300) }
   };
   if (out.settings.roster.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.url)) throw new Error("Roster sheet link must be a Google Sheets link (https://docs.google.com/spreadsheets/d/...).");
   if (out.settings.heroLogo && !IMG_RE.test(out.settings.heroLogo)) throw new Error("Home page logo must be a file like img/logo.png or an https:// link.");

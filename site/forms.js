@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 9;
+  const BACKEND_NEEDS = 10;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -151,7 +151,13 @@ window.Portal = (function () {
     const sub = [x.months ? x.months + " months" : "", x.fine ? "$" + x.fine.toLocaleString("en-US") + " fine" : ""].filter(Boolean).join(" · ");
     return { label: m[1], value: o, sub: sub, badge: m[2][0].toUpperCase(), cls: m[2].toLowerCase(), search: o.toLowerCase() };
   }
-  const rosterItems = () => ROSTER.map(p => ({ label: p.name, value: p.name, id: p.id, sub: [p.extra, p.id ? "ID " + p.id : "no Discord ID"].filter(Boolean).join(" · "), search: (p.name + " " + (p.extra || "") + " " + (p.id || "")).toLowerCase() }));
+  // optional division filter, e.g. "CID, Detectives" (matches the roster tab names)
+  const rosterItems = only => ROSTER.filter(p => {
+    const want = String(only || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+    if (!want.length) return true;
+    const has = String(p.division || "").toLowerCase().split(",").map(x => x.trim());
+    return want.some(w => has.some(h => h === w || h.indexOf(w) !== -1));
+  }).map(p => ({ label: p.name, value: p.name, id: p.id, sub: [p.extra, p.id ? "ID " + p.id : "no Discord ID"].filter(Boolean).join(" · "), search: (p.name + " " + (p.extra || "") + " " + (p.id || "")).toLowerCase() }));
 
   let PK = null;
   function pkClose() { if (PK) { PK.panel.remove(); PK = null; } }
@@ -483,13 +489,14 @@ window.Portal = (function () {
       }
       if (el.dataset.ofcin) {
         const id = el.dataset.ofcin, hid = q(`[data-f="${CSS.escape(id)}"]`);
-        return { multi: true, items: rosterItems(), noun: "on the roster", emptyText: ROSTER.length ? "Not on the roster. Press Enter to add it as typed (paste a Discord ID to mention them)." : "Type a name, or paste a Discord ID, then press Enter.",
+        const of = fieldDefs.find(x => x.id === id);
+        return { multi: true, items: rosterItems(of && of.rosterDivisions), noun: "on the roster", emptyText: ROSTER.length ? "Not on the roster. Press Enter to add it as typed (paste a Discord ID to mention them)." : "Type a name, or paste a Discord ID, then press Enter.",
           exclude: it => parseOfc(hid.value).some(o => o.id ? o.id === it.id : o.name === it.label),
           onPick: it => { if (!it) return; ofcAdd(id, { name: it.label, id: it.id || "" }); el.value = ""; PK.typed = false; PK.idx = -1; pkRender(); } };
       }
       if (el.dataset.roster) {
         const f = fieldDefs.find(x => x.id === el.dataset.f), isId = f && f.type === "discord_id";
-        return { items: rosterItems(), noun: "on the roster", emptyText: "Not on the roster. What you typed will be kept.",
+        return { items: rosterItems(f && f.rosterDivisions), noun: "on the roster", emptyText: "Not on the roster. What you typed will be kept.",
           onPick: it => { if (!it) return;
             el.value = isId ? (it.id || "") : it.label;
             if (el.dataset.fill && it.id) { const t = q(`[data-f="${CSS.escape(el.dataset.fill)}"]`); if (t) { t.value = it.id; t.classList.remove("err"); } }
