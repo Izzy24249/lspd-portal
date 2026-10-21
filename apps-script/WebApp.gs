@@ -510,25 +510,23 @@ function handleSubmit_(d) {
   const embedFields = [], followTexts = [], archiveCols = [], detailBlocks = [];
   form.blocks.forEach(b => {
     if (b.type === "fields" || b.type === "strip") {
-      const lines = [];
       (b.fields || []).forEach(f => {
         if (f.type === "static") return;
         const v = str_(values[f.id]);
         archiveCols.push({ id: f.id, label: f.label || f.id, value: v });
-        if (!v) return;                                            // skip empty answers: cleaner report
         const label = cleanLabel_(f.label || f.id);
-        const prev = lines[lines.length - 1];
-        // "Lead Detective Discord ID" right after "Lead Detective" -> one line: L-104 | Duzen · @Duzen
-        if (f.type === "discord_id" && prev && prev.value.indexOf("<@" + v + ">") !== -1) return;   // officer pick already mentions them
+        const prev = detailBlocks[detailBlocks.length - 1];
+        // a Discord ID box that belongs to the person before it is folded into that person
+        if (f.type === "discord_id" && prev && (v && prev.raw.indexOf(v) !== -1)) return;            // officer pick already has it
         if (f.type === "discord_id" && prev && !prev.mention && prev.type !== "discord_id" && sameSubject_(prev.label, label)) {
-          prev.mention = v;
+          prev.mention = v; prev.person = true;
           const short = prev.label.replace(/\s*call\s*sign\s*$/i, "").trim();       // "Trainee callsign" -> "Trainee"
           if (short) prev.label = short.charAt(0).toUpperCase() + short.slice(1);
           return;
         }
-        lines.push({ label: label, value: displayValue_(f, v).replace(/^[-–•]\s+/, ""), type: f.type });
+        detailBlocks.push({ f: f, label: label, raw: v, value: v ? displayValue_(f, v).replace(/^[-–•]\s+/, "") : "", type: f.type,
+          person: f.type === "officer" || f.type === "officers" || f.type === "discord_id" || !!f.roster });
       });
-      lines.forEach(l => detailBlocks.push("**" + l.label + ":** " + l.value + (l.mention ? " · <@" + l.mention + ">" : "")));
     } else if (b.type === "checklist") {
       const st = checklists[b.id] || {};
       const items = b.items || [];
@@ -547,7 +545,7 @@ function handleSubmit_(d) {
     } else if (b.type === "repeater") {
       const cols = b.columns || [];
       const rows = (repeaters[b.id] || []).filter(r => cols.some(c => c.type !== "select" && c.type !== "link" && str_(r[c.id])));
-      const tick = r => b.check && b.check.id && r[b.check.id] ? "  ·  ✅ " + (b.check.label || "") : "";
+      const tick = r => b.check && b.check.id && r[b.check.id] ? "  ✅ " + (b.check.label || "") : "";
       const totalsOn = b.totals && b.totals.on;
       const fmtCell = (c, v) => totalsOn && c.id === b.totals.col ? chargeText_(v) : v;
       let lines = [];
@@ -569,13 +567,13 @@ function handleSubmit_(d) {
           });
         });
       } else {
-        lines = rows.map(r => clip_("▸ " + cols.map((c, ci) => { const v = fmtCell(c, str_(r[c.id])); return !v ? "" : ci === 0 ? "**" + v + "**" : v; }).filter(Boolean).join("  ·  ") + tick(r), 1000));
+        lines = rows.map((r, ri) => clip_("`" + (ri + 1) + "` " + cols.map((c, ci) => { const v = fmtCell(c, str_(r[c.id])); return !v ? "" : ci === 0 ? "**" + v + "**" : v; }).filter(Boolean).join(" · ") + tick(r), 1000));
         if (totalsOn && rows.length) {
           const t = rows.reduce((a, r) => { const x = sentence_(r[b.totals.col], r[b.totals.countCol]); a.m += x.months; a.f += x.fine; return a; }, { m: 0, f: 0 });
           lines.push("**Total:** `" + t.m + " months · $" + t.f.toLocaleString("en-US") + "`");
         }
       }
-      if (lines.length) addListFields_(embedFields, sectionIcon_(b.title) + " " + clip_(String(b.title || "List").toUpperCase(), 230), lines);
+      addListFields_(embedFields, sectionIcon_(b.title) + " " + clip_(String(b.title || "List").toUpperCase(), 230), lines.length ? lines : ["*None recorded.*"]);
       archiveCols.push({ id: b.id, label: b.title || b.id, value: rows.map(r => cols.map(c => str_(r[c.id])).filter(Boolean).join(" / ") + (b.check && r[b.check.id] ? " [" + b.check.label + "]" : "")).join("; ") });
     } else if (b.type === "longtext") {
       const v = str_(values[b.id]).substring(0, b.maxLength || 8000);
@@ -599,9 +597,40 @@ function handleSubmit_(d) {
   // ---- post ----
   const color = parseInt(String(form.color || "#3498db").replace("#", ""), 16) || 3447003;
   const title = clip_(fillTemplate_(form.embedTitle || form.title, values), 256);
+  // ---- details grid: three columns, grouped so related things sit together ----
+  //   row(s) 1: case identity (case #, CAD #, status) · row(s) 2: incident details · row(s) 3: people
+  const PEOPLE_RE = /detective|officer|instructor|trainee|supervisor|fto|lead|assist|unit|deputy|trooper|agent|member|reporting|arresting|filed by/i;
+  const groups = { id: [], info: [], people: [] }, statusItems = [];
+  detailBlocks.forEach(d => {
+    const L = d.label;
+    let val = d.value || "—";
+    if (d.type === "officer") val = (officersText_(d.raw) || "—").replace(" · ", "\n");                  // L-104 | Duzen / @Duzen
+    else if (d.type === "officers") val = String(d.raw || "").split(";").map(e => e.trim()).filter(Boolean).map(e => {   // one per line: L-122 @Smith
+      const m = /^(.*?)\s*\((\d{15,21})\)$/.exec(e); if (!m) return e;
+      const cs = m[1].indexOf("|") !== -1 ? m[1].split("|")[0].trim() : "";
+      return (cs ? cs + " " : m[1] && !cs ? m[1] + " · " : "") + "<@" + m[2] + ">";
+    }).join("\n") || "—";
+    else if (d.mention) val = (d.value || "—") + "\n<@" + d.mention + ">";
+    else if (d.type === "discord_id" && d.raw) val = "<@" + d.raw + ">";
+    const item = { name: clip_(L, 256), value: clip_(val, 1024), inline: true };
+    const notPerson = /check|type|date|time|status|result|location|postal|#|number/i.test(L);
+    if (d.person || (PEOPLE_RE.test(L) && !notPerson)) groups.people.push(item);
+    else if (/status|result|outcome|verdict/i.test(L)) statusItems.push(item);
+    else if (d.type === "case_number" || (/case|cad|report|incident|ticket|file|reference|#/i.test(L) && !/type|date|time|status|location|check/i.test(L))) groups.id.push(item);
+    else groups.info.push(item);
+  });
+  (groups.id.length ? groups.id : groups.info).push(...statusItems);
+  const grid = [];
+  [groups.id, groups.info, groups.people].forEach(g => {
+    if (!g.length) return;
+    g.forEach(x => grid.push(x));
+    while (g.length % 3) { g.push(0); grid.push({ name: "\u200b", value: "\u200b", inline: true }); }   // keep each group on its own row(s)
+  });
+  embedFields.unshift(...grid);
+
   const extras = { footer: { text: "LSPD Records Portal  •  " + clip_(form.title, 80) }, timestamp: new Date().toISOString() };
   if (/^https:\/\/[^\s"'<>]+$/.test(str_(form.discordThumb))) extras.thumbnail = { url: str_(form.discordThumb) };
-  const embeds = packEmbeds_(embedFields, title, color, detailBlocks.join("\n"), extras);
+  const embeds = packEmbeds_(embedFields, title, color, "", extras);
   const isForum = webhook.kind !== "text";
 
   // ---- ONE post when it fits; otherwise post 1 = full case report, then the narrative on its own ----
