@@ -17,6 +17,7 @@
       <div><b id="brandName">LSPD</b><small id="brandSub">LOS SANTOS POLICE DEPT.</small></div>
     </a>
     <div class="spacer"></div>
+    <a class="pill navlink" id="promoNav" onclick="go('promo')" style="display:none">🎖️ Promotions</a>
     <div class="pill"><span class="dot"></span> Records Portal</div>
   </div>
 </header>
@@ -32,7 +33,14 @@
     </div>
     <div class="maint" id="maint" style="display:none"></div>
     <div class="announce" id="announce" style="display:none"></div>
-    <div class="grid" id="formGrid"><div class="loading">Loading forms…</div></div>
+    <div id="formGrid"><div class="loading">Loading forms…</div></div>
+    <div id="programs"></div>
+  </section>
+
+  <!-- SGT PROMOTION TRACKER -->
+  <section class="view" id="view-promo">
+    <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; <span id="promoCrumb">Promotion Tracker</span></div>
+    <div id="promoMount"><div class="loading">Loading tracker…</div></div>
   </section>
 
   <!-- ANY FORM -->
@@ -68,9 +76,11 @@ function draftStatus(msg){ const el = $("draftStatus"); el.textContent = msg; el
 
 /* ---------- routing ---------- */
 function go(view){
-  if(view !== "home" && !openForm(view)) view = "home";
+  if(view === "promo" && !(CONFIG && promoOn())) view = "home";
+  if(view !== "home" && view !== "promo" && !openForm(view)) view = "home";
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  $(view === "home" ? "view-home" : "view-form").classList.add("active");
+  $(view === "home" ? "view-home" : view === "promo" ? "view-promo" : "view-form").classList.add("active");
+  if(view === "promo") loadPromo();
   if(view === "home"){ if(ctrl) ctrl.saveDraft(); current = null; }
   history.replaceState(null, "", view === "home" ? location.pathname : "#" + view);
   window.scrollTo({top:0,behavior:"smooth"});
@@ -100,13 +110,99 @@ function renderHome(){
   ["maint","formMaint"].forEach(id => { $(id).style.display = m.on ? "" : "none"; $(id).textContent = "🛠️ " + (m.message || "Maintenance in progress."); });
 
   const forms = (CONFIG.forms || []).filter(f => f.status === "live" || f.status === "soon");
-  $("formGrid").innerHTML = forms.length ? forms.map(f => {
+  // forms are grouped by their "Home page section" (set in the admin builder); order follows the form list
+  const groups = [];
+  forms.forEach(f => {
+    const name = String(f.section || "").trim() || "Reports";
+    let g = groups.find(x => x.name.toLowerCase() === name.toLowerCase());
+    if(!g) groups.push(g = { name: name, forms: [] });
+    g.forms.push(f);
+  });
+  const card = f => {
     const live = f.status === "live";
     return `<div class="card ${live?"":"soon"}" ${live?`data-open="${Portal.esc(f.id)}"`:""}>
       <div class="ico">${Portal.esc(f.icon||"📄")}</div>
       <h3>${Portal.esc(f.title)}</h3><p>${Portal.esc(f.description||"")}</p>
       <div class="go">${live?"OPEN FORM →":"COMING SOON"}</div></div>`;
-  }).join("") : '<div class="loading">No forms are published yet.</div>';
+  };
+  const icon = n => /train|academy|fto|school|course/i.test(n) ? "🎓" : /report|record/i.test(n) ? "📁" : /division|unit/i.test(n) ? "🛡️" : "📋";
+  $("formGrid").innerHTML = forms.length ? groups.map(g => `<section class="fsec ${/train|academy|fto/i.test(g.name) ? "training" : ""}">
+      ${groups.length > 1 ? `<div class="fsec-head"><span class="fsec-ico">${icon(g.name)}</span><h2>${Portal.esc(g.name)}</h2><span class="fsec-n">${g.forms.length}</span></div>` : ""}
+      <div class="grid">${g.forms.map(card).join("")}</div></section>`).join("") : '<div class="loading">No forms are published yet.</div>';
+  renderPrograms();
+}
+
+/* ---------- SGT promotion tracker ---------- */
+function promoOn(){ const p = (CONFIG.settings || {}).promo; return !!(p && p.on !== false); }
+let PROMO = null, PROMO_T = 0, promoFilter = "all", promoQuery = "";
+function renderPrograms(){
+  const p = (CONFIG.settings || {}).promo, on = promoOn();
+  $("promoNav").style.display = on ? "" : "none";
+  if(!on){ $("programs").innerHTML = ""; return; }
+  const st = PROMO && PROMO.candidates ? PROMO.candidates : null;
+  const ready = st ? st.filter(c => c.complete).length : 0;
+  $("programs").innerHTML = `<section class="fsec"><div class="fsec-head"><span class="fsec-ico">🎖️</span><h2>Programs</h2></div>
+    <a class="prog-card" onclick="go('promo')">
+      <div class="prog-medal"><svg viewBox="0 0 64 64"><path d="M22 4h20l-4 18H26z" fill="#2f7bff"/><path d="M26 4h12l-2 18h-8z" fill="#f2b632"/><circle cx="32" cy="40" r="17" fill="#f2b632"/><circle cx="32" cy="40" r="12.5" fill="none" stroke="#0e1627" stroke-width="2" opacity=".55"/><path d="M32 30l3 6.2 6.8.9-5 4.7 1.2 6.7-6-3.2-6 3.2 1.2-6.7-5-4.7 6.8-.9z" fill="#0e1627" opacity=".75"/></svg></div>
+      <div class="prog-txt"><span class="prog-kicker">FTO PROGRAM · CORPORAL TO SERGEANT</span><h3>${Portal.esc(p.title || "SGT Promotion Tracker")}</h3>
+        <p>${Portal.esc(p.subtitle || "Track each corporal's progress toward Sergeant.")}</p></div>
+      <div class="prog-stats">${st ? `<div><b>${st.length}</b><small>Corporals</small></div><div><b>${ready}</b><small>Ready</small></div>` : ""}<span class="prog-go">VIEW TRACKER →</span></div>
+    </a></section>`;
+  if(!st && Date.now() - PROMO_T > 30000) fetchPromo().then(renderPrograms).catch(()=>{});
+}
+async function fetchPromo(){
+  PROMO_T = Date.now();
+  const res = await fetch(Portal.ENDPOINT + "?action=promo&t=" + Date.now());
+  const data = await res.json();
+  if(!data.ok) throw new Error(data.error || "Could not load the tracker");
+  PROMO = data.promo; return PROMO;
+}
+function ring(done, total, size){
+  const r = 26, c = 2 * Math.PI * r, f = total ? done / total : 0;
+  return `<svg class="ring" viewBox="0 0 64 64" width="${size||64}" height="${size||64}"><circle cx="32" cy="32" r="${r}" class="rb"/><circle cx="32" cy="32" r="${r}" class="rf" stroke-dasharray="${(c*f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 32 32)"/><text x="32" y="36">${done}/${total}</text></svg>`;
+}
+function loadPromo(){
+  const p = (CONFIG.settings || {}).promo || {};
+  $("promoCrumb").textContent = p.title || "Promotion Tracker";
+  if(PROMO && PROMO.candidates) drawPromo();
+  fetchPromo().then(drawPromo).catch(e => { if(!PROMO) $("promoMount").innerHTML = '<div class="loading">Could not load the tracker. ' + Portal.esc(e.message) + '</div>'; });
+}
+function drawPromo(){
+  const P = PROMO, E = Portal.esc;
+  if(!P.on){ $("promoMount").innerHTML = '<div class="loading">The tracker is turned off.</div>'; return; }
+  const C = (P.candidates || []).slice().sort((a,b) => (b.complete - a.complete) || (b.done - a.done) || a.callsign.localeCompare(b.callsign, undefined, {numeric:true}));
+  const ready = C.filter(c => c.complete).length, avg = C.length ? Math.round(C.reduce((n,c) => n + c.done / Math.max(1,c.total), 0) / C.length * 100) : 0;
+  const q = promoQuery.toLowerCase();
+  const shown = C.filter(c => (promoFilter === "all" || (promoFilter === "ready" ? c.complete : !c.complete)) && (!q || (c.callsign + " " + c.name).toLowerCase().includes(q)));
+  const fmtD = d => d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric", year:"numeric"}) : "";
+  const taskRow = (c, t, i) => {
+    const s = c.tasks[t.id] || {count:0, need:t.need, items:[]}, pct = Math.min(1, s.count / s.need);
+    const pips = Array.from({length: s.need}, (_, k) => `<i class="${k < s.count || s.excused ? "on" : ""}"></i>`).join("");
+    const state = s.excused ? '<span class="st ex">Excused</span>' : s.done ? '<span class="st ok">✓ Done</span>' : s.locked ? '<span class="st lk">🔒 Locked</span>' : `<span class="st">${s.count}/${s.need}</span>`;
+    const hist = s.items.length ? s.items.map(x => `<li><b>${E(fmtD(x.date))}</b> · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.count > 1 ? ` ×${x.count}` : ""}</li>`).join("") : `<li class="none">Nothing logged yet.</li>`;
+    return `<details class="ptask ${s.done ? "done" : ""} ${s.locked && !s.done ? "locked" : ""}"><summary><span class="pn">${i + 1}</span><span class="pt">${E(t.title)}${t.final ? ' <em>FINAL</em>' : ""}</span><span class="pips">${pips}</span>${state}</summary>
+      <div class="phist">${t.desc ? `<p>${E(t.desc)}</p>` : ""}${s.locked && !s.done ? `<p class="lockwhy">Unlocks when every other requirement is done${P.tigDays ? " and " + P.tigDays + " days time in grade" : ""}.</p>` : ""}<ul>${hist}</ul></div></details>`;
+  };
+  $("promoMount").innerHTML = `
+    <div class="promo-hero">
+      <div class="ph-txt"><span class="ph-kick">FTO PROGRAM · CPL → SGT</span><h1>${E(P.title)}</h1><p>${E(P.subtitle || "")}</p></div>
+      <div class="ph-stats"><div><b>${C.length}</b><small>Corporals</small></div><div><b>${ready}</b><small>Ready for SGT</small></div><div><b>${avg}%</b><small>Avg. progress</small></div></div>
+    </div>
+    <div class="promo-req"><h3>Requirements</h3><ol>${P.tasks.map(t => `<li><span>${E(t.title)}${t.final ? ' <em>FINAL</em>' : ""}</span><b>×${t.need}</b></li>`).join("")}</ol>
+      ${P.tigDays ? `<p class="tig-note">⏱ Minimum ${P.tigDays} days time in grade (TIG) as CPL before the final step.</p>` : ""}</div>
+    <div class="promo-bar"><input id="promoQ" placeholder="Search callsign or name…" value="${E(promoQuery)}">
+      <div class="seg">${[["all","All"],["prog","In progress"],["ready","Ready"]].map(([k,l]) => `<button data-pf="${k}" class="${promoFilter===k?"on":""}">${l}</button>`).join("")}</div></div>
+    ${P.error ? `<div class="maint">${E(P.error)}</div>` : ""}
+    <div class="promo-grid">${shown.length ? shown.map(c => `
+      <article class="pc ${c.complete ? "complete" : ""}">
+        ${c.complete ? '<div class="pc-ribbon">READY FOR SGT</div>' : ""}
+        <header>${ring(c.done, c.total)}<div class="pc-id"><span class="cs">${E(c.callsign)}</span><h3>${E(c.name)}</h3>
+          <span class="tig ${c.tigOk ? "ok" : ""}">${c.tig == null ? "TIG not set" : "TIG " + c.tig + (P.tigDays ? " / " + P.tigDays : "") + " days"}</span></div></header>
+        <div class="pc-tasks">${P.tasks.map((t, i) => taskRow(c, t, i)).join("")}</div>
+      </article>`).join("") : `<div class="loading">${C.length ? "No one matches." : "No corporals found on the roster."}</div>`}</div>
+    <p class="promo-upd">Updates automatically when a report is filed · last checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;
+  const qi = $("promoQ"); qi.oninput = () => { promoQuery = qi.value; const pos = qi.selectionStart; drawPromo(); const n = $("promoQ"); n.focus(); n.setSelectionRange(pos, pos); };
+  document.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => { promoFilter = b.dataset.pf; drawPromo(); });
 }
 $("formGrid").addEventListener("click", e => { const c = e.target.closest("[data-open]"); if(c) go(c.dataset.open); });
 

@@ -100,6 +100,16 @@
   .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
   @media(max-width:600px){.g2,.g3{grid-template-columns:1fr}}
   .stat{display:grid;gap:2px;padding:8px 16px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(110,170,255,.15)}.stat b{font-size:20px}.stat small{font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.08em}
+  .pcard{padding:14px 18px} .pcard.ready{border-color:rgba(242,182,50,.55)}
+  .pc-head{display:flex;gap:12px;align-items:center;cursor:pointer;flex-wrap:wrap}
+  .pcs{background:rgba(47,123,255,.14);border-radius:6px;padding:2px 8px;font-size:12px}
+  .pc-since{display:flex;gap:10px;align-items:center;margin:14px 0 6px;flex-wrap:wrap} .pc-since input{max-width:180px}
+  .pc-task{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0 4px;border-top:1px solid rgba(255,255,255,.06)}
+  .pc-task.done b{color:#86efac}
+  .pc-hist{list-style:none;margin:0 0 6px 14px;display:grid;gap:3px;font-size:12.5px;opacity:.85}
+  .pc-hist li{display:flex;gap:8px;align-items:center}
+  .src{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,.03)}
+  @media(max-width:900px){.src{grid-template-columns:1fr 1fr}}
   .hbar{height:8px;border-radius:9px;background:rgba(255,255,255,.06);overflow:hidden}.hbar i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,#22d3ee,#8b5cf6)}
   label.f small{display:block;color:var(--muted);font-size:.74rem;margin-top:5px;line-height:1.4}
   .admin input[type=text],.admin input[type=password],.admin input[type=number],.admin select,.admin textarea{padding:9px 11px;font-size:.88rem;border-radius:9px}
@@ -172,6 +182,7 @@
         <button data-tab="webhooks">🔗 Webhooks</button>
         <button data-tab="settings">⚙️ Portal Settings</button>
         <button data-tab="hours">⏱️ Hours</button>
+        <button data-tab="promo">🎖️ Promotions</button>
         <div class="sep"></div>
         <button data-tab="admins">👮 Admins</button>
         <button data-tab="activity">🕘 Activity Log</button>
@@ -394,7 +405,7 @@ function renderPage(keepScroll) {
   const y = window.scrollY;
   document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
   const page = $("page"); page.innerHTML = "";
-  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
+  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
   if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
 }
 function head(title, desc, ...right) {
@@ -549,7 +560,11 @@ function pageEditor(page) {
     h("div", { class: "g2" },
       field("Status", bind(form, "status", { type: "select", structural: true, options: [["live", "Live: officers can submit"], ["soon", "Coming soon card"], ["hidden", "Hidden"]] })),
       field("Form ID", idInput, "Used in the link (index.html#" + form.id + ") and the sheet. Avoid changing once live.")),
-    h("div", { class: "g2" }, field("Submit button text", bind(form, "submitLabel", { max: 60 })), h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(form, "copyText", "Show “Copy as Text” button")))));
+    h("div", { class: "g2" }, field("Submit button text", bind(form, "submitLabel", { max: 60 })), h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(form, "copyText", "Show “Copy as Text” button"))),
+    (() => { const inp = bind(form, "section", { placeholder: "Reports", max: 40 }); inp.setAttribute("list", "sectionList");
+      const names = [...new Set(["Reports", "Training"].concat(CFG.forms.map(f => String(f.section || "").trim()).filter(Boolean)))];
+      return field("Home page section", h("span", {}, inp, h("datalist", { id: "sectionList" }, names.map(n => h("option", { value: n })))),
+        "Forms with the same section are grouped together on the home page (e.g. Reports, Training). Blank = Reports."); })()));
 
   // ---- look ----
   left.append(sec("Look", false,
@@ -1322,6 +1337,112 @@ function pageHours(page) {
       out.append(h("div", { class: "sec" }, h("h3", { text: (d.icon ? d.icon + " " : "") + d.title + " · " + fmt(mins) }), h("div", { class: "tablewrap" }, tbl)));
     });
   }).catch(e => { out.innerHTML = ""; out.append(h("div", { class: "sec empty-note", text: e.message })); });
+}
+
+/* ---------------- PROMOTIONS (SGT tracker) ---------------- */
+let PROMO_ADMIN = null, PROMO_OPEN = new Set();
+function pagePromo(page) {
+  page.append(head("SGT Promotion Tracker", "Corporals are read from the roster automatically. Reports credit their tasks; you can add, remove or excuse anything here. Changes to completions save straight away; the setup below needs Save & publish.",
+    h("a", { class: "btn ghost sm", href: "index.html#promo", target: "_blank" }, "Open public page ↗"),
+    h("button", { class: "btn ghost sm", onclick: () => { PROMO_ADMIN = null; renderPage(true); } }, "Refresh")));
+  const candBox = h("div", {}, h("div", { class: "sec empty-note", text: "Loading corporals…" }));
+  const setupBox = h("div", {});
+  page.append(candBox, setupBox);
+  const load = PROMO_ADMIN ? Promise.resolve(PROMO_ADMIN) : api("promoAdmin", {}).then(r => (PROMO_ADMIN = r));
+  load.then(r => {
+    if (!CFG.settings.promo) {        // first visit: start from the built-in setup without marking the page unsaved
+      CFG.settings.promo = clone(r.settings);
+      const b = JSON.parse(BASE); b.settings.promo = clone(r.settings); BASE = JSON.stringify(b);
+    }
+    drawSetup(setupBox); drawCands(candBox, r.promo);
+  }).catch(e => { candBox.innerHTML = ""; candBox.append(h("div", { class: "sec empty-note", text: e.message })); });
+}
+function promoAct(action, data, box) {
+  return api(action, data).then(r => { PROMO_ADMIN = Object.assign({}, PROMO_ADMIN, { promo: r.promo }); drawCands(box, r.promo); toast("Saved.", "ok"); }).catch(e => toast(e.message, "bad"));
+}
+function drawCands(box, P) {
+  box.innerHTML = "";
+  const C = P.candidates || [];
+  const ready = C.filter(c => c.complete).length;
+  box.append(h("div", { class: "sec", style: "display:flex;gap:18px;align-items:center;flex-wrap:wrap" },
+    h("div", { class: "stat" }, h("b", { text: String(C.length) }), h("small", { text: "corporals" })),
+    h("div", { class: "stat" }, h("b", { text: String(ready) }), h("small", { text: "ready for SGT" })),
+    h("div", { class: "help", text: P.error ? "⚠ " + P.error : "Found by callsign in the roster tab. Click a name to edit their progress." })));
+  if (!C.length) { box.append(h("div", { class: "sec empty-note", text: "No corporals matched. Check the roster tab, column and callsign pattern in the setup below." })); return; }
+  C.forEach(c => {
+    const open = PROMO_OPEN.has(c.key);
+    const card = h("div", { class: "sec pcard" + (c.complete ? " ready" : "") });
+    const bar = h("div", { class: "hbar", style: "flex:1;max-width:220px" }, h("i", { style: "width:" + Math.round(c.done / Math.max(1, c.total) * 100) + "%" }));
+    card.append(h("div", { class: "pc-head", onclick: () => { open ? PROMO_OPEN.delete(c.key) : PROMO_OPEN.add(c.key); drawCands(box, P); } },
+      h("span", { class: "mono pcs", text: c.callsign }), h("b", { text: c.name }), bar, h("span", { class: "help", text: c.done + "/" + c.total + " tasks" }),
+      h("span", { class: "badge " + (c.tigOk ? "live" : "soon"), text: c.tig == null ? "TIG not set" : "TIG " + c.tig + "d" }),
+      c.complete ? h("span", { class: "badge owner", text: "READY" }) : null, h("span", { class: "help", text: open ? "▲" : "▼" })));
+    if (open) {
+      const sinceIn = h("input", { type: "date", value: c.since || "" });
+      card.append(h("div", { class: "pc-since" }, h("span", { class: "help", text: "CPL since" + (c.sinceSrc ? " (" + c.sinceSrc + ")" : "") + ":" }), sinceIn,
+        h("button", { class: "btn ghost sm", onclick: () => promoAct("promoSince", { key: c.key, date: sinceIn.value }, box) }, "Set date")));
+      P.tasks.forEach(t => {
+        const s = c.tasks[t.id];
+        const row = h("div", { class: "pc-task" + (s.done ? " done" : "") },
+          h("div", { class: "pc-tt" }, h("b", { text: t.title }), h("span", { class: "help", text: " " + s.count + "/" + s.need + (s.excused ? " · excused" : "") + (s.locked && !s.done ? " · locked" : "") })),
+          h("div", { class: "acts" },
+            h("button", { class: "btn ghost sm", title: "Add one completion", onclick: () => promoAct("promoCredit", { key: c.key, taskId: t.id, count: 1 }, box) }, "+1"),
+            h("button", { class: "btn ghost sm", onclick: () => promoAct("promoExcuse", { key: c.key, taskId: t.id, on: !s.excused }, box) }, s.excused ? "Un-excuse" : "Excuse")));
+        const list = h("ul", { class: "pc-hist" }, s.items.length ? s.items.map(x => h("li", {},
+          h("span", { text: x.date + " · " + x.source + (x.report ? " " + x.report : "") + (x.count > 1 ? " ×" + x.count : "") }),
+          h("button", { class: "ibtn", title: "Remove this completion", onclick: () => { if (confirm("Remove this completion?")) promoAct("promoRemove", { rowId: x.entry }, box); } }, "×"))) : h("li", { class: "help", text: "Nothing logged." }));
+        card.append(row, list);
+      });
+    }
+    box.append(card);
+  });
+}
+function drawSetup(box) {
+  box.innerHTML = "";
+  const p = CFG.settings.promo;
+  const tabOpts = () => {
+    const tabs = (ROSTER_TABS && ROSTER_TABS.tabs) || [];
+    return [["", "— pick the roster tab —"]].concat(tabs.map(t => [String(t.id), t.name + " (" + t.rows + " rows)"]));
+  };
+  const tabSel = h("select", { onchange: () => { const t = ((ROSTER_TABS && ROSTER_TABS.tabs) || []).find(x => String(x.id) === tabSel.value); p.rosterTabId = t ? t.id : null; p.rosterTabName = t ? t.name : ""; changed(); } });
+  const fillTabs = () => { tabSel.innerHTML = ""; tabOpts().forEach(o => tabSel.append(h("option", { value: o[0], text: o[1] })));
+    const byName = ((ROSTER_TABS && ROSTER_TABS.tabs) || []).find(x => x.name.trim().toLowerCase() === String(p.rosterTabName || "").trim().toLowerCase());
+    tabSel.value = p.rosterTabId != null ? String(p.rosterTabId) : byName ? String(byName.id) : ""; };
+  fillTabs();
+  if (!ROSTER_TABS) api("rosterTabs", {}).then(r => { ROSTER_TABS = { book: r.book, tabs: r.tabs, url: (CFG.settings.roster || {}).url || "" }; fillTabs(); }).catch(() => {});
+  box.append(h("div", { class: "sec", style: "display:grid;gap:14px" }, h("h3", { text: "Setup" }),
+    toggle(p, "on", "Show the tracker on the portal (public page + home page card)"),
+    h("div", { class: "g2" }, field("Title", bind(p, "title", { max: 80 })), field("Roster tab", tabSel, "Saved: " + (p.rosterTabName || "—"))),
+    field("Text under the title", bind(p, "subtitle", { type: "textarea", rows: 2 })),
+    h("div", { class: "g3" },
+      field("Callsign column", bind(p, "col", { max: 2, set: v => v.trim().toUpperCase() })),
+      field("Corporal callsigns look like", bind(p, "match", { placeholder: "L-5##" }), "# = any digit. L-5## matches L-501 … L-599."),
+      field("Days time in grade before the final step", bind(p, "tigDays", { type: "number", set: v => Number(v) || 0 }))),
+    field("Roster column with the date they made CPL (optional)", bind(p, "tigCol", { max: 2, placeholder: "e.g. F", set: v => v.trim().toUpperCase() }), "Blank = use the date you set per person above (or the day the portal first saw them).")));
+  const tb = h("div", { class: "sec", style: "display:grid;gap:12px" }, h("h3", { text: "Requirements" }),
+    h("p", { class: "help", text: "Each requirement counts reports: pick the form, the box the corporal's name is in, and (optionally) a box that must contain some text. A report can also count toward several requirements." }));
+  p.tasks.forEach((t, i) => {
+    t.sources = t.sources || [];
+    const srcs = t.sources.map((src, si) => {
+      const f = CFG.forms.find(x => x.id === src.form), keys = f ? formKeys(f) : [];
+      const fdef = f && src.field ? f.blocks.flatMap(b => b.fields || []).find(x => x.id === src.field) : null;
+      return h("div", { class: "src" },
+        field("Report", bind(src, "form", { type: "select", structural: true, options: [["", "— form —"]].concat(CFG.forms.map(x => [x.id, x.title])) })),
+        field("CPL's name is in", bind(src, "person", { type: "select", options: [["", "— box —"]].concat(keys.filter(k => ["officer", "officers", "discord_id", "text"].includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")])) })),
+        field("Only if box", bind(src, "field", { type: "select", structural: true, options: [["", "— any report —"]].concat(keys.filter(k => !["repeater", "checklist"].includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")])) })),
+        src.field ? field("contains", fdef && fdef.type === "select" ? bind(src, "value", { type: "select", options: [["", "— filled in —"]].concat((fdef.options || []).map(o => [o, o])) }) : bind(src, "value", { placeholder: "text (blank = filled in)" })) : h("div"),
+        h("button", { class: "ibtn", title: "Remove", style: "align-self:end;margin-bottom:8px", onclick: () => { t.sources.splice(si, 1); changed(true); } }, "×"));
+    });
+    tb.append(h("div", { class: "sub" },
+      h("div", { class: "subhead" }, h("b", { text: (i + 1) + ". " + (t.title || "New requirement") }), ctrls(p.tasks, i)),
+      h("div", { class: "g2" }, field("Requirement", bind(t, "title", { max: 120 })), field("How many times", bind(t, "need", { type: "number", set: v => Math.max(1, Number(v) || 1) }))),
+      field("Short description (shown on the public page)", bind(t, "desc", { max: 300 })),
+      toggle(t, "final", "Final step: locked until every other requirement and the time in grade are done", true),
+      h("div", { class: "help", text: "Counts from:" }), srcs.length ? srcs : h("div", { class: "help", text: "No reports yet: only admin-added completions count." }),
+      h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { t.sources.push({ form: "", person: "", field: "", value: "" }); changed(true); } }, "+ Count another report"))));
+  });
+  tb.append(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { p.tasks.push({ id: "task" + Date.now().toString(36), title: "New requirement", need: 1, desc: "", sources: [] }); changed(true); } }, "+ Add requirement")));
+  box.append(tb);
 }
 
 /* ---------------- ACTIVITY ---------------- */

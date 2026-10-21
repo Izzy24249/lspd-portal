@@ -1517,5 +1517,158 @@ window.PORTAL_TEMPLATES = [
     }
    }
   ]
+ },
+ {
+  "theme": "hud",
+  "status": "hidden",
+  "copyText": true,
+  "webhookId": "",
+  "watermarkMode": "single",
+  "tags": {
+   "base": [],
+   "rules": []
+  },
+  "leaderboard": {
+   "enabled": false,
+   "countField": "",
+   "webhookId": "",
+   "messageId": "",
+   "title": "",
+   "heading": ""
+  },
+  "id": "suptask",
+  "section": "Training",
+  "logoUrl": "img/lspd-badge.png",
+  "discordThumb": "https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/img/lspd-badge.png",
+  "icon": "🎖️",
+  "title": "Supervisor Training Log",
+  "description": "Log a Corporal's SGT requirement: GOM trainings, 71 requests and the supervisor ride-along.",
+  "submitLabel": "Log Requirement",
+  "color": "#f2b632",
+  "embedTitle": "🎖️ Supervisor Training Log — {stNo}",
+  "threadTitle": "{stCpl} | {stTask}",
+  "archiveSheet": "Supervisor Training",
+  "blocks": [
+   {
+    "type": "banner",
+    "title": "LSPD - SUPERVISOR TRAINING LOG",
+    "subtitle": "Corporal → Sergeant requirements. Filing this updates the SGT Promotion Tracker automatically."
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "stNo",
+      "label": "Log #:",
+      "type": "case_number",
+      "prefix": "SUP",
+      "required": true
+     },
+     {
+      "id": "stDate",
+      "label": "Date:",
+      "type": "date",
+      "defaultToday": true,
+      "required": true
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "stCpl",
+      "label": "Corporal (CPL):",
+      "type": "officer",
+      "required": true,
+      "rosterTabName": "FTO - Roster"
+     },
+     {
+      "id": "stTask",
+      "label": "Requirement completed:",
+      "type": "select",
+      "required": true,
+      "options": [
+       "Witness a Global Operation Manual Training",
+       "Lead a GOM Training with a SGT+ hosting",
+       "Complete a GOM Training on their own",
+       "Witness a SGT+ handle a 71 request",
+       "Supervisor Ride-Along with a SGM+"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "stSupervisor",
+      "label": "Supervising SGT+ / SGM+:",
+      "type": "officer",
+      "required": true
+     },
+     {
+      "id": "stOthers",
+      "label": "Trainees / others present:",
+      "type": "officers",
+      "allowTyped": true
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "stLocation",
+      "label": "Location / Postal:",
+      "type": "text",
+      "placeholder": "Mission Row PD"
+     },
+     {
+      "id": "stCad",
+      "label": "CAD # (71 request / RA):",
+      "type": "text"
+     }
+    ]
+   },
+   {
+    "type": "longtext",
+    "id": "stNotes",
+    "title": "SUMMARY",
+    "hint": "What happened and how the CPL did.",
+    "maxLength": 4000,
+    "required": true,
+    "followUp": true,
+    "guide": {
+     "on": true,
+     "steps": [
+      {
+       "label": "What",
+       "help": "Which requirement, when and where?",
+       "starter": "On {stDate}, {stCpl} completed: {stTask}."
+      },
+      {
+       "label": "Who",
+       "help": "Who supervised or hosted, and who else was there?",
+       "starter": "The session was supervised by {stSupervisor}."
+      },
+      {
+       "label": "How it went",
+       "help": "Strengths and anything to work on.",
+       "starter": "The CPL [performed well / needs to improve] in [areas]."
+      }
+     ],
+     "tips": [
+      "Write in first person and past tense: \"I observed\", not \"Officer observed\".",
+      "Tell it in the order it happened, with times (e.g. 2315 hours).",
+      "Stick to facts you saw, heard or were told.",
+      "Quote important statements word for word.",
+      "Re-read it once: would someone who wasn't there understand what happened?"
+     ],
+     "mention": [],
+     "keywords": []
+    }
+   }
+  ]
  }
 ];

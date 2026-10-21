@@ -13,13 +13,14 @@
  *   - Submissions                          -> one tab per form (name set in the form builder)
  *   - Leaderboard counts                   -> "Leaderboard Log" tab
  *   - Hours from reports (start -> end)    -> "Hours Log" tab
+ *   - SGT promotion task credits           -> "Promotion Log" tab
  *
  * FIRST ADMIN: open the Google Sheet, menu "🚔 LSPD Portal" > "Create / reset admin account".
  * Webhook URLs never belong in this file (it is stored on GitHub).
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 24;
+const BACKEND_VERSION = 25;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -27,6 +28,7 @@ const ADMINS_SHEET_ = "Portal Admins";
 const LOG_SHEET_    = "Admin Log";
 const LB_SHEET_     = "Leaderboard Log";
 const HOURS_SHEET_  = "Hours Log";
+const PROMO_SHEET_  = "Promotion Log";
 const SESSION_SECONDS_ = 6 * 60 * 60;   // admin login lasts 6 hours of inactivity
 const MAX_LOGIN_FAILS_ = 5;             // then locked for 15 minutes
 
@@ -37,6 +39,7 @@ function doGet(e) {
   try {
     const action = (e && e.parameter && e.parameter.action) || "";
     if (action === "config") return json_({ ok: true, config: publicConfig_() });
+    if (action === "promo") return json_({ ok: true, promo: promoView_(false) });
     return json_({ ok: true, service: "LSPD Forms Portal" });
   } catch (err) {
     return json_({ ok: false, error: errMsg_(err) });
@@ -44,7 +47,7 @@ function doGet(e) {
 }
 
 // Only actions that change saved data wait in line; reading, logging in and Discord posting run side by side.
-const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1, hoursRefresh: 1 };
+const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1, hoursRefresh: 1, promoCredit: 1, promoRemove: 1, promoExcuse: 1, promoSince: 1 };
 
 function doPost(e) {
   let d;
@@ -250,6 +253,7 @@ function warmRosters() {
   try { callsignMap_(true); } catch (e) {}
   rostersFor_(cfg.forms, { fresh: true });
   try { if (usesOldRoster_(cfg.forms)) getRoster_(true); } catch (e) {}
+  try { promoCandidates_(true); promoSync_(); } catch (e) {}
 }
 function ensureWarmTrigger_() {
   const cache = CacheService.getScriptCache();
@@ -728,6 +732,7 @@ function handleSubmit_(d) {
       lbSheet_().appendRow([new Date(), form.id, "'" + str_(values[lb.countField])]);
       try { updateLeaderboard_(form); } catch (e) { warning = warning || "leaderboard not updated: " + errMsg_(e); }
     }
+    try { const n = promoFromReport_(cfg, form, values); if (n.problem) warning = warning || n.problem; } catch (e) { warning = warning || "promotion tracker not updated: " + errMsg_(e); }
     if (form.hours && form.hours.on) {
       try {
         const h = logHours_(form, values);
@@ -1034,6 +1039,195 @@ function updateHoursBoard_(cfg) {
 }
 
 // =====================================================================
+// SGT PROMOTION TRACKER (CPL candidates from a roster tab; tasks credited by reports or by an admin)
+// =====================================================================
+const PROMO_DEFAULT_ = {
+  on: true, title: "SGT Promotion Tracker", subtitle: "Corporal requirements for promotion to Sergeant. Progress updates automatically when a report is filed.",
+  rosterTabId: null, rosterTabName: "FTO - Roster", col: "C", match: "L-5##", tigDays: 14, tigCol: "",
+  tasks: [
+    { id: "gomWitness", title: "Witness a Global Operation Manual Training", need: 1, desc: "Sit in on a GOM training hosted by a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a Global Operation Manual Training" }] },
+    { id: "gomLead", title: "Lead a GOM Training with a SGT+ hosting", need: 1, desc: "Run the training while a SGT+ hosts and observes.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Lead a GOM Training with a SGT+ hosting" }] },
+    { id: "gomSolo", title: "Complete GOM Trainings on their own", need: 2, desc: "Host and complete the training without a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Complete a GOM Training on their own" }] },
+    { id: "witness71", title: "Witness a SGT+ handle a 10-71 request", need: 3, desc: "Observe a SGT+ respond to a supervisor (71) request.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a SGT+ handle a 71 request" }] },
+    { id: "supervisorRa", title: "Supervisor Ride-Along with a SGM+", need: 1, desc: "Final step: only after the 14-day time in grade and every other requirement.", final: true, sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Supervisor Ride-Along with a SGM+" }] }
+  ]
+};
+function cleanPromo_(p) {
+  if (!p) return JSON.parse(JSON.stringify(PROMO_DEFAULT_));
+  const out = {
+    on: p.on !== false, title: clip_(str_(p.title) || PROMO_DEFAULT_.title, 80), subtitle: clip_(str_(p.subtitle), 300),
+    rosterTabId: p.rosterTabId != null && p.rosterTabId !== "" && isFinite(Number(p.rosterTabId)) ? Number(p.rosterTabId) : null,
+    rosterTabName: String(p.rosterTabName || "").substring(0, 100),
+    col: /^[A-Za-z]{1,2}$/.test(str_(p.col)) ? str_(p.col).toUpperCase() : "C",
+    match: clip_(str_(p.match) || "L-5##", 40), tigDays: Math.max(0, Math.min(365, parseInt(p.tigDays, 10) || 0)),
+    tigCol: /^[A-Za-z]{1,2}$/.test(str_(p.tigCol)) ? str_(p.tigCol).toUpperCase() : "",
+    tasks: []
+  };
+  const ids = {};
+  (p.tasks || []).slice(0, 12).forEach(t => {
+    const id = str_(t.id);
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(id) || ids[id]) throw new Error("Promotion tracker: every task needs its own ID (letters/numbers).");
+    ids[id] = 1;
+    if (!str_(t.title)) throw new Error("Promotion tracker: a task has no title.");
+    out.tasks.push({ id: id, title: clip_(str_(t.title), 120), desc: clip_(str_(t.desc), 300), need: Math.max(1, Math.min(50, parseInt(t.need, 10) || 1)), final: !!t.final,
+      sources: (t.sources || []).slice(0, 6).map(x => ({ form: str_(x.form), person: str_(x.person), field: str_(x.field), value: clip_(str_(x.value), 120) })).filter(x => x.form && x.person) });
+  });
+  return out;
+}
+function promoCfg_(cfg) { return ((cfg || getConfig_()).settings || {}).promo || PROMO_DEFAULT_; }
+function promoSheet_() {
+  const ss = ss_();
+  let sh = ss.getSheetByName(PROMO_SHEET_);
+  if (!sh) {
+    sh = ss.insertSheet(PROMO_SHEET_);
+    sh.appendRow(["Entry", "Logged", "Type", "Key", "Callsign", "Name", "Task", "Count", "Form", "Report #", "Date", "Note", "By", "Removed"]);
+    sh.setFrozenRows(1); sh.getRange(1, 1, 1, 14).setFontWeight("bold"); sh.getRange("D:D").setNumberFormat("@"); sh.getRange("K:K").setNumberFormat("@");
+  }
+  return sh;
+}
+function promoAppend_(list) {
+  const rows = list.map(e => [Utilities.getUuid().slice(0, 8), new Date(), e.type, "'" + e.c.key, e.c.callsign, cellSafe_(e.c.name), e.task, e.count || 0, e.form || "", cellSafe_(e.report || ""), e.date ? "'" + e.date : "", cellSafe_(e.note || ""), e.by || "", ""]);
+  if (!rows.length) return;
+  const sh = promoSheet_();
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  CacheService.getScriptCache().remove("promo_view");
+}
+// "L-5##" -> /^L5\d\d$/ (letters/digits only, so "L-501", "L501" and "l 501" all match)
+function promoRe_(pattern) {
+  const p = str_(pattern).toUpperCase().replace(/[^A-Z0-9#*]/g, "");
+  return new RegExp("^" + p.replace(/#/g, "\\d").replace(/\*/g, "[A-Z0-9]*") + "$");
+}
+function promoTabId_(pc) {
+  if (pc.rosterTabId != null) return pc.rosterTabId;
+  const want = str_(pc.rosterTabName).toLowerCase();
+  const sh = rosterBook_().getSheets().find(x => x.getName() === pc.rosterTabName) || rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want);
+  return sh ? sh.getSheetId() : null;
+}
+// CPLs on the roster: [{ key, callsign, name, id, tigDate }]
+function promoCandidates_(fresh) {
+  const pc = promoCfg_();
+  const tabId = promoTabId_(pc);
+  if (tabId == null) return { error: "Roster tab \"" + pc.rosterTabName + "\" not found in the roster sheet.", list: [] };
+  const cols = [pc.col].concat(pc.tigCol ? [pc.tigCol] : []).filter((x, i, a) => a.indexOf(x) === i).sort();
+  const tab = getRosterTab_(tabId, !!fresh, cols);
+  const re = promoRe_(pc.match), list = [], seen = {};
+  (tab.people || []).forEach(p => {
+    const cs = str_(p.more && p.more[pc.col]);
+    if (!cs || !re.test(cs.toUpperCase().replace(/[^A-Z0-9]/g, ""))) return;
+    const name = p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name.replace(cs, "").trim();
+    const key = p.id || "CS:" + callKey_(cs);
+    if (seen[key]) return; seen[key] = 1;
+    list.push({ key: key, callsign: cs, name: name || p.name, id: p.id || "", tigRaw: pc.tigCol ? str_(p.more && p.more[pc.tigCol]) : "" });
+  });
+  list.sort((a, b) => a.callsign.localeCompare(b.callsign, undefined, { numeric: true }));
+  return { error: tab.error || "", list: list, tab: tab.tab };
+}
+function promoFind_(key) {
+  const c = promoCandidates_().list.find(x => x.key === str_(key));
+  if (!c) throw new Error("That CPL isn't on the roster any more.");
+  return c;
+}
+function promoTask_(id) {
+  const t = promoCfg_().tasks.find(x => x.id === str_(id));
+  if (!t) throw new Error("Unknown task.");
+  return t;
+}
+// remember the first day each CPL showed up (used for time in grade when no date is set)
+function promoSync_() {
+  const cands = promoCandidates_().list;
+  if (!cands.length) return;
+  const have = {};
+  const data = promoSheet_().getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) if (data[i][2] === "since" || data[i][2] === "seen") have[str_(data[i][3]).replace(/^'/, "")] = 1;
+  const add = cands.filter(c => !have[c.key]).map(c => ({ type: "seen", c: c, task: "", date: ymd_(new Date()), by: "system" }));
+  if (add.length) withLock_(() => { promoAppend_(add); return { ok: true }; });
+}
+// A filed report -> credits for every CPL named in the right box of a matching report
+function promoFromReport_(cfg, form, values) {
+  const pc = promoCfg_(cfg);
+  if (!pc.on) return {};
+  const hits = [];
+  pc.tasks.forEach(t => (t.sources || []).forEach(src => {
+    if (src.form !== form.id) return;
+    if (src.field) {
+      const v = str_(values[src.field]).toLowerCase(), want = str_(src.value).toLowerCase();
+      if (want ? v.indexOf(want) === -1 : !v) return;
+    }
+    hits.push({ t: t, src: src });
+  }));
+  if (!hits.length) return {};
+  const cands = promoCandidates_().list;
+  const caseF = allFields_(form).find(f => f.type === "case_number");
+  const reportNo = caseF ? str_(values[caseF.id]) : "";
+  const out = [], done = {};
+  hits.forEach(h => {
+    peopleIn_(values[h.src.person]).forEach(p => {
+      const ck = callKey_(p.name), nk = nameKey_(p.name);
+      const c = cands.find(x => (p.id && x.id === p.id)) || (ck && cands.find(x => callKey_(x.callsign) === ck)) || (nk && cands.find(x => nameKey_(x.name) === nk));
+      if (!c || done[c.key + h.t.id]) return;
+      done[c.key + h.t.id] = 1;
+      out.push({ type: "credit", c: c, task: h.t.id, count: 1, form: form.id, report: reportNo, date: ymd_(parseYmd_(firstDate_(form, values)) || new Date()), by: "report" });
+    });
+  });
+  if (!out.length) return { problem: hits.length ? "promotion tracker: no CPL from the roster was picked, so nothing was credited" : "" };
+  promoAppend_(out);
+  return { credited: out.length };
+}
+function firstDate_(form, values) { const f = allFields_(form).find(x => x.type === "date"); return f ? values[f.id] : ""; }
+// Everything the tracker page shows. admin=true adds entry IDs + notes for editing.
+function promoView_(admin) {
+  const cache = CacheService.getScriptCache();
+  if (!admin) { const hit = cache.get("promo_view"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const cfg = getConfig_(), pc = promoCfg_(cfg);
+  const base = { on: pc.on, title: pc.title, subtitle: pc.subtitle, tigDays: pc.tigDays, tasks: pc.tasks.map(t => ({ id: t.id, title: t.title, desc: t.desc, need: t.need, final: t.final })) };
+  if (!pc.on && !admin) return base;
+  const cr = promoCandidates_();
+  const data = promoSheet_().getDataRange().getValues();
+  const byKey = {}, since = {}, seen = {}, excused = {};
+  const keyFor = r => {
+    const k = str_(r[3]).replace(/^'/, "");
+    if (cr.list.some(c => c.key === k)) return k;
+    const ck = callKey_(str_(r[4])), c = ck && cr.list.find(x => callKey_(x.callsign) === ck);
+    return c ? c.key : k;
+  };
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i], type = str_(r[2]), k = keyFor(r);
+    if (type === "since") since[k] = str_(r[10]).replace(/^'/, "");
+    else if (type === "seen") { if (!seen[k]) seen[k] = str_(r[10]).replace(/^'/, ""); }
+    else if (type === "excuse" || type === "unexcuse") excused[k + "|" + r[6]] = type === "excuse";
+    else if (type === "credit" && !str_(r[13])) {
+      (byKey[k] = byKey[k] || []).push({ entry: str_(r[0]), task: str_(r[6]), count: Number(r[7]) || 1, form: str_(r[8]), report: str_(r[9]), date: str_(r[10]).replace(/^'/, ""), by: str_(r[12]), note: admin ? str_(r[11]) : "" });
+    }
+  }
+  const forms = {}; cfg.forms.forEach(f => forms[f.id] = f.title);
+  const today = parseYmd_(ymd_(new Date()));
+  base.error = cr.error;
+  base.candidates = cr.list.map(c => {
+    const credits = byKey[c.key] || [];
+    let sinceDate = since[c.key] || "", sinceSrc = sinceDate ? "set" : "";
+    if (!sinceDate && c.tigRaw) { const d = new Date(c.tigRaw); if (!isNaN(d)) { sinceDate = ymd_(d); sinceSrc = "roster"; } }
+    if (!sinceDate && seen[c.key]) { sinceDate = seen[c.key]; sinceSrc = "first seen"; }
+    const tig = sinceDate ? Math.max(0, Math.round((today - parseYmd_(sinceDate)) / 864e5)) : null;
+    const tasks = {};
+    pc.tasks.forEach(t => {
+      const items = credits.filter(x => x.task === t.id).sort((a, b) => a.date < b.date ? -1 : 1);
+      const count = items.reduce((n, x) => n + x.count, 0);
+      tasks[t.id] = { count: count, need: t.need, done: count >= t.need || !!excused[c.key + "|" + t.id], excused: !!excused[c.key + "|" + t.id],
+        items: items.map(x => ({ entry: admin ? x.entry : undefined, date: x.date, count: x.count, source: x.form ? (forms[x.form] || x.form) : "Added by admin", report: x.report, note: x.note || undefined })) };
+    });
+    const others = pc.tasks.filter(t => !t.final).every(t => tasks[t.id].done);
+    const tigOk = !pc.tigDays || (tig != null && tig >= pc.tigDays);
+    pc.tasks.filter(t => t.final).forEach(t => { tasks[t.id].locked = !(others && tigOk); });
+    const doneN = pc.tasks.filter(t => tasks[t.id].done).length;
+    return { key: admin ? c.key : undefined, callsign: c.callsign, name: c.name, since: sinceDate, sinceSrc: admin ? sinceSrc : undefined, tig: tig, tigOk: tigOk,
+      tasks: tasks, done: doneN, total: pc.tasks.length, complete: doneN === pc.tasks.length && pc.tasks.length > 0 };
+  });
+  base.updated = new Date().toISOString();
+  if (!admin) { const js = JSON.stringify(base); if (js.length < 95000) cache.put("promo_view", js, 120); }
+  return base;
+}
+
+// =====================================================================
 // DISCORD HELPERS
 // =====================================================================
 function addListFields_(fields, name, lines) {
@@ -1319,7 +1513,7 @@ function handleAdmin_(d) {
       let book;
       try { book = url ? SpreadsheetApp.openByUrl(url) : ss_(); }
       catch (e) { return { ok: false, error: "Couldn't open that sheet: " + errMsg_(e) }; }
-      const system = [CONFIG_SHEET_, ADMINS_SHEET_, LOG_SHEET_, LB_SHEET_, HOURS_SHEET_];
+      const system = [CONFIG_SHEET_, ADMINS_SHEET_, LOG_SHEET_, LB_SHEET_, HOURS_SHEET_, PROMO_SHEET_];
       const tabs = book.getSheets().filter(sh => url || system.indexOf(sh.getName()) === -1)
         .map(sh => ({ name: sh.getName(), id: sh.getSheetId(), hidden: sh.isSheetHidden(), rows: Math.max(0, sh.getLastRow() - 1) }));
       return { ok: true, book: book.getName(), tabs: tabs };
@@ -1340,6 +1534,37 @@ function handleAdmin_(d) {
 
     case "rosters": {   // the roster tabs getAll didn't have cached yet
       return { ok: true, rosters: rostersFor_(getConfig_().forms) };
+    }
+
+    case "promoAdmin": return { ok: true, promo: promoView_(true), settings: promoCfg_() };
+    case "promoCredit": {        // add a completion by hand
+      const c = promoFind_(d.key), t = promoTask_(d.taskId);
+      const n = Math.max(1, Math.min(10, parseInt(d.count, 10) || 1));
+      promoAppend_([{ type: "credit", c: c, task: t.id, count: n, form: "", report: "", date: str_(d.date) || ymd_(new Date()), note: clip_(str_(d.note), 300), by: me.username }]);
+      logAdmin_(me.username, "promotion credit", c.callsign + " " + c.name + " · " + t.title + (n > 1 ? " ×" + n : ""));
+      return { ok: true, promo: promoView_(true) };
+    }
+    case "promoRemove": {        // take a completion back off (kept in the sheet, marked removed)
+      const sh = promoSheet_(), data = sh.getDataRange().getValues();
+      const i = data.findIndex((r, j) => j && str_(r[0]) === str_(d.rowId));
+      if (i < 1) throw new Error("That entry no longer exists.");
+      sh.getRange(i + 1, 14).setValue("removed by " + me.username + " " + ymd_(new Date()));
+      CacheService.getScriptCache().remove("promo_view");
+      logAdmin_(me.username, "promotion credit removed", str_(data[i][4]) + " " + str_(data[i][5]) + " · " + str_(data[i][6]));
+      return { ok: true, promo: promoView_(true) };
+    }
+    case "promoExcuse": {
+      const c = promoFind_(d.key), t = promoTask_(d.taskId);
+      promoAppend_([{ type: d.on ? "excuse" : "unexcuse", c: c, task: t.id, count: 0, note: clip_(str_(d.note), 300), by: me.username }]);
+      logAdmin_(me.username, d.on ? "promotion task excused" : "promotion excuse removed", c.callsign + " · " + t.title);
+      return { ok: true, promo: promoView_(true) };
+    }
+    case "promoSince": {         // date they became CPL (time in grade)
+      const c = promoFind_(d.key);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(str_(d.date))) throw new Error("Pick a date.");
+      promoAppend_([{ type: "since", c: c, task: "", count: 0, date: str_(d.date), by: me.username }]);
+      logAdmin_(me.username, "CPL since date set", c.callsign + " → " + d.date);
+      return { ok: true, promo: promoView_(true) };
     }
 
     case "hoursReport": {
@@ -1438,6 +1663,7 @@ function validateConfig_(c) {
     hours: { weekStart: s.hours && Number(s.hours.weekStart) === 0 ? 0 : 1, board: !!(s.hours && s.hours.board),
       webhookId: str_(s.hours && s.hours.webhookId), title: clip_(str_(s.hours && s.hours.title), 120) }
   };
+  out.settings.promo = cleanPromo_(s.promo);
   if (out.settings.hours.board && !out.settings.hours.webhookId) throw new Error("Weekly hours board: pick which webhook it posts to (or turn it off).");
   if (out.settings.roster.verify.on && !out.settings.roster.verify.tab.trim() && out.settings.roster.verify.tabId == null) throw new Error("Roster: pick which tab is the main personnel roster (or turn the two-way check off).");
   if (out.settings.roster.verify.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.verify.url)) throw new Error("Main roster link must be a Google Sheets link.");
@@ -1496,6 +1722,7 @@ function validateConfig_(c) {
       if (!f.leaderboard.countField || !keys[f.leaderboard.countField]) throw new Error(f.title + ": pick which Discord ID field the leaderboard counts.");
     }
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
+    f.section = clip_(str_(f.section), 40);
     f.theme = /^[a-z][a-z0-9-]{1,20}$/.test(str_(f.theme)) ? str_(f.theme) : "sheet"; // any look the website offers
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
     if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");
