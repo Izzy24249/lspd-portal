@@ -353,10 +353,10 @@ $("saveBtn").onclick = async () => {
     }
     if (!res.ok) throw new Error(res.error);
     const editIndex = EDIT ? CFG.forms.findIndex(f => f.id === EDIT) : -1;
-    const sentRoster = JSON.stringify(((CFG.settings || {}).roster || {}).tabs || []);
+    const sentRoster = JSON.stringify(((CFG.settings || {}).roster || {}).tabIds || []);
     CFG = res.config; VERSION = CFG.version; BASE = JSON.stringify(CFG);
     if (editIndex > -1 && CFG.forms[editIndex]) EDIT = CFG.forms[editIndex].id;
-    if (sentRoster !== JSON.stringify(((CFG.settings || {}).roster || {}).tabs || [])) {
+    if (sentRoster !== JSON.stringify(((CFG.settings || {}).roster || {}).tabIds || [])) {
       setTimeout(() => toast("Heads up: Google didn't keep your roster tab choices. Your Apps Script is out of date. Paste the latest WebApp.gs and deploy a New version.", "bad"), 1600);
     }
     dirty(); renderPage(true);
@@ -905,54 +905,68 @@ function rosterTabPicker(r) {
     if (!r.url && r.tabs.length === 1 && r.tabs[0] === "Roster") r.tabs = [];
   }
   if (r.tab) { r.tab = ""; changed(); }   // old "Tabs to read" text: the checklist replaces it (press Save & publish once)
+  if (!Array.isArray(r.tabIds)) r.tabIds = [];
+  r.verify = r.verify || { on: false, tab: "", url: "", tabId: null };
+  const v = r.verify;
+  // Tabs are tracked by their permanent ID; names are kept only for display / old settings.
+  const sync = () => { r.tabs = r.tabIds.map(id => (ROSTER_TABS.tabs.find(t => t.id === id) || {}).name).filter(n => n != null); r.tab = ""; };
+  const odd = n => n !== n.trim() || /\s{2,}/.test(n);                      // hidden extra spaces in the tab name
+  const show = n => odd(n) ? "“" + n.replace(/ /g, "·") + "”" : n;   // make spaces visible: "CID·-·Roster·"
   const box = h("div", { class: "sub" });
   const draw = () => {
     box.innerHTML = "";
-    const head = h("div", { class: "subhead" }, h("b", { text: "Roster tabs to use" + (ROSTER_TABS ? " — " + ROSTER_TABS.book : "") }),
-      h("button", { class: "btn ghost sm", onclick: load }, ROSTER_TABS ? "↻ Reload tabs" : "Load tabs"));
-    box.append(head);
+    box.append(h("div", { class: "subhead" }, h("b", { text: "Roster tabs to use" + (ROSTER_TABS ? " — " + ROSTER_TABS.book : "") }),
+      h("button", { class: "btn ghost sm", onclick: load }, ROSTER_TABS ? "↻ Reload tabs" : "Load tabs")));
     if (!ROSTER_TABS) {
       box.append(h("p", { class: "help", text: r.tabs.length ? "Using: " + r.tabs.join(", ") + ". Click Load tabs to change." : "Click Load tabs to see every tab in the roster sheet and choose which ones to use." }));
       return;
     }
-    const tabs = ROSTER_TABS.tabs.slice();
-    r.tabs.forEach(n => { if (!tabs.some(t => t.name === n)) tabs.push({ name: n, missing: true }); });   // chosen tabs that no longer exist
-    if (!tabs.length) { box.append(h("p", { class: "help", text: "That sheet has no tabs." })); return; }
-    const list = h("div", { style: "display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 14px" });
-    tabs.forEach(t => {
-      const cb = h("input", { type: "checkbox", checked: r.tabs.includes(t.name), onchange: () => {
-        r.tabs = cb.checked ? r.tabs.concat(t.name) : r.tabs.filter(x => x !== t.name);
-        r.tab = "";              // the checklist replaces the old text setting
-        changed(); draw();
+    const all = ROSTER_TABS.tabs;
+    // first load after an upgrade: turn saved names into IDs (exact name only)
+    if (!r.tabIds.length && r.tabs.length) {
+      r.tabIds = r.tabs.map(n => (all.find(t => t.name === n) || {}).id).filter(id => id != null);
+      if (r.tabIds.length) { sync(); changed(); }
+    }
+    if (v.on && v.tabId == null && v.tab) { const m = all.find(t => t.name === v.tab); if (m) { v.tabId = m.id; changed(); } }
+    const lookalikes = all.filter(t => all.some(o => o !== t && o.name.trim().toLowerCase() === t.name.trim().toLowerCase()));
+    if (lookalikes.length) box.append(h("div", { class: "maint", style: "text-align:left" },
+      "⚠️ Some tabs have names that look the same but differ by a space: " + lookalikes.map(t => show(t.name) + " (" + t.rows + " rows)").join(", ") +
+      ". They're told apart correctly now, but renaming the old one (e.g. \"CID Roster OLD\") will avoid confusion."));
+    const list = h("div", { style: "display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px 14px" });
+    const rows = all.slice();
+    r.tabIds.forEach(id => { if (!all.some(t => t.id === id)) rows.push({ id: id, name: "(deleted tab)", missing: true }); });
+    rows.forEach(t => {
+      const cb = h("input", { type: "checkbox", checked: r.tabIds.includes(t.id), onchange: () => {
+        r.tabIds = cb.checked ? r.tabIds.concat(t.id) : r.tabIds.filter(x => x !== t.id);
+        sync(); changed(); draw();
       } });
-      const isMain = r.verify && r.verify.on && r.verify.tab === t.name && !r.verify.url;
+      const isMain = v.on && !v.url && v.tabId === t.id;
       list.append(h("label", { class: "tog", style: t.missing ? "color:#ff8a95" : isMain ? "opacity:.6" : "" }, cb,
-        h("span", {}, t.name, h("span", { class: "mono", text: t.missing ? "  (tab not found)" : isMain ? "  main roster · check only" : "  " + t.rows + " rows" + (t.hidden ? " · hidden" : "") }))));
+        h("span", {}, show(t.name), h("span", { class: "mono", text: t.missing ? "  (no longer in the sheet)" : isMain ? "  main roster · check only" :
+          "  " + t.rows + " rows" + (t.hidden ? " · hidden" : "") + (odd(t.name) ? " · extra spaces in name" : "") }))));
     });
     box.append(list);
     // ---- two-way check against the main personnel roster ----
-    r.verify = r.verify || { on: false, tab: "", url: "" };
-    const v = r.verify;
-    const guess = (ROSTER_TABS.tabs.find(t => /personnel/i.test(t.name)) || ROSTER_TABS.tabs.find(t => /main|master|lspd/i.test(t.name)) || {}).name || "";
-    const vcb = h("input", { type: "checkbox", checked: !!v.on, onchange: () => { v.on = vcb.checked; if (v.on && !v.tab) v.tab = guess; changed(); draw(); } });
+    const guess = all.find(t => /personnel/i.test(t.name)) || all.find(t => /main|master|lspd/i.test(t.name)) || null;
+    const vcb = h("input", { type: "checkbox", checked: !!v.on, onchange: () => {
+      v.on = vcb.checked; if (v.on && v.tabId == null && guess) { v.tabId = guess.id; v.tab = guess.name; } changed(); draw(); } });
     const vbox = h("div", { class: "sub", style: "margin-top:6px;border-style:solid;border-color:" + (v.on ? "rgba(46,204,113,.45)" : "var(--line)") },
       h("label", { class: "tog" }, vcb, h("b", { text: "Two-way check: people must also be on the main personnel roster" })),
       h("p", { class: "help", text: "Anyone from the division tabs who isn't on the main roster (old members, onboarding, typos) is left out. Matched by Discord ID, otherwise by callsign + name." }));
     if (v.on) {
       const sel = h("select", {}, h("option", { value: "", text: "— choose the main roster tab —" }),
-        ROSTER_TABS.tabs.map(t => h("option", { value: t.name, text: t.name + (t.hidden ? " (hidden)" : "") })));
-      sel.value = v.tab || "";
-      if (v.tab && !ROSTER_TABS.tabs.some(t => t.name === v.tab)) sel.append(h("option", { value: v.tab, text: v.tab + " (not in this sheet)" })), sel.value = v.tab;
-      sel.onchange = () => { v.tab = sel.value; changed(); draw(); };
+        all.map(t => h("option", { value: String(t.id), text: show(t.name) + "  (" + t.rows + " rows" + (t.hidden ? ", hidden" : "") + ")" })));
+      sel.value = v.tabId != null ? String(v.tabId) : "";
+      sel.onchange = () => { const t = all.find(x => String(x.id) === sel.value); v.tabId = t ? t.id : null; v.tab = t ? t.name : ""; changed(); draw(); };
       vbox.append(h("div", { class: "g2" },
         field("Main roster tab", sel, "e.g. LSPD Personnel Roster. It's used only for the check, not as a division."),
-        field("Main roster is in a different Google Sheet? (optional)", bind(v, "url", { placeholder: "blank = same sheet as above" }))));
+        field("Main roster is in a different Google Sheet? (optional)", bind(v, "url", { placeholder: "blank = same sheet as above" }), "If you fill this in, type the main roster's exact tab name in the box on the left after loading.")));
     }
     box.append(vbox);
     box.append(h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center" },
-      h("button", { class: "btn ghost sm", onclick: () => { r.tabs = ROSTER_TABS.tabs.filter(t => !t.hidden).map(t => t.name); r.tab = ""; changed(); draw(); } }, "Tick all visible"),
-      h("button", { class: "btn ghost sm", onclick: () => { r.tabs = []; r.tab = ""; changed(); draw(); } }, "Untick all"),
-      h("span", { class: "help", text: r.tabs.length ? r.tabs.length + " tab" + (r.tabs.length === 1 ? "" : "s") + " selected. Press Save & publish, then Test / refresh roster." :
+      h("button", { class: "btn ghost sm", onclick: () => { r.tabIds = all.filter(t => !t.hidden).map(t => t.id); sync(); changed(); draw(); } }, "Tick all visible"),
+      h("button", { class: "btn ghost sm", onclick: () => { r.tabIds = []; sync(); changed(); draw(); } }, "Untick all"),
+      h("span", { class: "help", text: r.tabIds.length ? r.tabIds.length + " tab" + (r.tabIds.length === 1 ? "" : "s") + " selected. Press Save & publish, then Test / refresh roster." :
         "Nothing ticked = " + (r.url ? "every visible tab is used." : "the tab named \"Roster\" is used.") })));
   };
   async function load(e) {
@@ -965,7 +979,7 @@ function rosterTabPicker(r) {
   }
   if (ROSTER_TABS && ROSTER_TABS.url !== (r.url || "")) ROSTER_TABS = null;   // link changed: reload
   draw();
-  if (!ROSTER_TABS && (r.url || r.tabs.length)) load();
+  if (!ROSTER_TABS && (r.url || r.tabs.length || r.tabIds.length)) load();
   return box;
 }
 

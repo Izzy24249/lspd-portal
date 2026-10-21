@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 16;
+const BACKEND_VERSION = 17;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -209,19 +209,27 @@ function getRoster_(fresh) {
   try {
     const linked = !!str_(r.url);
     const book = linked ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
-    const masterTab = r.verify && r.verify.on ? str_(r.verify.tab) : "";
+    const masterTab = r.verify && r.verify.on ? (String(r.verify.tab || "") || (r.verify.tabId != null ? "#" + r.verify.tabId : "")) : "";
+    const masterId = r.verify && r.verify.on && r.verify.tabId != null && isFinite(Number(r.verify.tabId)) ? Number(r.verify.tabId) : null;
     // which tabs: ticked list, or blank = every tab (linked sheet) / "Roster" (this spreadsheet)
     // The tab checklist decides. (The old "Tabs to read" text is only used by settings saved before the checklist existed.)
-    const useList = Array.isArray(r.tabs);
+    // Tabs are remembered by their permanent sheet ID (two tabs can look identical but differ by a space).
+    const ids = Array.isArray(r.tabIds) ? r.tabIds.map(Number).filter(n => isFinite(n)) : [];
+    const useList = Array.isArray(r.tabs) || ids.length;
     const want = useList ? "" : str_(r.tab);
-    const picked = useList ? r.tabs.map(str_).filter(Boolean) : [];
-    const all = !picked.length && (want === "*" || want.toLowerCase() === "all" || (!want && linked));
-    const names = all ? null : picked.length ? picked : (want || "Roster").split(",").map(x => x.trim()).filter(Boolean);
+    const picked = ids.length ? [] : (Array.isArray(r.tabs) ? r.tabs.map(t => String(t == null ? "" : t)).filter(t => t.trim()) : []);
+    const all = !ids.length && !picked.length && (want === "*" || want.toLowerCase() === "all" || (!want && linked));
     let sheets = book.getSheets();
-    if (names) {
-      const missing = names.filter(n => !book.getSheetByName(n));
+    if (ids.length) {
+      const found = ids.map(id => sheets.find(sh => sh.getSheetId() === id)).filter(Boolean);
+      if (found.length < ids.length) out.warnings.push((ids.length - found.length) + " ticked tab(s) no longer exist in the sheet. Reload tabs and tick again.");
+      sheets = found;
+    } else if (!all) {
+      const names = picked.length ? picked : (want || "Roster").split(",").map(x => x.trim()).filter(Boolean);
+      const byName = n => sheets.find(sh => sh.getName() === n) || sheets.find(sh => sh.getName().trim() === String(n).trim());
+      const missing = names.filter(n => !byName(n));
       if (missing.length) out.warnings.push("Tab(s) not found: " + missing.join(", "));
-      sheets = names.map(n => book.getSheetByName(n)).filter(Boolean);
+      sheets = names.map(byName).filter(Boolean);
     }
     out.source = (linked ? "linked sheet \"" + book.getName() + "\"" : "this spreadsheet") + " → " + (all ? "all tabs" : sheets.map(x => "\"" + x.getName() + "\"").join(", "));
     const EXCL = str_(r.exclude === undefined ? ROSTER_EXCLUDE_DEFAULT : r.exclude).toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
@@ -231,7 +239,8 @@ function getRoster_(fresh) {
     let master = null;
     if (masterTab) {
       const mBook = str_(r.verify.url) ? SpreadsheetApp.openByUrl(str_(r.verify.url)) : book;
-      const msh = mBook.getSheetByName(masterTab);
+      const msheets = mBook.getSheets();
+      const msh = (masterId != null && msheets.find(sh => sh.getSheetId() === masterId)) || msheets.find(sh => sh.getName() === masterTab) || msheets.find(sh => sh.getName().trim() === masterTab.trim());
       out.verify = { tab: masterTab, count: 0, dropped: 0, droppedNames: [], error: "" };
       if (!msh) out.verify.error = "Main roster tab \"" + masterTab + "\" was not found.";
       else {
@@ -259,9 +268,9 @@ function getRoster_(fresh) {
 
     const byKey = {};
     sheets.forEach(sh => {
-      const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "", left: 0, unverified: 0, hidden: sh.isSheetHidden() };
+      const tabName = sh.getName(), info = { tab: tabName, id: sh.getSheetId(), people: 0, noId: 0, skipped: "", left: 0, unverified: 0, hidden: sh.isSheetHidden() };
       out.tabs.push(info);
-      if (masterTab && tabName === masterTab && !str_(r.verify.url)) { info.skipped = "main roster (used for the check only)"; return; }
+      if (masterTab && !str_(r.verify.url) && (masterId != null ? sh.getSheetId() === masterId : tabName === masterTab)) { info.skipped = "main roster (used for the check only)"; return; }
       if (all && info.hidden) { info.skipped = "hidden tab"; return; }
       if (all && isOut(tabName)) { info.skipped = "tab name marks former/onboarding members"; return; }
       readRosterTab_(sh, isOut, info, out.warnings).forEach(p => {
@@ -949,7 +958,7 @@ function handleAdmin_(d) {
       catch (e) { return { ok: false, error: "Couldn't open that sheet: " + errMsg_(e) }; }
       const system = [CONFIG_SHEET_, ADMINS_SHEET_, LOG_SHEET_, LB_SHEET_];
       const tabs = book.getSheets().filter(sh => url || system.indexOf(sh.getName()) === -1)
-        .map(sh => ({ name: sh.getName(), hidden: sh.isSheetHidden(), rows: Math.max(0, sh.getLastRow() - 1) }));
+        .map(sh => ({ name: sh.getName(), id: sh.getSheetId(), hidden: sh.isSheetHidden(), rows: Math.max(0, sh.getLastRow() - 1) }));
       return { ok: true, book: book.getName(), tabs: tabs };
     }
 
@@ -1038,11 +1047,14 @@ function validateConfig_(c) {
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
     maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) },
     roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: s.roster && Array.isArray(s.roster.tabs) ? "" : clip_(str_(s.roster && s.roster.tab), 300),
-      tabs: (s.roster && Array.isArray(s.roster.tabs) ? s.roster.tabs : []).map(t => clip_(str_(t), 100)).filter(Boolean).slice(0, 60),
-      verify: { on: !!(s.roster && s.roster.verify && s.roster.verify.on), tab: clip_(str_(s.roster && s.roster.verify && s.roster.verify.tab), 100), url: clip_(str_(s.roster && s.roster.verify && s.roster.verify.url), 300) }, requireId: !(s.roster && s.roster.requireId === false),
+      tabs: (s.roster && Array.isArray(s.roster.tabs) ? s.roster.tabs : []).map(t => String(t == null ? "" : t).substring(0, 100)).filter(t => t.trim()).slice(0, 60),   // exact names, spaces kept
+      tabIds: (s.roster && Array.isArray(s.roster.tabIds) ? s.roster.tabIds : []).map(Number).filter(n => isFinite(n)).slice(0, 60),
+      verify: { on: !!(s.roster && s.roster.verify && s.roster.verify.on), tab: String((s.roster && s.roster.verify && s.roster.verify.tab) || "").substring(0, 100),
+        tabId: s.roster && s.roster.verify && s.roster.verify.tabId != null && isFinite(Number(s.roster.verify.tabId)) ? Number(s.roster.verify.tabId) : null,
+        url: clip_(str_(s.roster && s.roster.verify && s.roster.verify.url), 300) }, requireId: !(s.roster && s.roster.requireId === false),
       exclude: s.roster && s.roster.exclude !== undefined ? clip_(str_(s.roster.exclude), 500) : ROSTER_EXCLUDE_DEFAULT }
   };
-  if (out.settings.roster.verify.on && !out.settings.roster.verify.tab) throw new Error("Roster: pick which tab is the main personnel roster (or turn the two-way check off).");
+  if (out.settings.roster.verify.on && !out.settings.roster.verify.tab.trim() && out.settings.roster.verify.tabId == null) throw new Error("Roster: pick which tab is the main personnel roster (or turn the two-way check off).");
   if (out.settings.roster.verify.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.verify.url)) throw new Error("Main roster link must be a Google Sheets link.");
   if (out.settings.roster.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.url)) throw new Error("Roster sheet link must be a Google Sheets link (https://docs.google.com/spreadsheets/d/...).");
   if (out.settings.heroLogo && !IMG_RE.test(out.settings.heroLogo)) throw new Error("Home page logo must be a file like img/logo.png or an https:// link.");
