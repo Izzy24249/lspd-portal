@@ -71,13 +71,15 @@ window.PORTAL_TEMPLATES = [
       "label": "Handler:",
       "type": "officer",
       "required": true,
-      "rosterTabName": "K-9 - Roster"
+      "rosterTabName": "K-9 - Roster",
+      "pairCol": "J",
+      "pairFill": "k9Dog"
      },
      {
       "id": "k9Dog",
       "label": "K9 Partner:",
       "type": "text",
-      "placeholder": "K9 Rex"
+      "placeholder": "Fills in when you pick the handler"
      }
     ]
    },

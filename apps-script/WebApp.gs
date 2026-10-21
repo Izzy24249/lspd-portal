@@ -19,7 +19,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 22;
+const BACKEND_VERSION = 23;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -151,8 +151,9 @@ function rosterBook_() {
   const r = ((getConfig_().settings || {}).roster) || {};
   return str_(r.url) ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
 }
-function getRosterTab_(tabId, fresh) {
-  const key = "roster_tab_" + tabId, cache = CacheService.getScriptCache();
+function getRosterTab_(tabId, fresh, cols) {
+  cols = (cols || []).filter(c => colIndex_(c) >= 0);
+  const key = "roster_tab_" + tabId + (cols.length ? "_" + cols.join("") : ""), cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get(key); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   const r = ((getConfig_().settings || {}).roster) || {};
   const out = { tab: "", people: [], warnings: [], error: "", left: 0, noId: 0 };
@@ -164,7 +165,7 @@ function getRosterTab_(tabId, fresh) {
       const EXCL = str_(r.exclude === undefined ? ROSTER_EXCLUDE_DEFAULT : r.exclude).toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
       const isOut = t => { t = String(t || "").toLowerCase(); return EXCL.some(w => t.indexOf(w) !== -1); };
       const info = { tab: out.tab, people: 0, noId: 0, skipped: "", left: 0 };
-      const rows = readRosterTab_(sh, isOut, info, out.warnings);
+      const rows = readRosterTab_(sh, isOut, info, out.warnings, { moreCols: cols });
       if (info.skipped) out.error = "Tab \"" + out.tab + "\": " + info.skipped + ".";
       out.left = info.left; out.noId = info.noId;
       const seen = {}, calls = callsignMap_();
@@ -174,7 +175,9 @@ function getRosterTab_(tabId, fresh) {
         const k = p.id || p.name.toLowerCase(); if (seen[k]) return; seen[k] = 1;
         const shownName = withCallsign_(p, calls);
         if (shownName !== p.name) out.withCallsign++;
-        out.people.push({ name: clip_(shownName, 80), id: p.id, extra: clip_(p.extra, 80) });
+        const person = { name: clip_(shownName, 80), id: p.id, extra: clip_(p.extra, 80) };
+        if (p.more) person.more = p.more;                                  // extra columns a form asked for (e.g. K9 name in J)
+        out.people.push(person);
       });
     }
   } catch (e) { out.error = "Couldn't open the roster sheet: " + errMsg_(e); }
@@ -221,9 +224,13 @@ function withCallsign_(p, calls) {
 // every roster tab used by a field on these forms -> { tabId: [people] }
 function rostersFor_(forms) {
   const ids = {};
-  forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") ids[fd.rosterTabId] = 1; })));
+  forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => {
+    if (fd.rosterTabId == null || fd.rosterTabId === "") return;
+    const set = ids[fd.rosterTabId] || (ids[fd.rosterTabId] = {});
+    if (fd.pairCol && fd.pairFill) set[String(fd.pairCol).toUpperCase()] = 1;
+  })));
   const out = {};
-  Object.keys(ids).forEach(id => { try { out[id] = getRosterTab_(id).people; } catch (e) { out[id] = []; } });
+  Object.keys(ids).forEach(id => { try { out[id] = getRosterTab_(id, false, Object.keys(ids[id]).sort()).people; } catch (e) { out[id] = []; } });
   return out;
 }
 function usesOldRoster_(forms) {
@@ -307,7 +314,9 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
       warnings.push(tabName + " row " + (i + 1) + " (" + name + "): Discord ID is stored as a number, so Google Sheets rounded it. Format that column as Plain text and paste the ID again.");
       id = "";
     } else if (id && !/^\d{15,21}$/.test(id)) id = "";
-    rows.push({ name: name, id: id, cs: cs, extra: extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), call: callKey_(cs || name), nm: nameKey_(name) });
+    const more = {};
+    (opts.moreCols || []).forEach(L => { const c = colIndex_(L), v = c >= 0 && c < shown[i].length ? str_(shown[i][c]) : ""; if (v) more[L] = clip_(v, 60); });
+    rows.push({ more: Object.keys(more).length ? more : undefined, name: name, id: id, cs: cs, extra: extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), call: callKey_(cs || name), nm: nameKey_(name) });
     if (!id) info.noId++;
   }
   return rows;
@@ -1428,6 +1437,11 @@ function validateConfig_(c) {
           fd.id = key(fd.id, fd.label || "field");
           if (fd.type === "select" && !(fd.options || []).length) throw new Error(f.title + ": dropdown \"" + (fd.label || fd.id) + "\" has no options.");
           if (fd.rosterTabId != null && fd.rosterTabId !== "") { fd.rosterTabId = Number(fd.rosterTabId); if (!isFinite(fd.rosterTabId)) delete fd.rosterTabId; }
+          if (fd.pairCol || fd.pairFill) {                       // "also fill <box> from roster column <J>"
+            fd.pairCol = /^[A-Za-z]{1,2}$/.test(str_(fd.pairCol)) ? str_(fd.pairCol).toUpperCase() : "";
+            fd.pairFill = /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(str_(fd.pairFill)) ? str_(fd.pairFill) : "";
+            if (!fd.pairCol || !fd.pairFill) { delete fd.pairCol; delete fd.pairFill; }
+          }
         });
       }
       if (b.type === "checklist") { b.id = key(b.id, b.title || "checklist"); b.items = (b.items || []).filter(it => str_(it.topic)); }

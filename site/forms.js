@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 22;
+  const BACKEND_NEEDS = 23;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -165,7 +165,10 @@ window.Portal = (function () {
     // "CID" also matches a tab called "Criminal Investigation Division"
     const initials = h => h.split(/[\s\-_/&]+/).filter(w => w && !/^(of|and|the)$/.test(w)).map(w => w[0]).join("");
     return want.some(w => has.some(h => h === w || h.indexOf(w) !== -1 || initials(h) === w));
-  }).map(p => ({ label: p.name, value: p.name, id: p.id, sub: [p.extra, p.id ? "ID " + p.id : "no Discord ID"].filter(Boolean).join(" · "), search: (p.name + " " + (p.extra || "") + " " + (p.id || "")).toLowerCase() }));
+  }).map(p => {
+    const pair = f && f.pairCol && p.more ? String(p.more[f.pairCol] || "").trim() : "";
+    return { label: p.name, value: p.name, id: p.id, pair: pair, sub: [p.extra, pair ? "↳ " + pair : "", p.id ? "ID " + p.id : "no Discord ID"].filter(Boolean).join(" · "), search: (p.name + " " + (p.extra || "") + " " + pair + " " + (p.id || "")).toLowerCase() };
+  });
 
   let PK = null;
   function pkClose() { if (PK) { PK.panel.remove(); PK = null; } }
@@ -526,7 +529,8 @@ window.Portal = (function () {
         const strict = of && (of.rosterStrict || (fieldRoster(of) && !of.allowTyped)) && list.length;
         return { multi: true, strict: strict, items: list, noun: "on the roster", emptyText: strict ? "Not on the roster. Only roster officers can be added." : ROSTER.length ? "Not on the roster. Press Enter to add it as typed (paste a Discord ID to mention them)." : "Type a name, or paste a Discord ID, then press Enter.",
           exclude: it => parseOfc(hid.value).some(o => o.id ? o.id === it.id : o.name === it.label),
-          onPick: it => { if (!it) return; ofcAdd(id, { name: it.label, id: it.id || "" }); el.value = ""; if (PK) { PK.typed = false; PK.idx = -1; pkRender(); } } };
+          onPick: it => { if (!it) return; ofcAdd(id, { name: it.label, id: it.id || "" });
+            if (of && of.pairFill && it.pair) { const t = q(`[data-f="${CSS.escape(of.pairFill)}"]`); if (t) { t.value = it.pair; t.dispatchEvent(new Event("input", { bubbles: true })); t.dispatchEvent(new Event("change", { bubbles: true })); } } el.value = ""; if (PK) { PK.typed = false; PK.idx = -1; pkRender(); } } };
       }
       if (el.dataset.roster) {
         const f = fieldDefs.find(x => x.id === el.dataset.f), isId = f && f.type === "discord_id";
