@@ -30,6 +30,16 @@ window.PORTAL_TEMPLATES = [
   "embedTitle": "🐕 LSPD K9 Unit Report — {k9No}",
   "threadTitle": "{k9No} | {k9Handler}",
   "archiveSheet": "K9 Reports",
+  "hours": {
+   "on": true,
+   "dateField": "k9Date",
+   "startField": "k9Start",
+   "endField": "k9End",
+   "people": [
+    "k9Handler",
+    "k9Assist"
+   ]
+  },
   "blocks": [
    {
     "type": "banner",
@@ -95,12 +105,14 @@ window.PORTAL_TEMPLATES = [
      {
       "id": "k9Start",
       "label": "Start Time",
-      "type": "time"
+      "type": "time",
+      "required": true
      },
      {
       "id": "k9End",
       "label": "End Time",
-      "type": "time"
+      "type": "time",
+      "required": true
      },
      {
       "id": "k9Area",
@@ -723,6 +735,16 @@ window.PORTAL_TEMPLATES = [
   "embedTitle": "🚁 LSPD ASU Flight Report — {asuNo}",
   "threadTitle": "{asuNo} | {asuAircraft} | {asuPilot}",
   "archiveSheet": "ASU Flights",
+  "hours": {
+   "on": true,
+   "dateField": "asuDate",
+   "startField": "asuTakeoff",
+   "endField": "asuLanding",
+   "people": [
+    "asuPilot",
+    "asuTfo"
+   ]
+  },
   "blocks": [
    {
     "type": "banner",
@@ -798,12 +820,14 @@ window.PORTAL_TEMPLATES = [
      {
       "id": "asuTakeoff",
       "label": "Takeoff",
-      "type": "time"
+      "type": "time",
+      "required": true
      },
      {
       "id": "asuLanding",
       "label": "Landing",
-      "type": "time"
+      "type": "time",
+      "required": true
      },
      {
       "id": "asuStatus",
@@ -966,6 +990,16 @@ window.PORTAL_TEMPLATES = [
   "embedTitle": "🛟 LSPD CRU Incident Report — {cruNo}",
   "threadTitle": "{cruNo} | {cruType}",
   "archiveSheet": "CRU Incidents",
+  "hours": {
+   "on": true,
+   "dateField": "cruDate",
+   "startField": "cruStart",
+   "endField": "cruEnd",
+   "people": [
+    "cruLead",
+    "cruMembers"
+   ]
+  },
   "blocks": [
    {
     "type": "banner",
@@ -1035,12 +1069,14 @@ window.PORTAL_TEMPLATES = [
      {
       "id": "cruStart",
       "label": "Start",
-      "type": "time"
+      "type": "time",
+      "required": true
      },
      {
       "id": "cruEnd",
       "label": "End",
-      "type": "time"
+      "type": "time",
+      "required": true
      }
     ]
    },

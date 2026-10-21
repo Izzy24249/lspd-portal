@@ -99,6 +99,8 @@
   .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
   @media(max-width:600px){.g2,.g3{grid-template-columns:1fr}}
+  .stat{display:grid;gap:2px;padding:8px 16px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(110,170,255,.15)}.stat b{font-size:20px}.stat small{font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.08em}
+  .hbar{height:8px;border-radius:9px;background:rgba(255,255,255,.06);overflow:hidden}.hbar i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,#22d3ee,#8b5cf6)}
   label.f small{display:block;color:var(--muted);font-size:.74rem;margin-top:5px;line-height:1.4}
   .admin input[type=text],.admin input[type=password],.admin input[type=number],.admin select,.admin textarea{padding:9px 11px;font-size:.88rem;border-radius:9px}
   .admin textarea{min-height:70px}
@@ -169,6 +171,7 @@
         <button data-tab="forms">📝 Forms</button>
         <button data-tab="webhooks">🔗 Webhooks</button>
         <button data-tab="settings">⚙️ Portal Settings</button>
+        <button data-tab="hours">⏱️ Hours</button>
         <div class="sep"></div>
         <button data-tab="admins">👮 Admins</button>
         <button data-tab="activity">🕘 Activity Log</button>
@@ -386,7 +389,7 @@ function renderPage(keepScroll) {
   const y = window.scrollY;
   document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
   const page = $("page"); page.innerHTML = "";
-  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
+  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
   if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
 }
 function head(title, desc, ...right) {
@@ -604,6 +607,28 @@ function pageEditor(page) {
       } }, "Refresh leaderboard now")));
   }
   left.append(sec("Leaderboard" + (lb.enabled ? " (on)" : ""), false, lbBody));
+
+  // ---- hours (from the report's own start/end times) ----
+  form.hours = form.hours || { on: false, dateField: "", startField: "", endField: "", people: [] };
+  const hr = form.hours;
+  const hrBody = [h("p", { class: "help", text: "Each report adds its start → end time to the \u201CHours Log\u201D tab for every officer picked in the boxes you tick below. Weekly totals show on the Hours page and (if turned on in Portal Settings) a Discord board. Shifts past midnight are handled." }),
+    toggle(hr, "on", "Count hours from this form", true)];
+  if (hr.on) {
+    const opt = (types, none) => [["", none]].concat(keys.filter(k => types.includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "") + " (" + k.id + ")"]));
+    hrBody.push(h("div", { class: "g3" },
+      field("Date box", bind(hr, "dateField", { type: "select", options: opt(["date"], "— date —") })),
+      field("Start time box", bind(hr, "startField", { type: "select", options: opt(["time", "text"], "— start —") })),
+      field("End time box", bind(hr, "endField", { type: "select", options: opt(["time", "text"], "— end —") }))));
+    const ppl = keys.filter(k => ["officer", "officers", "discord_id"].includes(k.type));
+    hr.people = hr.people || [];
+    hrBody.push(h("div", { class: "f" }, h("span", { text: "Give the hours to everyone in" }),
+      ppl.length ? h("div", { style: "display:flex;flex-wrap:wrap;gap:6px 18px" }, ppl.map(k => {
+        const cb = h("input", { type: "checkbox", checked: hr.people.includes(k.id), onchange: () => { hr.people = cb.checked ? hr.people.concat(k.id) : hr.people.filter(x => x !== k.id); changed(); } });
+        return h("label", { class: "tog" }, cb, (k.label || k.id).replace(/:\s*$/, ""));
+      })) : h("small", { text: "This form has no officer boxes yet. Add an \u201COfficer from roster\u201D field first." })));
+    hrBody.push(h("p", { class: "help", text: "Tip: make the start and end time boxes required so every report counts." }));
+  }
+  left.append(sec("Hours" + (hr.on ? " (on)" : ""), false, hrBody));
 
   // ---- blocks ----
   const blocksBody = [h("p", { class: "help", text: "Blocks are drawn top to bottom. Each answer box has an ID: the sheet column and {placeholders} use it, so keep IDs stable once a form is live." })];
@@ -1178,6 +1203,22 @@ function pageSettings(page) {
         e.target.disabled = false;
       } }, "Test / refresh roster"), rosterOut));
   }
+  s.hours = s.hours || { weekStart: 1, board: false, webhookId: "", title: "" };
+  const hookOpts = [["", "— choose a webhook —"]].concat(HOOKS.map(w => [w.id, w.name + (w.kind === "text" ? " (text channel)" : " (forum)")]));
+  page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
+    h("h3", { text: "Hours tracking" }),
+    h("p", { class: "help", text: "Hours come from the start/end times on reports (turn it on per form in the form builder, under Hours). Nobody has to clock in." }),
+    field("Week starts on", bind(s.hours, "weekStart", { type: "select", options: [["1", "Monday"], ["0", "Sunday"]], get: v => String(v == null ? 1 : v), set: v => Number(v) })),
+    toggle(s.hours, "board", "Post a weekly hours board to Discord", true),
+    s.hours.board ? h("div", { class: "g2" },
+      field("Post it to", bind(s.hours, "webhookId", { type: "select", options: hookOpts }), "A text-channel webhook works best. One message per week, edited as reports come in."),
+      field("Board title", bind(s.hours, "title", { placeholder: "LSPD Weekly Hours" }))) : null,
+    s.hours.board ? h("div", {}, h("button", { class: "btn ghost sm", onclick: async e => {
+      if (isDirty()) return toast("Save your changes first.", "bad");
+      e.target.disabled = true;
+      try { await api("hoursRefresh", {}); toast("Hours board updated in Discord.", "ok"); } catch (err) { toast(err.message, "bad"); }
+      e.target.disabled = false;
+    } }, "Post / refresh board now")) : null));
   page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
     h("h3", { text: "Maintenance mode" }),
     h("p", { class: "help", text: "Shows a red notice and blocks all submissions until turned off. Officers' drafts are kept in their browser." }),
@@ -1234,6 +1275,42 @@ function resetModal(a) {
     } }, h("h3", { text: "Reset password: " + a.username }), field("New password", p, "At least 8 characters."),
       h("div", { class: "actions", style: "margin-top:0" }, h("button", { type: "button", class: "btn ghost", onclick: close }, "Cancel"), h("button", { class: "btn primary" }, "Reset")), msg);
   });
+}
+
+/* ---------------- HOURS ---------------- */
+let HOURS_WEEK = "";
+function pageHours(page) {
+  const out = h("div", {}, h("div", { class: "sec empty-note", text: "Loading…" }));
+  page.append(head("Hours", "Weekly hours worked, added up from the start/end times on filed reports. Every entry is in the \u201CHours Log\u201D tab of the Google Sheet.",
+    h("button", { class: "btn ghost sm", onclick: () => renderPage(true) }, "Refresh")), out);
+  const fmt = m => Math.floor(m / 60) + "h " + String(Math.round(m % 60)).padStart(2, "0") + "m";
+  api("hoursReport", { week: HOURS_WEEK }).then(r => {
+    const H = r.hours; out.innerHTML = "";
+    const tracked = CFG.forms.filter(f => f.hours && f.hours.on);
+    const wsel = h("select", { onchange: () => { HOURS_WEEK = wsel.value; renderPage(true); } }, H.weeks.map(w => {
+      const d = new Date(w + "T12:00:00"), e = new Date(d.getTime() + 6 * 864e5), o = { month: "short", day: "numeric" };
+      return h("option", { value: w, text: "Week of " + d.toLocaleDateString(undefined, o) + " – " + e.toLocaleDateString(undefined, o) + (w === H.weeks[0] ? "" : "") });
+    }));
+    wsel.value = H.week;
+    const total = H.divisions.reduce((n, d) => n + d.officers.reduce((a, o) => a + o.minutes, 0), 0);
+    const people = new Set(); H.divisions.forEach(d => d.officers.forEach(o => people.add(o.id || o.name)));
+    out.append(h("div", { class: "sec", style: "display:flex;gap:18px;align-items:center;flex-wrap:wrap" }, field("Week", wsel),
+      h("div", { class: "stat" }, h("b", { text: fmt(total) }), h("small", { text: "total hours" })),
+      h("div", { class: "stat" }, h("b", { text: String(people.size) }), h("small", { text: "officers" })),
+      h("div", { class: "help", text: tracked.length ? "Counting: " + tracked.map(f => f.title).join(", ") : "No form counts hours yet: open a form → Hours → Count hours from this form." })));
+    if (!H.divisions.length) out.append(h("div", { class: "sec empty-note", text: "No hours logged for this week." }));
+    H.divisions.forEach(d => {
+      const mins = d.officers.reduce((a, o) => a + o.minutes, 0), top = d.officers.length ? d.officers[0].minutes : 1;
+      const tbl = h("table", { class: "list" }, h("tr", {}, ["#", "Officer", "Hours", "", "Reports"].map(t => h("th", { text: t }))));
+      d.officers.forEach((o, i) => tbl.append(h("tr", {},
+        h("td", { class: "help", text: String(i + 1) }),
+        h("td", {}, h("b", { text: o.name || "(no name)" }), o.id ? h("span", { class: "mono", style: "display:block;font-size:11px;opacity:.6", text: o.id }) : null),
+        h("td", { style: "white-space:nowrap", text: fmt(o.minutes) }),
+        h("td", { style: "width:40%" }, h("div", { class: "hbar" }, h("i", { style: "width:" + Math.max(3, Math.round(o.minutes / top * 100)) + "%" }))),
+        h("td", { text: String(o.reports) }))));
+      out.append(h("div", { class: "sec" }, h("h3", { text: (d.icon ? d.icon + " " : "") + d.title + " · " + fmt(mins) }), h("div", { class: "tablewrap" }, tbl)));
+    });
+  }).catch(e => { out.innerHTML = ""; out.append(h("div", { class: "sec empty-note", text: e.message })); });
 }
 
 /* ---------------- ACTIVITY ---------------- */

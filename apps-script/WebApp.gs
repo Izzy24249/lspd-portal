@@ -12,19 +12,21 @@
  *   - Every admin change                   -> "Admin Log" tab
  *   - Submissions                          -> one tab per form (name set in the form builder)
  *   - Leaderboard counts                   -> "Leaderboard Log" tab
+ *   - Hours from reports (start -> end)    -> "Hours Log" tab
  *
  * FIRST ADMIN: open the Google Sheet, menu "🚔 LSPD Portal" > "Create / reset admin account".
  * Webhook URLs never belong in this file (it is stored on GitHub).
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 21;
+const BACKEND_VERSION = 22;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
 const ADMINS_SHEET_ = "Portal Admins";
 const LOG_SHEET_    = "Admin Log";
 const LB_SHEET_     = "Leaderboard Log";
+const HOURS_SHEET_  = "Hours Log";
 const SESSION_SECONDS_ = 6 * 60 * 60;   // admin login lasts 6 hours of inactivity
 const MAX_LOGIN_FAILS_ = 5;             // then locked for 15 minutes
 
@@ -42,7 +44,7 @@ function doGet(e) {
 }
 
 // Only actions that change saved data wait in line; reading, logging in and Discord posting run side by side.
-const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1 };
+const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1, hoursRefresh: 1 };
 
 function doPost(e) {
   let d;
@@ -693,6 +695,13 @@ function handleSubmit_(d) {
       lbSheet_().appendRow([new Date(), form.id, "'" + str_(values[lb.countField])]);
       try { updateLeaderboard_(form); } catch (e) { warning = warning || "leaderboard not updated: " + errMsg_(e); }
     }
+    if (form.hours && form.hours.on) {
+      try {
+        const h = logHours_(form, values);
+        if (h.problem) warning = warning || h.problem;
+        else if (h.rows && cfg.settings.hours && cfg.settings.hours.board) updateHoursBoard_(cfg);
+      } catch (e) { warning = warning || "hours not logged: " + errMsg_(e); }
+    }
     return { ok: true };
   });
   if (!saved.ok) warning = warning || "posted to Discord, but the sheet was busy and the record wasn't logged";
@@ -860,6 +869,135 @@ function updateLeaderboard_(form) {
     const f = cfg.forms.find(x => x.id === form.id);
     if (f && f.leaderboard) { f.leaderboard.messageId = r.body.id; writeConfig_(cfg, "system"); }
   }
+}
+
+// =====================================================================
+// HOURS (worked out from each report's date + start/end times; nobody has to clock in)
+// =====================================================================
+function hoursSheet_() {
+  const ss = ss_();
+  let sh = ss.getSheetByName(HOURS_SHEET_);
+  if (!sh) {
+    sh = ss.insertSheet(HOURS_SHEET_);
+    sh.appendRow(["Logged", "Week Of", "Division", "Form", "Report #", "Officer", "Discord ID", "Role", "Date", "Start", "End", "Minutes", "Hours", "Note"]);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, 14).setFontWeight("bold");
+    sh.getRange("G:G").setNumberFormat("@");
+    sh.getRange("B:B").setNumberFormat("@");
+    sh.getRange("I:K").setNumberFormat("@");
+  }
+  return sh;
+}
+function hhmm_(v) { const m = /^(\d{1,2}):?(\d{2})/.exec(str_(v)); if (!m) return null; const h = +m[1], mi = +m[2]; return h < 24 && mi < 60 ? h * 60 + mi : null; }
+function ymd_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd"); }
+function parseYmd_(v) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str_(v)); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12) : null; }
+// first day (Sunday or Monday) of the week a date falls in, as yyyy-MM-dd
+function weekOf_(date, weekStart) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12);
+  d.setDate(d.getDate() - ((d.getDay() - (weekStart || 0) + 7) % 7));
+  return ymd_(d);
+}
+function hoursFmt_(min) { const h = Math.floor(min / 60), m = Math.round(min % 60); return !h ? m + "m" : h + "h" + (m ? " " + (m < 10 ? "0" : "") + m + "m" : ""); }
+// "L-104 | Duzen (1234...)" ; "Smith (5678...)" -> [{name, id}]
+function peopleIn_(v) {
+  return str_(v).split(";").map(x => x.trim()).filter(Boolean).map(x => {
+    const m = /^(.*?)\s*\((\d{15,21})\)\s*$/.exec(x);
+    if (m) return { name: m[1].trim(), id: m[2] };
+    if (/^\d{15,21}$/.test(x)) return { name: "", id: x };
+    return { name: x, id: "" };
+  });
+}
+function logHours_(form, values) {
+  const h = form.hours, cfg = getConfig_();
+  const ws = cfg.settings.hours ? cfg.settings.hours.weekStart : 1;
+  const start = hhmm_(values[h.startField]), end = hhmm_(values[h.endField]);
+  if (start == null || end == null) return { problem: "hours not counted: the " + (start == null ? "start" : "end") + " time is missing" };
+  let minutes = end - start;
+  if (minutes < 0) minutes += 24 * 60;        // shift ran past midnight
+  if (!minutes) return { problem: "hours not counted: start and end time are the same" };
+  const day = parseYmd_(values[h.dateField]) || new Date();
+  const week = weekOf_(day, ws);
+  const caseF = allFields_(form).find(f => f.type === "case_number");
+  const reportNo = caseF ? str_(values[caseF.id]) : "";
+  const seen = {}, rows = [];
+  (h.people || []).forEach(fid => {
+    const fd = allFields_(form).find(f => f.id === fid);
+    peopleIn_(values[fid]).forEach(p => {
+      const key = p.id || p.name.toLowerCase();
+      if (!key || seen[key]) return;
+      seen[key] = 1;
+      rows.push([new Date(), "'" + week, form.title, form.id, cellSafe_(reportNo), cellSafe_(p.name), p.id ? "'" + p.id : "", fd ? cleanLabel_(fd.label) : fid,
+        "'" + ymd_(day), "'" + str_(values[h.startField]), "'" + str_(values[h.endField]), minutes, Math.round(minutes / 6) / 10, minutes > 12 * 60 ? "Long shift - check times" : ""]);
+    });
+  });
+  if (!rows.length) return { problem: "hours not counted: nobody was picked in the officer boxes" };
+  const sh = hoursSheet_();
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  return { rows: rows.length };
+}
+// Totals for one week: { week, weeks:[...], divisions:[{form, title, officers:[{name,id,minutes,reports}]}] }
+function hoursSummary_(week) {
+  const cfg = getConfig_(), ws = cfg.settings.hours ? cfg.settings.hours.weekStart : 1;
+  const data = hoursSheet_().getDataRange().getValues();
+  const weeks = {}, div = {};
+  week = week || weekOf_(new Date(), ws);
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i], wk = str_(r[1]).replace(/^'/, "");
+    if (!wk) continue;
+    weeks[wk] = 1;
+    if (wk !== week) continue;
+    const fid = str_(r[3]), id = str_(r[6]).replace(/^'/, ""), name = str_(r[5]);
+    const key = id || name.toLowerCase();
+    const d = div[fid] || (div[fid] = { form: fid, title: str_(r[2]), officers: {} });
+    const o = d.officers[key] || (d.officers[key] = { name: name, id: id, minutes: 0, reports: 0 });
+    o.minutes += Number(r[11]) || 0; o.reports++;
+    if (name) o.name = name;
+  }
+  weeks[weekOf_(new Date(), ws)] = 1;
+  const order = cfg.forms.map(f => f.id);
+  return { week: week, weekStart: ws, weeks: Object.keys(weeks).sort().reverse(),
+    divisions: Object.keys(div).sort((a, b) => order.indexOf(a) - order.indexOf(b)).map(k => {
+      const d = div[k]; const f = cfg.forms.find(x => x.id === k);
+      return { form: k, title: f ? f.title : d.title, icon: f ? f.icon || "" : "", officers: Object.keys(d.officers).map(x => d.officers[x]).sort((a, b) => b.minutes - a.minutes) };
+    }) };
+}
+// One Discord message per week, edited as reports come in; a new week starts a new message.
+function updateHoursBoard_(cfg) {
+  const hs = cfg.settings.hours || {};
+  const hook = webhookById_(hs.webhookId);
+  if (!hook) throw new Error("hours board webhook not set");
+  const sum = hoursSummary_();
+  const wk = parseYmd_(sum.week), endD = new Date(wk.getTime()); endD.setDate(endD.getDate() + 6);
+  const tz = Session.getScriptTimeZone(), fmt = d => Utilities.formatDate(d, tz, "MMM d");
+  const fields = [];
+  let grand = 0;
+  sum.divisions.forEach(d => {
+    const mins = d.officers.reduce((n, o) => n + o.minutes, 0); grand += mins;
+    const lines = d.officers.map((o, j) => {
+      const medal = j === 0 ? "🥇" : j === 1 ? "🥈" : j === 2 ? "🥉" : "▫️";
+      const cs = o.name.indexOf("|") !== -1 ? "`" + o.name.split("|")[0].trim() + "` " : "";
+      const who = o.id ? cs + "<@" + o.id + ">" : "**" + o.name + "**";
+      return medal + " " + who + " — **" + hoursFmt_(o.minutes) + "** · " + o.reports + " report" + (o.reports === 1 ? "" : "s");
+    });
+    addListFields_(fields, (d.icon ? d.icon + " " : "") + (d.title.replace(/\s*(flight|incident)?\s*report\s*$/i, "").trim() || d.title).toUpperCase() + "  ·  " + hoursFmt_(mins), lines);
+  });
+  const stamp = Utilities.formatDate(new Date(), tz, "MM/dd/yyyy 'at' h:mm a");
+  const embed = { title: clip_(hs.title || "LSPD Weekly Hours", 200) + "  ·  " + fmt(wk) + " – " + fmt(endD), color: 0x22d3ee,
+    description: "Hours from filed reports (start → end time).\nTotal this week: **" + hoursFmt_(grand) + "**\n*Last updated: " + stamp + "*",
+    fields: fields.slice(0, 25) };
+  if (!fields.length) embed.description += "\n\n_No hours logged this week yet._";
+  const payload = { content: "", allowed_mentions: { parse: [] }, embeds: [embed] };
+  const msgId = PROPS_.getProperty("HOURS_MSG") || "", msgWeek = PROPS_.getProperty("HOURS_WEEK") || "";
+  if (msgId && msgWeek === sum.week) {
+    const th = PROPS_.getProperty("HOURS_THREAD") || "";
+    const res = UrlFetchApp.fetch(hook.url + "/messages/" + msgId + (th ? "?thread_id=" + th : ""), { method: "patch", contentType: "application/json", payload: JSON.stringify(payload), muteHttpExceptions: true });
+    if (res.getResponseCode() === 200) return;
+    if (res.getResponseCode() !== 404) throw new Error("Discord (" + res.getResponseCode() + ")");
+  }
+  if (hook.kind !== "text") payload.thread_name = clip_(embed.title, 100);    // forum: a new thread each week
+  const r = discordPost_(hook.url, payload, null);
+  if (!r.ok) throw new Error(r.error);
+  if (r.body && r.body.id) { PROPS_.setProperty("HOURS_MSG", r.body.id); PROPS_.setProperty("HOURS_WEEK", sum.week); PROPS_.setProperty("HOURS_THREAD", hook.kind !== "text" && r.body.channel_id ? r.body.channel_id : ""); }
 }
 
 // =====================================================================
@@ -1146,7 +1284,7 @@ function handleAdmin_(d) {
       let book;
       try { book = url ? SpreadsheetApp.openByUrl(url) : ss_(); }
       catch (e) { return { ok: false, error: "Couldn't open that sheet: " + errMsg_(e) }; }
-      const system = [CONFIG_SHEET_, ADMINS_SHEET_, LOG_SHEET_, LB_SHEET_];
+      const system = [CONFIG_SHEET_, ADMINS_SHEET_, LOG_SHEET_, LB_SHEET_, HOURS_SHEET_];
       const tabs = book.getSheets().filter(sh => url || system.indexOf(sh.getName()) === -1)
         .map(sh => ({ name: sh.getName(), id: sh.getSheetId(), hidden: sh.isSheetHidden(), rows: Math.max(0, sh.getLastRow() - 1) }));
       return { ok: true, book: book.getName(), tabs: tabs };
@@ -1162,6 +1300,18 @@ function handleAdmin_(d) {
       if (!form || !form.leaderboard || !form.leaderboard.enabled) throw new Error("That form has no leaderboard turned on.");
       updateLeaderboard_(form);
       logAdmin_(me.username, "refresh leaderboard", form.title);
+      return { ok: true };
+    }
+
+    case "hoursReport": {
+      return { ok: true, hours: hoursSummary_(/^\d{4}-\d{2}-\d{2}$/.test(str_(d.week)) ? str_(d.week) : "") };
+    }
+
+    case "hoursRefresh": {
+      const cfg = getConfig_();
+      if (!cfg.settings.hours || !cfg.settings.hours.board) throw new Error("Turn on the weekly hours board in Portal Settings first.");
+      updateHoursBoard_(cfg);
+      logAdmin_(me.username, "refresh hours board", "");
       return { ok: true };
     }
 
@@ -1245,8 +1395,11 @@ function validateConfig_(c) {
       verify: { on: !!(s.roster && s.roster.verify && s.roster.verify.on), tab: String((s.roster && s.roster.verify && s.roster.verify.tab) || "").substring(0, 100),
         tabId: s.roster && s.roster.verify && s.roster.verify.tabId != null && isFinite(Number(s.roster.verify.tabId)) ? Number(s.roster.verify.tabId) : null,
         url: clip_(str_(s.roster && s.roster.verify && s.roster.verify.url), 300) }, requireId: !(s.roster && s.roster.requireId === false),
-      exclude: s.roster && s.roster.exclude !== undefined ? clip_(str_(s.roster.exclude), 500) : ROSTER_EXCLUDE_DEFAULT }
+      exclude: s.roster && s.roster.exclude !== undefined ? clip_(str_(s.roster.exclude), 500) : ROSTER_EXCLUDE_DEFAULT },
+    hours: { weekStart: s.hours && Number(s.hours.weekStart) === 0 ? 0 : 1, board: !!(s.hours && s.hours.board),
+      webhookId: str_(s.hours && s.hours.webhookId), title: clip_(str_(s.hours && s.hours.title), 120) }
   };
+  if (out.settings.hours.board && !out.settings.hours.webhookId) throw new Error("Weekly hours board: pick which webhook it posts to (or turn it off).");
   if (out.settings.roster.verify.on && !out.settings.roster.verify.tab.trim() && out.settings.roster.verify.tabId == null) throw new Error("Roster: pick which tab is the main personnel roster (or turn the two-way check off).");
   if (out.settings.roster.verify.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.verify.url)) throw new Error("Main roster link must be a Google Sheets link.");
   if (out.settings.roster.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.url)) throw new Error("Roster sheet link must be a Google Sheets link (https://docs.google.com/spreadsheets/d/...).");
@@ -1290,6 +1443,11 @@ function validateConfig_(c) {
       if (b.type === "longtext") { b.id = key(b.id, b.title || "text box"); b.maxLength = Math.min(Math.max(Number(b.maxLength) || 1000, 50), 8000); }
     });
     if (f.status === "live" && !(f.blocks || []).length) throw new Error(f.title + " is set to Live but has no blocks.");
+    if (f.hours && f.hours.on) {
+      ["dateField", "startField", "endField"].forEach(k => { if (!keys[str_(f.hours[k])]) throw new Error(f.title + ": hours tracking needs its " + k.replace("Field", "") + " field picked."); });
+      f.hours.people = (f.hours.people || []).filter(k => keys[k]);
+      if (!f.hours.people.length) throw new Error(f.title + ": hours tracking needs at least one officer box to count.");
+    }
     if (f.leaderboard && f.leaderboard.enabled) {
       if (!f.leaderboard.countField || !keys[f.leaderboard.countField]) throw new Error(f.title + ": pick which Discord ID field the leaderboard counts.");
     }
