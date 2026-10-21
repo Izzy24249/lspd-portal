@@ -332,6 +332,11 @@ async function loadAll(keepEdits) {
   $("whoRole").textContent = ME.role; $("whoRole").className = "badge " + (ME.role === "owner" ? "owner" : "");
   if (EDIT && !CFG.forms.some(f => f.id === EDIT)) EDIT = null;
   dirty(); renderPage();
+  if ((res.rostersMissing || []).length) api("rosters").then(r => {          // fill in roster tabs that weren't cached yet
+    window.__rosters = Object.assign({}, window.__rosters || {}, r.rosters || {});
+    if (Portal.setRosters) Portal.setRosters(window.__rosters);
+    if (TAB === "forms" && EDIT) renderPreview();
+  }).catch(() => {});
 }
 
 // Google is running an older WebApp.gs than this website needs -> saves can lose new settings.

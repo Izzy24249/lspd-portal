@@ -19,7 +19,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 23;
+const BACKEND_VERSION = 24;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -147,14 +147,19 @@ function rosterForPickers_() {
 }
 
 // ---- One roster tab -> people (each form field picks its own tab) ----
+let ROSTER_BOOK_ = null;            // opened once per request (opening another spreadsheet is slow)
 function rosterBook_() {
-  const r = ((getConfig_().settings || {}).roster) || {};
-  return str_(r.url) ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
+  const r = ((getConfig_().settings || {}).roster) || {}, url = str_(r.url);
+  if (ROSTER_BOOK_ && ROSTER_BOOK_.url === url) return ROSTER_BOOK_.book;
+  ROSTER_BOOK_ = { url: url, book: url ? SpreadsheetApp.openByUrl(url) : ss_() };
+  return ROSTER_BOOK_.book;
 }
-function getRosterTab_(tabId, fresh, cols) {
+const ROSTER_CACHE_SECONDS_ = 3600;  // kept warm every 10 minutes by warmRosters() so nobody waits on the sheet
+function getRosterTab_(tabId, fresh, cols, cacheOnly) {
   cols = (cols || []).filter(c => colIndex_(c) >= 0);
   const key = "roster_tab_" + tabId + (cols.length ? "_" + cols.join("") : ""), cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get(key); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  if (cacheOnly) return null;
   const r = ((getConfig_().settings || {}).roster) || {};
   const out = { tab: "", people: [], warnings: [], error: "", left: 0, noId: 0 };
   try {
@@ -182,7 +187,7 @@ function getRosterTab_(tabId, fresh, cols) {
     }
   } catch (e) { out.error = "Couldn't open the roster sheet: " + errMsg_(e); }
   const js = JSON.stringify(out);
-  if (js.length < 95000) cache.put(key, js, 900);
+  if (js.length < 95000) cache.put(key, js, ROSTER_CACHE_SECONDS_);
   return out;
 }
 // Callsigns from the main roster (Portal Settings → Roster → Callsigns): { byId: {discordId: "L-104"}, byName: {"f duzen": "L-104"} }
@@ -210,7 +215,7 @@ function callsignMap_(fresh) {
       });
     }
   } catch (e) { out.error = "Couldn't read callsigns: " + errMsg_(e); }
-  const js = JSON.stringify(out); if (js.length < 95000) cache.put("roster_calls", js, 900);
+  const js = JSON.stringify(out); if (js.length < 95000) cache.put("roster_calls", js, ROSTER_CACHE_SECONDS_);
   return out;
 }
 // "F. Duzen" + "L-104" -> "L-104 | F. Duzen" (replaces any other callsign already in front)
@@ -222,7 +227,8 @@ function withCallsign_(p, calls) {
 }
 
 // every roster tab used by a field on these forms -> { tabId: [people] }
-function rostersFor_(forms) {
+function rostersFor_(forms, opts) {
+  opts = opts || {};
   const ids = {};
   forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => {
     if (fd.rosterTabId == null || fd.rosterTabId === "") return;
@@ -230,8 +236,26 @@ function rostersFor_(forms) {
     if (fd.pairCol && fd.pairFill) set[String(fd.pairCol).toUpperCase()] = 1;
   })));
   const out = {};
-  Object.keys(ids).forEach(id => { try { out[id] = getRosterTab_(id, false, Object.keys(ids[id]).sort()).people; } catch (e) { out[id] = []; } });
+  Object.keys(ids).forEach(id => {
+    try {
+      const r = getRosterTab_(id, !!opts.fresh, Object.keys(ids[id]).sort(), !!opts.cacheOnly);
+      if (r) out[id] = r.people; else if (opts.missing) opts.missing.push(id);
+    } catch (e) { out[id] = []; }
+  });
   return out;
+}
+// Runs every 10 minutes (time trigger) so the website and admin never wait on reading the roster sheet.
+function warmRosters() {
+  const cfg = getConfig_();
+  try { callsignMap_(true); } catch (e) {}
+  rostersFor_(cfg.forms, { fresh: true });
+  try { if (usesOldRoster_(cfg.forms)) getRoster_(true); } catch (e) {}
+}
+function ensureWarmTrigger_() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get("warm_trigger_ok")) return;
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "warmRosters")) ScriptApp.newTrigger("warmRosters").timeBased().everyMinutes(10).create();
+  cache.put("warm_trigger_ok", "1", 21600);
 }
 function usesOldRoster_(forms) {
   return forms.some(f => (f.blocks || []).some(b => (b.fields || []).some(fd => (fd.roster || fd.type === "officers" || fd.type === "officer") && (fd.rosterTabId == null || fd.rosterTabId === ""))));
@@ -1185,13 +1209,15 @@ function handleAdmin_(d) {
       return { ok: true };
 
     case "getAll": {
-      const cfg = getConfig_();
+      const cfg = getConfig_(), missing = [];
+      try { ensureWarmTrigger_(); } catch (e) {}
+      const rosters = rostersFor_(cfg.forms, { cacheOnly: true, missing: missing });   // instant; anything not cached loads after sign-in
       return {
         ok: true,
         me: { username: me.username, role: me.role },
         backend: BACKEND_VERSION,
         config: cfg,
-        rosters: rostersFor_(cfg.forms),
+        rosters: rosters, rostersMissing: missing,
         roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_() : []; } catch (e) { return []; } })(),
         webhooks: maskWebhooks_(),
         admins: isOwner ? getAdmins_().map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })) : [],
@@ -1310,6 +1336,10 @@ function handleAdmin_(d) {
       updateLeaderboard_(form);
       logAdmin_(me.username, "refresh leaderboard", form.title);
       return { ok: true };
+    }
+
+    case "rosters": {   // the roster tabs getAll didn't have cached yet
+      return { ok: true, rosters: rostersFor_(getConfig_().forms) };
     }
 
     case "hoursReport": {
