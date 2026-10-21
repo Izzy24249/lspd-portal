@@ -725,13 +725,15 @@ function fieldCard(form, b, f, fi) {
   if (f.type === "date") kids.push(toggle(f, "defaultToday", "Fill in today's date automatically"));
   if (f.type === "text" || f.type === "discord_id") {
     kids.push(toggle(f, "roster", "Suggest names from the roster (Portal Settings → Roster)", true));
-    if (f.roster) kids.push(field("Only show people from these divisions (optional)", bind(f, "rosterDivisions", { placeholder: "e.g. CID, Detectives" }), "Roster tab names, separated by commas. Blank = everyone."));
+    if (f.roster) kids.push(field("Only show people from these divisions (optional)", bind(f, "rosterDivisions", { placeholder: "e.g. CID, Patrol" }), "Roster tab names, comma separated. Short forms work: CID matches \"Criminal Investigation Division\". Blank = everyone."));
+    if (f.roster) kids.push(toggle(f, "rosterStrict", "Only accept names picked from the roster (no typing in other names)"));
     if (f.roster && f.type === "text") {
       const ids = formKeys(form).filter(k => k.type === "discord_id");
       kids.push(field("When a name is picked, also fill in", bind(f, "fillId", { type: "select", options: [["", "— nothing —"]].concat(ids.map(k => [k.id, (k.label || k.id).replace(/[:(].*$/, "").trim()])) }), "Fills that Discord ID box automatically from the roster."));
     }
   }
-  if (f.type === "officers") kids.push(field("Only show people from these divisions (optional)", bind(f, "rosterDivisions", { placeholder: "blank = everyone" }), "Roster tab names, separated by commas."));
+  if (f.type === "officers") kids.push(field("Only show people from these divisions (optional)", bind(f, "rosterDivisions", { placeholder: "blank = everyone" }), "Roster tab names, comma separated. Short forms like CID work."));
+  if (f.type === "officers") kids.push(toggle(f, "rosterStrict", "Only allow officers from the roster (no typed names)"));
   if (f.type === "officers") kids.push(h("p", { class: "help", text: "Officers add people as tags: search the roster, or type a name / paste a Discord ID and press Enter. Everyone with an ID is mentioned in the Discord post." }));
   return h("div", { class: "sub" }, kids);
 }
@@ -914,14 +916,16 @@ function pageSettings(page) {
     h("div", { class: "g2" },
       field("Roster Google Sheet link", bind(s.roster, "url", { placeholder: "https://docs.google.com/spreadsheets/d/…  (blank = this spreadsheet)" }), "Paste the link from your browser's address bar."),
       field("Tabs to read", bind(s.roster, "tab", { placeholder: s.roster.url ? "blank = all tabs" : "Roster" }), "Blank = all tabs of the linked sheet. Or list tabs: Patrol, CID, SWAT")),
+    (() => { if (s.roster.requireId === undefined) s.roster.requireId = true; return toggle(s.roster, "requireId", "Only list people who have a Discord ID (hide everyone else)"); })(),
     h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
       h("button", { class: "btn ghost sm", onclick: async e => {
         if (isDirty()) return toast("Save & publish first, then test.", "bad");
         e.target.disabled = true; rosterOut.textContent = "Reading the roster…";
         try {
-          const r = (await api("rosterTest")).roster;
-          Portal.setRoster(r.people);
-          rosterOut.textContent = (r.error ? "❌ " + r.error : "✅ " + r.people.length + " people loaded from " + r.source + ".") +
+          const res = await api("rosterTest"), r = res.roster;
+          const shown = s.roster.requireId === false ? r.people : r.people.filter(p => /^\d{15,21}$/.test(p.id || ""));
+          Portal.setRoster(shown);
+          rosterOut.textContent = (r.error ? "❌ " + r.error : "✅ " + shown.length + " people available in the pickers, from " + r.source + "." + (shown.length < r.people.length ? " (" + (r.people.length - shown.length) + " hidden because they have no Discord ID.)" : "")) +
             ((r.tabs || []).length ? "\n" + r.tabs.map(t => "  • " + t.tab + ": " + (t.skipped ? "skipped (" + t.skipped + ")" : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : ""))).join("\n") : "") +
             (r.people.length ? "\nFirst few: " + r.people.slice(0, 5).map(p => p.name + (p.id ? " (" + p.id + ")" : " (no ID)")).join(", ") : "") +
             (r.warnings.length ? "\n⚠️ " + r.warnings.slice(0, 6).join("\n⚠️ ") + (r.warnings.length > 6 ? "\n…and " + (r.warnings.length - 6) + " more" : "") : "");

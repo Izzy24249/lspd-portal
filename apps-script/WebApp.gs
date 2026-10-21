@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 10;
+const BACKEND_VERSION = 11;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -120,7 +120,7 @@ function publicConfig_() {
     version: cfg.version,
     backend: BACKEND_VERSION,
     settings: cfg.settings,
-    roster: (() => { try { return getRoster_().people.map(p => ({ name: p.name, id: p.id, extra: p.extra, division: p.division })); } catch (e) { return []; } })(),
+    roster: (() => { try { return rosterForPickers_().map(p => ({ name: p.name, id: p.id, extra: p.extra, division: p.division })); } catch (e) { return []; } })(),
     forms: cfg.forms.filter(f => f.status !== "hidden")
   };
 }
@@ -131,6 +131,13 @@ function publicConfig_() {
 //   a column with "Discord" + "ID" in the header, a column with "Name" or "Callsign",
 //   and optionally "Rank" / "Division" / "Unit" / "Badge" (shown as extra info).
 // =====================================================================
+// people shown in the pickers (hides anyone without a Discord ID unless that setting is turned off)
+function rosterForPickers_() {
+  const cfg = getConfig_(), r = (cfg.settings && cfg.settings.roster) || {};
+  const people = getRoster_().people;
+  return r.requireId === false ? people : people.filter(p => /^\d{15,21}$/.test(p.id || ""));
+}
+
 function getRoster_(fresh) {
   const cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get("portal_roster"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
@@ -770,7 +777,7 @@ function handleAdmin_(d) {
         me: { username: me.username, role: me.role },
         backend: BACKEND_VERSION,
         config: cfg,
-        roster: (() => { try { return getRoster_().people; } catch (e) { return []; } })(),
+        roster: (() => { try { return rosterForPickers_(); } catch (e) { return []; } })(),
         webhooks: maskWebhooks_(),
         admins: isOwner ? getAdmins_().map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })) : [],
         log: readLog_(200)
@@ -854,7 +861,7 @@ function handleAdmin_(d) {
 
     case "rosterTest": {
       const r = getRoster_(true);
-      return { ok: true, roster: r };
+      return { ok: true, roster: r, shown: rosterForPickers_().length };
     }
 
     case "leaderboardRefresh": {
@@ -936,7 +943,7 @@ function validateConfig_(c) {
     heroLogo: s.heroLogo == null ? "img/lspd-patch.png" : str_(s.heroLogo),
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
     maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) },
-    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300) }
+    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300), requireId: !(s.roster && s.roster.requireId === false) }
   };
   if (out.settings.roster.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.url)) throw new Error("Roster sheet link must be a Google Sheets link (https://docs.google.com/spreadsheets/d/...).");
   if (out.settings.heroLogo && !IMG_RE.test(out.settings.heroLogo)) throw new Error("Home page logo must be a file like img/logo.png or an https:// link.");
@@ -1351,7 +1358,7 @@ function defaultConfig_() {
       heroText: "Select a form below to file an official record to Discord.",
       footer: "LOS SANTOS POLICE DEPARTMENT · INTERNAL USE ONLY",
       heroLogo: "img/lspd-patch.png",
-      roster: { url: "", tab: "Roster" },
+      roster: { url: "", tab: "Roster", requireId: true },
       announcement: { text: "", style: "info" },
       maintenance: { on: false, message: "The forms portal is down for maintenance. Please try again shortly." }
     },
@@ -1438,7 +1445,7 @@ function defaultConfig_() {
             { id: "cidCaseNo", label: "CID Case Number:", type: "case_number", prefix: "CID", required: true },
             { id: "cidCadNo", label: "CAD Case #:", type: "text" } ] },
           { type: "fields", fields: [
-            { id: "cidLead", label: "Lead Detective: ( L-XXX | J. Doe )", type: "text", required: true, roster: true, fillId: "cidLeadId" },
+            { id: "cidLead", label: "Lead Detective: ( L-XXX | J. Doe )", type: "text", required: true, roster: true, fillId: "cidLeadId", rosterDivisions: "CID" },
             { id: "cidLeadId", label: "Lead Detective Discord ID:", type: "discord_id", required: true } ] },
           { type: "fields", fields: [
             { id: "cidAssist", label: "Assisting Officers:", type: "officers" },

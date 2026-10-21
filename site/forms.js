@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 10;
+  const BACKEND_NEEDS = 11;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -155,8 +155,10 @@ window.Portal = (function () {
   const rosterItems = only => ROSTER.filter(p => {
     const want = String(only || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
     if (!want.length) return true;
-    const has = String(p.division || "").toLowerCase().split(",").map(x => x.trim());
-    return want.some(w => has.some(h => h === w || h.indexOf(w) !== -1));
+    const has = String(p.division || "").toLowerCase().split(",").map(x => x.trim()).filter(Boolean);
+    // "CID" also matches a tab called "Criminal Investigation Division"
+    const initials = h => h.split(/[\s\-_/&]+/).filter(w => w && !/^(of|and|the)$/.test(w)).map(w => w[0]).join("");
+    return want.some(w => has.some(h => h === w || h.indexOf(w) !== -1 || initials(h) === w));
   }).map(p => ({ label: p.name, value: p.name, id: p.id, sub: [p.extra, p.id ? "ID " + p.id : "no Discord ID"].filter(Boolean).join(" · "), search: (p.name + " " + (p.extra || "") + " " + (p.id || "")).toLowerCase() }));
 
   let PK = null;
@@ -490,7 +492,8 @@ window.Portal = (function () {
       if (el.dataset.ofcin) {
         const id = el.dataset.ofcin, hid = q(`[data-f="${CSS.escape(id)}"]`);
         const of = fieldDefs.find(x => x.id === id);
-        return { multi: true, items: rosterItems(of && of.rosterDivisions), noun: "on the roster", emptyText: ROSTER.length ? "Not on the roster. Press Enter to add it as typed (paste a Discord ID to mention them)." : "Type a name, or paste a Discord ID, then press Enter.",
+        const strict = of && of.rosterStrict && ROSTER.length;
+        return { multi: true, strict: strict, items: rosterItems(of && of.rosterDivisions), noun: "on the roster", emptyText: strict ? "Not on the roster. Only roster officers can be added." : ROSTER.length ? "Not on the roster. Press Enter to add it as typed (paste a Discord ID to mention them)." : "Type a name, or paste a Discord ID, then press Enter.",
           exclude: it => parseOfc(hid.value).some(o => o.id ? o.id === it.id : o.name === it.label),
           onPick: it => { if (!it) return; ofcAdd(id, { name: it.label, id: it.id || "" }); el.value = ""; PK.typed = false; PK.idx = -1; pkRender(); } };
       }
@@ -506,7 +509,12 @@ window.Portal = (function () {
     }
     root.addEventListener("focusin", e => { const el = e.target; if (el.matches && el.matches("[data-search],[data-ofcin],[data-roster]")) { const c = pickerFor(el); if (c && (c.items.length || el.dataset.ofcin)) pkOpen(el, c); } });
     root.addEventListener("focusout", e => { if (PK && PK.input === e.target) setTimeout(() => { if (PK && document.activeElement !== PK.input) pkClose(); }, 120); });
-    root.addEventListener("input", e => { if (PK && PK.input === e.target) { PK.typed = true; PK.idx = -1; pkRender(); } }, true);
+    const reopen = el => { if (el.matches && el.matches("[data-search],[data-ofcin],[data-roster]") && (!PK || PK.input !== el)) { const c = pickerFor(el); if (c && (c.items.length || el.dataset.ofcin)) pkOpen(el, c); } };
+    root.addEventListener("input", e => {
+      reopen(e.target);                                    // typing after Esc brings the list back
+      if (PK && PK.input === e.target) { PK.typed = true; PK.idx = -1; pkRender(); }
+    }, true);
+    root.addEventListener("click", e => reopen(e.target));
     root.addEventListener("keydown", e => {
       const el = e.target;
       if (el.dataset && el.dataset.ofcin && e.key === "Backspace" && !el.value) {
@@ -525,6 +533,7 @@ window.Portal = (function () {
       else if (e.key === "Enter") {
         e.preventDefault();
         if (PK.idx >= 0 && PK.list[PK.idx]) PK.onPick(PK.list[PK.idx]);
+        else if (el.dataset.ofcin && el.value.trim() && PK.strict) { /* roster-only: ignore free text */ }
         else if (el.dataset.ofcin && el.value.trim()) {
           const t = el.value.trim(), digits = t.replace(/\D/g, "");
           const hit = ROSTER.find(p => p.id && p.id === digits);
@@ -655,6 +664,9 @@ window.Portal = (function () {
         const el = q(`[data-f="${CSS.escape(f.id)}"]`);
         const v = el ? el.value.trim() : "";
         if (f.required && !v) { el.classList.add("err"); el.focus(); return (f.label || f.id).replace(/[:(].*$/, "").trim() + " is required."; }
+        if (v && f.roster && f.rosterStrict && ROSTER.length && !rosterItems(f.rosterDivisions).some(it => (f.type === "discord_id" ? it.id : it.label) === v)) {
+          el.classList.add("err"); el.focus(); return (f.label || f.id).replace(/[:(].*$/, "").trim() + ": pick a name from the roster list.";
+        }
         if (v && f.type === "discord_id" && !/^\d{15,21}$/.test(v)) { el.classList.add("err"); el.focus(); return "Discord IDs are the 17-20 digit number (Developer Mode → right-click user → Copy User ID)."; }
       }
       return "";
