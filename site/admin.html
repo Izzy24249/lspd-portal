@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>LSPD Admin</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="portal.css?v=202610200937">
 <style>
   main.adm{max-width:1500px;padding:24px 22px 120px}
@@ -188,6 +188,7 @@
 <div class="modal" id="modal"><div class="sec" id="modalBody"></div></div>
 <div class="toast" id="toast"></div>
 
+<script src="templates.js?v=1"></script>
 <script src="forms.js?v=202610200937"></script>
 <script>
 /* =====================================================================
@@ -396,6 +397,7 @@ const STATUS_TXT = { live: "Live", soon: "Coming soon", hidden: "Hidden" };
 /* ---------------- FORMS LIST ---------------- */
 function pageForms(page) {
   page.append(head("Forms", "Live forms appear on the portal home page. Coming-soon forms show as greyed-out cards. Hidden forms are only visible here. Drag order = home page order.",
+    h("button", { class: "btn ghost sm", onclick: templateModal }, "+ From template"),
     h("button", { class: "btn primary sm", onclick: newForm }, "+ New form")));
   const body = h("div", { class: "sec" });
   if (!CFG.forms.length) body.append(h("div", { class: "empty-note", text: "No forms yet." }));
@@ -415,6 +417,30 @@ function pageForms(page) {
 function hookName(id) { const w = HOOKS.find(x => x.id === id); return w ? w.name : id + " (missing!)"; }
 function uniqueFormId(base) { let id = base, n = 2; while (CFG.forms.some(f => f.id === id)) id = base + "-" + n++; return id; }
 function dupForm(f) { const c = clone(f); c.id = uniqueFormId(f.id + "-copy"); c.title = f.title + " (copy)"; c.status = "hidden"; if (c.leaderboard) c.leaderboard.messageId = ""; return c; }
+// Ready-made reports (site/templates.js). Roster tabs are matched by name, e.g. "K-9 - Roster".
+async function templateModal() {
+  const list = window.PORTAL_TEMPLATES || [];
+  if (!list.length) return toast("No templates found (templates.js didn't load).", "bad");
+  if (!ROSTER_TABS) { try { const r = await api("rosterTabs", {}); ROSTER_TABS = { book: r.book, tabs: r.tabs, url: (CFG.settings.roster || {}).url || "" }; } catch (e) {} }
+  modal(close => h("div", { style: "display:grid;gap:12px" }, h("h3", { text: "Add a ready-made report" }),
+    h("p", { class: "help", text: "It's added as Hidden so you can look it over, pick a webhook and tweak anything before setting it Live." }),
+    list.map(t => h("button", { class: "btn ghost", style: "text-align:left;display:flex;gap:12px;align-items:center", onclick: () => { addTemplate(t); close(); } },
+      h("span", { style: "font-size:1.6rem" }, t.icon), h("span", {}, h("b", { text: t.title }), h("div", { class: "help", text: t.description })))),
+    h("div", { class: "actions", style: "margin-top:0" }, h("button", { class: "btn ghost", onclick: close }, "Cancel"))));
+}
+function addTemplate(t) {
+  const f = clone(t);
+  f.id = uniqueFormId(t.id); f.status = "hidden";
+  const missing = [];
+  (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => {
+    if (!fd.rosterTabName) return;
+    const tab = ROSTER_TABS && (ROSTER_TABS.tabs.find(x => x.name === fd.rosterTabName) || ROSTER_TABS.tabs.find(x => x.name.trim().toLowerCase() === fd.rosterTabName.trim().toLowerCase()));
+    if (tab) { fd.rosterTabId = tab.id; fd.rosterTabName = tab.name; } else if (!missing.includes(fd.rosterTabName)) missing.push(fd.rosterTabName);
+  }));
+  CFG.forms.push(f); EDIT = f.id; changed(); renderPage();
+  toast(missing.length ? "Added. Couldn't find roster tab(s): " + missing.join(", ") + ". Pick them on the name boxes." : "Added \"" + f.title + "\" (hidden). Pick a webhook, check it over, then set it Live and Save & publish.", missing.length ? "bad" : "ok");
+}
+
 function newForm() {
   const id = uniqueFormId("new-form");
   CFG.forms.push({
@@ -439,7 +465,7 @@ const BLOCK_TYPES = {
   banner: "Title banner", fields: "Field row (1–2 fields)", strip: "Header strip (1–4 fields)", text: "Text / rule line",
   checklist: "Checklist", repeater: "Repeating list (add rows)", longtext: "Big text box"
 };
-const FIELD_TYPES = [["text", "Text"], ["select", "Dropdown"], ["date", "Date"], ["discord_id", "Discord user ID"], ["number", "Number"], ["case_number", "Case number (Generate button)"], ["static", "Fixed text (not an input)"], ["officer", "Officer from roster (one person)"], ["officers", "Officers from roster (several)"]];
+const FIELD_TYPES = [["text", "Text"], ["select", "Dropdown"], ["date", "Date"], ["time", "Time"], ["discord_id", "Discord user ID"], ["number", "Number"], ["case_number", "Case number (Generate button)"], ["static", "Fixed text (not an input)"], ["officer", "Officer from roster (one person)"], ["officers", "Officers from roster (several)"]];
 
 function formKeys(form) {
   const keys = [];
@@ -521,7 +547,7 @@ function pageEditor(page) {
   left.append(sec("Look", false,
     field("Header logo (shown above the title)", bind(form, "logoUrl", { placeholder: "img/cid-logo.png" }), "Leave blank for none. Use a file in the site's img folder (img/cid-logo.png is the CID seal) or an https:// link."),
     h("div", { class: "g2" },
-      field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"], ["hud", "Futuristic HUD (glass, neon)"]] })),
+      field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"], ["hud", "Futuristic HUD (glass, neon)"], ["k9", "K9 Unit (field green, paw prints)"], ["asu", "Air Support (flight deck, radar)"], ["cru", "Crisis Response (hi-vis rescue)"]] })),
       field("Watermark logo", bind(form, "watermark", { type: "select", structural: true, options: [["", "None"], ["cid", "LSPD CID seal (built in)"], ["custom", "My own image…"]] }))),
     form.watermark === "custom" ? field("Watermark image", bind(form, "watermarkUrl", { placeholder: "img/cid-logo.png" }), "A file on your site (like img/cid-logo.png) or an https:// link. Transparent PNGs look best.") : null,
     form.watermark ? field("Watermark layout", bind(form, "watermarkMode", { type: "select", options: [["", "One big logo behind the form"], ["repeat", "Repeating down the page"]] })) : null,
@@ -629,7 +655,9 @@ function blockBody(form, b) {
     }
     case "checklist":
       out.push(h("div", { class: "g2" }, field("Title", bind(b, "title")), field("ID", keyInput(form, b, "id"))),
-        h("div", { class: "g3" }, field("Column 1 header", bind(b, "colTopic")), field("Column 2 header", bind(b, "colStandard")), field("Tick column", bind(b, "colCheck"))));
+        h("div", { class: "g3" }, field("Column 1 header", bind(b, "colTopic")), field("Column 2 header", bind(b, "colStandard")), field("Tick column", bind(b, "colCheck"))),
+        h("label", { class: "tog" }, h("input", { type: "checkbox", checked: b.display === "selected", onchange: e => { b.display = e.target.checked ? "selected" : ""; changed(); } }),
+          "Tick-all-that-apply list: Discord shows only the ticked items (no progress bar). Good for Equipment Used."));
       b.items.forEach((it, ii) => out.push(h("div", { class: "sub" },
         h("div", { class: "subhead" }, h("b", { text: "Item " + (ii + 1) }), ctrls(b.items, ii)),
         field("Topic", bind(it, "topic")), field("Requirement / standard", bind(it, "standard", { type: "textarea", rows: 2 })))));
@@ -645,6 +673,7 @@ function blockBody(form, b) {
             field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"], ["link", "Pick from another list (e.g. suspects)"]] }))),
           field("Width (Futuristic HUD look)", bind(c, "width", { type: "select", options: [["", c.type === "search" ? "Auto (wide)" : "Auto (normal)"], ["narrow", "Narrow"], ["normal", "Normal"], ["wide", "Wide"]] })),
           c.type === "link" ? linkEditor(form, b, c) : null,
+          c.type === "select" ? h("label", { class: "tog" }, h("input", { type: "checkbox", checked: !!c.blank, onchange: e => { c.blank = e.target.checked; changed(); } }), "Start blank (\u2014 choose \u2014) so a row counts as soon as something is picked") : null,
           c.type === "select" || c.type === "search"
             ? field("Options (one per line)" + ((c.options || []).length ? " · " + c.options.length + " options" : ""), bind(c, "options", { type: "textarea", rows: c.type === "search" ? 8 : 4, get: linesGet, set: linesSet }),
                 c.type === "search" ? "Officers type to filter this list and pick one, or type their own text if it's not listed." : null)

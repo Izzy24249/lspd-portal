@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Stamp file versions so browsers fetch the new files
-        run: sed -i -E "s/(portal\.css|forms\.js)\?v=[0-9a-z]+/\1?v=${GITHUB_SHA::8}/g" site/index.html site/admin.html
+        run: sed -i -E "s/(portal\.css|forms\.js|templates\.js)\?v=[0-9a-z]+/\1?v=${GITHUB_SHA::8}/g" site/index.html site/admin.html
 
       - name: Upload site/ to htdocs over FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.4.0

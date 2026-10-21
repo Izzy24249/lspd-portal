@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 20;
+  const BACKEND_NEEDS = 21;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -67,9 +67,11 @@ window.Portal = (function () {
     const ph = f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : "";
     switch (f.type) {
       case "select":
-        return `<select class="g${c}" data-f="${esc(f.id)}"><option value=""></option>${(f.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select>`;
+        return `<select class="g${c}" data-f="${esc(f.id)}"><option value=""></option>${(f.options || []).map(o => `<option${f.default === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
       case "date":
         return `<input class="g c" type="date" data-f="${esc(f.id)}"><button type="button" data-today="${esc(f.id)}" title="Stamp today's date">Today</button>`;
+      case "time":
+        return `<input class="g c" type="time" data-f="${esc(f.id)}"><button type="button" data-now="${esc(f.id)}" title="Stamp the current time">Now</button>`;
       case "case_number":
         return `<div class="with-gen"><input class="g${c}" type="text" maxlength="60" data-f="${esc(f.id)}"${ph}><button type="button" class="mini" data-gen="${esc(f.id)}" data-prefix="${esc(f.prefix || "")}">Generate</button></div>`;
       case "static":
@@ -97,15 +99,15 @@ window.Portal = (function () {
       case "fields": {
         const fs = b.fields || [];
         const cells = fs.length === 1
-          ? `<td class="lbl">${esc(fs[0].label)}${req(fs[0])}</td><td colspan="3" class="${fs[0].type === "date" ? "datecell" : ""}">${inputHTML(fs[0])}</td>`
-          : fs.map(f => `<td class="lbl">${esc(f.label)}${req(f)}</td><td class="${f.type === "date" ? "datecell" : ""}">${inputHTML(f)}</td>`).join("");
+          ? `<td class="lbl">${esc(fs[0].label)}${req(fs[0])}</td><td colspan="3" class="${fs[0].type === "date" || fs[0].type === "time" ? "datecell" : ""}">${inputHTML(fs[0])}</td>`
+          : fs.map(f => `<td class="lbl">${esc(f.label)}${req(f)}</td><td class="${f.type === "date" || f.type === "time" ? "datecell" : ""}">${inputHTML(f)}</td>`).join("");
         return `<tr class="inrow">${cells}</tr><tr class="gap2"><td colspan="4"></td></tr>`;
       }
       case "strip": {
         const fs = b.fields || [], sp = spans(fs.length);
         return `<tr class="gap3"><td colspan="4"></td></tr>` +
           `<tr class="hdr1">${fs.map((f, i) => `<td colspan="${sp[i]}">${esc(f.label)}${req(f)}</td>`).join("")}</tr>` +
-          `<tr class="sess">${fs.map((f, i) => `<td colspan="${sp[i]}" class="${f.type === "date" ? "datecell" : f.type === "static" ? "c static" : ""}">${inputHTML(f, true)}</td>`).join("")}</tr>` +
+          `<tr class="sess">${fs.map((f, i) => `<td colspan="${sp[i]}" class="${f.type === "date" || f.type === "time" ? "datecell" : f.type === "static" ? "c static" : ""}">${inputHTML(f, true)}</td>`).join("")}</tr>` +
           `<tr class="gap3"><td colspan="4"></td></tr>`;
       }
       case "text": {
@@ -167,7 +169,7 @@ window.Portal = (function () {
 
   let PK = null;
   function pkClose() { if (PK) { PK.panel.remove(); PK = null; } }
-  function pkTheme(el) { return el.closest(".hud") ? "pk-hud" : el.closest(".theme-dossier") ? "pk-dossier" : "pk-light"; }
+  function pkTheme(el) { const dw = el.closest("[class*=' div-']"); return el.closest(".hud") ? "pk-hud" + (dw ? " pk-" + (dw.className.match(/div-(\w+)/) || [])[1] : "") : el.closest(".theme-dossier") ? "pk-dossier" : "pk-light"; }
   function pkPlace() {
     if (!PK) return;
     const r = PK.input.getBoundingClientRect(), p = PK.panel, vw = innerWidth, vh = innerHeight;
@@ -260,14 +262,26 @@ window.Portal = (function () {
     if (f.type === "static") return `<div class="hud-field"><span class="hud-lbl">${esc(f.label)}</span><div class="hud-static">${esc(f.text || "")}</div></div>`;
     return `<div class="hud-field"><span class="hud-lbl">${esc(String(f.label || "").replace(/:\s*$/, ""))}${req(f)}</span><div class="hud-ctl">${inputHTML(f)}</div></div>`;
   }
+  // Division looks: the HUD layout with each unit's own colours, emblem and backdrop.
+  const DIVS = {
+    k9: { kicker: "LSPD · K9 UNIT · FIELD OPERATIONS", status: "K9 ON DUTY",
+      svg: '<svg viewBox="0 0 64 64" fill="currentColor"><ellipse cx="17" cy="26" rx="6" ry="8" transform="rotate(-18 17 26)"/><ellipse cx="27" cy="15" rx="6" ry="8.5" transform="rotate(-6 27 15)"/><ellipse cx="39" cy="15" rx="6" ry="8.5" transform="rotate(6 39 15)"/><ellipse cx="49" cy="26" rx="6" ry="8" transform="rotate(18 49 26)"/><path d="M33 31c-8 0-15 9-15 16 0 6 5 8 9 7 3-1 4-2 6-2s3 1 6 2c4 1 9-1 9-7 0-7-7-16-15-16z"/></svg>' },
+    asu: { kicker: "LSPD · AIR SUPPORT UNIT · FLIGHT DECK", status: "AIRBORNE",
+      svg: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17h48M32 17v7"/><path d="M20 34c0-6 5-10 12-10h4c7 0 11 5 11 11v1c0 3-2 5-5 5H25c-3 0-5-3-5-7z" fill="currentColor" fill-opacity=".18"/><path d="M47 33h9l3-5M37 25v7h9M27 41l-3 7M40 41l3 7M19 48h30"/></svg>' },
+    cru: { kicker: "LSPD · CRISIS RESPONSE UNIT · TECHNICAL RESCUE", status: "RESCUE READY",
+      svg: '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="21" fill="none" stroke="currentColor" stroke-width="10"/><g stroke="#fff" stroke-width="10" fill="none" stroke-dasharray="11 22" stroke-dashoffset="5.5"><circle cx="32" cy="32" r="21"/></g><circle cx="32" cy="32" r="26.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"/></svg>' }
+  };
   function hudBlockHTML(b, form) {
     switch (b.type) {
-      case "banner":
+      case "banner": {
+        const dv = form && DIVS[form.theme];
+        const emblem = form && okImg(form.logoUrl) ? `<img src="${esc(form.logoUrl)}" alt="">` : dv ? `<span class="div-ico">${dv.svg}</span>` : "";
         return `<div class="hud-hero">
-          ${form && okImg(form.logoUrl) ? `<div class="hud-emblem"><span class="ring"></span><span class="ring r2"></span><img src="${esc(form.logoUrl)}" alt=""></div>` : ""}
-          <div class="hud-htext"><div class="hud-kicker">LSPD · SECURE REPORT TERMINAL</div><h2>${esc(b.title)}</h2>${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ""}</div>
-          <div class="hud-status"><span class="pulse"></span>LINK SECURE</div>
+          ${emblem ? `<div class="hud-emblem"><span class="ring"></span><span class="ring r2"></span>${emblem}</div>` : ""}
+          <div class="hud-htext"><div class="hud-kicker">${dv ? dv.kicker : "LSPD · SECURE REPORT TERMINAL"}</div><h2>${esc(b.title)}</h2>${b.subtitle ? `<p>${esc(b.subtitle)}</p>` : ""}</div>
+          <div class="hud-status"><span class="pulse"></span>${dv ? dv.status : "LINK SECURE"}</div>
         </div>`;
+      }
       case "fields":
       case "strip": {
         const fs = b.fields || [];
@@ -316,13 +330,14 @@ window.Portal = (function () {
     opts = opts || {};
     form = withDefaults(form);
     const blocks = form.blocks || [];
-    const hud = form.theme === "hud";
+    const div = DIVS[form.theme] ? form.theme : "";
+    const hud = form.theme === "hud" || !!div;
     const theme = hud ? "theme-hud" : form.theme === "dossier" ? "theme-dossier" : "theme-sheet";
     const wm = watermarkCSS(form);
     const wmOpacity = Math.min(Math.max(Number(form.watermarkOpacity) || (theme === "theme-sheet" ? 6 : 8), 2), 30) / 100;
     const wmHTML = wm ? `<div class="wm ${form.watermarkMode === "repeat" ? "" : "single"}" style="background-image:${wm};opacity:${wmOpacity}"></div>` : "";
     mount.innerHTML = hud
-      ? `<div class="paper-wrap theme-hud"><div class="paper hud">${wmHTML}<div class="hud-grid-bg"></div><div class="hud-scan"></div>
+      ? `<div class="paper-wrap theme-hud${div ? " div-" + div : ""}"><div class="paper hud">${wmHTML}<div class="hud-grid-bg"></div>${div ? '<div class="div-deco"><i></i><i></i><i></i></div>' : ""}<div class="hud-scan"></div>
           ${blocks.map((b, i) => `<div class="hud-b k-${esc(b.type)}" data-b="${i}">${hudBlockHTML(b, form)}</div>`).join("")}</div></div>`
       : `<div class="paper-wrap ${theme}"><div class="paper ${theme}">${wmHTML}<table class="xl">
       <colgroup><col style="width:26.6%"><col style="width:35%"><col style="width:21.1%"><col style="width:17.3%"></colgroup>
@@ -339,6 +354,7 @@ window.Portal = (function () {
 
     function setDefaults() {
       fieldDefs.forEach(f => { if (f.type === "date" && f.defaultToday) { const el = q(`[data-f="${CSS.escape(f.id)}"]`); if (el && !el.value) el.value = todayISO(); } });
+      fieldDefs.forEach(f => { if (f.type === "select" && f.default) { const el = q(`[data-f="${CSS.escape(f.id)}"]`); if (el && !el.value) el.value = f.default; } });
     }
 
     function addRow(b, vals) {
@@ -346,7 +362,7 @@ window.Portal = (function () {
       const ctl = c => c.type === "link"
           ? `<select class="g c" data-k="${esc(c.id)}" data-link="1"></select>`
           : c.type === "select"
-          ? `<select class="g c" data-k="${esc(c.id)}">${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select>`
+          ? `<select class="g c" data-k="${esc(c.id)}">${c.blank ? `<option value="">— choose —</option>` : ""}${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select>`
           : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"${c.type === "search" ? ` data-search="1" autocomplete="off"` : ""}>`;
       const hasCheck = b.check && b.check.id;
       let tr;
@@ -630,6 +646,8 @@ window.Portal = (function () {
       }
       const rm = t.closest(".rm");
       if (rm) { rm.closest(".dyn").remove(); refresh(); changed(); return; }
+      const nowB = t.closest("[data-now]");
+      if (nowB) { const d = new Date(); q(`[data-f="${CSS.escape(nowB.dataset.now)}"]`).value = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); changed(); return; }
       const today = t.closest("[data-today]");
       if (today) { q(`[data-f="${CSS.escape(today.dataset.today)}"]`).value = todayISO(); changed(); return; }
       const gen = t.closest("[data-gen]");

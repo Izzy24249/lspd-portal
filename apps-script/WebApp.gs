@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 20;
+const BACKEND_VERSION = 21;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -531,7 +531,10 @@ function handleSubmit_(d) {
       const st = checklists[b.id] || {};
       const items = b.items || [];
       const done = items.filter(it => st[it.topic] === true).length;
-      if (items.length) {
+      if (items.length && b.display === "selected") {             // e.g. Equipment Used: just list what was ticked
+        const picked = items.filter(it => st[it.topic] === true).map(it => it.topic);
+        embedFields.push({ name: sectionIcon_(b.title) + " " + clip_(String(b.title || "Checklist").toUpperCase(), 240), value: clip_(picked.length ? picked.join(" · ") : "*None*", 1024), inline: false });
+      } else if (items.length) {
         const doneList = items.filter(it => st[it.topic] === true).map(it => it.topic);
         const todo = items.filter(it => st[it.topic] !== true).map(it => it.topic);
         const bar = "▰".repeat(Math.round(10 * done / items.length)) + "▱".repeat(10 - Math.round(10 * done / items.length));
@@ -540,11 +543,12 @@ function handleSubmit_(d) {
         if (todo.length) body.push("⬜ **Not done:** " + todo.join(" · "));
         embedFields.push({ name: "☑️ " + clip_(String(b.title || "Checklist").toUpperCase(), 240), value: clip_(body.join("\n"), 1024), inline: false });
       }
-      archiveCols.push({ id: b.id, label: b.title || b.id, value: done + "/" + items.length + " done" +
+      if (b.display === "selected") archiveCols.push({ id: b.id, label: b.title || b.id, value: items.filter(it => st[it.topic] === true).map(it => it.topic).join(", ") });
+      else archiveCols.push({ id: b.id, label: b.title || b.id, value: done + "/" + items.length + " done" +
         (done < items.length ? " | missing: " + items.filter(it => st[it.topic] !== true).map(it => it.topic).join(", ") : "") });
     } else if (b.type === "repeater") {
       const cols = b.columns || [];
-      const rows = (repeaters[b.id] || []).filter(r => cols.some(c => c.type !== "select" && c.type !== "link" && str_(r[c.id])));
+      const rows = (repeaters[b.id] || []).filter(r => cols.some(c => ((c.type !== "select" && c.type !== "link") || c.blank) && str_(r[c.id])));
       const tick = r => b.check && b.check.id && r[b.check.id] ? "  ✅ " + (b.check.label || "") : "";
       const totalsOn = b.totals && b.totals.on;
       const fmtCell = (c, v) => totalsOn && c.id === b.totals.col ? chargeText_(v) : v;
@@ -599,7 +603,7 @@ function handleSubmit_(d) {
   const title = clip_(fillTemplate_(form.embedTitle || form.title, values), 256);
   // ---- details grid: three columns, grouped so related things sit together ----
   //   row(s) 1: case identity (case #, CAD #, status) · row(s) 2: incident details · row(s) 3: people
-  const PEOPLE_RE = /detective|officer|instructor|trainee|supervisor|fto|lead|assist|unit|deputy|trooper|agent|member|reporting|arresting|filed by/i;
+  const PEOPLE_RE = /detective|officer|instructor|trainee|supervisor|fto|lead|assist|unit|deputy|trooper|agent|member|reporting|arresting|filed by|handler|partner|pilot|crew|commander|supported/i;
   const groups = { id: [], info: [], people: [] }, statusItems = [];
   detailBlocks.forEach(d => {
     const L = d.label;
@@ -613,7 +617,7 @@ function handleSubmit_(d) {
     else if (d.mention) val = (d.value || "—") + "\n<@" + d.mention + ">";
     else if (d.type === "discord_id" && d.raw) val = "<@" + d.raw + ">";
     const item = { name: clip_(L, 256), value: clip_(val, 1024), inline: true };
-    const notPerson = /check|type|date|time|status|result|location|postal|#|number/i.test(L);
+    const notPerson = /check|type|date|time|status|result|location|postal|#|number|area|aircraft|takeoff|landing/i.test(L);
     if (d.person || (PEOPLE_RE.test(L) && !notPerson)) groups.people.push(item);
     else if (/status|result|outcome|verdict/i.test(L)) statusItems.push(item);
     else if (d.type === "case_number" || (/case|cad|report|incident|ticket|file|reference|#/i.test(L) && !/type|date|time|status|location|check/i.test(L))) groups.id.push(item);
@@ -721,7 +725,8 @@ function sameSubject_(a, b) {
 }
 function sectionIcon_(t) {
   t = String(t || "").toLowerCase();
-  return /person|people|suspect|witness/.test(t) ? "👥" : /evidence/.test(t) ? "🧪" : /vehicle|car/.test(t) ? "🚗" : /charge/.test(t) ? "⚖️" : /weapon|firearm/.test(t) ? "🔫" : "📋";
+  return /person|people|suspect|witness/.test(t) ? "👥" : /evidence|finding/.test(t) ? "🧪" : /vehicle|car|target/.test(t) ? "🚗" : /charge/.test(t) ? "⚖️" : /weapon|firearm/.test(t) ? "🔫" :
+    /equipment|gear/.test(t) ? "🧰" : /event|activity|log/.test(t) ? "🕒" : /deploy/.test(t) ? "🐕" : "📋";
 }
 // "Armed Robbery (Felony, 18 Months - $9,000 Fine)" -> "Armed Robbery `Felony · 18 mo · $9,000`"
 function chargeText_(v) {
@@ -1217,7 +1222,7 @@ function maskWebhooks_() {
 // Server-side checks so a broken or malicious save can't wreck the live portal.
 function validateConfig_(c) {
   if (!c || !Array.isArray(c.forms)) throw new Error("Invalid config.");
-  const FIELD_TYPES = ["text", "number", "date", "select", "discord_id", "case_number", "static", "officers", "officer"];
+  const FIELD_TYPES = ["text", "number", "date", "time", "select", "discord_id", "case_number", "static", "officers", "officer"];
   const BLOCK_TYPES = ["banner", "fields", "strip", "text", "checklist", "repeater", "longtext"];
   const formIds = {};
   const out = { settings: {}, forms: [] };
