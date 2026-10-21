@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 12;
+const BACKEND_VERSION = 13;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -41,19 +41,24 @@ function doGet(e) {
   }
 }
 
+// Only actions that change saved data wait in line; reading, logging in and Discord posting run side by side.
+const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1 };
+
 function doPost(e) {
   let d;
   try { d = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "Bad request." }); }
-  const lock = LockService.getScriptLock();
-  try { lock.waitLock(30000); } catch (err) { return json_({ ok: false, error: "Server busy, please press Submit again." }); }
   try {
-    if (d.action) return json_(handleAdmin_(d));
+    if (d.action) return json_(WRITE_ACTIONS_[d.action] ? withLock_(() => handleAdmin_(d)) : handleAdmin_(d));
     return json_(handleSubmit_(d));
   } catch (err) {
     return json_({ ok: false, error: errMsg_(err) });
-  } finally {
-    lock.releaseLock();
   }
+}
+
+function withLock_(fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(45000)) return { ok: false, error: "Server busy, please try again in a few seconds." };
+  try { return fn(); } finally { lock.releaseLock(); }
 }
 
 function json_(obj) {
@@ -152,7 +157,7 @@ function getRoster_(fresh) {
     const want = str_(r.tab);
     const all = want === "*" || want.toLowerCase() === "all" || (!want && linked);
     const names = all ? null : (want || "Roster").split(",").map(x => x.trim()).filter(Boolean);
-    let sheets = book.getSheets().filter(sh => !sh.isSheetHidden());
+    let sheets = book.getSheets();
     if (names) {
       const missing = names.filter(n => !book.getSheetByName(n));
       if (missing.length) out.warnings.push("Tab(s) not found: " + missing.join(", "));
@@ -164,8 +169,9 @@ function getRoster_(fresh) {
     const EXCL = str_(r.exclude === undefined ? ROSTER_EXCLUDE_DEFAULT : r.exclude).toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
     const isOut = t => { t = String(t || "").toLowerCase(); return EXCL.some(w => t.indexOf(w) !== -1); };
     sheets.forEach(sh => {
-      const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "", left: 0 };
+      const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "", left: 0, hidden: sh.isSheetHidden() };
       out.tabs.push(info);
+      if (all && info.hidden) { info.skipped = "hidden tab"; return; }             // hidden tabs only count when you list them by name
       if (isOut(tabName)) { info.skipped = "tab name marks former/onboarding members"; return; }
       if (sh.getLastRow() < 2) { info.skipped = "empty"; return; }
       const range = sh.getRange(1, 1, Math.min(sh.getLastRow(), 2000), Math.min(sh.getLastColumn(), 30));
@@ -186,6 +192,7 @@ function getRoster_(fresh) {
       const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
       const statusCols = head.map((h, i) => /status|state|active|standing/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
       let inOutSection = false;
+      const checkHidden = shown.length - hr <= 400;      // per-row hidden checks are slow; skip them on very long tabs
       for (let i = hr + 1; i < shown.length; i++) {
         const filled = shown[i].filter(c => str_(c)).length;
         // section heading row (one cell of text, e.g. "FORMER MEMBERS" / "ACTIVE ROSTER")
@@ -197,7 +204,7 @@ function getRoster_(fresh) {
         if (!filled) continue;
         const why = inOutSection ? "section" : statusCols.some(c => isOut(shown[i][c])) ? "status" :
           (lines && lines[i] && (lines[i][nameCol] === "line-through" || (callCol >= 0 && lines[i][callCol] === "line-through"))) ? "crossed out" :
-          (sh.isRowHiddenByUser(i + 1) || sh.isRowHiddenByFilter(i + 1)) ? "hidden row" : "";
+          (checkHidden && (sh.isRowHiddenByUser(i + 1) || sh.isRowHiddenByFilter(i + 1))) ? "hidden row" : "";
         if (why) { info.left++; continue; }
         const nm = str_(shown[i][nameCol]), cs = callCol >= 0 ? str_(shown[i][callCol]) : "";
         const name = cs && nm ? (nm.indexOf(cs) === -1 ? cs + " | " + nm : nm) : (nm || cs);   // "L-104 | Duzen"
@@ -226,7 +233,7 @@ function getRoster_(fresh) {
     out.error = "Couldn't open the roster sheet: " + errMsg_(e) + " (check the link, and that the Google account running the script can open that sheet).";
   }
   const js = JSON.stringify(out);
-  if (js.length < 95000) cache.put("portal_roster", js, 300);
+  if (js.length < 95000) cache.put("portal_roster", js, 900);   // 15 min; "Test / refresh roster" reloads it straight away
   return out;
 }
 
@@ -445,13 +452,17 @@ function handleSubmit_(d) {
     if (!r.ok) { warning = "the case report posted, but part " + (i + 1) + " failed: " + r.error; break; }
   }
 
-  // ---- archive + leaderboard (after Discord so a failed post isn't logged as filed) ----
-  archiveRow_(form, archiveCols);
-  const lb = form.leaderboard;
-  if (lb && lb.enabled && lb.countField && str_(values[lb.countField])) {
-    lbSheet_().appendRow([new Date(), form.id, "'" + str_(values[lb.countField])]);
-    try { updateLeaderboard_(form); } catch (e) { warning = warning || "leaderboard not updated: " + errMsg_(e); }
-  }
+  // ---- archive + leaderboard (after Discord so a failed post isn't logged as filed; only this part waits in line) ----
+  const saved = withLock_(() => {
+    archiveRow_(form, archiveCols);
+    const lb = form.leaderboard;
+    if (lb && lb.enabled && lb.countField && str_(values[lb.countField])) {
+      lbSheet_().appendRow([new Date(), form.id, "'" + str_(values[lb.countField])]);
+      try { updateLeaderboard_(form); } catch (e) { warning = warning || "leaderboard not updated: " + errMsg_(e); }
+    }
+    return { ok: true };
+  });
+  if (!saved.ok) warning = warning || "posted to Discord, but the sheet was busy and the record wasn't logged";
   return warning ? { ok: true, warning: warning } : { ok: true };
 }
 

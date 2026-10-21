@@ -928,9 +928,21 @@ function pageSettings(page) {
           const shown = s.roster.requireId === false ? r.people : r.people.filter(p => /^\d{15,21}$/.test(p.id || ""));
           Portal.setRoster(shown);
           rosterOut.textContent = (r.error ? "❌ " + r.error : "✅ " + shown.length + " people available in the pickers, from " + r.source + "." + (shown.length < r.people.length ? " (" + (r.people.length - shown.length) + " hidden because they have no Discord ID.)" : "")) +
-            ((r.tabs || []).length ? "\n" + r.tabs.map(t => "  • " + t.tab + ": " + (t.skipped ? "skipped (" + t.skipped + ")" : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : "") + (t.left ? ", " + t.left + " left out (former / onboarding / crossed out / hidden)" : ""))).join("\n") : "") +
-            (r.people.length ? "\nFirst few: " + r.people.slice(0, 5).map(p => p.name + (p.id ? " (" + p.id + ")" : " (no ID)")).join(", ") : "") +
-            (r.warnings.length ? "\n⚠️ " + r.warnings.slice(0, 6).join("\n⚠️ ") + (r.warnings.length > 6 ? "\n…and " + (r.warnings.length - 6) + " more" : "") : "");
+            ((r.tabs || []).length ? "\n\nTabs:\n" + r.tabs.map(t => (t.skipped ? "  ✗ " : "  ✓ ") + t.tab + (t.hidden ? " (hidden tab)" : "") + " — " +
+              (t.skipped ? "skipped: " + t.skipped : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : "") + (t.left ? ", " + t.left + " left out (former / onboarding / crossed out / hidden rows)" : ""))).join("\n") : "") +
+            (r.people.length ? "\n\nFirst few: " + r.people.slice(0, 5).map(p => p.name + (p.id ? "" : " (no ID)")).join(", ") : "") +
+            (r.warnings.length ? "\n\n⚠️ " + r.warnings.slice(0, 6).join("\n⚠️ ") + (r.warnings.length > 6 ? "\n…and " + (r.warnings.length - 6) + " more" : "") : "");
+          // one-click "read only these tabs"
+          const usable = (r.tabs || []).filter(t => t.people > 0 || (t.skipped === "hidden tab"));
+          if (usable.length > 1) {
+            const pick = h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;margin-top:10px" }, h("span", { class: "help", text: "Read only:" }),
+              usable.map(t => h("button", { class: "btn ghost sm", onclick: () => {
+                const cur = String(s.roster.tab || "").split(",").map(x => x.trim()).filter(Boolean);
+                s.roster.tab = (cur.includes(t.tab) ? cur.filter(x => x !== t.tab) : cur.concat(t.tab)).join(", ");
+                changed(true); toast("Tabs to read: " + (s.roster.tab || "all") + ". Press Save & publish, then test again.", "ok");
+              } }, (String(s.roster.tab || "").split(",").map(x => x.trim()).includes(t.tab) ? "✓ " : "+ ") + t.tab + (t.hidden ? " (hidden)" : ""))));
+            rosterOut.append(pick);
+          }
         } catch (err) { rosterOut.textContent = "❌ " + err.message; }
         e.target.disabled = false;
       } }, "Test / refresh roster"), rosterOut)));
