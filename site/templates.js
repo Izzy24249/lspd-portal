@@ -6,8 +6,6 @@ window.PORTAL_TEMPLATES = [
   "status": "hidden",
   "copyText": true,
   "webhookId": "",
-  "watermark": "",
-  "watermarkOpacity": 8,
   "watermarkMode": "single",
   "tags": {
    "base": [],
@@ -22,6 +20,11 @@ window.PORTAL_TEMPLATES = [
    "heading": ""
   },
   "id": "k9",
+  "logoUrl": "img/k9-patch.png",
+  "discordThumb": "https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/img/k9-patch.png",
+  "watermark": "custom",
+  "watermarkUrl": "img/k9-patch.png",
+  "watermarkOpacity": 4,
   "icon": "🐕",
   "title": "K9 Unit Report",
   "description": "K9 patrol activity: traffic, calls for service and K9 deployments.",
@@ -713,8 +716,6 @@ window.PORTAL_TEMPLATES = [
   "status": "hidden",
   "copyText": true,
   "webhookId": "",
-  "watermark": "",
-  "watermarkOpacity": 8,
   "watermarkMode": "single",
   "tags": {
    "base": [],
@@ -729,6 +730,11 @@ window.PORTAL_TEMPLATES = [
    "heading": ""
   },
   "id": "asu",
+  "logoUrl": "img/asu-patch.png",
+  "discordThumb": "https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/img/asu-patch.png",
+  "watermark": "custom",
+  "watermarkUrl": "img/asu-patch.png",
+  "watermarkOpacity": 4,
   "icon": "🚁",
   "title": "ASU Flight Report",
   "description": "Air Support Unit flight log: pilot, aircraft and everything done in the air.",
@@ -968,8 +974,6 @@ window.PORTAL_TEMPLATES = [
   "status": "hidden",
   "copyText": true,
   "webhookId": "",
-  "watermark": "",
-  "watermarkOpacity": 8,
   "watermarkMode": "single",
   "tags": {
    "base": [],
@@ -984,6 +988,11 @@ window.PORTAL_TEMPLATES = [
    "heading": ""
   },
   "id": "cru",
+  "logoUrl": "img/cru-patch.png",
+  "discordThumb": "https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/img/cru-patch.png",
+  "watermark": "custom",
+  "watermarkUrl": "img/cru-patch.png",
+  "watermarkOpacity": 4,
   "icon": "🛟",
   "title": "CRU Incident Report",
   "description": "Crisis Response Unit: dive, high-angle, MVC, marine and air rescue, plus patrol duty.",

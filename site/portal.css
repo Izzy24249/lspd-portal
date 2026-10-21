@@ -640,7 +640,7 @@ table.xl tr.guiderow td{padding:0;background:#F8FAFC}
 .div-cru .hud-empty{color:#8f7a68}
 .div-k9 .paper.hud select.g option{background:#121a0c}.div-cru .paper.hud select.g option{background:#1a1411}.div-asu .paper.hud select.g option{background:#06142b}
 /* narrow containers (admin side-by-side preview): 4-across strips go 2x2 so date/time buttons fit */
-.paper.hud{container-type:inline-size}
+.paper-wrap.theme-hud{container-type:inline-size}   /* on the wrapper: style containment on .paper would break the 01/02/03 section counter */
 @container (max-width:640px){.hud-fields.n4,.hud-fields.n3{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (max-width:380px){.hud-fields.n4,.hud-fields.n3,.hud-fields{grid-template-columns:minmax(0,1fr)}}
 @container (max-width:640px){.hud-hero{grid-template-columns:1fr;justify-items:center;text-align:center;gap:16px}.hud-status{display:none}}
