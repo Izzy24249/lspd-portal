@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 14;
+const BACKEND_VERSION = 15;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -145,15 +145,72 @@ function rosterForPickers_() {
 
 const ROSTER_EXCLUDE_DEFAULT = "former, removed, inactive, resigned, terminated, fired, retired, archive, onboarding, pending, applicant, blacklist, dismissed";
 
+// Reads one roster tab -> [{ name, nm, call, id, extra }]. Applies the "not a current member" rules.
+function readRosterTab_(sh, isOut, info, warnings) {
+  const rows = [];
+  if (sh.getLastRow() < 2) { info.skipped = "empty"; return rows; }
+  const tabName = sh.getName();
+  const range = sh.getRange(1, 1, Math.min(sh.getLastRow(), 2000), Math.min(sh.getLastColumn(), 30));
+  const raw = range.getValues(), shown = range.getDisplayValues();
+  let lines = null; try { lines = range.getFontLines(); } catch (e) {}
+  // find the header row in the first 15 rows (allows title rows above it)
+  let hr = -1, idCol = -1, nameCol = -1, callCol = -1;
+  for (let i = 0; i < Math.min(15, shown.length) && hr < 0; i++) {
+    const head = shown[i].map(h => String(h).toLowerCase().trim());
+    let ic = head.findIndex(h => /discord/.test(h) && /\bid\b|identifier|snowflake/.test(h));
+    if (ic < 0) ic = head.findIndex(h => /^(discord )?id$/.test(h) || h === "discord");
+    const cc = head.findIndex((h, j) => j !== ic && /call ?sign|unit ?#|badge ?#/.test(h));
+    const nc = head.findIndex((h, j) => j !== ic && j !== cc && /name|officer|member/.test(h) && !/\bid\b|discord/.test(h));
+    if (nc >= 0 || cc >= 0) { hr = i; idCol = ic; nameCol = nc >= 0 ? nc : cc; callCol = nc >= 0 ? cc : -1; }
+  }
+  if (hr < 0) { info.skipped = "no header row with a Name/Callsign column"; return rows; }
+  const head = shown[hr].map(h => String(h).toLowerCase());
+  const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
+  const statusCols = head.map((h, i) => /status|state|active|standing/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
+  let inOutSection = false;
+  const checkHidden = shown.length - hr <= 400;      // per-row hidden checks are slow; skip them on very long tabs
+  for (let i = hr + 1; i < shown.length; i++) {
+    const filled = shown[i].filter(c => str_(c)).length;
+    if (filled === 1 && !(idCol >= 0 && str_(shown[i][idCol]))) {           // section heading row
+      const t = str_(shown[i].find(c => str_(c)));
+      const heading = isOut(t) || (/[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t)) || /member|roster|division|section|command|staff|personnel|active/i.test(t);
+      if (heading) { inOutSection = isOut(t); continue; }
+    }
+    if (!filled) continue;
+    const why = inOutSection || statusCols.some(c => isOut(shown[i][c])) ||
+      (lines && lines[i] && (lines[i][nameCol] === "line-through" || (callCol >= 0 && lines[i][callCol] === "line-through"))) ||
+      (checkHidden && (sh.isRowHiddenByUser(i + 1) || sh.isRowHiddenByFilter(i + 1)));
+    if (why) { info.left++; continue; }
+    const nm = str_(shown[i][nameCol]), cs = callCol >= 0 ? str_(shown[i][callCol]) : "";
+    const name = cs && nm ? (nm.indexOf(cs) === -1 ? cs + " | " + nm : nm) : (nm || cs);   // "L-104 | Duzen"
+    if (!name) continue;
+    let id = idCol >= 0 ? str_(shown[i][idCol]).replace(/[^0-9]/g, "") : "";
+    if (idCol >= 0 && typeof raw[i][idCol] === "number" && raw[i][idCol] > 1e14) {
+      warnings.push(tabName + " row " + (i + 1) + " (" + name + "): Discord ID is stored as a number, so Google Sheets rounded it. Format that column as Plain text and paste the ID again.");
+      id = "";
+    } else if (id && !/^\d{15,21}$/.test(id)) id = "";
+    rows.push({ name: name, id: id, extra: extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), call: callKey_(cs || name), nm: nameKey_(name) });
+    if (!id) info.noId++;
+  }
+  return rows;
+}
+// "L-104 | Duzen" -> "L104";  "Duzen" -> ""
+function callKey_(t) { const m = /\b([A-Za-z]{1,4})\s*-?\s*(\d{1,5})\b/.exec(String(t || "")); return m ? (m[1] + m[2]).toUpperCase() : ""; }
+// "L-104 | J. Duzen" -> "j duzen"
+function nameKey_(t) {
+  return String(t || "").replace(/\b[A-Za-z]{1,4}\s*-?\s*\d{1,5}\b/g, " ").replace(/[^A-Za-z\s']/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 function getRoster_(fresh) {
   const cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get("portal_roster"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   const cfg = getConfig_(), r = (cfg.settings && cfg.settings.roster) || {};
-  const out = { people: [], warnings: [], tabs: [], source: "", error: "" };
+  const out = { people: [], warnings: [], tabs: [], source: "", error: "", verify: null };
   try {
     const linked = !!str_(r.url);
     const book = linked ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
-    // which tabs: blank or * = every tab (linked sheet) / "Roster" (this spreadsheet); otherwise a comma list
+    const masterTab = r.verify && r.verify.on ? str_(r.verify.tab) : "";
+    // which tabs: ticked list, or blank = every tab (linked sheet) / "Roster" (this spreadsheet)
     const want = str_(r.tab);
     const picked = Array.isArray(r.tabs) ? r.tabs.map(str_).filter(Boolean) : [];
     const all = !picked.length && (want === "*" || want.toLowerCase() === "all" || (!want && linked));
@@ -165,67 +222,57 @@ function getRoster_(fresh) {
       sheets = names.map(n => book.getSheetByName(n)).filter(Boolean);
     }
     out.source = (linked ? "linked sheet \"" + book.getName() + "\"" : "this spreadsheet") + " → " + (all ? "all tabs" : sheets.map(x => "\"" + x.getName() + "\"").join(", "));
-    const byKey = {};
-    // words that mean "not a current member": tabs, section headings, status cells containing these are left out
     const EXCL = str_(r.exclude === undefined ? ROSTER_EXCLUDE_DEFAULT : r.exclude).toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
     const isOut = t => { t = String(t || "").toLowerCase(); return EXCL.some(w => t.indexOf(w) !== -1); };
+
+    // ---- main roster (two-way check): people must also be listed here ----
+    let master = null;
+    if (masterTab) {
+      const mBook = str_(r.verify.url) ? SpreadsheetApp.openByUrl(str_(r.verify.url)) : book;
+      const msh = mBook.getSheetByName(masterTab);
+      out.verify = { tab: masterTab, count: 0, dropped: 0, droppedNames: [], error: "" };
+      if (!msh) out.verify.error = "Main roster tab \"" + masterTab + "\" was not found.";
+      else {
+        const mi = { tab: masterTab, people: 0, noId: 0, skipped: "", left: 0 };
+        const rows = readRosterTab_(msh, isOut, mi, out.warnings);
+        if (mi.skipped) out.verify.error = "Main roster tab \"" + masterTab + "\": " + mi.skipped + ".";
+        else {
+          master = { ids: {}, calls: {}, names: {} };
+          rows.forEach(m => {
+            if (m.id) master.ids[m.id] = 1;
+            if (m.call) (master.calls[m.call] = master.calls[m.call] || []).push(m.nm);
+            if (m.nm) master.names[m.nm] = (master.names[m.nm] || 0) + 1;
+          });
+          out.verify.count = rows.length;
+        }
+      }
+      if (out.verify.error) out.error = out.verify.error + " Nobody is shown until this is fixed (so old members can't slip through).";
+    }
+    const onMaster = p => {
+      if (!master) return !masterTab;                                   // check on but main roster unreadable -> show nobody
+      if (p.id && master.ids[p.id]) return true;                        // same Discord ID
+      if (p.call && master.calls[p.call]) return !p.nm || master.calls[p.call].some(n => !n || n === p.nm || n.split(" ").pop() === p.nm.split(" ").pop());
+      return !!(p.nm && master.names[p.nm] && !p.call);                // no callsign: exact name
+    };
+
+    const byKey = {};
     sheets.forEach(sh => {
-      const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "", left: 0, hidden: sh.isSheetHidden() };
+      const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "", left: 0, unverified: 0, hidden: sh.isSheetHidden() };
       out.tabs.push(info);
-      if (all && info.hidden) { info.skipped = "hidden tab"; return; }             // hidden tabs only count when you list them by name
-      if (all && isOut(tabName)) { info.skipped = "tab name marks former/onboarding members"; return; }   // a tab you tick yourself is always read
-      if (sh.getLastRow() < 2) { info.skipped = "empty"; return; }
-      const range = sh.getRange(1, 1, Math.min(sh.getLastRow(), 2000), Math.min(sh.getLastColumn(), 30));
-      const raw = range.getValues(), shown = range.getDisplayValues();
-      let lines = null; try { lines = range.getFontLines(); } catch (e) {}
-      // find the header row in the first 15 rows (allows title rows above it)
-      let hr = -1, idCol = -1, nameCol = -1, callCol = -1;
-      for (let i = 0; i < Math.min(15, shown.length) && hr < 0; i++) {
-        const head = shown[i].map(h => String(h).toLowerCase().trim());
-        let ic = head.findIndex(h => /discord/.test(h) && /\bid\b|identifier|snowflake/.test(h));
-        if (ic < 0) ic = head.findIndex(h => /^(discord )?id$/.test(h) || h === "discord");
-        const cc = head.findIndex((h, j) => j !== ic && /call ?sign|unit ?#|badge ?#/.test(h));
-        const nc = head.findIndex((h, j) => j !== ic && j !== cc && /name|officer|member/.test(h) && !/\bid\b|discord/.test(h));
-        if (nc >= 0 || cc >= 0) { hr = i; idCol = ic; nameCol = nc >= 0 ? nc : cc; callCol = nc >= 0 ? cc : -1; }
-      }
-      if (hr < 0) { info.skipped = "no header row with a Name/Callsign column"; return; }
-      const head = shown[hr].map(h => String(h).toLowerCase());
-      const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
-      const statusCols = head.map((h, i) => /status|state|active|standing/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
-      let inOutSection = false;
-      const checkHidden = shown.length - hr <= 400;      // per-row hidden checks are slow; skip them on very long tabs
-      for (let i = hr + 1; i < shown.length; i++) {
-        const filled = shown[i].filter(c => str_(c)).length;
-        // section heading row (one cell of text, e.g. "FORMER MEMBERS" / "ACTIVE ROSTER")
-        if (filled === 1 && !(idCol >= 0 && str_(shown[i][idCol]))) {
-          const t = str_(shown[i].find(c => str_(c)));
-          const heading = isOut(t) || (/[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t)) || /member|roster|division|section|command|staff|personnel|active/i.test(t);
-          if (heading) { inOutSection = isOut(t); continue; }
+      if (masterTab && tabName === masterTab && !str_(r.verify.url)) { info.skipped = "main roster (used for the check only)"; return; }
+      if (all && info.hidden) { info.skipped = "hidden tab"; return; }
+      if (all && isOut(tabName)) { info.skipped = "tab name marks former/onboarding members"; return; }
+      readRosterTab_(sh, isOut, info, out.warnings).forEach(p => {
+        if (masterTab && !onMaster(p)) {
+          info.unverified++;
+          if (out.verify) { out.verify.dropped++; if (out.verify.droppedNames.length < 25) out.verify.droppedNames.push(p.name + " (" + tabName + ")"); }
+          return;
         }
-        if (!filled) continue;
-        const why = inOutSection ? "section" : statusCols.some(c => isOut(shown[i][c])) ? "status" :
-          (lines && lines[i] && (lines[i][nameCol] === "line-through" || (callCol >= 0 && lines[i][callCol] === "line-through"))) ? "crossed out" :
-          (checkHidden && (sh.isRowHiddenByUser(i + 1) || sh.isRowHiddenByFilter(i + 1))) ? "hidden row" : "";
-        if (why) { info.left++; continue; }
-        const nm = str_(shown[i][nameCol]), cs = callCol >= 0 ? str_(shown[i][callCol]) : "";
-        const name = cs && nm ? (nm.indexOf(cs) === -1 ? cs + " | " + nm : nm) : (nm || cs);   // "L-104 | Duzen"
-        let id = idCol >= 0 ? str_(shown[i][idCol]).replace(/[^0-9]/g, "") : "";
-        if (!name && !id) continue;
-        if (!name && id) continue;                                  // stray number in an empty row
-        if (idCol >= 0 && typeof raw[i][idCol] === "number" && raw[i][idCol] > 1e14) {
-          out.warnings.push(tabName + " row " + (i + 1) + " (" + name + "): Discord ID is stored as a number, so Google Sheets rounded it. Format that column as Plain text and paste the ID again.");
-          id = "";
-        } else if (id && !/^\d{15,21}$/.test(id)) id = "";
-        const extra = extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · ");
-        const key = id || name.toLowerCase();
-        if (byKey[key]) {                                           // same person in two divisions
-          if (byKey[key].divisions.indexOf(tabName) === -1) byKey[key].divisions.push(tabName);
-        } else {
-          byKey[key] = { name: clip_(name, 80), id: id, rank: clip_(extra, 60), divisions: [tabName] };
-          out.people.push(byKey[key]);
-        }
-        info.people++; if (!id) info.noId++;
-      }
+        const key = p.id || p.name.toLowerCase();
+        if (byKey[key]) { if (byKey[key].divisions.indexOf(tabName) === -1) byKey[key].divisions.push(tabName); }
+        else { byKey[key] = { name: clip_(p.name, 80), id: p.id, rank: clip_(p.extra, 60), divisions: [tabName] }; out.people.push(byKey[key]); }
+        info.people++;
+      });
     });
     // a plain "Roster" tab isn't a division
     out.people.forEach(p => { p.division = p.divisions.filter(d => !/^roster$/i.test(d)).join(", "); p.extra = clip_([p.division, p.rank].filter(Boolean).join(" · "), 100); delete p.divisions; });
@@ -989,9 +1036,12 @@ function validateConfig_(c) {
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
     maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) },
     roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300),
-      tabs: (s.roster && Array.isArray(s.roster.tabs) ? s.roster.tabs : []).map(t => clip_(str_(t), 100)).filter(Boolean).slice(0, 60), requireId: !(s.roster && s.roster.requireId === false),
+      tabs: (s.roster && Array.isArray(s.roster.tabs) ? s.roster.tabs : []).map(t => clip_(str_(t), 100)).filter(Boolean).slice(0, 60),
+      verify: { on: !!(s.roster && s.roster.verify && s.roster.verify.on), tab: clip_(str_(s.roster && s.roster.verify && s.roster.verify.tab), 100), url: clip_(str_(s.roster && s.roster.verify && s.roster.verify.url), 300) }, requireId: !(s.roster && s.roster.requireId === false),
       exclude: s.roster && s.roster.exclude !== undefined ? clip_(str_(s.roster.exclude), 500) : ROSTER_EXCLUDE_DEFAULT }
   };
+  if (out.settings.roster.verify.on && !out.settings.roster.verify.tab) throw new Error("Roster: pick which tab is the main personnel roster (or turn the two-way check off).");
+  if (out.settings.roster.verify.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.verify.url)) throw new Error("Main roster link must be a Google Sheets link.");
   if (out.settings.roster.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.url)) throw new Error("Roster sheet link must be a Google Sheets link (https://docs.google.com/spreadsheets/d/...).");
   if (out.settings.heroLogo && !IMG_RE.test(out.settings.heroLogo)) throw new Error("Home page logo must be a file like img/logo.png or an https:// link.");
   c.forms.forEach(f => {

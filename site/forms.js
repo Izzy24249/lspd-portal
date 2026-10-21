@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 14;
+  const BACKEND_NEEDS = 15;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 

@@ -920,10 +920,30 @@ function rosterTabPicker(r) {
         r.tab = "";              // the checklist replaces the old text setting
         changed(); draw();
       } });
-      list.append(h("label", { class: "tog", style: t.missing ? "color:#ff8a95" : "" }, cb,
-        h("span", {}, t.name, h("span", { class: "mono", text: t.missing ? "  (tab not found)" : "  " + t.rows + " rows" + (t.hidden ? " · hidden" : "") }))));
+      const isMain = r.verify && r.verify.on && r.verify.tab === t.name && !r.verify.url;
+      list.append(h("label", { class: "tog", style: t.missing ? "color:#ff8a95" : isMain ? "opacity:.6" : "" }, cb,
+        h("span", {}, t.name, h("span", { class: "mono", text: t.missing ? "  (tab not found)" : isMain ? "  main roster · check only" : "  " + t.rows + " rows" + (t.hidden ? " · hidden" : "") }))));
     });
     box.append(list);
+    // ---- two-way check against the main personnel roster ----
+    r.verify = r.verify || { on: false, tab: "", url: "" };
+    const v = r.verify;
+    const guess = (ROSTER_TABS.tabs.find(t => /personnel/i.test(t.name)) || ROSTER_TABS.tabs.find(t => /main|master|lspd/i.test(t.name)) || {}).name || "";
+    const vcb = h("input", { type: "checkbox", checked: !!v.on, onchange: () => { v.on = vcb.checked; if (v.on && !v.tab) v.tab = guess; changed(); draw(); } });
+    const vbox = h("div", { class: "sub", style: "margin-top:6px;border-style:solid;border-color:" + (v.on ? "rgba(46,204,113,.45)" : "var(--line)") },
+      h("label", { class: "tog" }, vcb, h("b", { text: "Two-way check: people must also be on the main personnel roster" })),
+      h("p", { class: "help", text: "Anyone from the division tabs who isn't on the main roster (old members, onboarding, typos) is left out. Matched by Discord ID, otherwise by callsign + name." }));
+    if (v.on) {
+      const sel = h("select", {}, h("option", { value: "", text: "— choose the main roster tab —" }),
+        ROSTER_TABS.tabs.map(t => h("option", { value: t.name, text: t.name + (t.hidden ? " (hidden)" : "") })));
+      sel.value = v.tab || "";
+      if (v.tab && !ROSTER_TABS.tabs.some(t => t.name === v.tab)) sel.append(h("option", { value: v.tab, text: v.tab + " (not in this sheet)" })), sel.value = v.tab;
+      sel.onchange = () => { v.tab = sel.value; changed(); draw(); };
+      vbox.append(h("div", { class: "g2" },
+        field("Main roster tab", sel, "e.g. LSPD Personnel Roster. It's used only for the check, not as a division."),
+        field("Main roster is in a different Google Sheet? (optional)", bind(v, "url", { placeholder: "blank = same sheet as above" }))));
+    }
+    box.append(vbox);
     box.append(h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center" },
       h("button", { class: "btn ghost sm", onclick: () => { r.tabs = ROSTER_TABS.tabs.filter(t => !t.hidden).map(t => t.name); r.tab = ""; changed(); draw(); } }, "Tick all visible"),
       h("button", { class: "btn ghost sm", onclick: () => { r.tabs = []; r.tab = ""; changed(); draw(); } }, "Untick all"),
@@ -979,7 +999,9 @@ function pageSettings(page) {
           Portal.setRoster(shown);
           rosterOut.textContent = (r.error ? "❌ " + r.error : "✅ " + shown.length + " people available in the pickers, from " + r.source + "." + (shown.length < r.people.length ? " (" + (r.people.length - shown.length) + " hidden because they have no Discord ID.)" : "")) +
             ((r.tabs || []).length ? "\n\nTabs:\n" + r.tabs.map(t => (t.skipped ? "  ✗ " : "  ✓ ") + t.tab + (t.hidden ? " (hidden tab)" : "") + " — " +
-              (t.skipped ? "skipped: " + t.skipped : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : "") + (t.left ? ", " + t.left + " left out (former / onboarding / crossed out / hidden rows)" : ""))).join("\n") : "") +
+              (t.skipped ? "skipped: " + t.skipped : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : "") + (t.left ? ", " + t.left + " left out (former / onboarding / crossed out / hidden rows)" : "") + (t.unverified ? ", " + t.unverified + " not on the main roster" : ""))).join("\n") : "") +
+            (r.verify && !r.verify.error ? "\n\n🔒 Two-way check against \"" + r.verify.tab + "\" (" + r.verify.count + " people on it): " +
+              (r.verify.dropped ? r.verify.dropped + " left out because they're not on the main roster:\n  " + r.verify.droppedNames.join("\n  ") + (r.verify.dropped > r.verify.droppedNames.length ? "\n  …and " + (r.verify.dropped - r.verify.droppedNames.length) + " more" : "") : "everyone matched.") : "") +
             (r.people.length ? "\n\nFirst few: " + r.people.slice(0, 5).map(p => p.name + (p.id ? "" : " (no ID)")).join(", ") : "") +
             (r.warnings.length ? "\n\n⚠️ " + r.warnings.slice(0, 6).join("\n⚠️ ") + (r.warnings.length > 6 ? "\n…and " + (r.warnings.length - 6) + " more" : "") : "");
         } catch (err) { rosterOut.textContent = "❌ " + err.message; }
