@@ -904,6 +904,47 @@ function webhookModal(w) {
 }
 
 /* ---------------- SETTINGS ---------------- */
+// Callsigns: put "L-104 | " in front of every name, taken from the main roster
+function callsignBox(r) {
+  r.callsigns = r.callsigns || { on: false, tabId: null, tabName: "", col: "D", idCol: "" };
+  const c = r.callsigns;
+  const box = h("div", { class: "sub", style: "border-style:solid;border-color:" + (c.on ? "rgba(46,204,113,.45)" : "var(--line)") });
+  const out = h("div", { class: "help", style: "white-space:pre-line" });
+  const draw = () => {
+    box.innerHTML = ""; box.style.borderColor = c.on ? "rgba(46,204,113,.45)" : "";
+    const cb = h("input", { type: "checkbox", checked: !!c.on, onchange: () => {
+      c.on = cb.checked;
+      if (c.on && c.tabId == null && ROSTER_TABS) { const g = ROSTER_TABS.tabs.find(t => /personnel/i.test(t.name)) || ROSTER_TABS.tabs.find(t => /main|master|lspd/i.test(t.name)); if (g) { c.tabId = g.id; c.tabName = g.name; } }
+      changed(); draw(); } });
+    box.append(h("label", { class: "tog" }, cb, h("b", { text: "Show callsigns in front of names (e.g. L-104 | F. Duzen)" })),
+      h("p", { class: "help", text: "The callsign is looked up on your main roster by Discord ID (or by exact name), so every name box shows the same, up-to-date callsign." }));
+    if (!c.on) return;
+    const tabs = ROSTER_TABS ? ROSTER_TABS.tabs : [];
+    const sel = h("select", {}, h("option", { value: "", text: ROSTER_TABS ? "— choose the main roster tab —" : "Loading tabs…" }),
+      tabs.map(t => h("option", { value: String(t.id), text: t.name.replace(/^ | $/g, "·") + "  (" + t.rows + " rows)" })));
+    if (c.tabId != null && !tabs.some(t => t.id === c.tabId)) sel.append(h("option", { value: String(c.tabId), text: c.tabName || "Saved tab" }));
+    sel.value = c.tabId != null ? String(c.tabId) : "";
+    sel.onchange = () => { const t = tabs.find(x => String(x.id) === sel.value); c.tabId = t ? t.id : null; c.tabName = t ? t.name : ""; changed(); };
+    box.append(h("div", { class: "g3" },
+      field("Main roster tab", sel),
+      field("Callsign column", bind(c, "col", { placeholder: "D", max: 2, set: v => v.toUpperCase().replace(/[^A-Z]/g, "") }), "Column letter, e.g. D"),
+      field("Discord ID column (optional)", bind(c, "idCol", { placeholder: "auto", max: 2, set: v => v.toUpperCase().replace(/[^A-Z]/g, "") }), "Leave blank to find it automatically")),
+      h("div", { style: "display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap" }, h("button", { class: "btn ghost sm", onclick: async e => {
+        if (isDirty()) return toast("Save & publish first, then test.", "bad");
+        e.target.disabled = true; out.textContent = "Reading callsigns…";
+        try { const m = (await api("callsignTest")).calls;
+          out.textContent = !m ? "Turn this on and save first." : m.error ? "❌ " + m.error : "✅ " + m.count + " callsigns read from \"" + m.tab + "\"" + (m.sample.length ? " (e.g. " + m.sample.join(", ") + ")" : "") + ". Use Show names on a form field to see them in place.";
+        } catch (err) { out.textContent = "❌ " + err.message; }
+        e.target.disabled = false; } }, "Test callsigns"), out));
+  };
+  draw();
+  if (!ROSTER_TABS) {
+    window.__tabsP = window.__tabsP || api("rosterTabs", {}).then(x => { ROSTER_TABS = { book: x.book, tabs: x.tabs, url: r.url || "" }; }).finally(() => { window.__tabsP = null; });
+    window.__tabsP.then(draw).catch(() => {});
+  }
+  return box;
+}
+
 // "Roster tab" dropdown for one field + a quick preview of the names it will offer
 function rosterTabSelect(f) {
   const wrap = h("div", { class: "sub", style: "border-style:solid" });
@@ -934,7 +975,7 @@ function rosterTabSelect(f) {
         try {
           const p = (await api("rosterPreview", { tabId: f.rosterTabId })).preview;
           const m = {}; m[f.rosterTabId] = p.people; Portal.setRosters(Object.assign({}, window.__rosters || {}, m)); window.__rosters = Object.assign({}, window.__rosters || {}, m);
-          out.textContent = (p.error ? "❌ " + p.error : "✅ " + p.people.length + " people from \"" + p.tab + "\"" + (p.people.length ? ": " + p.people.slice(0, 6).map(x => x.name).join(", ") + (p.people.length > 6 ? ", …" : "") : "")) +
+          out.textContent = (p.error ? "❌ " + p.error : "✅ " + p.people.length + " people from \"" + p.tab + "\"" + (p.withCallsign ? " (" + p.withCallsign + " with callsigns from the main roster)" : "") + (p.people.length ? ": " + p.people.slice(0, 6).map(x => x.name).join(", ") + (p.people.length > 6 ? ", …" : "") : "")) +
             (p.noId ? "\n" + p.noId + " row(s) have no Discord ID" + ((CFG.settings.roster || {}).requireId === false ? "." : " and are hidden (Portal Settings → Roster).") : "") +
             (p.left ? "\n" + p.left + " left out (former / onboarding / crossed out / hidden rows)." : "") +
             (p.warnings.length ? "\n⚠️ " + p.warnings.slice(0, 3).join("\n⚠️ ") : "");
@@ -1073,9 +1114,11 @@ function pageSettings(page) {
     h("p", { class: "help", text: "Link your roster Google Sheet here. Then, in the form builder, each name box picks exactly which tab it uses, e.g. CID form → Lead Detective → \"CID - Roster\". Each tab needs a header row with a Name or Callsign column and a Discord ID column (formatted as Plain text)." }),
     field("Roster Google Sheet link", bind(s.roster, "url", { placeholder: "https://docs.google.com/spreadsheets/d/…  (blank = this spreadsheet)" }), "Paste the link from your browser's address bar, then press Save & publish."),
     h("div", { style: "display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap" }, h("button", { class: "btn ghost sm", onclick: showTabs }, "Show tabs in this sheet"), tabList),
+    callsignBox(s.roster),
     (() => { if (s.roster.requireId === undefined) s.roster.requireId = true; return toggle(s.roster, "requireId", "Only list people who have a Discord ID (hide everyone else)"); })(),
     (() => { if (s.roster.exclude === undefined) s.roster.exclude = "former, removed, inactive, resigned, terminated, fired, retired, archive, onboarding, pending, applicant, blacklist, dismissed";
       return field("Leave out people marked as", bind(s.roster, "exclude", { type: "textarea", rows: 2 }), "Comma-separated words. Section headings (e.g. a \"FORMER MEMBERS\" row) and Status cells containing these are skipped. Crossed-out and hidden rows are always skipped."); })(),
+    h("p", { class: "help", text: "Discord IDs are found automatically: any column full of 17–20 digit numbers is used, whatever its header says (e.g. \"Email ID\")." }),
     older));
   {
     const olderBody = h("div", { style: "display:grid;gap:12px;margin-top:10px" });

@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 19;
+const BACKEND_VERSION = 20;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -165,11 +165,14 @@ function getRosterTab_(tabId, fresh) {
       const rows = readRosterTab_(sh, isOut, info, out.warnings);
       if (info.skipped) out.error = "Tab \"" + out.tab + "\": " + info.skipped + ".";
       out.left = info.left; out.noId = info.noId;
-      const seen = {};
+      const seen = {}, calls = callsignMap_();
+      out.withCallsign = 0;
       rows.forEach(p => {
         if (r.requireId !== false && !p.id) return;                    // only people with a Discord ID
         const k = p.id || p.name.toLowerCase(); if (seen[k]) return; seen[k] = 1;
-        out.people.push({ name: clip_(p.name, 80), id: p.id, extra: clip_(p.extra, 80) });
+        const shownName = withCallsign_(p, calls);
+        if (shownName !== p.name) out.withCallsign++;
+        out.people.push({ name: clip_(shownName, 80), id: p.id, extra: clip_(p.extra, 80) });
       });
     }
   } catch (e) { out.error = "Couldn't open the roster sheet: " + errMsg_(e); }
@@ -177,6 +180,42 @@ function getRosterTab_(tabId, fresh) {
   if (js.length < 95000) cache.put(key, js, 900);
   return out;
 }
+// Callsigns from the main roster (Portal Settings → Roster → Callsigns): { byId: {discordId: "L-104"}, byName: {"f duzen": "L-104"} }
+function callsignMap_(fresh) {
+  const r = ((getConfig_().settings || {}).roster) || {}, c = r.callsigns || {};
+  if (!c.on || c.tabId == null) return null;
+  const cache = CacheService.getScriptCache();
+  if (!fresh) { const hit = cache.get("roster_calls"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const out = { byId: {}, byName: {}, count: 0, tab: "", error: "" };
+  try {
+    const sh = rosterBook_().getSheets().find(x => x.getSheetId() === Number(c.tabId));
+    if (!sh) out.error = "The main roster tab for callsigns no longer exists.";
+    else {
+      out.tab = sh.getName();
+      const info = { tab: out.tab, people: 0, noId: 0, skipped: "", left: 0 };
+      const rows = readRosterTab_(sh, () => false, info, [], { callCol: c.col || "D", idCol: c.idCol || "" });
+      if (info.skipped) out.error = "Main roster: " + info.skipped + ".";
+      const nameCount = {};
+      rows.forEach(m => { if (m.nm) nameCount[m.nm] = (nameCount[m.nm] || 0) + 1; });
+      rows.forEach(m => {
+        const cs = str_(m.cs); if (!cs) return;
+        if (m.id) out.byId[m.id] = cs;
+        if (m.nm && nameCount[m.nm] === 1) out.byName[m.nm] = cs;
+        out.count++;
+      });
+    }
+  } catch (e) { out.error = "Couldn't read callsigns: " + errMsg_(e); }
+  const js = JSON.stringify(out); if (js.length < 95000) cache.put("roster_calls", js, 900);
+  return out;
+}
+// "F. Duzen" + "L-104" -> "L-104 | F. Duzen" (replaces any other callsign already in front)
+function withCallsign_(p, calls) {
+  if (!calls) return p.name;
+  const cs = (p.id && calls.byId[p.id]) || calls.byName[nameKey_(p.name)];
+  if (!cs || p.name.indexOf(cs) === 0) return p.name;
+  return cs + " | " + p.name.replace(/^\s*[A-Za-z]{1,4}\s*-?\s*\d{1,5}\s*[|·\-–]\s*/, "").trim();
+}
+
 // every roster tab used by a field on these forms -> { tabId: [people] }
 function rostersFor_(forms) {
   const ids = {};
@@ -192,7 +231,12 @@ function usesOldRoster_(forms) {
 const ROSTER_EXCLUDE_DEFAULT = "former, removed, inactive, resigned, terminated, fired, retired, archive, onboarding, pending, applicant, blacklist, dismissed";
 
 // Reads one roster tab -> [{ name, nm, call, id, extra }]. Applies the "not a current member" rules.
-function readRosterTab_(sh, isOut, info, warnings) {
+function colIndex_(letter) {          // "D" -> 3, "AA" -> 26; "" -> -1
+  const t = String(letter || "").trim().toUpperCase(); if (!/^[A-Z]{1,2}$/.test(t)) return -1;
+  return t.split("").reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+}
+function readRosterTab_(sh, isOut, info, warnings, opts) {
+  opts = opts || {};
   const rows = [];
   if (sh.getLastRow() < 2) { info.skipped = "empty"; return rows; }
   const tabName = sh.getName();
@@ -206,10 +250,36 @@ function readRosterTab_(sh, isOut, info, warnings) {
     let ic = head.findIndex(h => /discord/.test(h) && /\bid\b|identifier|snowflake/.test(h));
     if (ic < 0) ic = head.findIndex(h => /^(discord )?id$/.test(h) || h === "discord");
     const cc = head.findIndex((h, j) => j !== ic && /call ?sign|unit ?#|badge ?#/.test(h));
-    const nc = head.findIndex((h, j) => j !== ic && j !== cc && /name|officer|member/.test(h) && !/\bid\b|discord/.test(h));
-    if (nc >= 0 || cc >= 0) { hr = i; idCol = ic; nameCol = nc >= 0 ? nc : cc; callCol = nc >= 0 ? cc : -1; }
+    const nc = head.findIndex((h, j) => j !== ic && j !== cc && /name|officer|member|detective|agent|player|character|personnel|trooper|deputy|employee|staff|instructor|fto|recruit|cadet/.test(h) && !/\bid\b|discord|email|rank|status|date|joined/.test(h));
+    if ((nc >= 0 || cc >= 0) && head.filter(Boolean).length >= 2) { hr = i; idCol = ic; nameCol = nc >= 0 ? nc : cc; callCol = nc >= 0 ? cc : -1; }   // a title row has only one cell
+  }
+  if (hr < 0) {
+    // no recognisable header: find the row above a run of Discord IDs, and use the text column beside them as the name
+    const isId = v => /^\s*\d{17,20}\s*$/.test(String(v || ""));
+    for (let i = 0; i < Math.min(15, shown.length - 1) && hr < 0; i++) {
+      const below = shown.slice(i + 1, i + 21);
+      for (let c = 0; c < shown[i].length && hr < 0; c++) {
+        if (below.filter(r => isId(r[c])).length >= Math.max(1, Math.min(3, below.length))) {
+          let best = -1, bestN = 0;
+          for (let k = 0; k < shown[i].length; k++) { if (k === c) continue; const n = below.filter(r => /[A-Za-z]{2,}/.test(String(r[k] || ""))).length; if (n > bestN) { best = k; bestN = n; } }
+          if (best >= 0) { hr = i; idCol = c; nameCol = best; }
+        }
+      }
+    }
   }
   if (hr < 0) { info.skipped = "no header row with a Name/Callsign column"; return rows; }
+  // Discord ID column found by its contents (17-20 digit numbers), whatever the header says ("Email ID", "UID", …)
+  {
+    const data = shown.slice(hr + 1, hr + 301), rawData = raw.slice(hr + 1, hr + 301);
+    const filled = data.filter(r => r.some(c => str_(c))).length || 1;
+    const score = c => data.filter((r, i) => /^\s*\d{17,20}\s*$/.test(String(r[c] || "")) || (typeof rawData[i][c] === "number" && rawData[i][c] > 1e15)).length;
+    let best = -1, bestN = 0;
+    for (let c = 0; c < shown[hr].length; c++) { if (c === nameCol) continue; const n = score(c); if (n > bestN) { best = c; bestN = n; } }
+    if (best >= 0 && bestN >= Math.max(1, filled * 0.2) && (idCol < 0 || score(idCol) < bestN * 0.6)) idCol = best;
+  }
+  if (colIndex_(opts.idCol) >= 0) idCol = colIndex_(opts.idCol);
+  if (colIndex_(opts.callCol) >= 0) { callCol = colIndex_(opts.callCol); if (callCol === nameCol) nameCol = -1; }
+  if (nameCol < 0) { info.skipped = "no Name column"; return rows; }
   const head = shown[hr].map(h => String(h).toLowerCase());
   const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
   const statusCols = head.map((h, i) => /status|state|active|standing/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
@@ -235,7 +305,7 @@ function readRosterTab_(sh, isOut, info, warnings) {
       warnings.push(tabName + " row " + (i + 1) + " (" + name + "): Discord ID is stored as a number, so Google Sheets rounded it. Format that column as Plain text and paste the ID again.");
       id = "";
     } else if (id && !/^\d{15,21}$/.test(id)) id = "";
-    rows.push({ name: name, id: id, extra: extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), call: callKey_(cs || name), nm: nameKey_(name) });
+    rows.push({ name: name, id: id, cs: cs, extra: extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), call: callKey_(cs || name), nm: nameKey_(name) });
     if (!id) info.noId++;
   }
   return rows;
@@ -956,7 +1026,7 @@ function handleAdmin_(d) {
       const next = validateConfig_(d.config);
       next.version = Number(cur.version) + 1;
       writeConfig_(next, me.username);
-      CacheService.getScriptCache().remove("portal_roster");
+      CacheService.getScriptCache().removeAll(["portal_roster", "roster_calls"]);
       const tabKeys = []; next.forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") tabKeys.push("roster_tab_" + fd.rosterTabId); })));
       if (tabKeys.length) CacheService.getScriptCache().removeAll(tabKeys);
       logAdmin_(me.username, "save config", diffSummary_(cur, next));
@@ -1026,8 +1096,14 @@ function handleAdmin_(d) {
     }
 
     case "rosterPreview": {
+      callsignMap_(true);
       const r = getRosterTab_(d.tabId, true);
       return { ok: true, preview: r };
+    }
+
+    case "callsignTest": {
+      const m = callsignMap_(true);
+      return { ok: true, calls: m ? { count: m.count, tab: m.tab, error: m.error, sample: Object.keys(m.byId).slice(0, 5).map(k => m.byId[k]) } : null };
     }
 
     case "rosterTabs": {
@@ -1129,6 +1205,9 @@ function validateConfig_(c) {
     roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: s.roster && Array.isArray(s.roster.tabs) ? "" : clip_(str_(s.roster && s.roster.tab), 300),
       tabs: (s.roster && Array.isArray(s.roster.tabs) ? s.roster.tabs : []).map(t => String(t == null ? "" : t).substring(0, 100)).filter(t => t.trim()).slice(0, 60),   // exact names, spaces kept
       tabIds: (s.roster && Array.isArray(s.roster.tabIds) ? s.roster.tabIds : []).map(Number).filter(n => isFinite(n)).slice(0, 60),
+      callsigns: (() => { const c = (s.roster && s.roster.callsigns) || {};
+        return { on: !!c.on, tabId: c.tabId != null && isFinite(Number(c.tabId)) ? Number(c.tabId) : null, tabName: String(c.tabName || "").substring(0, 100),
+          col: /^[A-Za-z]{1,2}$/.test(str_(c.col)) ? str_(c.col).toUpperCase() : "D", idCol: /^[A-Za-z]{1,2}$/.test(str_(c.idCol)) ? str_(c.idCol).toUpperCase() : "" }; })(),
       verify: { on: !!(s.roster && s.roster.verify && s.roster.verify.on), tab: String((s.roster && s.roster.verify && s.roster.verify.tab) || "").substring(0, 100),
         tabId: s.roster && s.roster.verify && s.roster.verify.tabId != null && isFinite(Number(s.roster.verify.tabId)) ? Number(s.roster.verify.tabId) : null,
         url: clip_(str_(s.roster && s.roster.verify && s.roster.verify.url), 300) }, requireId: !(s.roster && s.roster.requireId === false),
