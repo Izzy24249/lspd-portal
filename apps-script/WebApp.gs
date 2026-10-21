@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 17;
+const BACKEND_VERSION = 18;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -248,22 +248,32 @@ function getRoster_(fresh) {
         const rows = readRosterTab_(msh, isOut, mi, out.warnings);
         if (mi.skipped) out.verify.error = "Main roster tab \"" + masterTab + "\": " + mi.skipped + ".";
         else {
-          master = { ids: {}, calls: {}, names: {} };
+          master = { ids: {}, calls: {}, names: {}, last: {} };
+          const add = (map, k, m) => { if (k) (map[k] = map[k] || []).push(m); };
           rows.forEach(m => {
-            if (m.id) master.ids[m.id] = 1;
-            if (m.call) (master.calls[m.call] = master.calls[m.call] || []).push(m.nm);
-            if (m.nm) master.names[m.nm] = (master.names[m.nm] || 0) + 1;
+            if (m.id) master.ids[m.id] = m;
+            add(master.calls, m.call, m); add(master.names, m.nm, m); add(master.last, m.nm.split(" ").pop(), m);
+            m.hasCall = !!m.call;
           });
           out.verify.count = rows.length;
+          out.verify.byId = 0; out.verify.byName = 0; out.verify.synced = 0; out.verify.idsAdded = 0;
         }
       }
       if (out.verify.error) out.error = out.verify.error + " Nobody is shown until this is fixed (so old members can't slip through).";
     }
-    const onMaster = p => {
-      if (!master) return !masterTab;                                   // check on but main roster unreadable -> show nobody
-      if (p.id && master.ids[p.id]) return true;                        // same Discord ID
-      if (p.call && master.calls[p.call]) return !p.nm || master.calls[p.call].some(n => !n || n === p.nm || n.split(" ").pop() === p.nm.split(" ").pop());
-      return !!(p.nm && master.names[p.nm] && !p.call);                // no callsign: exact name
+    // Find this person on the main roster. Returns the main-roster row, or null.
+    // 1) same Discord ID  2) same callsign + surname  3) same full name  4) same surname + first initial (only if exactly one)
+    const findOnMaster = p => {
+      if (!master) return null;
+      if (p.id && master.ids[p.id]) { out.verify.byId++; return master.ids[p.id]; }
+      const ok = m => !(p.id && m.id && p.id !== m.id);                  // two different Discord IDs = two different people
+      const sur = p.nm.split(" ").pop(), first = p.nm.split(" ")[0] || "";
+      const one = list => { list = (list || []).filter(ok); return list.length === 1 ? list[0] : null; };
+      const hit = (p.call && one((master.calls[p.call] || []).filter(m => !p.nm || !m.nm || m.nm.split(" ").pop() === sur))) ||
+        (p.nm && one(master.names[p.nm])) ||
+        (sur && one((master.last[sur] || []).filter(m => { const f = m.nm.split(" ")[0] || ""; return m.nm.split(" ").length < 2 || p.nm.split(" ").length < 2 || !f || !first || f[0] === first[0]; })));
+      if (hit) out.verify.byName++;
+      return hit || null;
     };
 
     const byKey = {};
@@ -274,10 +284,17 @@ function getRoster_(fresh) {
       if (all && info.hidden) { info.skipped = "hidden tab"; return; }
       if (all && isOut(tabName)) { info.skipped = "tab name marks former/onboarding members"; return; }
       readRosterTab_(sh, isOut, info, out.warnings).forEach(p => {
-        if (masterTab && !onMaster(p)) {
-          info.unverified++;
-          if (out.verify) { out.verify.dropped++; if (out.verify.droppedNames.length < 25) out.verify.droppedNames.push(p.name + " (" + tabName + ")"); }
-          return;
+        if (masterTab) {
+          const m = findOnMaster(p);
+          if (!m) {
+            info.unverified++;
+            if (out.verify) { out.verify.dropped++; if (out.verify.droppedNames.length < 25) out.verify.droppedNames.push(p.name + " (" + tabName + ")"); }
+            return;
+          }
+          // main roster is the source of truth: its callsign + name, and its Discord ID if the division tab has none
+          if (m.hasCall && m.name !== p.name) { p.name = m.name; out.verify.synced++; }
+          if (!p.id && m.id) { p.id = m.id; out.verify.idsAdded++; }
+          if (m.extra && !p.extra) p.extra = m.extra;
         }
         const key = p.id || p.name.toLowerCase();
         if (byKey[key]) { if (byKey[key].divisions.indexOf(tabName) === -1) byKey[key].divisions.push(tabName); }
