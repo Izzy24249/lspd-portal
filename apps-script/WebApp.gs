@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 13;
+const BACKEND_VERSION = 14;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -155,8 +155,9 @@ function getRoster_(fresh) {
     const book = linked ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
     // which tabs: blank or * = every tab (linked sheet) / "Roster" (this spreadsheet); otherwise a comma list
     const want = str_(r.tab);
-    const all = want === "*" || want.toLowerCase() === "all" || (!want && linked);
-    const names = all ? null : (want || "Roster").split(",").map(x => x.trim()).filter(Boolean);
+    const picked = Array.isArray(r.tabs) ? r.tabs.map(str_).filter(Boolean) : [];
+    const all = !picked.length && (want === "*" || want.toLowerCase() === "all" || (!want && linked));
+    const names = all ? null : picked.length ? picked : (want || "Roster").split(",").map(x => x.trim()).filter(Boolean);
     let sheets = book.getSheets();
     if (names) {
       const missing = names.filter(n => !book.getSheetByName(n));
@@ -172,7 +173,7 @@ function getRoster_(fresh) {
       const tabName = sh.getName(), info = { tab: tabName, people: 0, noId: 0, skipped: "", left: 0, hidden: sh.isSheetHidden() };
       out.tabs.push(info);
       if (all && info.hidden) { info.skipped = "hidden tab"; return; }             // hidden tabs only count when you list them by name
-      if (isOut(tabName)) { info.skipped = "tab name marks former/onboarding members"; return; }
+      if (all && isOut(tabName)) { info.skipped = "tab name marks former/onboarding members"; return; }   // a tab you tick yourself is always read
       if (sh.getLastRow() < 2) { info.skipped = "empty"; return; }
       const range = sh.getRange(1, 1, Math.min(sh.getLastRow(), 2000), Math.min(sh.getLastColumn(), 30));
       const raw = range.getValues(), shown = range.getDisplayValues();
@@ -891,6 +892,18 @@ function handleAdmin_(d) {
       return { ok: true, valid: true, message: "Valid: posts as \"" + info.name + "\"." };
     }
 
+    case "rosterTabs": {
+      const r = (getConfig_().settings || {}).roster || {};
+      const url = str_(d.url !== undefined ? d.url : r.url);
+      let book;
+      try { book = url ? SpreadsheetApp.openByUrl(url) : ss_(); }
+      catch (e) { return { ok: false, error: "Couldn't open that sheet: " + errMsg_(e) }; }
+      const system = [CONFIG_SHEET_, ADMINS_SHEET_, LOG_SHEET_, LB_SHEET_];
+      const tabs = book.getSheets().filter(sh => url || system.indexOf(sh.getName()) === -1)
+        .map(sh => ({ name: sh.getName(), hidden: sh.isSheetHidden(), rows: Math.max(0, sh.getLastRow() - 1) }));
+      return { ok: true, book: book.getName(), tabs: tabs };
+    }
+
     case "rosterTest": {
       const r = getRoster_(true);
       return { ok: true, roster: r, shown: rosterForPickers_().length };
@@ -975,7 +988,8 @@ function validateConfig_(c) {
     heroLogo: s.heroLogo == null ? "img/lspd-patch.png" : str_(s.heroLogo),
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
     maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) },
-    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300), requireId: !(s.roster && s.roster.requireId === false),
+    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 300),
+      tabs: (s.roster && Array.isArray(s.roster.tabs) ? s.roster.tabs : []).map(t => clip_(str_(t), 100)).filter(Boolean).slice(0, 60), requireId: !(s.roster && s.roster.requireId === false),
       exclude: s.roster && s.roster.exclude !== undefined ? clip_(str_(s.roster.exclude), 500) : ROSTER_EXCLUDE_DEFAULT }
   };
   if (out.settings.roster.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.url)) throw new Error("Roster sheet link must be a Google Sheets link (https://docs.google.com/spreadsheets/d/...).");

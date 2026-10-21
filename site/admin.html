@@ -893,6 +893,57 @@ function webhookModal(w) {
 }
 
 /* ---------------- SETTINGS ---------------- */
+// Checklist of every tab in the roster sheet: ticked tabs are the ones the pickers use
+let ROSTER_TABS = null;   // last loaded list: { book, tabs:[{name,hidden,rows}], url }
+function rosterTabPicker(r) {
+  if (!Array.isArray(r.tabs)) {      // carry over an older "Tabs to read" text setting
+    r.tabs = String(r.tab || "").split(",").map(x => x.trim()).filter(x => x && x !== "*" && x.toLowerCase() !== "all");
+    if (!r.url && r.tabs.length === 1 && r.tabs[0] === "Roster") r.tabs = [];
+  }
+  const box = h("div", { class: "sub" });
+  const draw = () => {
+    box.innerHTML = "";
+    const head = h("div", { class: "subhead" }, h("b", { text: "Roster tabs to use" + (ROSTER_TABS ? " — " + ROSTER_TABS.book : "") }),
+      h("button", { class: "btn ghost sm", onclick: load }, ROSTER_TABS ? "↻ Reload tabs" : "Load tabs"));
+    box.append(head);
+    if (!ROSTER_TABS) {
+      box.append(h("p", { class: "help", text: r.tabs.length ? "Using: " + r.tabs.join(", ") + ". Click Load tabs to change." : "Click Load tabs to see every tab in the roster sheet and choose which ones to use." }));
+      return;
+    }
+    const tabs = ROSTER_TABS.tabs.slice();
+    r.tabs.forEach(n => { if (!tabs.some(t => t.name === n)) tabs.push({ name: n, missing: true }); });   // chosen tabs that no longer exist
+    if (!tabs.length) { box.append(h("p", { class: "help", text: "That sheet has no tabs." })); return; }
+    const list = h("div", { style: "display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 14px" });
+    tabs.forEach(t => {
+      const cb = h("input", { type: "checkbox", checked: r.tabs.includes(t.name), onchange: () => {
+        r.tabs = cb.checked ? r.tabs.concat(t.name) : r.tabs.filter(x => x !== t.name);
+        r.tab = "";              // the checklist replaces the old text setting
+        changed(); draw();
+      } });
+      list.append(h("label", { class: "tog", style: t.missing ? "color:#ff8a95" : "" }, cb,
+        h("span", {}, t.name, h("span", { class: "mono", text: t.missing ? "  (tab not found)" : "  " + t.rows + " rows" + (t.hidden ? " · hidden" : "") }))));
+    });
+    box.append(list);
+    box.append(h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center" },
+      h("button", { class: "btn ghost sm", onclick: () => { r.tabs = ROSTER_TABS.tabs.filter(t => !t.hidden).map(t => t.name); r.tab = ""; changed(); draw(); } }, "Tick all visible"),
+      h("button", { class: "btn ghost sm", onclick: () => { r.tabs = []; r.tab = ""; changed(); draw(); } }, "Untick all"),
+      h("span", { class: "help", text: r.tabs.length ? r.tabs.length + " tab" + (r.tabs.length === 1 ? "" : "s") + " selected. Press Save & publish, then Test / refresh roster." :
+        "Nothing ticked = " + (r.url ? "every visible tab is used." : "the tab named \"Roster\" is used.") })));
+  };
+  async function load(e) {
+    if (e) e.target.disabled = true;
+    try {
+      const res = await api("rosterTabs", { url: r.url || "" });
+      ROSTER_TABS = { book: res.book, tabs: res.tabs, url: r.url || "" };
+    } catch (err) { toast(err.message, "bad"); }
+    draw();
+  }
+  if (ROSTER_TABS && ROSTER_TABS.url !== (r.url || "")) ROSTER_TABS = null;   // link changed: reload
+  draw();
+  if (!ROSTER_TABS && (r.url || r.tabs.length)) load();
+  return box;
+}
+
 function pageSettings(page) {
   const s = CFG.settings = CFG.settings || {};
   s.roster = s.roster || { url: "", tab: "Roster" };
@@ -913,9 +964,8 @@ function pageSettings(page) {
   page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
     h("h3", { text: "Roster (names + Discord IDs for the pickers)" }),
     h("p", { class: "help", text: "Officers can search this list in name boxes and the Assisting Officers field, and their Discord ID fills in automatically. Use your existing roster sheet (one tab per division works: the tab name becomes the division), or a tab named Roster in this spreadsheet. Each tab needs a header row with a Name or Callsign column and a Discord ID column (format it as Plain text)." }),
-    h("div", { class: "g2" },
-      field("Roster Google Sheet link", bind(s.roster, "url", { placeholder: "https://docs.google.com/spreadsheets/d/…  (blank = this spreadsheet)" }), "Paste the link from your browser's address bar."),
-      field("Tabs to read", bind(s.roster, "tab", { placeholder: s.roster.url ? "blank = all tabs" : "Roster" }), "Blank = all tabs of the linked sheet. Or list tabs: Patrol, CID, SWAT")),
+    field("Roster Google Sheet link", bind(s.roster, "url", { placeholder: "https://docs.google.com/spreadsheets/d/…  (blank = this spreadsheet)" }), "Paste the link from your browser's address bar, then load its tabs below."),
+    rosterTabPicker(s.roster),
     (() => { if (s.roster.requireId === undefined) s.roster.requireId = true; return toggle(s.roster, "requireId", "Only list people who have a Discord ID (hide everyone else)"); })(),
     (() => { if (s.roster.exclude === undefined) s.roster.exclude = "former, removed, inactive, resigned, terminated, fired, retired, archive, onboarding, pending, applicant, blacklist, dismissed";
       return field("Leave out people marked as", bind(s.roster, "exclude", { type: "textarea", rows: 2 }), "Comma-separated words. Tabs, section headings (e.g. a \"FORMER MEMBERS\" row) and Status cells containing any of these are skipped. Crossed-out and hidden rows are always skipped."); })(),
@@ -932,17 +982,6 @@ function pageSettings(page) {
               (t.skipped ? "skipped: " + t.skipped : t.people + " people" + (t.noId ? ", " + t.noId + " without a Discord ID" : "") + (t.left ? ", " + t.left + " left out (former / onboarding / crossed out / hidden rows)" : ""))).join("\n") : "") +
             (r.people.length ? "\n\nFirst few: " + r.people.slice(0, 5).map(p => p.name + (p.id ? "" : " (no ID)")).join(", ") : "") +
             (r.warnings.length ? "\n\n⚠️ " + r.warnings.slice(0, 6).join("\n⚠️ ") + (r.warnings.length > 6 ? "\n…and " + (r.warnings.length - 6) + " more" : "") : "");
-          // one-click "read only these tabs"
-          const usable = (r.tabs || []).filter(t => t.people > 0 || (t.skipped === "hidden tab"));
-          if (usable.length > 1) {
-            const pick = h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;margin-top:10px" }, h("span", { class: "help", text: "Read only:" }),
-              usable.map(t => h("button", { class: "btn ghost sm", onclick: () => {
-                const cur = String(s.roster.tab || "").split(",").map(x => x.trim()).filter(Boolean);
-                s.roster.tab = (cur.includes(t.tab) ? cur.filter(x => x !== t.tab) : cur.concat(t.tab)).join(", ");
-                changed(true); toast("Tabs to read: " + (s.roster.tab || "all") + ". Press Save & publish, then test again.", "ok");
-              } }, (String(s.roster.tab || "").split(",").map(x => x.trim()).includes(t.tab) ? "✓ " : "+ ") + t.tab + (t.hidden ? " (hidden)" : ""))));
-            rosterOut.append(pick);
-          }
         } catch (err) { rosterOut.textContent = "❌ " + err.message; }
         e.target.disabled = false;
       } }, "Test / refresh roster"), rosterOut)));
