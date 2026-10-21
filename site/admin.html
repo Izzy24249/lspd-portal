@@ -662,7 +662,7 @@ function blockBody(form, b) {
       out.push(h("div", { class: "g2" }, field("Title", bind(b, "title")), field("ID", keyInput(form, b, "id"))),
         field("Hint under the title", bind(b, "hint")),
         h("div", { class: "g2" }, field("Max characters", bind(b, "maxLength", { type: "number", set: v => Number(v) || 1000 }), "Up to 8000."),
-          h("div", { style: "display:grid;gap:8px;align-self:end;padding-bottom:6px" }, toggle(b, "required", "Required"), toggle(b, "followUp", "Post as its own message(s) in the thread"))));
+          h("div", { style: "display:grid;gap:8px;align-self:end;padding-bottom:6px" }, toggle(b, "required", "Required"), toggle(b, "followUp", "Show as its own full-width section (up to ~650 words in the card)"))));
       out.push(guideEditor(form, b));
       break;
   }

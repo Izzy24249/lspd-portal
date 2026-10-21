@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 6;
+const BACKEND_VERSION = 7;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -272,26 +272,51 @@ function handleSubmit_(d) {
   const embeds = packEmbeds_(embedFields, title, color);
   const isForum = webhook.kind !== "text";
 
-  const first = { embeds: [embeds[0]], allowed_mentions: { parse: [] } };
+  // ---- everything in ONE post: detail cards + narrative cards (Discord: max 10 cards, 6000 characters per post) ----
+  const LIMIT = 5900;
+  const sizeOf = e => (e.title || "").length + (e.description || "").length + (e.fields || []).reduce((n, f) => n + f.name.length + f.value.length, 0);
+  const extra = followTexts.map(t => ({ title: clip_("📝 " + t.title, 256), description: t.text, color: color }));
+  const wanted = embeds.concat(extra);
+  const sent = [];
+  let used = 0, cut = false;
+  for (let i = 0; i < wanted.length; i++) {
+    const e = wanted[i], isText = i >= embeds.length;
+    if (sent.length < 10 && used + sizeOf(e) <= LIMIT && (!e.description || e.description.length <= 4096)) { sent.push(e); used += sizeOf(e); continue; }
+    cut = true;
+    if (isText && sent.length < 10) {
+      // shorten the narrative to the space left in this post; the full text goes in the attached file
+      const note = "\n\n*… continued in the attached file*";
+      const room = Math.min(4096, LIMIT - used - e.title.length) - note.length;
+      if (room > 300) {
+        let part = e.description.substring(0, room);
+        const stop = Math.max(part.lastIndexOf("\n"), part.lastIndexOf(". "));
+        if (stop > room * 0.6) part = part.substring(0, stop + 1);
+        const short = { title: e.title, description: part + note, color: color };
+        sent.push(short); used += sizeOf(short);
+      } else if (used + e.title.length + 40 <= LIMIT) {
+        const short = { title: e.title, description: "*See the attached file for the full text.*", color: color };
+        sent.push(short); used += sizeOf(short);
+      }
+    }
+  }
+
+  const first = { embeds: sent, allowed_mentions: { parse: [] } };
   if (isForum) {
     first.thread_name = clip_(fillTemplate_(form.threadTitle || form.title, values) || form.title, 100);
     if (tags.length) first.applied_tags = tags;
   }
-  const r1 = discordPost_(webhook.url, first, null);
-  if (!r1.ok) return { ok: false, error: r1.error };
-  const threadId = isForum && r1.body ? r1.body.channel_id : null;
-
-  const follow = embeds.slice(1).map(e => ({ embeds: [e] }));
-  followTexts.forEach(t => chunk_(t.text, 4000).forEach((part, i, all) => follow.push({
-    embeds: [{ title: "📝 " + clip_(t.title, 200) + (all.length > 1 ? " (" + (i + 1) + "/" + all.length + ")" : ""), description: part, color: color }]
-  })));
-  let warning = "";
-  for (let i = 0; i < follow.length; i++) {
-    Utilities.sleep(350);
-    follow[i].allowed_mentions = { parse: [] };
-    const r = discordPost_(webhook.url, follow[i], threadId);
-    if (!r.ok) { warning = "posted, but part " + (i + 2) + " failed: " + r.error; break; }
+  let file = null;
+  if (cut) {
+    // complete report as a text file attached to the same post, so nothing is ever lost
+    const lines = [title, "=".repeat(Math.min(60, title.length)), ""];
+    embedFields.forEach(f => lines.push(f.name.replace(/\*\*/g, "") + ":", f.value.replace(/\*\*|`/g, ""), ""));
+    followTexts.forEach(t => lines.push(t.title.toUpperCase() + ":", t.text, ""));
+    const fname = (fillTemplate_(form.threadTitle || form.title, values) || form.id).replace(/[^\w.-]+/g, "_").substring(0, 60) + "_full-report.txt";
+    file = Utilities.newBlob(lines.join("\n"), "text/plain", fname);
   }
+  const r1 = discordPost_(webhook.url, first, null, file);
+  if (!r1.ok) return { ok: false, error: r1.error };
+  let warning = "";
 
   // ---- archive + leaderboard (after Discord so a failed post isn't logged as filed) ----
   archiveRow_(form, archiveCols);
@@ -479,10 +504,17 @@ function chunk_(text, max) {
   return parts;
 }
 
-function discordPost_(webhookUrl, payload, threadId) {
+function discordPost_(webhookUrl, payload, threadId, file) {
   let url = webhookUrl + (webhookUrl.indexOf("?") !== -1 ? "&" : "?") + "wait=true";
   if (threadId) url += "&thread_id=" + threadId;
-  const res = UrlFetchApp.fetch(url, { method: "post", contentType: "application/json", payload: JSON.stringify(payload), muteHttpExceptions: true });
+  const opts = { method: "post", muteHttpExceptions: true };
+  if (file) {
+    opts.payload = { payload_json: JSON.stringify(payload), "files[0]": file }; // multipart: message + attachment in one post
+  } else {
+    opts.contentType = "application/json";
+    opts.payload = JSON.stringify(payload);
+  }
+  const res = UrlFetchApp.fetch(url, opts);
   const code = res.getResponseCode();
   if (code !== 200 && code !== 201 && code !== 204) return { ok: false, error: "Discord (" + code + "): " + clip_(res.getContentText(), 300) };
   let body = null;
