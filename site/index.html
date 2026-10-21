@@ -160,6 +160,7 @@ window.addEventListener("beforeunload", ()=>{ if(ctrl && current) ctrl.saveDraft
 /* ---------- boot: show cached forms instantly, then refresh from Google ---------- */
 function apply(cfg){
   CONFIG = cfg;
+  if (Portal.setRoster) Portal.setRoster(cfg.roster || []);
   renderHome();
   const h = location.hash.slice(1);
   if(h) go(h);

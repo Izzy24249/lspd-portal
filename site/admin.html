@@ -315,6 +315,7 @@ $("logoutBtn").onclick = async () => {
 async function loadAll(keepEdits) {
   const res = await api("getAll");
   ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log;
+  if (Portal.setRoster) Portal.setRoster(res.roster || []);
   showBackendWarning(res.backend || 0);
   if (!keepEdits) {
     CFG = res.config; VERSION = res.config.version;
@@ -433,7 +434,7 @@ const BLOCK_TYPES = {
   banner: "Title banner", fields: "Field row (1–2 fields)", strip: "Header strip (1–4 fields)", text: "Text / rule line",
   checklist: "Checklist", repeater: "Repeating list (add rows)", longtext: "Big text box"
 };
-const FIELD_TYPES = [["text", "Text"], ["select", "Dropdown"], ["date", "Date"], ["discord_id", "Discord user ID"], ["number", "Number"], ["case_number", "Case number (Generate button)"], ["static", "Fixed text (not an input)"]];
+const FIELD_TYPES = [["text", "Text"], ["select", "Dropdown"], ["date", "Date"], ["discord_id", "Discord user ID"], ["number", "Number"], ["case_number", "Case number (Generate button)"], ["static", "Fixed text (not an input)"], ["officers", "Officers: pick several (roster)"]];
 
 function formKeys(form) {
   const keys = [];
@@ -531,7 +532,8 @@ function pageEditor(page) {
     field("Post to webhook", bind(form, "webhookId", { type: "select", options: hookOpts, structural: true }), HOOKS.length ? "Add or fix webhooks in the Webhooks tab." : "No webhooks yet: add one in the Webhooks tab first."),
     field("Embed title", embedT), chipRow(embedT),
     field("Forum thread name", threadT, "Only used for forum-channel webhooks. Click a {field} to insert the officer's answer."), chipRow(threadT),
-    h("div", { class: "g2" }, field("Embed colour", bind(form, "color", { type: "color" })), field("Sheet tab for submissions", bind(form, "archiveSheet", { placeholder: form.title }), "Created automatically on first submission."))));
+    h("div", { class: "g2" }, field("Embed colour", bind(form, "color", { type: "color" })), field("Sheet tab for submissions", bind(form, "archiveSheet", { placeholder: form.title }), "Created automatically on first submission.")),
+    field("Logo in the Discord post (optional https link)", bind(form, "discordThumb", { placeholder: "https://i.imgur.com/xxxxxxx.png" }), "Shown in the top-right corner of the post. Upload the logo to imgur.com, right-click the image → Copy image address, and paste it here. (Discord attachment links expire, and InfinityFree images usually won't load in Discord.)")));
 
   // ---- tags ----
   const tagBody = [];
@@ -721,6 +723,14 @@ function fieldCard(form, b, f, fi) {
   if (f.type === "case_number") kids.push(field("Prefix", bind(f, "prefix", { placeholder: "CID" }), "Generate makes e.g. PREFIX-20261020-4821."));
   if (f.type === "static") kids.push(field("Text shown", bind(f, "text")));
   if (f.type === "date") kids.push(toggle(f, "defaultToday", "Fill in today's date automatically"));
+  if (f.type === "text" || f.type === "discord_id") {
+    kids.push(toggle(f, "roster", "Suggest names from the roster (Portal Settings → Roster)", true));
+    if (f.roster && f.type === "text") {
+      const ids = formKeys(form).filter(k => k.type === "discord_id");
+      kids.push(field("When a name is picked, also fill in", bind(f, "fillId", { type: "select", options: [["", "— nothing —"]].concat(ids.map(k => [k.id, (k.label || k.id).replace(/[:(].*$/, "").trim()])) }), "Fills that Discord ID box automatically from the roster."));
+    }
+  }
+  if (f.type === "officers") kids.push(h("p", { class: "help", text: "Officers add people as tags: search the roster, or type a name / paste a Discord ID and press Enter. Everyone with an ID is mentioned in the Discord post." }));
   return h("div", { class: "sub" }, kids);
 }
 
@@ -881,6 +891,7 @@ function webhookModal(w) {
 /* ---------------- SETTINGS ---------------- */
 function pageSettings(page) {
   const s = CFG.settings = CFG.settings || {};
+  s.roster = s.roster || { url: "", tab: "Roster" };
   s.announcement = s.announcement || { text: "", style: "info" };
   s.maintenance = s.maintenance || { on: false, message: "" };
   page.append(head("Portal settings", "Branding and site-wide notices. Use Save & publish at the bottom when done."));
@@ -894,6 +905,26 @@ function pageSettings(page) {
     h("h3", { text: "Announcement" }),
     field("Message on the home page (blank = none)", bind(s.announcement, "text", { type: "textarea", rows: 3 })),
     field("Style", bind(s.announcement, "style", { type: "select", options: [["info", "Blue (info)"], ["warning", "Gold (important)"]] }))));
+  const rosterOut = h("div", { class: "help", style: "white-space:pre-line" });
+  page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
+    h("h3", { text: "Roster (names + Discord IDs for the pickers)" }),
+    h("p", { class: "help", text: "Officers can search this list in name boxes and the Assisting Officers field, and their Discord ID fills in automatically. Put a tab named Roster in this Google Sheet with a header row like:  Name | Discord ID | Rank  (format the Discord ID column as Plain text first). Or link a different Google Sheet below." }),
+    h("div", { class: "g2" },
+      field("Tab name", bind(s.roster, "tab", { placeholder: "Roster" })),
+      field("Different Google Sheet (optional)", bind(s.roster, "url", { placeholder: "https://docs.google.com/spreadsheets/d/…" }), "Leave blank to use this spreadsheet.")),
+    h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
+      h("button", { class: "btn ghost sm", onclick: async e => {
+        if (isDirty()) return toast("Save & publish first, then test.", "bad");
+        e.target.disabled = true; rosterOut.textContent = "Reading the roster…";
+        try {
+          const r = (await api("rosterTest")).roster;
+          Portal.setRoster(r.people);
+          rosterOut.textContent = (r.error ? "❌ " + r.error : "✅ " + r.people.length + " people loaded from " + r.source + ".") +
+            (r.people.length ? "\nFirst few: " + r.people.slice(0, 5).map(p => p.name + (p.id ? " (" + p.id + ")" : " (no ID)")).join(", ") : "") +
+            (r.warnings.length ? "\n⚠️ " + r.warnings.slice(0, 6).join("\n⚠️ ") + (r.warnings.length > 6 ? "\n…and " + (r.warnings.length - 6) + " more" : "") : "");
+        } catch (err) { rosterOut.textContent = "❌ " + err.message; }
+        e.target.disabled = false;
+      } }, "Test / refresh roster"), rosterOut)));
   page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
     h("h3", { text: "Maintenance mode" }),
     h("p", { class: "help", text: "Shows a red notice and blocks all submissions until turned off. Officers' drafts are kept in their browser." }),

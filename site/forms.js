@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 8;
+  const BACKEND_NEEDS = 9;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -74,14 +74,17 @@ window.Portal = (function () {
         return `<div class="with-gen"><input class="g${c}" type="text" maxlength="60" data-f="${esc(f.id)}"${ph}><button type="button" class="mini" data-gen="${esc(f.id)}" data-prefix="${esc(f.prefix || "")}">Generate</button></div>`;
       case "static":
         return esc(f.text || "");
+      case "officers":
+        return `<div class="ofc" data-ofc="${esc(f.id)}"><input type="hidden" data-f="${esc(f.id)}"><span class="ofc-chips"></span><input type="text" class="ofc-in" data-ofcin="${esc(f.id)}" autocomplete="off" placeholder="${ROSTER.length ? "Search the roster or type a Discord ID…" : "Type a name or Discord ID, then Enter…"}"></div>`;
       case "discord_id":
       case "number":
-        return `<input class="g${c}" type="text" inputmode="numeric" maxlength="${f.type === "discord_id" ? 21 : 30}" data-f="${esc(f.id)}"${ph}>`;
+        return `<input class="g${c}" type="text" inputmode="${f.roster ? "text" : "numeric"}" maxlength="${f.type === "discord_id" ? (f.roster ? 80 : 21) : 30}" data-f="${esc(f.id)}"${ph}${rosterAttrs(f)}>`;
       default:
-        return `<input class="g${c}" type="text" maxlength="200" data-f="${esc(f.id)}"${ph}>`;
+        return `<input class="g${c}" type="text" maxlength="200" data-f="${esc(f.id)}"${ph}${rosterAttrs(f)}>`;
     }
   }
   const req = f => f.required ? ' <i class="req">*</i>' : "";
+  const rosterAttrs = f => f.roster ? ` data-roster="1" autocomplete="off"${f.fillId ? ` data-fill="${esc(f.fillId)}"` : ""}` : "";
 
   function blockHTML(b, form) {
     switch (b.type) {
@@ -137,6 +140,77 @@ window.Portal = (function () {
     }
     return "";
   }
+
+  // ===================== ROSTER + SEARCH PICKER POPUP =====================
+  let ROSTER = [];   // [{name, id, extra}] from the Roster sheet (set by the page after loading config)
+  function setRoster(list) { ROSTER = Array.isArray(list) ? list.filter(p => p && (p.name || p.id)) : []; }
+  const CLASS_RE = /^(.*?)\s*\(((?:Felony|Misdemeanor|Infraction))[^)]*\)\s*$/i;
+  function chargeItem(o) {
+    const m = CLASS_RE.exec(o), x = sentence(o, 1);
+    if (!m) return { label: o, value: o, search: o.toLowerCase() };
+    const sub = [x.months ? x.months + " months" : "", x.fine ? "$" + x.fine.toLocaleString("en-US") + " fine" : ""].filter(Boolean).join(" · ");
+    return { label: m[1], value: o, sub: sub, badge: m[2][0].toUpperCase(), cls: m[2].toLowerCase(), search: o.toLowerCase() };
+  }
+  const rosterItems = () => ROSTER.map(p => ({ label: p.name, value: p.name, id: p.id, sub: [p.extra, p.id ? "ID " + p.id : "no Discord ID"].filter(Boolean).join(" · "), search: (p.name + " " + (p.extra || "") + " " + (p.id || "")).toLowerCase() }));
+
+  let PK = null;
+  function pkClose() { if (PK) { PK.panel.remove(); PK = null; } }
+  function pkTheme(el) { return el.closest(".hud") ? "pk-hud" : el.closest(".theme-dossier") ? "pk-dossier" : "pk-light"; }
+  function pkPlace() {
+    if (!PK) return;
+    const r = PK.input.getBoundingClientRect(), p = PK.panel, vw = innerWidth, vh = innerHeight;
+    const w = Math.min(Math.max(r.width, 380), vw - 16);
+    p.style.width = w + "px";
+    p.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + "px";
+    const below = vh - r.bottom - 12, above = r.top - 12;
+    if (below < 240 && above > below) { p.style.top = ""; p.style.bottom = (vh - r.top + 6) + "px"; p.style.maxHeight = Math.min(380, above) + "px"; }
+    else { p.style.bottom = ""; p.style.top = (r.bottom + 6) + "px"; p.style.maxHeight = Math.min(380, below) + "px"; }
+  }
+  addEventListener("scroll", () => pkPlace(), true);
+  addEventListener("resize", () => pkPlace());
+  function hl(text, toks) {
+    let h = esc(text);
+    toks.forEach(t => { if (t) h = h.replace(new RegExp("(" + esc(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig"), "<mark>$1</mark>"); });
+    return h;
+  }
+  function pkRender() {
+    if (!PK) return;
+    const q = PK.typed ? PK.input.value.trim().toLowerCase() : "";
+    const toks = q.split(/\s+/).filter(Boolean);
+    let list = PK.items.filter(it => !PK.exclude || !PK.exclude(it));
+    if (toks.length) {
+      list = list.filter(it => toks.every(t => it.search.indexOf(t) !== -1));
+      list.sort((a, b) => (b.label.toLowerCase().startsWith(toks[0]) ? 1 : 0) - (a.label.toLowerCase().startsWith(toks[0]) ? 1 : 0));
+    }
+    PK.list = list.slice(0, 80);
+    if (PK.idx >= PK.list.length) PK.idx = PK.list.length - 1;
+    if (PK.idx < 0 && PK.list.length && toks.length) PK.idx = 0;
+    const head = `<div class="pk-head">${toks.length ? list.length + " match" + (list.length === 1 ? "" : "es") : PK.items.length + " " + PK.noun + " · type to filter"}<span>↑↓ Enter · Esc</span></div>`;
+    const body = PK.list.length ? PK.list.map((it, i) => `<div class="pk-item${i === PK.idx ? " on" : ""}${it.value === PK.input.value && !PK.multi ? " cur" : ""}" data-i="${i}">
+        ${it.badge ? `<span class="pk-b ${esc(it.cls)}">${esc(it.badge)}</span>` : `<span class="pk-av">${esc((it.label || "?").replace(/^[^A-Za-z0-9]*/, "").charAt(0).toUpperCase())}</span>`}
+        <span class="pk-t"><span class="pk-l">${hl(it.label, toks)}</span>${it.sub ? `<span class="pk-s">${hl(it.sub, toks)}</span>` : ""}</span></div>`).join("")
+      : `<div class="pk-none">${PK.emptyText}</div>`;
+    PK.panel.innerHTML = head + `<div class="pk-list">${body}</div>`;
+    const on = PK.panel.querySelector(".pk-item.on"); if (on) on.scrollIntoView({ block: "nearest" });
+    pkPlace();
+  }
+  function pkOpen(input, cfg) {
+    if (PK && PK.input === input) return;
+    pkClose();
+    const panel = document.createElement("div");
+    panel.className = "pk-panel " + pkTheme(input);
+    document.body.appendChild(panel);
+    PK = Object.assign({ input: input, panel: panel, idx: -1, typed: false, list: [] }, cfg);
+    panel.addEventListener("mousedown", e => {
+      e.preventDefault();                                   // keep focus in the input
+      const it = e.target.closest(".pk-item"); if (it && PK) PK.onPick(PK.list[+it.dataset.i]);
+    });
+    pkRender();
+  }
+
+  // officers field value: "Name (123…); Name; (456…)"
+  const parseOfc = v => String(v || "").split(";").map(x => x.trim()).filter(Boolean).map(x => { const m = /^(.*?)\s*\((\d{15,21})\)$/.exec(x); return m ? { name: m[1], id: m[2] } : { name: x, id: "" }; });
+  const fmtOfc = list => list.map(o => (o.name || "") + (o.id ? (o.name ? " " : "") + "(" + o.id + ")" : "")).join("; ");
 
   // ===================== NARRATIVE WRITING GUIDE (big text box option) =====================
   // Built-in guides, used when a text box with this ID has never had a guide saved
@@ -235,10 +309,10 @@ window.Portal = (function () {
     const wmHTML = wm ? `<div class="wm ${form.watermarkMode === "repeat" ? "" : "single"}" style="background-image:${wm};opacity:${wmOpacity}"></div>` : "";
     mount.innerHTML = hud
       ? `<div class="paper-wrap theme-hud"><div class="paper hud">${wmHTML}<div class="hud-grid-bg"></div><div class="hud-scan"></div>
-          ${blocks.map((b, i) => `<div class="hud-b k-${esc(b.type)}" data-b="${i}">${hudBlockHTML(b, form)}</div>`).join("")}${searchLists(form)}</div></div>`
+          ${blocks.map((b, i) => `<div class="hud-b k-${esc(b.type)}" data-b="${i}">${hudBlockHTML(b, form)}</div>`).join("")}</div></div>`
       : `<div class="paper-wrap ${theme}"><div class="paper ${theme}">${wmHTML}<table class="xl">
       <colgroup><col style="width:26.6%"><col style="width:35%"><col style="width:21.1%"><col style="width:17.3%"></colgroup>
-      ${blocks.map((b, i) => `<tbody data-b="${i}">${blockHTML(b, form)}</tbody>`).join("")}</table>${searchLists(form)}</div></div>`;
+      ${blocks.map((b, i) => `<tbody data-b="${i}">${blockHTML(b, form)}</tbody>`).join("")}</table></div></div>`;
     const root = mount.querySelector(".paper");
     const q = sel => root.querySelector(sel);
     const qa = sel => [...root.querySelectorAll(sel)];
@@ -259,7 +333,7 @@ window.Portal = (function () {
           ? `<select class="g c" data-k="${esc(c.id)}" data-link="1"></select>`
           : c.type === "select"
           ? `<select class="g c" data-k="${esc(c.id)}">${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select>`
-          : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"${c.type === "search" ? ` list="${esc(listId(b, c))}" autocomplete="off"` : ""}>`;
+          : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"${c.type === "search" ? ` data-search="1" autocomplete="off"` : ""}>`;
       const hasCheck = b.check && b.check.id;
       let tr;
       if (hud) {
@@ -386,7 +460,75 @@ window.Portal = (function () {
       return out;
     }
 
+    function renderOfc() {
+      qa("[data-ofc]").forEach(box => {
+        const hid = box.querySelector("[data-f]"), chips = box.querySelector(".ofc-chips");
+        if (chips.dataset.k === hid.value) return;
+        chips.dataset.k = hid.value;
+        chips.innerHTML = parseOfc(hid.value).map((o, i) => `<span class="ofc-chip" title="${esc(o.id ? "Discord ID " + o.id : "No Discord ID (won't be mentioned)")}">${esc(o.name || "@" + o.id)}${o.id ? "" : " <i>no ID</i>"}<b class="ofc-x" data-i="${i}" title="Remove">×</b></span>`).join("");
+      });
+    }
+    function ofcAdd(id, entry) {
+      const hid = q(`[data-f="${CSS.escape(id)}"]`), list = parseOfc(hid.value);
+      if (list.some(o => (entry.id && o.id === entry.id) || (!entry.id && o.name.toLowerCase() === entry.name.toLowerCase()))) return;
+      list.push(entry); hid.value = fmtOfc(list);
+      hid.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    function pickerFor(el) {
+      if (el.dataset.search) {
+        const row = el.closest(".dyn"), b = repeaters.find(x => x.id === row.dataset.rep), c = (b.columns || []).find(x => x.id === el.dataset.k);
+        return { items: (c.options || []).map(chargeItem), noun: c.label ? "options" : "options", emptyText: "No match. Your text will be kept as typed.",
+          onPick: it => { if (!it) return; el.value = it.value; el.title = it.value; el.dispatchEvent(new Event("input", { bubbles: true })); pkClose();
+            const next = row.querySelectorAll("input[type=text],select")[[...row.querySelectorAll("input[type=text],select")].indexOf(el) + 1]; if (next) next.focus(); } };
+      }
+      if (el.dataset.ofcin) {
+        const id = el.dataset.ofcin, hid = q(`[data-f="${CSS.escape(id)}"]`);
+        return { multi: true, items: rosterItems(), noun: "on the roster", emptyText: ROSTER.length ? "Not on the roster. Press Enter to add it as typed (paste a Discord ID to mention them)." : "Type a name, or paste a Discord ID, then press Enter.",
+          exclude: it => parseOfc(hid.value).some(o => o.id ? o.id === it.id : o.name === it.label),
+          onPick: it => { if (!it) return; ofcAdd(id, { name: it.label, id: it.id || "" }); el.value = ""; PK.typed = false; PK.idx = -1; pkRender(); } };
+      }
+      if (el.dataset.roster) {
+        const f = fieldDefs.find(x => x.id === el.dataset.f), isId = f && f.type === "discord_id";
+        return { items: rosterItems(), noun: "on the roster", emptyText: "Not on the roster. What you typed will be kept.",
+          onPick: it => { if (!it) return;
+            el.value = isId ? (it.id || "") : it.label;
+            if (el.dataset.fill && it.id) { const t = q(`[data-f="${CSS.escape(el.dataset.fill)}"]`); if (t) { t.value = it.id; t.classList.remove("err"); } }
+            el.classList.remove("err"); el.dispatchEvent(new Event("input", { bubbles: true })); pkClose(); } };
+      }
+      return null;
+    }
+    root.addEventListener("focusin", e => { const el = e.target; if (el.matches && el.matches("[data-search],[data-ofcin],[data-roster]")) { const c = pickerFor(el); if (c && (c.items.length || el.dataset.ofcin)) pkOpen(el, c); } });
+    root.addEventListener("focusout", e => { if (PK && PK.input === e.target) setTimeout(() => { if (PK && document.activeElement !== PK.input) pkClose(); }, 120); });
+    root.addEventListener("input", e => { if (PK && PK.input === e.target) { PK.typed = true; PK.idx = -1; pkRender(); } }, true);
+    root.addEventListener("keydown", e => {
+      const el = e.target;
+      if (el.dataset && el.dataset.ofcin && e.key === "Backspace" && !el.value) {
+        const hid = q(`[data-f="${CSS.escape(el.dataset.ofcin)}"]`), list = parseOfc(hid.value);
+        if (list.length) { list.pop(); hid.value = fmtOfc(list); hid.dispatchEvent(new Event("change", { bubbles: true })); }
+        return;
+      }
+      if (!PK || PK.input !== el) {
+        if (e.key === "ArrowDown" && el.matches && el.matches("[data-search],[data-ofcin],[data-roster]")) { const c = pickerFor(el); if (c) { pkOpen(el, c); e.preventDefault(); } }
+        if (e.key === "Enter" && el.matches && el.matches("[data-search],[data-ofcin],[data-roster]")) e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowDown") { PK.idx = Math.min(PK.list.length - 1, PK.idx + 1); pkRender(); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { PK.idx = Math.max(0, PK.idx - 1); pkRender(); e.preventDefault(); }
+      else if (e.key === "Escape") { pkClose(); e.preventDefault(); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        if (PK.idx >= 0 && PK.list[PK.idx]) PK.onPick(PK.list[PK.idx]);
+        else if (el.dataset.ofcin && el.value.trim()) {
+          const t = el.value.trim(), digits = t.replace(/\D/g, "");
+          const hit = ROSTER.find(p => p.id && p.id === digits);
+          ofcAdd(el.dataset.ofcin, /^\d{15,21}$/.test(digits) && digits.length === t.replace(/\s/g, "").length ? { name: hit ? hit.name : "", id: digits } : { name: t, id: "" });
+          el.value = ""; PK.typed = false; pkRender();
+        } else pkClose();
+      } else if (e.key === "Tab") pkClose();
+    });
+
     function refresh() {
+      renderOfc();
       blocks.forEach(b => {
         if (b.type === "longtext" && hasGuide(b)) {
           const box = q(`[data-gchecks="${CSS.escape(b.id)}"]`);
@@ -426,6 +568,13 @@ window.Portal = (function () {
     });
     root.addEventListener("click", e => {
       const t = e.target;
+      const x = t.closest(".ofc-x");
+      if (x) {
+        const hid = x.closest("[data-ofc]").querySelector("[data-f]"), list = parseOfc(hid.value);
+        list.splice(+x.dataset.i, 1); hid.value = fmtOfc(list); hid.dispatchEvent(new Event("change", { bubbles: true })); return;
+      }
+      const box = t.closest("[data-ofc]");
+      if (box && !t.closest(".ofc-in")) { box.querySelector(".ofc-in").focus(); }
       const step = t.closest("[data-step]");
       if (step) {
         const b = blocks.find(x => x.id === step.dataset.for), st = b.guide.steps[+step.dataset.step];
@@ -582,5 +731,5 @@ window.Portal = (function () {
     return data.config;
   }
 
-  return { ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, render, post, loadConfig, esc, todayISO, sentence };
+  return { ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, setRoster, render, post, loadConfig, esc, todayISO, sentence };
 })();

@@ -18,7 +18,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 8;
+const BACKEND_VERSION = 9;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -120,8 +120,51 @@ function publicConfig_() {
     version: cfg.version,
     backend: BACKEND_VERSION,
     settings: cfg.settings,
+    roster: (() => { try { return getRoster_().people.map(p => ({ name: p.name, id: p.id, extra: p.extra })); } catch (e) { return []; } })(),
     forms: cfg.forms.filter(f => f.status !== "hidden")
   };
+}
+
+// =====================================================================
+// ROSTER (names + Discord IDs from a Google Sheet tab, for the name pickers)
+// Default: a tab called "Roster" in this spreadsheet. Column headers are found by name:
+//   a column with "Discord" + "ID" in the header, a column with "Name" or "Callsign",
+//   and optionally "Rank" / "Division" / "Unit" / "Badge" (shown as extra info).
+// =====================================================================
+function getRoster_(fresh) {
+  const cache = CacheService.getScriptCache();
+  if (!fresh) { const hit = cache.get("portal_roster"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const cfg = getConfig_(), r = (cfg.settings && cfg.settings.roster) || {};
+  const out = { people: [], warnings: [], source: "", error: "" };
+  try {
+    const book = str_(r.url) ? SpreadsheetApp.openByUrl(str_(r.url)) : ss_();
+    const tab = str_(r.tab) || "Roster";
+    const sh = book.getSheetByName(tab);
+    out.source = (str_(r.url) ? "linked sheet" : "this spreadsheet") + " → tab \"" + tab + "\"";
+    if (!sh) { out.error = "No tab named \"" + tab + "\" was found in the " + (str_(r.url) ? "linked sheet" : "spreadsheet") + "."; }
+    else if (sh.getLastRow() >= 2) {
+      const range = sh.getDataRange(), raw = range.getValues(), shown = range.getDisplayValues();
+      const head = shown[0].map(h => String(h).toLowerCase());
+      let idCol = head.findIndex(h => /discord/.test(h) && /\bid\b/.test(h));
+      if (idCol < 0) idCol = head.findIndex(h => /\bid\b/.test(h));
+      const nameCol = head.findIndex((h, i) => i !== idCol && /name|callsign|officer|member/.test(h) && !/\bid\b/.test(h));
+      const extraCols = head.map((h, i) => /rank|division|unit|badge|title|department/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
+      if (idCol < 0 || nameCol < 0) out.error = "Header row needs a \"Name\" column and a \"Discord ID\" column.";
+      else for (let i = 1; i < raw.length; i++) {
+        const name = str_(shown[i][nameCol]);
+        let id = str_(shown[i][idCol]).replace(/[^0-9]/g, "");
+        if (!name && !id) continue;
+        if (typeof raw[i][idCol] === "number") { out.warnings.push("Row " + (i + 1) + " (" + (name || "?") + "): the Discord ID is stored as a number, so Google Sheets has rounded it. Format the column as Plain text and paste the ID again."); id = ""; }
+        else if (id && !/^\d{15,21}$/.test(id)) { out.warnings.push("Row " + (i + 1) + " (" + (name || "?") + "): \"" + shown[i][idCol] + "\" is not a Discord ID."); id = ""; }
+        out.people.push({ name: clip_(name || "(no name)", 80), id: id, extra: clip_(extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), 80) });
+      }
+    }
+  } catch (e) {
+    out.error = "Couldn't open the roster sheet: " + errMsg_(e) + " (check the link, and that the Google account running the script can open it).";
+  }
+  const js = JSON.stringify(out);
+  if (js.length < 95000) cache.put("portal_roster", js, 300);
+  return out;
 }
 
 // =====================================================================
@@ -194,65 +237,82 @@ function handleSubmit_(d) {
   const webhook = webhookById_(form.webhookId);
   if (!webhook) return { ok: false, error: "No Discord webhook is set for this form. An admin needs to pick one in admin.html." };
 
-  // ---- build Discord content ----
-  const embedFields = [], followTexts = [], archiveCols = [];
+  // ---- build Discord content (report layout) ----
+  const embedFields = [], followTexts = [], archiveCols = [], detailBlocks = [];
   form.blocks.forEach(b => {
     if (b.type === "fields" || b.type === "strip") {
+      const lines = [];
       (b.fields || []).forEach(f => {
         if (f.type === "static") return;
         const v = str_(values[f.id]);
-        embedFields.push({ name: clip_(f.label || f.id, 256), value: clip_(displayValue_(f, v), 1024), inline: true });
         archiveCols.push({ id: f.id, label: f.label || f.id, value: v });
+        if (!v) return;                                            // skip empty answers: cleaner report
+        const label = cleanLabel_(f.label || f.id);
+        const prev = lines[lines.length - 1];
+        // "Lead Detective Discord ID" right after "Lead Detective" -> one line: L-104 | Duzen · @Duzen
+        if (f.type === "discord_id" && prev && !prev.mention && prev.type !== "discord_id" && sameSubject_(prev.label, label)) {
+          prev.mention = v;
+          const short = prev.label.replace(/\s*call\s*sign\s*$/i, "").trim();       // "Trainee callsign" -> "Trainee"
+          if (short) prev.label = short.charAt(0).toUpperCase() + short.slice(1);
+          return;
+        }
+        lines.push({ label: label, value: displayValue_(f, v).replace(/^[-–•]\s+/, ""), type: f.type });
       });
+      lines.forEach(l => detailBlocks.push("**" + l.label + ":** " + l.value + (l.mention ? " · <@" + l.mention + ">" : "")));
     } else if (b.type === "checklist") {
       const st = checklists[b.id] || {};
       const items = b.items || [];
       const done = items.filter(it => st[it.topic] === true).length;
-      addListFields_(embedFields, "📘 " + clip_(b.title || "Checklist", 230) + " (" + done + "/" + items.length + ")",
-        items.map(it => (st[it.topic] === true ? "✅" : "❌") + " `" + clip_(it.topic, 120) + "`"));
+      if (items.length) {
+        const doneList = items.filter(it => st[it.topic] === true).map(it => it.topic);
+        const todo = items.filter(it => st[it.topic] !== true).map(it => it.topic);
+        const bar = "▰".repeat(Math.round(10 * done / items.length)) + "▱".repeat(10 - Math.round(10 * done / items.length));
+        const body = ["`" + bar + "`  **" + done + "/" + items.length + "**" + (done === items.length ? "  ·  all complete" : "")];
+        if (doneList.length && todo.length) body.push("✅ " + doneList.join(" · "));
+        if (todo.length) body.push("⬜ **Not done:** " + todo.join(" · "));
+        embedFields.push({ name: "☑️ " + clip_(String(b.title || "Checklist").toUpperCase(), 240), value: clip_(body.join("\n"), 1024), inline: false });
+      }
       archiveCols.push({ id: b.id, label: b.title || b.id, value: done + "/" + items.length + " done" +
         (done < items.length ? " | missing: " + items.filter(it => st[it.topic] !== true).map(it => it.topic).join(", ") : "") });
     } else if (b.type === "repeater") {
       const cols = b.columns || [];
       const rows = (repeaters[b.id] || []).filter(r => cols.some(c => c.type !== "select" && c.type !== "link" && str_(r[c.id])));
-      const checkTxt = r => !(b.check && b.check.id) ? "" : r[b.check.id] ? " ✅ " + (b.check.label || "") : " ▫️ no " + (b.check.label || "check");
-      let lines;
+      const tick = r => b.check && b.check.id && r[b.check.id] ? "  ·  ✅ " + (b.check.label || "") : "";
+      const totalsOn = b.totals && b.totals.on;
+      const fmtCell = (c, v) => totalsOn && c.id === b.totals.col ? chargeText_(v) : v;
+      let lines = [];
       if (b.groupBy && cols.some(c => c.id === b.groupBy)) {
-        // one heading per suspect (or whatever the list is grouped by), their rows underneath
         const groups = {}, order = [];
         rows.forEach(r => { const g = str_(r[b.groupBy]) || "Unassigned"; if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(r); });
-        lines = [];
-        order.forEach(g => {
-          let head = "**" + g + "**";
-          if (b.totals && b.totals.on) {
+        order.forEach((g, gi) => {
+          let head = "👤 **" + g + "**";
+          if (totalsOn) {
             const t = groups[g].reduce((a, r) => { const x = sentence_(r[b.totals.col], r[b.totals.countCol]); a.m += x.months; a.f += x.fine; return a; }, { m: 0, f: 0 });
-            head += " — " + t.m + " months · $" + t.f.toLocaleString("en-US");
+            head += "  —  `" + t.m + " months · $" + t.f.toLocaleString("en-US") + "`";
           }
+          if (gi) lines.push("");
           lines.push(head);
           groups[g].forEach(r => {
-            const parts = cols.filter(c => c.id !== b.groupBy).map(c => {
-              const v = str_(r[c.id]);
-              return c.id === (b.totals && b.totals.countCol) ? (v && v !== "1" ? "×" + v : "") : v;
-            }).filter(Boolean);
-            lines.push(clip_("　• " + (parts.join(" ") || "—") + (b.check && b.check.id && r[b.check.id] ? " ✅ " + (b.check.label || "") : ""), 1000));
+            const cnt = totalsOn ? parseInt(r[b.totals.countCol], 10) || 1 : 1;
+            const parts = cols.filter(c => c.id !== b.groupBy && !(totalsOn && c.id === b.totals.countCol)).map(c => fmtCell(c, str_(r[c.id]))).filter(Boolean);
+            lines.push(clip_("› " + (cnt > 1 ? "**" + cnt + "×** " : "") + (parts.join(" · ") || "—") + tick(r), 1000));
           });
         });
       } else {
-        lines = rows.map((r, i) => clip_("`" + (i + 1) + "` " + cols.map((c, ci) => { const v = str_(r[c.id]) || "—"; return ci === 0 ? "**" + v + "**" : v; }).join(" · ") + checkTxt(r), 1000));
-        if (b.totals && b.totals.on && rows.length) {
+        lines = rows.map(r => clip_("▸ " + cols.map((c, ci) => { const v = fmtCell(c, str_(r[c.id])); return !v ? "" : ci === 0 ? "**" + v + "**" : v; }).filter(Boolean).join("  ·  ") + tick(r), 1000));
+        if (totalsOn && rows.length) {
           const t = rows.reduce((a, r) => { const x = sentence_(r[b.totals.col], r[b.totals.countCol]); a.m += x.months; a.f += x.fine; return a; }, { m: 0, f: 0 });
-          lines.push("**Total: " + t.m + " months · $" + t.f.toLocaleString("en-US") + "**");
+          lines.push("**Total:** `" + t.m + " months · $" + t.f.toLocaleString("en-US") + "`");
         }
       }
-      addListFields_(embedFields, clip_(b.title || "List", 240), lines);
+      if (lines.length) addListFields_(embedFields, sectionIcon_(b.title) + " " + clip_(String(b.title || "List").toUpperCase(), 230), lines);
       archiveCols.push({ id: b.id, label: b.title || b.id, value: rows.map(r => cols.map(c => str_(r[c.id])).filter(Boolean).join(" / ") + (b.check && r[b.check.id] ? " [" + b.check.label + "]" : "")).join("; ") });
     } else if (b.type === "longtext") {
       const v = str_(values[b.id]).substring(0, b.maxLength || 8000);
       if (b.followUp) {
-        if (v) followTexts.push({ title: b.title || "Notes", text: v });
-      } else {
-        const quoted = v ? "> " + clip_(v, 1000).split("\n").join("\n> ") : "> *Nothing provided.*";
-        embedFields.push({ name: "📝 " + clip_(b.title || "Notes", 240), value: clip_(quoted, 1024), inline: false });
+        if (v) followTexts.push({ title: String(b.title || "Notes").toUpperCase(), text: v });
+      } else if (v) {
+        embedFields.push({ name: "📝 " + clip_(String(b.title || "Notes").toUpperCase(), 240), value: clip_("> " + clip_(v, 1000).split("\n").join("\n> "), 1024), inline: false });
       }
       archiveCols.push({ id: b.id, label: b.title || b.id, value: v });
     }
@@ -269,13 +329,15 @@ function handleSubmit_(d) {
   // ---- post ----
   const color = parseInt(String(form.color || "#3498db").replace("#", ""), 16) || 3447003;
   const title = clip_(fillTemplate_(form.embedTitle || form.title, values), 256);
-  const embeds = packEmbeds_(embedFields, title, color);
+  const extras = { footer: { text: "LSPD Records Portal  •  " + clip_(form.title, 80) }, timestamp: new Date().toISOString() };
+  if (/^https:\/\/[^\s"'<>]+$/.test(str_(form.discordThumb))) extras.thumbnail = { url: str_(form.discordThumb) };
+  const embeds = packEmbeds_(embedFields, title, color, detailBlocks.join("\n"), extras);
   const isForum = webhook.kind !== "text";
 
   // ---- ONE post when it fits; otherwise post 1 = full case report, then the narrative on its own ----
   // (Discord: max 10 cards and ~6000 characters per post, 4096 per card description)
   const LIMIT = 5900;
-  const sizeOf = e => (e.title || "").length + (e.description || "").length + (e.fields || []).reduce((n, f) => n + f.name.length + f.value.length, 0);
+  const sizeOf = e => (e.title || "").length + (e.description || "").length + ((e.footer && e.footer.text) || "").length + (e.fields || []).reduce((n, f) => n + f.name.length + f.value.length, 0);
   const total = list => list.reduce((n, e) => n + sizeOf(e), 0);
   const textCards = followTexts.map(t => ({ title: clip_("📝 " + t.title, 256), description: t.text, color: color }));
   const allCards = embeds.concat(textCards);
@@ -346,8 +408,38 @@ function allFields_(form) {
   return out;
 }
 
+// "Lead Detective: ( L-XXX | J. Doe )" -> "Lead Detective"
+function cleanLabel_(l) { return String(l || "").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().replace(/[:：]$/, "").trim(); }
+// "Lead Detective Discord ID" belongs to "Lead Detective"; "Instructor Discord ID" to "Instructor Callsign"
+function sameSubject_(a, b) {
+  const base = s => s.toLowerCase().replace(/discord|user|\bid\b|callsign|name|#/g, " ").replace(/\s+/g, " ").trim();
+  const x = base(a), y = base(b);
+  return !!x && !!y && (x === y || x.indexOf(y) === 0 || y.indexOf(x) === 0);
+}
+function sectionIcon_(t) {
+  t = String(t || "").toLowerCase();
+  return /person|people|suspect|witness/.test(t) ? "👥" : /evidence/.test(t) ? "🧪" : /vehicle|car/.test(t) ? "🚗" : /charge/.test(t) ? "⚖️" : /weapon|firearm/.test(t) ? "🔫" : "📋";
+}
+// "Armed Robbery (Felony, 18 Months - $9,000 Fine)" -> "Armed Robbery `Felony · 18 mo · $9,000`"
+function chargeText_(v) {
+  const m = /^(.*?)\s*\(((?:Felony|Misdemeanor|Infraction))[^)]*\)\s*$/i.exec(v || "");
+  if (!m) return v;
+  const x = sentence_(v, 1), bits = [m[2]];
+  if (x.months) bits.push(x.months + " mo");
+  if (x.fine) bits.push("$" + x.fine.toLocaleString("en-US"));
+  return m[1] + "  `" + bits.join(" · ") + "`";
+}
+// officers field value "L-122 | Smith (123…); L-423 | Doe" -> "L-122 | Smith · <@123…>, L-423 | Doe"
+function officersText_(v) {
+  return String(v || "").split(";").map(e => e.trim()).filter(Boolean).map(e => {
+    const m = /^(.*?)\s*\((\d{15,21})\)$/.exec(e);
+    return m ? (m[1] ? m[1] + " · <@" + m[2] + ">" : "<@" + m[2] + ">") : e;
+  }).join("\n");
+}
+
 function displayValue_(f, v) {
   if (!v) return "—";
+  if (f.type === "officers") { const t = officersText_(v); return t.indexOf("\n") !== -1 ? "\n" + t.split("\n").map(x => "　› " + x).join("\n") : t; }
   if (f.type === "discord_id") return "<@" + v + ">";
   if (f.type === "case_number") return "`" + v + "`";
   if (f.type === "date") {
@@ -476,9 +568,10 @@ function addListFields_(fields, name, lines) {
   if (buf) flush();
 }
 
-function packEmbeds_(fields, title, color) {
+function packEmbeds_(fields, title, color, description, extras) {
   const out = [];
-  let cur = { title: title, color: color, fields: [] }, size = title.length;
+  let cur = Object.assign({ title: title, color: color }, description ? { description: clip_(description, 4096) } : {}, extras || {}, { fields: [] });
+  let size = title.length + (cur.description || "").length + ((cur.footer && cur.footer.text) || "").length;
   fields.forEach(f => {
     const fs = f.name.length + f.value.length;
     if (cur.fields.length >= 25 || size + fs > 5800) {
@@ -642,6 +735,7 @@ function handleAdmin_(d) {
         me: { username: me.username, role: me.role },
         backend: BACKEND_VERSION,
         config: cfg,
+        roster: (() => { try { return getRoster_().people; } catch (e) { return []; } })(),
         webhooks: maskWebhooks_(),
         admins: isOwner ? getAdmins_().map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })) : [],
         log: readLog_(200)
@@ -656,6 +750,7 @@ function handleAdmin_(d) {
       const next = validateConfig_(d.config);
       next.version = Number(cur.version) + 1;
       writeConfig_(next, me.username);
+      CacheService.getScriptCache().remove("portal_roster");
       logAdmin_(me.username, "save config", diffSummary_(cur, next));
       return { ok: true, config: next };
     }
@@ -720,6 +815,11 @@ function handleAdmin_(d) {
         return { ok: true, valid: true, message: "Test message posted by \"" + info.name + "\"." };
       }
       return { ok: true, valid: true, message: "Valid: posts as \"" + info.name + "\"." };
+    }
+
+    case "rosterTest": {
+      const r = getRoster_(true);
+      return { ok: true, roster: r };
     }
 
     case "leaderboardRefresh": {
@@ -787,7 +887,7 @@ function maskWebhooks_() {
 // Server-side checks so a broken or malicious save can't wreck the live portal.
 function validateConfig_(c) {
   if (!c || !Array.isArray(c.forms)) throw new Error("Invalid config.");
-  const FIELD_TYPES = ["text", "number", "date", "select", "discord_id", "case_number", "static"];
+  const FIELD_TYPES = ["text", "number", "date", "select", "discord_id", "case_number", "static", "officers"];
   const BLOCK_TYPES = ["banner", "fields", "strip", "text", "checklist", "repeater", "longtext"];
   const formIds = {};
   const out = { settings: {}, forms: [] };
@@ -800,8 +900,10 @@ function validateConfig_(c) {
     footer: clip_(str_(s.footer), 120),
     heroLogo: s.heroLogo == null ? "img/lspd-patch.png" : str_(s.heroLogo),
     announcement: { text: clip_(str_(s.announcement && s.announcement.text), 500), style: (s.announcement && s.announcement.style) === "warning" ? "warning" : "info" },
-    maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) }
+    maintenance: { on: !!(s.maintenance && s.maintenance.on), message: clip_(str_(s.maintenance && s.maintenance.message), 300) },
+    roster: { url: clip_(str_(s.roster && s.roster.url), 300), tab: clip_(str_(s.roster && s.roster.tab), 60) || "Roster" }
   };
+  if (out.settings.roster.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.url)) throw new Error("Roster sheet link must be a Google Sheets link (https://docs.google.com/spreadsheets/d/...).");
   if (out.settings.heroLogo && !IMG_RE.test(out.settings.heroLogo)) throw new Error("Home page logo must be a file like img/logo.png or an https:// link.");
   c.forms.forEach(f => {
     const id = str_(f.id);
@@ -848,6 +950,8 @@ function validateConfig_(c) {
     f.theme = /^[a-z][a-z0-9-]{1,20}$/.test(str_(f.theme)) ? str_(f.theme) : "sheet"; // any look the website offers
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
     if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");
+    f.discordThumb = str_(f.discordThumb);
+    if (f.discordThumb && !/^https:\/\/[^\s"'<>]+$/.test(f.discordThumb)) throw new Error(f.title + ": the Discord logo must be an https:// image link.");
     f.logoUrl = str_(f.logoUrl);
     if (f.logoUrl && !IMG_RE.test(f.logoUrl)) throw new Error(f.title + ": the header logo must be a file like img/logo.png or an https:// link (no spaces or quotes).");
     out.forms.push(f);
@@ -1212,6 +1316,7 @@ function defaultConfig_() {
       heroText: "Select a form below to file an official record to Discord.",
       footer: "LOS SANTOS POLICE DEPARTMENT · INTERNAL USE ONLY",
       heroLogo: "img/lspd-patch.png",
+      roster: { url: "", tab: "Roster" },
       announcement: { text: "", style: "info" },
       maintenance: { on: false, message: "The forms portal is down for maintenance. Please try again shortly." }
     },
@@ -1245,7 +1350,7 @@ function defaultConfig_() {
             { id: "traineeCallsign", label: "Trainee callsign (L-8XX | J. Doe ):", type: "text", required: true },
             { id: "traineeDiscordId", label: "Trainee Discord ID:", type: "discord_id" } ] },
           { type: "fields", fields: [
-            { id: "ftoCallsign", label: "Instructor Callsign: ( L-XXX | J. Doe )", type: "text" },
+            { id: "ftoCallsign", label: "Instructor Callsign: ( L-XXX | J. Doe )", type: "text", roster: true, fillId: "ftoDiscordId" },
             { id: "ftoDiscordId", label: "Instructor Discord ID:", type: "discord_id", required: true } ] },
           { type: "strip", fields: [
             { id: "sessionName", label: "Training Session", type: "static", text: "1-Hour 30-Min Combined Academy Session" },
@@ -1298,11 +1403,11 @@ function defaultConfig_() {
             { id: "cidCaseNo", label: "CID Case Number:", type: "case_number", prefix: "CID", required: true },
             { id: "cidCadNo", label: "CAD Case #:", type: "text" } ] },
           { type: "fields", fields: [
-            { id: "cidLead", label: "Lead Detective: ( L-XXX | J. Doe )", type: "text", required: true },
+            { id: "cidLead", label: "Lead Detective: ( L-XXX | J. Doe )", type: "text", required: true, roster: true, fillId: "cidLeadId" },
             { id: "cidLeadId", label: "Lead Detective Discord ID:", type: "discord_id", required: true } ] },
           { type: "fields", fields: [
-            { id: "cidAssist", label: "Assisting Units:", type: "text", placeholder: "L-112, L-245 …" },
-            { id: "cidSupervisor", label: "Supervisor Notified:", type: "text" } ] },
+            { id: "cidAssist", label: "Assisting Officers:", type: "officers" },
+            { id: "cidSupervisor", label: "Supervisor Notified:", type: "text", roster: true } ] },
           { type: "strip", fields: [
             { id: "cidType", label: "Case Type", type: "select", required: true, options: ["Homicide", "Attempted Murder", "Armed Robbery", "Bank / Store Robbery", "Burglary", "Grand Theft Auto", "Narcotics", "Weapons Trafficking", "Assault / Battery", "Kidnapping", "Fraud / Forgery", "Gang Activity", "Officer-Involved Shooting", "Other"] },
             { id: "cidDate", label: "Incident Date", type: "date", defaultToday: true },
