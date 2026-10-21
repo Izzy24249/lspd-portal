@@ -129,7 +129,7 @@ function publicConfig_() {
   return {
     version: cfg.version,
     backend: BACKEND_VERSION,
-    settings: cfg.settings,
+    settings: Object.assign({}, cfg.settings, { promo: promoCfg_(cfg) }),   // tracker on by default, even before its setup is first saved
     rosters: rostersFor_(cfg.forms.filter(f => f.status !== "hidden")),
     roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_().map(p => ({ name: p.name, id: p.id, extra: p.extra, division: p.division })) : []; } catch (e) { return []; } })(),
     forms: cfg.forms.filter(f => f.status !== "hidden")
