@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 31;
+const BACKEND_VERSION = 32;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -574,7 +574,7 @@ function handleSubmit_(d) {
   if (!webhook) return { ok: false, error: "No Discord webhook is set for this form. An admin needs to pick one in admin.html." };
 
   // ---- build Discord content (report layout) ----
-  const embedFields = [], followTexts = [], archiveCols = [], detailBlocks = [];
+  const embedFields = [], followTexts = [], archiveCols = [], detailBlocks = [], repFields = {};
   form.blocks.forEach(b => {
     if (b.type === "fields" || b.type === "strip") {
       (b.fields || []).forEach(f => {
@@ -644,7 +644,9 @@ function handleSubmit_(d) {
           lines.push("**Total:** `" + t.m + " months · $" + t.f.toLocaleString("en-US") + "`");
         }
       }
+      const repStart = embedFields.length;
       addListFields_(embedFields, sectionIcon_(b.title) + " " + clip_(String(b.title || "List").toUpperCase(), 230), lines.length ? lines : ["*None recorded.*"]);
+      repFields[b.id] = embedFields.slice(repStart);
       archiveCols.push({ id: b.id, label: b.title || b.id, value: rows.map(r => cols.map(c => str_(r[c.id])).filter(Boolean).join(" / ") + (b.check && r[b.check.id] ? " [" + b.check.label + "]" : "")).join("; ") });
     } else if (b.type === "longtext") {
       const v = str_(values[b.id]).substring(0, b.maxLength || 8000);
@@ -664,6 +666,14 @@ function handleSubmit_(d) {
     if (ruleMatches_(r, values, repeaters)) tags.push(r.tag);
   });
   tags = tags.map(str_).filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 5);
+
+  // ---- "Classic" Discord layout (per form): people + date across the top, then each section as a ticked list ----
+  const classic = form.discordStyle === "classic";
+  if (classic) {
+    const c = classicFields_(form, values, checklists, repFields);
+    embedFields.length = 0; embedFields.push(...c.fields);
+    followTexts.length = 0; followTexts.push(...c.follow);
+  }
 
   // ---- post ----
   const color = parseInt(String(form.color || "#3498db").replace("#", ""), 16) || 3447003;
@@ -697,7 +707,7 @@ function handleSubmit_(d) {
     g.forEach(x => grid.push(x));
     while (g.length % 3) { g.push(0); grid.push({ name: "\u200b", value: "\u200b", inline: true }); }   // keep each group on its own row(s)
   });
-  embedFields.unshift(...grid);
+  if (!classic) embedFields.unshift(...grid);
 
   const extras = { footer: { text: "LSPD Records Portal  •  " + clip_(form.title, 80) }, timestamp: new Date().toISOString() };
   if (/^https:\/\/[^\s"'<>]+$/.test(str_(form.discordThumb))) extras.thumbnail = { url: str_(form.discordThumb) };
@@ -1342,6 +1352,71 @@ function promoView_(admin, pid) {
   return base;
 }
 
+// ---- Classic Discord layout ----
+//   Instructor | Trainee | Session Date      (people with their @mention, then dates)
+//   Evaluation Status: • ✅ - PASSED
+//   📘 HEADING            **Label:** value   (fields under a heading text block)
+//   📘 CHECKLIST          ✅ `item` / ❌ `item`
+//   📝 Notes              > text
+function classicFields_(form, values, checklists, repFields) {
+  const out = [], follow = [], header = [], status = [];
+  const isHeading = b => b.type === "text" && (b.style === "heading" || (str_(b.text).length < 60 && str_(b.text) === str_(b.text).toUpperCase() && /[A-Z]/.test(str_(b.text))));
+  const firstHeading = (form.blocks || []).findIndex(isHeading);
+  const titleCase = t => String(t || "").toLowerCase().replace(/(^|[\s(/-])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Of|And|The|To|For|In|On)\b/g, w => w.toLowerCase()).replace(/^./, x => x.toUpperCase());
+  const mark = v => /pass|approved|complete|clear|yes/i.test(v) ? "✅ " : /fail|denied|terminat|no go|reject/i.test(v) ? "❌ " : "";
+  const personVal = (raw, mention) => {
+    const m = /^(.*?)\s*\((\d{15,21})\)\s*$/.exec(raw);
+    const name = m ? m[1] : raw, id = mention || (m ? m[2] : "");
+    return (name || "—") + (id ? " (<@" + id + ">)" : "");
+  };
+  let sec = null;
+  const flush = () => { if (sec && sec.lines.length) out.push({ name: clip_("📘 " + sec.title, 256), value: clip_(sec.lines.join("\n"), 1024), inline: false }); sec = null; };
+  (form.blocks || []).forEach((b, bi) => {
+    const inHeader = firstHeading === -1 || bi < firstHeading;
+    if (b.type === "fields" || b.type === "strip") {
+      (b.fields || []).forEach(f => {
+        if (f.type === "static") return;
+        const v = str_(values[f.id]), label = cleanLabel_(f.label || f.id);
+        if (inHeader) {
+          const prev = header[header.length - 1];
+          if (f.type === "discord_id") {
+            if (prev && prev.person && !prev.mention && (prev.fillId === f.id || sameSubject_(prev.label, label) || (v && prev.raw.indexOf(v) !== -1))) { if (v && prev.raw.indexOf(v) === -1) prev.mention = v; return; }
+            if (v) header.push({ label: label.replace(/\s*discord\s*id\s*$/i, "") || label, raw: "", mention: v, person: true });
+            return;
+          }
+          if (f.type === "select" && /result|status|outcome|verdict/i.test(label)) { status.push({ name: /final result/i.test(label) ? "Evaluation Status" : label, value: v ? "• " + mark(v) + v : "—" }); return; }
+          const person = f.type === "officer" || f.type === "officers" || !!f.roster;
+          header.push({ label: label.replace(/\s*call\s*sign\s*$/i, "").trim() || label, raw: v, person: person, fillId: f.fillId, date: f.type === "date", f: f });
+        } else {
+          if (!sec) sec = { title: "DETAILS", lines: [] };
+          if (v) sec.lines.push("**" + (f.label || f.id).replace(/[:：]\s*$/, "") + ":** " + (f.type === "officer" || f.type === "officers" ? officersText_(v) : displayValue_(f, v).replace(/^[-–•]\s+/, "")));
+        }
+      });
+    } else if (isHeading(b)) { flush(); sec = { title: String(b.text || "").toUpperCase(), lines: [] }; }
+    else if (b.type === "checklist") {
+      flush();
+      const st = checklists[b.id] || {}, items = b.items || [];
+      const list = b.display === "selected" ? items.filter(it => st[it.topic] === true) : items;
+      const lines = list.map(it => (st[it.topic] === true ? "✅" : "❌") + " `" + String(it.topic).replace(/`/g, "'") + "`");
+      addListFields_(out, "📘 " + clip_(String(b.title || "Checklist").toUpperCase(), 240), lines.length ? lines : ["*None*"]);
+    } else if (b.type === "repeater") { flush(); (repFields[b.id] || []).forEach(x => out.push(Object.assign({}, x, { name: x.name.replace(/^\S+\s/, "📘 ") }))); }
+    else if (b.type === "longtext") {
+      flush();
+      const v = str_(values[b.id]).substring(0, b.maxLength || 8000), name = "📝 " + clip_(titleCase(b.title || "Notes"), 240);
+      if (v.length > 1000 && b.followUp) { follow.push({ title: String(b.title || "Notes").toUpperCase(), text: v }); out.push({ name: name, value: "> *See the next post.*", inline: false }); }
+      else out.push({ name: name, value: v ? clip_("> " + v.split("\n").join("\n> "), 1024) : "> *No specific notes provided.*", inline: false });
+    }
+  });
+  flush();
+  // header row: leaders (instructor / FTO / lead) first, then other people, then dates and the rest
+  const rank = h => h.person ? (/instructor|fto|lead|supervisor|handler|pilot|commander/i.test(h.label) ? 0 : 1) : h.date ? 2 : 3;
+  const top = header.filter(h => h.raw || h.mention).sort((a, b) => rank(a) - rank(b)).map(h => ({
+    name: clip_(h.date && /completed/i.test(h.label) ? "Session Date" : h.label, 256),
+    value: clip_(h.person ? personVal(h.raw, h.mention) : h.date ? displayValue_(h.f, h.raw) : h.f ? displayValue_(h.f, h.raw) : h.raw, 1024), inline: true }));
+  while (top.length % 3) top.push({ name: "​", value: "​", inline: true });
+  return { fields: top.concat(status.map(x => ({ name: x.name, value: x.value, inline: false })), out), follow: follow };
+}
+
 // =====================================================================
 // DISCORD HELPERS
 // =====================================================================
@@ -1870,6 +1945,7 @@ function validateConfig_(c) {
     }
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
     f.section = clip_(str_(f.section), 40);
+    f.discordStyle = f.discordStyle === "classic" ? "classic" : "";
     f.theme = /^[a-z][a-z0-9-]{1,20}$/.test(str_(f.theme)) ? str_(f.theme) : "sheet"; // any look the website offers
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
     if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");
@@ -2245,7 +2321,7 @@ function defaultConfig_() {
     },
     forms: [
       {
-        id: "academy", status: "live", icon: "🎓", title: "Academy Evaluation",
+        id: "academy", status: "live", icon: "🎓", title: "Academy Evaluation", discordStyle: "classic",
         description: "1-hour 30-minute mandatory academy training checklist and FTO sign-off.",
         submitLabel: "Submit Official Record to Discord", copyText: false,
         webhookId: "academy-forum", color: "#3498db",
