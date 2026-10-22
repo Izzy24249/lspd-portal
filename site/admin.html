@@ -1609,7 +1609,7 @@ function drawCands(box, P) {
     const open = PROMO_OPEN.has(c.key);
     const cellEl = t => { const s = c.tasks[t.id]; return h("span", { class: "c" }, h("i", { class: "ab-c " + (s.excused ? "ex" : s.done ? "ok" : s.locked ? "lk" : s.count ? "pt" : "no"), text: s.excused ? "EX" : s.done ? "✓" : s.locked ? "–" : s.count ? s.count + "/" + s.need : "·" })); };
     const row = h("div", { class: "ab-row" + (open ? " open" : "") + (c.complete ? " ready" : ""), onclick: () => { open ? PROMO_OPEN.delete(c.key) : PROMO_OPEN.add(c.key); drawCands(box, P); } },
-      h("span", { class: "ab-who" }, c.callsign ? h("code", { text: c.callsign }) : null, h("b", { text: c.name }), P.tigDays ? h("small", { class: c.tigOk ? "ok" : "", text: c.tig == null ? "TIG —" : "TIG " + c.tig + "d" }) : null),
+      h("span", { class: "ab-who" }, c.callsign ? h("code", { text: c.callsign }) : null, h("b", { text: c.name }), P.tigDays || P.showTig ? h("small", { class: c.tigOk || !P.tigDays ? "ok" : "", title: c.since || "", text: (P.tigLabel || "TIG") + " " + (c.tig == null ? "—" : c.tig + "d") }) : null),
       T.map(cellEl),
       h("span", { class: "r" }, c.complete ? h("em", { class: "rd", text: P.id === "cpl" ? "Ready" : "Done" }) : null, h("span", { class: "bar" }, h("i", { style: "width:" + Math.round(c.done / Math.max(1, c.total) * 100) + "%" })), h("b", { text: c.done + "/" + c.total })));
     board.append(row);

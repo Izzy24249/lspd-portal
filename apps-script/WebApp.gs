@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 30;
+const BACKEND_VERSION = 31;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1084,7 +1084,7 @@ const PROMO_DEFAULT_ = {
 };
 const ONBOARD_DEFAULT_ = {
   id: "onboard", noun: "Officer", on: true, title: "Onboarding", subtitle: "New officers' first steps. Boxes tick themselves when the Basic Training log or the Academy Evaluation is filed.",
-  rosterTabId: null, rosterTabName: "Onboarding", col: "", match: "", allRows: true, tigDays: 0, tigCol: "", tigTabId: null, tigTabName: "",
+  rosterTabId: null, rosterTabName: "Onboarding", col: "A", match: "L-8##", allRows: true, tigDays: 0, tigCol: "G", tigTabId: null, tigTabName: "",
   tasks: [
     { id: "bpa", title: "Basic Training - BPA", need: 1, desc: "Complete Basic Training (BPA) with an instructor.", sources: [{ form: "bpalog", person: "bpTrainee", field: "bpResult", value: "Passed" }] },
     { id: "academyRa", title: "Academy in-depth RA", need: 1, desc: "Ride-along covered by the Academy Evaluation.", sources: [{ form: "academy", person: "traineeCallsign", field: "", value: "" }, { form: "academy", person: "traineeDiscordId", field: "", value: "" }] }
@@ -1116,13 +1116,19 @@ function cleanPromo_(p, dflt, id) {
   });
   return out;
 }
+function onboardFix_(p) {          // Onboarding: callsigns in A, join date in G, only L-8## (unless set otherwise)
+  if (p && p.id === "onboard") { if (!p.col) p.col = "A"; if (!p.match) p.match = "L-8##"; if (!p.tigCol) p.tigCol = "G"; }
+  return p;
+}
 function cleanPrograms_(list) {
   const out = [], seen = { cpl: 1 };
+  list = Array.isArray(list) ? list.slice() : [ONBOARD_DEFAULT_];
+  if (!list.some(p => p && str_(p.id).toLowerCase() === "onboard")) list.unshift(ONBOARD_DEFAULT_);   // Onboarding is always there (turn it off instead of deleting)
   (Array.isArray(list) ? list : [ONBOARD_DEFAULT_]).slice(0, 8).forEach(p => {
     const id = str_(p && p.id).toLowerCase();
     if (!/^[a-z][a-z0-9-]{1,20}$/.test(id) || seen[id]) throw new Error("Training Progression: each program needs its own short ID (letters, numbers, dashes).");
     seen[id] = 1;
-    out.push(cleanPromo_(p, id === "onboard" ? ONBOARD_DEFAULT_ : Object.assign({}, ONBOARD_DEFAULT_, { title: "New program", tasks: [] }), id));
+    out.push(onboardFix_(cleanPromo_(p, id === "onboard" ? ONBOARD_DEFAULT_ : Object.assign({}, ONBOARD_DEFAULT_, { title: "New program", tasks: [] }), id)));
   });
   return out;
 }
@@ -1133,8 +1139,10 @@ function programs_(cfg) {
   if (cpl.title === "SGT Promotion Tracker") cpl.title = PROMO_DEFAULT_.title;
   if (!cpl.noun) cpl.noun = "Corporal";
   if (s.promo && !s.promo.col && s.promo.match) cpl.col = "C";
-  const more = Array.isArray(s.programs) ? s.programs : [ONBOARD_DEFAULT_];
-  return [cpl].concat(more.map(p => Object.assign({}, p)));
+  const more = (Array.isArray(s.programs) ? s.programs : []).map(p => Object.assign({}, p));
+  if (!more.some(p => p.id === "onboard")) more.unshift(JSON.parse(JSON.stringify(ONBOARD_DEFAULT_)));
+  if (more.length && more[0].id === "onboard" && !(more[0].tasks || []).length) more[0].tasks = JSON.parse(JSON.stringify(ONBOARD_DEFAULT_.tasks));
+  return [cpl].concat(more.map(onboardFix_));
 }
 function promoCfg_(cfg, pid) {
   const all = programs_(cfg);
@@ -1279,6 +1287,7 @@ function promoView_(admin, pid) {
   if (!admin) { const hit = cache.get(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   const cfg = getConfig_(), pc = promoCfg_(cfg, pid);
   const base = { id: pc.id, noun: pc.noun || "Person", on: pc.on, title: pc.title, subtitle: pc.subtitle, tigDays: pc.tigDays,
+    showTig: !!(pc.tigDays || pc.tigCol), tigLabel: pc.id === "cpl" ? "TIG" : "Joined",
     tasks: (pc.tasks || []).map(t => ({ id: t.id, title: t.title, desc: t.desc, need: t.need, final: t.final })) };
   if (!pc.on && !admin) return base;
   const cr = promoCandidates_(false, pid);
@@ -1325,7 +1334,7 @@ function promoView_(admin, pid) {
     const tigOk = !pc.tigDays || (tig != null && tig >= pc.tigDays);
     (pc.tasks || []).filter(t => t.final).forEach(t => { tasks[t.id].locked = !(others && tigOk); });
     const doneN = (pc.tasks || []).filter(t => tasks[t.id].done).length;
-    return { key: admin ? c.key : undefined, callsign: c.callsign, name: c.name, since: sinceDate, sinceSrc: admin ? sinceSrc : undefined, tig: pc.tigDays ? tig : null, tigOk: tigOk,
+    return { key: admin ? c.key : undefined, callsign: c.callsign, name: c.name, since: sinceDate, sinceSrc: admin ? sinceSrc : undefined, tig: pc.tigDays || pc.tigCol ? tig : null, tigOk: tigOk,
       tasks: tasks, done: doneN, total: (pc.tasks || []).length, complete: doneN === (pc.tasks || []).length && (pc.tasks || []).length > 0 };
   });
   base.updated = new Date().toISOString();

@@ -198,7 +198,7 @@ function drawPromo(){
       ${s.items.length ? `<ul>${s.items.map(x => `<li>${E(fmtD(x.date))} · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.count > 1 ? " ×" + x.count : ""}</li>`).join("")}</ul>`
         : `<p>${s.locked && !s.done ? "Unlocks after every other requirement" + (P.tigDays ? " and " + P.tigDays + " days TIG" : "") + "." : "Nothing logged yet."}</p>`}</div>`;
   }).join("")}</div>`;
-  const tigTxt = c => c.tig == null ? "TIG —" : "TIG " + c.tig + "d";
+  const tigTxt = c => P.id === "cpl" || !P.tigLabel ? (c.tig == null ? "TIG —" : "TIG " + c.tig + "d") : (c.tig == null ? "Joined —" : "Joined " + (c.tig === 0 ? "today" : c.tig + "d ago"));
   $("promoMount").innerHTML = `
     <header class="pb-head">
       <div class="pb-title">
@@ -216,7 +216,7 @@ function drawPromo(){
         const k = c.callsign || c.name, open = promoOpen.has(k);
         return `<div class="pb-item ${c.complete ? "ready" : ""} ${open ? "open" : ""}">
           <button class="pb-row" data-row="${E(k)}" aria-expanded="${open}">
-            <span class="pb-who">${c.callsign ? `<code>${E(c.callsign)}</code>` : ""}<span class="nm">${E(c.name)}</span>${P.tigDays ? `<span class="tg ${c.tigOk ? "ok" : ""}">${tigTxt(c)}</span>` : ""}</span>
+            <span class="pb-who">${c.callsign ? `<code>${E(c.callsign)}</code>` : ""}<span class="nm">${E(c.name)}</span>${P.tigDays || P.showTig ? `<span class="tg ${c.tigOk || !P.tigDays ? "ok" : ""}" title="${c.since ? E(c.since) : ""}">${tigTxt(c)}</span>` : ""}</span>
             ${T.map((t, i) => `<span class="pb-cell" data-n="${i + 1}">${cell(c, t)}</span>`).join("")}
             <span class="pb-prog">${c.complete ? `<span class="rd">${P.id === "cpl" ? "Ready" : "Done"}</span>` : ""}<span class="bar"><i style="width:${Math.round(c.done / Math.max(1,c.total) * 100)}%"></i></span><b>${c.done}/${c.total}</b></span>
           </button>${open ? detail(c) : ""}</div>`;
