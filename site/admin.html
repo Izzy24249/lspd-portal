@@ -1545,54 +1545,78 @@ function pageHours(page) {
   }).catch(e => { out.innerHTML = ""; out.append(h("div", { class: "sec empty-note", text: e.message })); });
 }
 
-/* ---------------- PROMOTIONS (SGT tracker) ---------------- */
-let PROMO_ADMIN = null, PROMO_OPEN = new Set(), SETUP_OPEN = false;
+/* ---------------- TRAINING PROGRESSION (one or more programs) ---------------- */
+let PROMO_ADMIN = null, PROMO_OPEN = new Set(), SETUP_OPEN = false, PROMO_PID = "cpl", PROMO_PROGS = null;
+// the settings object for a program inside CFG (CPL lives in settings.promo, the rest in settings.programs)
+function progSettings(pid, seed) {
+  if (pid === "cpl") { if (!CFG.settings.promo && seed) adoptSetting("promo", clone(seed)); return CFG.settings.promo; }
+  if (!Array.isArray(CFG.settings.programs) && seed) adoptSetting("programs", [clone(seed)]);
+  let p = (CFG.settings.programs || []).find(x => x.id === pid);
+  if (!p && seed) { CFG.settings.programs.push(clone(seed)); p = CFG.settings.programs.find(x => x.id === pid); }
+  return p;
+}
+function adoptSetting(k, v) {   // fill in the built-in setup without marking the page unsaved
+  CFG.settings[k] = v; const b = JSON.parse(BASE); b.settings[k] = clone(v); BASE = JSON.stringify(b);
+}
 function pagePromo(page) {
-  page.append(head("Training Progression · " + ((CFG.settings.promo || {}).title || "CPL → SGT"), "Corporals are read from the roster automatically. Reports credit their tasks; you can add, remove or excuse anything here. Changes to completions save straight away; the setup below needs Save & publish.",
-    h("a", { class: "btn ghost sm", href: "index.html#promo", target: "_blank" }, "Open public page ↗"),
-    h("button", { class: "btn ghost sm", onclick: () => { PROMO_ADMIN = null; renderPage(true); } }, "Refresh")));
-  const candBox = h("div", {}, h("div", { class: "sec empty-note", text: "Loading corporals…" }));
+  const progs = PROMO_PROGS || [{ id: "cpl", title: "CPL → SGT" }];
+  const cur = progs.find(x => x.id === PROMO_PID) || progs[0];
+  page.append(head("Training Progression", "People are read from the roster automatically. Reports check off their requirements; you can add, remove or excuse anything here. Completions save straight away; Setup needs Save & publish.",
+    h("a", { class: "btn ghost sm", href: "index.html#" + (PROMO_PID === "cpl" ? "promo" : "promo:" + PROMO_PID), target: "_blank" }, "Open public page ↗"),
+    h("button", { class: "btn ghost sm", onclick: () => { PROMO_ADMIN = null; PROMO_PROGS = null; renderPage(true); } }, "Refresh")));
+  // program switcher
+  const local = (CFG.settings.programs || []).filter(x => !progs.some(y => y.id === x.id)).map(x => ({ id: x.id, title: x.title + " (unsaved)" }));
+  page.append(h("div", { class: "toolbar" },
+    h("div", { class: "seg prog-seg" }, progs.concat(local).map(pg => h("button", { class: pg.id === PROMO_PID ? "on" : "", onclick: () => { if (PROMO_PID === pg.id) return; PROMO_PID = pg.id; PROMO_ADMIN = null; PROMO_OPEN = new Set(); renderPage(true); } }, pg.title))),
+    h("button", { class: "btn ghost sm", onclick: () => {
+      const name = prompt("Name of the new program (e.g. PO II → CPL):"); if (!name) return;
+      const id = ("p-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-")).replace(/-+$/, "").slice(0, 20) || "p-new";
+      if (!Array.isArray(CFG.settings.programs)) CFG.settings.programs = [];
+      CFG.settings.programs.push({ id: id, noun: "Officer", on: true, title: name, subtitle: "", rosterTabId: null, rosterTabName: "", col: "", match: "", allRows: false, tigDays: 0, tigCol: "", tigTabName: "", tasks: [] });
+      PROMO_PID = id; SETUP_OPEN = true; changed(true); toast("Program added. Pick its roster tab and requirements under Setup, then Save & publish.", "ok");
+    } }, "+ New program")));
+  const candBox = h("div", {}, h("div", { class: "sec empty-note", text: "Loading…" }));
   const setupBox = h("div", {});
   page.append(candBox, setupBox);
-  const load = PROMO_ADMIN ? Promise.resolve(PROMO_ADMIN) : api("promoAdmin", {}).then(r => (PROMO_ADMIN = r));
+  const isLocalOnly = local.some(x => x.id === PROMO_PID);
+  const load = isLocalOnly ? Promise.resolve(null) : PROMO_ADMIN ? Promise.resolve(PROMO_ADMIN) : api("promoAdmin", { program: PROMO_PID }).then(r => { PROMO_PROGS = r.programs; return (PROMO_ADMIN = r); });
   load.then(r => {
-    if (!CFG.settings.promo) {        // first visit: start from the built-in setup without marking the page unsaved
-      CFG.settings.promo = clone(r.settings);
-      const b = JSON.parse(BASE); b.settings.promo = clone(r.settings); BASE = JSON.stringify(b);
-    }
-    drawSetup(setupBox); drawCands(candBox, r.promo);
-    const det = h("details", { class: "sec setup-fold", open: SETUP_OPEN, ontoggle: () => { SETUP_OPEN = det.open; } }, h("summary", {}, h("span", { text: "Setup & requirements" }), h("small", { text: "Roster, callsign pattern, time in grade and what counts for each requirement · needs Save & publish" })));
+    const p = progSettings(PROMO_PID, r && r.settings);
+    if (r && r.programs && r.programs.some(x => !progs.some(y => y.id === x.id)) && TAB === "promo") { renderPage(true); return; }   // first load: show the real program list
+    if (p) drawSetup(setupBox, p);
+    if (r) drawCands(candBox, r.promo); else candBox.innerHTML = '<div class="sec empty-note">Save & publish to start tracking this program.</div>';
+    const det = h("details", { class: "sec setup-fold", open: SETUP_OPEN, ontoggle: () => { SETUP_OPEN = det.open; } }, h("summary", {}, h("span", { text: "Setup & requirements" }), h("small", { text: "Roster tab, who counts, time in grade and what checks off each requirement · needs Save & publish" })));
     [...setupBox.children].forEach(ch => { ch.classList.remove("sec"); ch.classList.add("fold-part"); det.append(ch); });
     setupBox.append(det);
   }).catch(e => { candBox.innerHTML = ""; candBox.append(h("div", { class: "sec empty-note", text: e.message })); });
 }
 function promoAct(action, data, box) {
-  return api(action, data).then(r => { PROMO_ADMIN = Object.assign({}, PROMO_ADMIN, { promo: r.promo }); drawCands(box, r.promo); toast("Saved.", "ok"); }).catch(e => toast(e.message, "bad"));
+  return api(action, Object.assign({ program: PROMO_PID }, data)).then(r => { PROMO_ADMIN = Object.assign({}, PROMO_ADMIN, { promo: r.promo }); drawCands(box, r.promo); toast("Saved.", "ok"); }).catch(e => toast(e.message, "bad"));
 }
 function drawCands(box, P) {
   box.innerHTML = "";
   const C = P.candidates || [], T = P.tasks || [];
   const ready = C.filter(c => c.complete).length;
   box.append(h("div", { class: "kpis" },
-    h("div", { class: "kpi" }, h("small", { text: "Corporals" }), h("b", { text: String(C.length) })),
-    h("div", { class: "kpi" }, h("small", { text: "Ready for SGT" }), h("b", { class: "g", text: String(ready) })),
+    h("div", { class: "kpi" }, h("small", { text: (P.noun || "Person") + "s" }), h("b", { text: String(C.length) })),
+    h("div", { class: "kpi" }, h("small", { text: P.id === "cpl" ? "Ready for SGT" : "Complete" }), h("b", { class: "g", text: String(ready) })),
     h("div", { class: "kpi" }, h("small", { text: "Requirements" }), h("b", { text: String(T.length) })),
     h("div", { class: "kpi wide" }, h("small", { text: "Source" }), h("span", { class: "help", text: P.error ? "⚠ " + P.error : "Roster callsigns · credits from reports and admins" }))));
-  if (!C.length) { box.append(h("div", { class: "sec empty-note", text: "No corporals matched. Check the roster tab, column and callsign pattern under Setup." })); return; }
+  if (!C.length) { box.append(h("div", { class: "sec empty-note", text: "Nobody matched. Check the roster tab (and callsign pattern, if any) under Setup." })); return; }
   const board = h("div", { class: "sec flush aboard", style: "--cols:" + T.length });
-  board.append(h("div", { class: "ab-row ab-th" }, h("span", { text: "Corporal" }), T.map((t, i) => h("span", { class: "c", title: t.title, text: String(i + 1) })), h("span", { class: "r", text: "Progress" })));
+  board.append(h("div", { class: "ab-row ab-th" }, h("span", { text: P.noun || "Person" }), T.map((t, i) => h("span", { class: "c", title: t.title, text: String(i + 1) })), h("span", { class: "r", text: "Progress" })));
   C.forEach(c => {
     const open = PROMO_OPEN.has(c.key);
     const cellEl = t => { const s = c.tasks[t.id]; return h("span", { class: "c" }, h("i", { class: "ab-c " + (s.excused ? "ex" : s.done ? "ok" : s.locked ? "lk" : s.count ? "pt" : "no"), text: s.excused ? "EX" : s.done ? "✓" : s.locked ? "–" : s.count ? s.count + "/" + s.need : "·" })); };
     const row = h("div", { class: "ab-row" + (open ? " open" : "") + (c.complete ? " ready" : ""), onclick: () => { open ? PROMO_OPEN.delete(c.key) : PROMO_OPEN.add(c.key); drawCands(box, P); } },
-      h("span", { class: "ab-who" }, h("code", { text: c.callsign }), h("b", { text: c.name }), h("small", { class: c.tigOk ? "ok" : "", text: c.tig == null ? "TIG —" : "TIG " + c.tig + "d" })),
+      h("span", { class: "ab-who" }, c.callsign ? h("code", { text: c.callsign }) : null, h("b", { text: c.name }), P.tigDays ? h("small", { class: c.tigOk ? "ok" : "", text: c.tig == null ? "TIG —" : "TIG " + c.tig + "d" }) : null),
       T.map(cellEl),
-      h("span", { class: "r" }, c.complete ? h("em", { class: "rd", text: "Ready" }) : null, h("span", { class: "bar" }, h("i", { style: "width:" + Math.round(c.done / Math.max(1, c.total) * 100) + "%" })), h("b", { text: c.done + "/" + c.total })));
+      h("span", { class: "r" }, c.complete ? h("em", { class: "rd", text: P.id === "cpl" ? "Ready" : "Done" }) : null, h("span", { class: "bar" }, h("i", { style: "width:" + Math.round(c.done / Math.max(1, c.total) * 100) + "%" })), h("b", { text: c.done + "/" + c.total })));
     board.append(row);
     if (open) {
       const sinceIn = h("input", { type: "date", value: c.since || "" });
       const det = h("div", { class: "ab-detail" },
-        h("div", { class: "ab-since" }, h("span", { text: "CPL since" }), sinceIn, h("button", { class: "btn ghost sm", onclick: () => promoAct("promoSince", { key: c.key, date: sinceIn.value }, box) }, "Save date"),
+        h("div", { class: "ab-since" }, h("span", { text: P.id === "cpl" ? "CPL since" : "Started on" }), sinceIn, h("button", { class: "btn ghost sm", onclick: () => promoAct("promoSince", { key: c.key, date: sinceIn.value }, box) }, "Save date"),
           h("small", { class: "help", text: c.sinceSrc ? "Currently from: " + ({ roster: "personnel roster", set: "set by an admin", "first seen": "first day on the tracker" }[c.sinceSrc] || c.sinceSrc) : "" })));
       T.forEach((t, i) => {
         const s = c.tasks[t.id];
@@ -1608,11 +1632,10 @@ function drawCands(box, P) {
       board.append(det);
     }
   });
-  box.append(board, h("p", { class: "help", style: "margin:8px 2px 0", text: "Click a corporal to add completions, excuse a requirement, remove an entry or set their CPL date. These save immediately and are recorded in the Activity Log." }));
+  box.append(board, h("p", { class: "help", style: "margin:8px 2px 0", text: "Click a name to add completions, excuse a requirement, remove an entry or set their start date. These save immediately and are recorded in the Activity Log." }));
 }
-function drawSetup(box) {
+function drawSetup(box, p) {
   box.innerHTML = "";
-  const p = CFG.settings.promo;
   const tabOpts = () => {
     const tabs = (ROSTER_TABS && ROSTER_TABS.tabs) || [];
     return [["", "— pick the roster tab —"]].concat(tabs.map(t => [String(t.id), t.name + " (" + t.rows + " rows)"]));
@@ -1624,13 +1647,15 @@ function drawSetup(box) {
   fillTabs();
   if (!ROSTER_TABS) api("rosterTabs", {}).then(r => { ROSTER_TABS = { book: r.book, tabs: r.tabs, url: (CFG.settings.roster || {}).url || "" }; fillTabs(); }).catch(() => {});
   box.append(h("div", { class: "sec", style: "display:grid;gap:14px" }, h("h3", { text: "Setup" }),
-    toggle(p, "on", "Show the tracker on the portal (public page + home page card)"),
+    toggle(p, "on", "Show this program on the portal (public page + home page tile)"),
     h("div", { class: "g2" }, field("Title", bind(p, "title", { max: 80 })), field("Roster tab", tabSel, "Saved: " + (p.rosterTabName || "—"))),
+    h("div", { class: "g2" }, field("People are called", bind(p, "noun", { max: 30, placeholder: "Officer" }), "Shown as the column heading, e.g. Corporal or Officer."),
+      h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(p, "allRows", "Include everyone on the tab (don't skip rows marked onboarding / inactive)"))),
     field("Text under the title", bind(p, "subtitle", { type: "textarea", rows: 2 })),
     h("div", { class: "g3" },
-      field("Callsign column", bind(p, "col", { max: 2, set: v => v.trim().toUpperCase() })),
-      field("Corporal callsigns look like", bind(p, "match", { placeholder: "L-5##" }), "# = any digit. L-5## matches L-501 … L-599."),
-      field("Days time in grade before the final step", bind(p, "tigDays", { type: "number", set: v => Number(v) || 0 }))),
+      field("Callsign column (optional)", bind(p, "col", { max: 2, placeholder: "C", set: v => v.trim().toUpperCase() })),
+      field("Only callsigns like (optional)", bind(p, "match", { placeholder: "L-5##" }), "# = any digit. L-5## matches L-501 … L-599. Blank = everyone on the tab."),
+      field("Days time in grade before the final step", bind(p, "tigDays", { type: "number", set: v => Number(v) || 0 }), "0 = no time requirement.")),
     (() => {
       const tigSel = h("select", { onchange: () => { const t = ((ROSTER_TABS && ROSTER_TABS.tabs) || []).find(x => String(x.id) === tigSel.value); p.tigTabId = t ? t.id : null; p.tigTabName = t ? t.name : ""; changed(); } });
       const fill = () => { tigSel.innerHTML = ""; [["", "— same tab as above —"]].concat(((ROSTER_TABS && ROSTER_TABS.tabs) || []).map(t => [String(t.id), t.name])).forEach(o => tigSel.append(h("option", { value: o[0], text: o[1] })));
@@ -1638,11 +1663,11 @@ function drawSetup(box) {
         tigSel.value = p.tigTabId != null ? String(p.tigTabId) : byName ? String(byName.id) : ""; };
       fill(); setTimeout(fill, 1500);
       return h("div", { class: "g2" },
-        field("Time in grade comes from tab", tigSel, "Matched to each CPL by Discord ID, callsign or name."),
+        field("Time in grade comes from tab", tigSel, "Matched to each person by Discord ID, callsign or name."),
         field("…column", bind(p, "tigCol", { max: 2, placeholder: "G", set: v => v.trim().toUpperCase() }), "A date (when they made CPL) or a number of days. Blank = use the date set per person above."));
     })()));
   const tb = h("div", { class: "sec", style: "display:grid;gap:12px" }, h("h3", { text: "Requirements" }),
-    h("p", { class: "help", text: "Each requirement counts reports: pick the form, the box the corporal's name is in, and (optionally) a box that must contain some text. A report can also count toward several requirements." }));
+    h("p", { class: "help", text: "Each requirement counts reports: pick the form, the box the person's name is in, and (optionally) a box that must contain some text. A report can also count toward several requirements." }));
   p.tasks.forEach((t, i) => {
     t.sources = t.sources || [];
     const srcs = t.sources.map((src, si) => {
@@ -1650,7 +1675,7 @@ function drawSetup(box) {
       const fdef = f && src.field ? f.blocks.flatMap(b => b.fields || []).find(x => x.id === src.field) : null;
       return h("div", { class: "src" },
         field("Report", bind(src, "form", { type: "select", structural: true, options: [["", "— form —"]].concat(CFG.forms.map(x => [x.id, x.title])) })),
-        field("CPL's name is in", bind(src, "person", { type: "select", options: [["", "— box —"]].concat(keys.filter(k => ["officer", "officers", "discord_id", "text"].includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")])) })),
+        field("Person's name is in", bind(src, "person", { type: "select", options: [["", "— box —"]].concat(keys.filter(k => ["officer", "officers", "discord_id", "text"].includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")])) })),
         field("Only if box", bind(src, "field", { type: "select", structural: true, options: [["", "— any report —"]].concat(keys.filter(k => !["repeater", "checklist"].includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")])) })),
         src.field ? field("contains", fdef && fdef.type === "select" ? bind(src, "value", { type: "select", options: [["", "— filled in —"]].concat((fdef.options || []).map(o => [o, o])) }) : bind(src, "value", { placeholder: "text (blank = filled in)" })) : h("div"),
         h("button", { class: "ibtn", title: "Remove", style: "align-self:end;margin-bottom:8px", onclick: () => { t.sources.splice(si, 1); changed(true); } }, "×"));

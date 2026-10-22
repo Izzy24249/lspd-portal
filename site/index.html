@@ -76,11 +76,13 @@ function draftStatus(msg){ const el = $("draftStatus"); el.textContent = msg; el
 
 /* ---------- routing ---------- */
 function go(view){
-  if(view === "promo" && !(CONFIG && promoOn())) view = "home";
-  if(view !== "home" && view !== "promo" && !openForm(view)) view = "home";
+  const isProg = /^promo(:[a-z0-9-]+)?$/.test(view);
+  if(isProg){ PID = view.split(":")[1] || "cpl"; if(!(CONFIG && progList().some(p => p.id === PID))) view = "home"; }
+  const prog = /^promo(:[a-z0-9-]+)?$/.test(view);
+  if(view !== "home" && !prog && !openForm(view)) view = "home";
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  $(view === "home" ? "view-home" : view === "promo" ? "view-promo" : "view-form").classList.add("active");
-  if(view === "promo") loadPromo();
+  $(view === "home" ? "view-home" : prog ? "view-promo" : "view-form").classList.add("active");
+  if(prog){ promoOpen = new Set(); promoQuery = ""; promoFilter = "all"; loadPromo(); }
   if(view === "home"){ if(ctrl) ctrl.saveDraft(); current = null; }
   history.replaceState(null, "", view === "home" ? location.pathname : "#" + view);
   window.scrollTo({top:0,behavior:"smooth"});
@@ -132,39 +134,46 @@ function renderHome(){
   renderPrograms();
 }
 
-/* ---------- SGT promotion tracker ---------- */
-function promoOn(){ const p = (CONFIG.settings || {}).promo; return !!(p && p.on !== false); }
-let PROMO = null, PROMO_T = 0, promoFilter = "all", promoQuery = "";
-function renderPrograms(){
-  const p = (CONFIG.settings || {}).promo, on = promoOn();
-  if(!on){ $("programs").innerHTML = ""; return; }
-  const st = PROMO && PROMO.candidates ? PROMO.candidates : null;
-  const ready = st ? st.filter(c => c.complete).length : 0;
-  const tiles = [{ go: "promo", title: p.title || "CPL → SGT", sub: st ? st.length + " corporal" + (st.length === 1 ? "" : "s") + " · " + ready + " ready" : "View progress" }];   // more programs can be added here later
-  $("programs").innerHTML = `<section class="fsec progsec"><div class="fsec-head"><span class="fsec-ico">📈</span><h2>Training Progression</h2></div>
-    <div class="prog-tiles">${tiles.map(t => `<a class="prog-tile" onclick="go('${t.go}')"><span class="pt-ico">🎖️</span><span class="pt-txt"><b>${Portal.esc(t.title)}</b><small>${Portal.esc(t.sub)}</small></span><span class="pt-go">→</span></a>`).join("")}</div></section>`;
-  if(!st && Date.now() - PROMO_T > 30000) fetchPromo().then(renderPrograms).catch(()=>{});
+/* ---------- Training progression (one page per program: CPL → SGT, Onboarding, …) ---------- */
+function progList(){
+  const st = CONFIG.settings || {};
+  const all = [Object.assign({ noun: "Corporal" }, st.promo || {}, { id: "cpl" })].concat(Array.isArray(st.programs) ? st.programs : []);
+  return all.filter(p => p && p.on !== false && (p.id !== "cpl" || st.promo));
 }
-async function fetchPromo(){
-  PROMO_T = Date.now();
-  const res = await fetch(Portal.ENDPOINT + "?action=promo&t=" + Date.now());
+function promoOn(){ return progList().length > 0; }
+let PROMOS = {}, PROMO_T = {}, PID = "cpl", promoFilter = "all", promoQuery = "";
+const progIcon = p => p.id === "cpl" ? "🎖️" : p.id === "onboard" ? "🧭" : "📋";
+function renderPrograms(){
+  const list = progList();
+  if(!list.length){ $("programs").innerHTML = ""; return; }
+  const tiles = list.map(p => {
+    const d = PROMOS[p.id], st = d && d.candidates, ready = st ? st.filter(c => c.complete).length : 0, noun = (d && d.noun) || p.noun || "person";
+    return { go: p.id === "cpl" ? "promo" : "promo:" + p.id, icon: progIcon(p), title: p.title || p.id,
+      sub: st ? st.length + " " + noun.toLowerCase() + (st.length === 1 ? "" : "s") + " · " + ready + " complete" : "View progress" };
+  });
+  $("programs").innerHTML = `<section class="fsec progsec"><div class="fsec-head"><span class="fsec-ico">📈</span><h2>Training Progression</h2></div>
+    <div class="prog-tiles">${tiles.map(t => `<a class="prog-tile" onclick="go('${t.go}')"><span class="pt-ico">${t.icon}</span><span class="pt-txt"><b>${Portal.esc(t.title)}</b><small>${Portal.esc(t.sub)}</small></span><span class="pt-go">→</span></a>`).join("")}</div></section>`;
+  list.forEach(p => { if(!PROMOS[p.id] && Date.now() - (PROMO_T[p.id] || 0) > 30000) fetchPromo(p.id).then(renderPrograms).catch(()=>{}); });
+}
+async function fetchPromo(pid){
+  pid = pid || PID; PROMO_T[pid] = Date.now();
+  const res = await fetch(Portal.ENDPOINT + "?action=promo&p=" + encodeURIComponent(pid) + "&t=" + Date.now());
   const data = await res.json();
   if(!data.ok) throw new Error(data.error || "Could not load the tracker");
-  PROMO = data.promo; return PROMO;
-}
-function ring(done, total, size){
-  const r = 26, c = 2 * Math.PI * r, f = total ? done / total : 0;
-  return `<svg class="ring" viewBox="0 0 64 64" width="${size||64}" height="${size||64}"><circle cx="32" cy="32" r="${r}" class="rb"/><circle cx="32" cy="32" r="${r}" class="rf" stroke-dasharray="${(c*f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 32 32)"/><text x="32" y="36">${done}/${total}</text></svg>`;
+  PROMOS[pid] = data.promo; return data.promo;
 }
 function loadPromo(){
-  const p = (CONFIG.settings || {}).promo || {};
-  $("promoCrumb").textContent = p.title || "CPL → SGT";
-  if(PROMO && PROMO.candidates) drawPromo();
-  fetchPromo().then(drawPromo).catch(e => { if(!PROMO) $("promoMount").innerHTML = '<div class="loading">Could not load the tracker. ' + Portal.esc(e.message) + '</div>'; });
+  const p = progList().find(x => x.id === PID) || {};
+  $("promoCrumb").textContent = p.title || "Progression";
+  if(PROMOS[PID] && PROMOS[PID].candidates) drawPromo(); else $("promoMount").innerHTML = '<div class="loading">Loading…</div>';
+  const want = PID;
+  fetchPromo(want).then(() => { if(PID === want) drawPromo(); }).catch(e => { if(!PROMOS[want]) $("promoMount").innerHTML = '<div class="loading">Could not load the tracker. ' + Portal.esc(e.message) + '</div>'; });
 }
 let promoOpen = new Set();
 function drawPromo(){
-  const P = PROMO, E = Portal.esc;
+  const P = PROMOS[PID], E = Portal.esc;
+  if(!P) return;
+  const noun = P.noun || "Person", nouns = noun + (/s$/i.test(noun) ? "" : "s");
   if(!P.on){ $("promoMount").innerHTML = '<div class="loading">The tracker is turned off.</div>'; return; }
   const T = P.tasks || [];
   const C = (P.candidates || []).slice().sort((a,b) => (b.complete - a.complete) || (b.done - a.done) || a.callsign.localeCompare(b.callsign, undefined, {numeric:true}));
@@ -193,25 +202,25 @@ function drawPromo(){
   $("promoMount").innerHTML = `
     <header class="pb-head">
       <div class="pb-title">
-        <div class="pb-rank" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M8 14l12-7 12 7M8 21l12-7 12 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M8 28l12-7 12 7" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 5" opacity=".9"/></svg></div>
+        <div class="pb-rank" aria-hidden="true">${P.id !== "cpl" ? `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M24.5 15.5l-3 6-6 3 3-6z" fill="var(--gold)"/></svg>` : `<svg viewBox="0 0 40 40"><path d="M8 14l12-7 12 7M8 21l12-7 12 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M8 28l12-7 12 7" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 5" opacity=".9"/></svg>`}</div>
         <div><span class="pb-kick">Training Progression</span><h1>${E(P.title)}</h1>${P.subtitle ? `<p>${E(P.subtitle)}</p>` : ""}</div>
       </div>
-      <dl class="pb-stats"><div><dt>Corporals</dt><dd>${C.length}</dd></div><div><dt>Ready</dt><dd class="g">${ready}</dd></div><div><dt>Average</dt><dd>${avg}%</dd></div></dl>
+      <dl class="pb-stats"><div><dt>${E(nouns)}</dt><dd>${C.length}</dd></div><div><dt>${P.id === "cpl" ? "Ready" : "Complete"}</dt><dd class="g">${ready}</dd></div><div><dt>Average</dt><dd>${avg}%</dd></div></dl>
     </header>
     <div class="pb-tools"><input id="promoQ" placeholder="Search callsign or name" value="${E(promoQuery)}">
-      <div class="seg">${[["all","All"],["prog","In progress"],["ready","Ready"]].map(([k,l]) => `<button data-pf="${k}" class="${promoFilter===k?"on":""}">${l}</button>`).join("")}</div></div>
+      <div class="seg">${[["all","All"],["prog","In progress"],["ready", P.id === "cpl" ? "Ready" : "Complete"]].map(([k,l]) => `<button data-pf="${k}" class="${promoFilter===k?"on":""}">${l}</button>`).join("")}</div></div>
     ${P.error ? `<div class="maint">${E(P.error)}</div>` : ""}
     <div class="pb-board" style="--cols:${T.length}">
-      <div class="pb-row pb-th"><span class="pb-who">Corporal</span>${T.map((t, i) => `<span class="pb-task" title="${E(t.title)} (×${t.need})"><b>${i + 1}</b><small>${E(short(t))}</small></span>`).join("")}<span class="pb-prog">Progress</span></div>
+      <div class="pb-row pb-th"><span class="pb-who">${E(noun)}</span>${T.map((t, i) => `<span class="pb-task" title="${E(t.title)} (×${t.need})"><b>${i + 1}</b><small>${E(short(t))}</small></span>`).join("")}<span class="pb-prog">Progress</span></div>
       ${shown.length ? shown.map(c => {
-        const k = c.callsign, open = promoOpen.has(k);
+        const k = c.callsign || c.name, open = promoOpen.has(k);
         return `<div class="pb-item ${c.complete ? "ready" : ""} ${open ? "open" : ""}">
           <button class="pb-row" data-row="${E(k)}" aria-expanded="${open}">
-            <span class="pb-who"><code>${E(c.callsign)}</code><span class="nm">${E(c.name)}</span><span class="tg ${c.tigOk ? "ok" : ""}">${tigTxt(c)}</span></span>
+            <span class="pb-who">${c.callsign ? `<code>${E(c.callsign)}</code>` : ""}<span class="nm">${E(c.name)}</span>${P.tigDays ? `<span class="tg ${c.tigOk ? "ok" : ""}">${tigTxt(c)}</span>` : ""}</span>
             ${T.map((t, i) => `<span class="pb-cell" data-n="${i + 1}">${cell(c, t)}</span>`).join("")}
-            <span class="pb-prog">${c.complete ? '<span class="rd">Ready</span>' : ""}<span class="bar"><i style="width:${Math.round(c.done / Math.max(1,c.total) * 100)}%"></i></span><b>${c.done}/${c.total}</b></span>
+            <span class="pb-prog">${c.complete ? `<span class="rd">${P.id === "cpl" ? "Ready" : "Done"}</span>` : ""}<span class="bar"><i style="width:${Math.round(c.done / Math.max(1,c.total) * 100)}%"></i></span><b>${c.done}/${c.total}</b></span>
           </button>${open ? detail(c) : ""}</div>`;
-      }).join("") : `<div class="pb-empty">${C.length ? "No one matches." : "No corporals found on the roster."}</div>`}
+      }).join("") : `<div class="pb-empty">${C.length ? "No one matches." : "No " + nouns.toLowerCase() + " found on the roster tab."}</div>`}
     </div>
     <ol class="pb-legend">${T.map(t => `<li><span>${E(t.title)}</span><b>×${t.need}</b>${t.final ? "<em>final</em>" : ""}</li>`).join("")}</ol>
     <p class="promo-upd">${P.tigDays ? `Final step requires ${P.tigDays} days time in grade. ` : ""}Updates when a report is filed · checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;

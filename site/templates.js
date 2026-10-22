@@ -1670,5 +1670,111 @@ window.PORTAL_TEMPLATES = [
     }
    }
   ]
+ },
+ {
+  "theme": "hud",
+  "status": "hidden",
+  "copyText": true,
+  "webhookId": "",
+  "watermarkMode": "single",
+  "tags": {
+   "base": [],
+   "rules": []
+  },
+  "leaderboard": {
+   "enabled": false,
+   "countField": "",
+   "webhookId": "",
+   "messageId": "",
+   "title": "",
+   "heading": ""
+  },
+  "id": "bpalog",
+  "section": "Training",
+  "logoUrl": "img/lspd-badge.png",
+  "discordThumb": "https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/img/lspd-badge.png",
+  "icon": "🎯",
+  "title": "Basic Training (BPA) Log",
+  "description": "Log an onboarding officer's Basic Training (BPA). A pass checks it off on the Onboarding page.",
+  "submitLabel": "Log Basic Training",
+  "color": "#22c55e",
+  "embedTitle": "🎯 Basic Training (BPA) — {bpNo}",
+  "threadTitle": "{bpTrainee} | BPA {bpResult}",
+  "archiveSheet": "Basic Training Log",
+  "blocks": [
+   {
+    "type": "banner",
+    "title": "LSPD - BASIC TRAINING (BPA) LOG",
+    "subtitle": "Onboarding requirement. A passed log updates the Onboarding progression page automatically."
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "bpNo",
+      "label": "Log #:",
+      "type": "case_number",
+      "prefix": "BPA",
+      "required": true
+     },
+     {
+      "id": "bpDate",
+      "label": "Date:",
+      "type": "date",
+      "defaultToday": true,
+      "required": true
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "bpTrainee",
+      "label": "Onboarding officer:",
+      "type": "officer",
+      "required": true,
+      "rosterTabName": "Onboarding",
+      "allowTyped": true
+     },
+     {
+      "id": "bpInstructor",
+      "label": "Instructor:",
+      "type": "officer",
+      "required": true
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "bpResult",
+      "label": "Result:",
+      "type": "select",
+      "required": true,
+      "options": [
+       "Passed",
+       "Needs retake"
+      ]
+     },
+     {
+      "id": "bpLocation",
+      "label": "Location:",
+      "type": "text",
+      "placeholder": "Mission Row PD"
+     }
+    ]
+   },
+   {
+    "type": "longtext",
+    "id": "bpNotes",
+    "title": "NOTES",
+    "hint": "How they did, and anything to work on.",
+    "maxLength": 3000,
+    "required": false,
+    "followUp": true
+   }
+  ]
  }
 ];

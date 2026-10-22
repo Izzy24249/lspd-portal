@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 29;
+const BACKEND_VERSION = 30;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -39,7 +39,7 @@ function doGet(e) {
   try {
     const action = (e && e.parameter && e.parameter.action) || "";
     if (action === "config") return json_({ ok: true, config: publicConfig_() });
-    if (action === "promo") return json_({ ok: true, promo: promoView_(false) });
+    if (action === "promo") return json_({ ok: true, promo: promoView_(false, e.parameter.p) });
     return json_({ ok: true, service: "LSPD Forms Portal" });
   } catch (err) {
     return json_({ ok: false, error: errMsg_(err) });
@@ -129,7 +129,7 @@ function publicConfig_() {
   return {
     version: cfg.version,
     backend: BACKEND_VERSION,
-    settings: Object.assign({}, cfg.settings, { promo: promoCfg_(cfg) }),   // tracker on by default, even before its setup is first saved
+    settings: Object.assign({}, cfg.settings, { promo: promoCfg_(cfg, "cpl"), programs: programs_(cfg).slice(1) }),   // progression on by default, even before its setup is first saved
     rosters: rostersFor_(cfg.forms.filter(f => f.status !== "hidden")),
     roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_().map(p => ({ name: p.name, id: p.id, extra: p.extra, division: p.division })) : []; } catch (e) { return []; } })(),
     forms: cfg.forms.filter(f => f.status !== "hidden")
@@ -158,9 +158,9 @@ function rosterBook_() {
   return ROSTER_BOOK_.book;
 }
 const ROSTER_CACHE_SECONDS_ = 3600;  // kept warm every 10 minutes by warmRosters() so nobody waits on the sheet
-function getRosterTab_(tabId, fresh, cols, cacheOnly) {
+function getRosterTab_(tabId, fresh, cols, cacheOnly, noExclude) {
   cols = (cols || []).filter(c => colIndex_(c) >= 0);
-  const key = "roster_tab_" + tabId + (cols.length ? "_" + cols.join("") : ""), cache = CacheService.getScriptCache();
+  const key = "roster_tab_" + tabId + (cols.length ? "_" + cols.join("") : "") + (noExclude ? "_all" : ""), cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get(key); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   if (cacheOnly) return null;
   const r = ((getConfig_().settings || {}).roster) || {};
@@ -171,7 +171,7 @@ function getRosterTab_(tabId, fresh, cols, cacheOnly) {
     else {
       out.tab = sh.getName();
       const EXCL = str_(r.exclude === undefined ? ROSTER_EXCLUDE_DEFAULT : r.exclude).toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
-      const isOut = t => { t = String(t || "").toLowerCase(); return EXCL.some(w => t.indexOf(w) !== -1); };
+      const isOut = noExclude ? () => false : t => { t = String(t || "").toLowerCase(); return EXCL.some(w => t.indexOf(w) !== -1); };   // onboarding tab: keep everyone
       const info = { tab: out.tab, people: 0, noId: 0, skipped: "", left: 0 };
       const rows = readRosterTab_(sh, isOut, info, out.warnings, { moreCols: cols });
       if (info.skipped) out.error = "Tab \"" + out.tab + "\": " + info.skipped + ".";
@@ -254,7 +254,9 @@ function warmRosters() {
   try { callsignMap_(true); } catch (e) {}
   rostersFor_(cfg.forms, { fresh: true });
   try { if (usesOldRoster_(cfg.forms)) getRoster_(true); } catch (e) {}
-  try { promoCandidates_(true); promoSync_(); } catch (e) {}
+  programs_(cfg).forEach(p => { try { if (p.on) promoCandidates_(true, p.id); } catch (e) {} });
+  try { promoSync_(); } catch (e) {}
+  promoClearCache_();
 }
 function ensureWarmTrigger_() {
   const cache = CacheService.getScriptCache();
@@ -283,6 +285,7 @@ function onRosterChange(e) {
   c.put("roster_busy", "1", 120);
   try {
     for (let i = 0; i < 3; i++) { c.remove("roster_pending"); warmRosters(); if (!c.get("roster_pending")) break; }
+    promoClearCache_();
   } finally { c.remove("roster_busy"); }
 }
 function usesOldRoster_(forms) {
@@ -1064,11 +1067,13 @@ function updateHoursBoard_(cfg) {
 }
 
 // =====================================================================
-// SGT PROMOTION TRACKER (CPL candidates from a roster tab; tasks credited by reports or by an admin)
+// TRAINING PROGRESSION (one or more programs: people from a roster tab; requirements credited by reports or by an admin)
+//   "cpl"     = CPL → SGT (settings.promo, kept for older setups)
+//   others    = settings.programs[]  (e.g. "onboard" = Onboarding)
 // =====================================================================
 const PROMO_DEFAULT_ = {
-  on: true, title: "CPL → SGT", subtitle: "Corporal requirements for promotion to Sergeant. Progress updates automatically when a report is filed.",
-  rosterTabId: null, rosterTabName: "FTO - Roster", col: "C", match: "L-5##", tigDays: 14, tigCol: "G", tigTabId: null, tigTabName: "LSPD Personnel Roster",
+  id: "cpl", noun: "Corporal", on: true, title: "CPL → SGT", subtitle: "Corporal requirements for promotion to Sergeant. Progress updates automatically when a report is filed.",
+  rosterTabId: null, rosterTabName: "FTO - Roster", col: "C", match: "L-5##", allRows: false, tigDays: 14, tigCol: "G", tigTabId: null, tigTabName: "LSPD Personnel Roster",
   tasks: [
     { id: "gomWitness", title: "Witness a Global Operation Manual Training", need: 1, desc: "Sit in on a GOM training hosted by a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a Global Operation Manual Training" }] },
     { id: "gomLead", title: "Lead a GOM Training with a SGT+ hosting", need: 1, desc: "Run the training while a SGT+ hosts and observes.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Lead a GOM Training with a SGT+ hosting" }] },
@@ -1077,31 +1082,67 @@ const PROMO_DEFAULT_ = {
     { id: "supervisorRa", title: "Supervisor Ride-Along with a SGM+", need: 1, desc: "Final step: only after the 14-day time in grade and every other requirement.", final: true, sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Supervisor Ride-Along with a SGM+" }] }
   ]
 };
-function cleanPromo_(p) {
-  if (!p) return JSON.parse(JSON.stringify(PROMO_DEFAULT_));
+const ONBOARD_DEFAULT_ = {
+  id: "onboard", noun: "Officer", on: true, title: "Onboarding", subtitle: "New officers' first steps. Boxes tick themselves when the Basic Training log or the Academy Evaluation is filed.",
+  rosterTabId: null, rosterTabName: "Onboarding", col: "", match: "", allRows: true, tigDays: 0, tigCol: "", tigTabId: null, tigTabName: "",
+  tasks: [
+    { id: "bpa", title: "Basic Training - BPA", need: 1, desc: "Complete Basic Training (BPA) with an instructor.", sources: [{ form: "bpalog", person: "bpTrainee", field: "bpResult", value: "Passed" }] },
+    { id: "academyRa", title: "Academy in-depth RA", need: 1, desc: "Ride-along covered by the Academy Evaluation.", sources: [{ form: "academy", person: "traineeCallsign", field: "", value: "" }, { form: "academy", person: "traineeDiscordId", field: "", value: "" }] }
+  ]
+};
+function cleanPromo_(p, dflt, id) {
+  dflt = dflt || PROMO_DEFAULT_;
+  if (!p) return JSON.parse(JSON.stringify(dflt));
   const out = {
-    on: p.on !== false, title: clip_(str_(p.title) && str_(p.title) !== "SGT Promotion Tracker" ? str_(p.title) : PROMO_DEFAULT_.title, 80), subtitle: clip_(str_(p.subtitle), 300),
+    id: id || dflt.id, noun: clip_(str_(p.noun) || dflt.noun || "Person", 30),
+    on: p.on !== false, title: clip_(str_(p.title) && str_(p.title) !== "SGT Promotion Tracker" ? str_(p.title) : dflt.title, 80), subtitle: clip_(str_(p.subtitle), 300),
     rosterTabId: p.rosterTabId != null && p.rosterTabId !== "" && isFinite(Number(p.rosterTabId)) ? Number(p.rosterTabId) : null,
     rosterTabName: String(p.rosterTabName || "").substring(0, 100),
-    col: /^[A-Za-z]{1,2}$/.test(str_(p.col)) ? str_(p.col).toUpperCase() : "C",
-    match: clip_(str_(p.match) || "L-5##", 40), tigDays: Math.max(0, Math.min(365, parseInt(p.tigDays, 10) || 0)),
+    col: /^[A-Za-z]{1,2}$/.test(str_(p.col)) ? str_(p.col).toUpperCase() : "",
+    match: clip_(str_(p.match), 40), allRows: !!p.allRows, tigDays: Math.max(0, Math.min(365, parseInt(p.tigDays, 10) || 0)),
     tigCol: /^[A-Za-z]{1,2}$/.test(str_(p.tigCol)) ? str_(p.tigCol).toUpperCase() : "",
     tigTabId: p.tigTabId != null && p.tigTabId !== "" && isFinite(Number(p.tigTabId)) ? Number(p.tigTabId) : null,
-    tigTabName: String(p.tigTabName == null ? PROMO_DEFAULT_.tigTabName : p.tigTabName).substring(0, 100),
+    tigTabName: String(p.tigTabName == null ? (dflt.tigTabName || "") : p.tigTabName).substring(0, 100),
     tasks: []
   };
   const ids = {};
   (p.tasks || []).slice(0, 12).forEach(t => {
-    const id = str_(t.id);
-    if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(id) || ids[id]) throw new Error("Promotion tracker: every task needs its own ID (letters/numbers).");
-    ids[id] = 1;
-    if (!str_(t.title)) throw new Error("Promotion tracker: a task has no title.");
-    out.tasks.push({ id: id, title: clip_(str_(t.title), 120), desc: clip_(str_(t.desc), 300), need: Math.max(1, Math.min(50, parseInt(t.need, 10) || 1)), final: !!t.final,
+    const tid = str_(t.id);
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(tid) || ids[tid]) throw new Error(out.title + ": every requirement needs its own ID (letters/numbers).");
+    ids[tid] = 1;
+    if (!str_(t.title)) throw new Error(out.title + ": a requirement has no title.");
+    out.tasks.push({ id: tid, title: clip_(str_(t.title), 120), desc: clip_(str_(t.desc), 300), need: Math.max(1, Math.min(50, parseInt(t.need, 10) || 1)), final: !!t.final,
       sources: (t.sources || []).slice(0, 6).map(x => ({ form: str_(x.form), person: str_(x.person), field: str_(x.field), value: clip_(str_(x.value), 120) })).filter(x => x.form && x.person) });
   });
   return out;
 }
-function promoCfg_(cfg) { const p = ((cfg || getConfig_()).settings || {}).promo || PROMO_DEFAULT_; if (p.title === "SGT Promotion Tracker") p.title = PROMO_DEFAULT_.title; return p; }
+function cleanPrograms_(list) {
+  const out = [], seen = { cpl: 1 };
+  (Array.isArray(list) ? list : [ONBOARD_DEFAULT_]).slice(0, 8).forEach(p => {
+    const id = str_(p && p.id).toLowerCase();
+    if (!/^[a-z][a-z0-9-]{1,20}$/.test(id) || seen[id]) throw new Error("Training Progression: each program needs its own short ID (letters, numbers, dashes).");
+    seen[id] = 1;
+    out.push(cleanPromo_(p, id === "onboard" ? ONBOARD_DEFAULT_ : Object.assign({}, ONBOARD_DEFAULT_, { title: "New program", tasks: [] }), id));
+  });
+  return out;
+}
+// every program, CPL first
+function programs_(cfg) {
+  const s = (cfg || getConfig_()).settings || {};
+  const cpl = Object.assign({}, PROMO_DEFAULT_, s.promo || {}, { id: "cpl" });
+  if (cpl.title === "SGT Promotion Tracker") cpl.title = PROMO_DEFAULT_.title;
+  if (!cpl.noun) cpl.noun = "Corporal";
+  if (s.promo && !s.promo.col && s.promo.match) cpl.col = "C";
+  const more = Array.isArray(s.programs) ? s.programs : [ONBOARD_DEFAULT_];
+  return [cpl].concat(more.map(p => Object.assign({}, p)));
+}
+function promoCfg_(cfg, pid) {
+  const all = programs_(cfg);
+  return all.find(p => p.id === (pid || "cpl")) || all[0];
+}
+const progId_ = pid => (pid && pid !== "cpl" ? pid : "cpl");
+const taskKey_ = (pid, tid) => progId_(pid) === "cpl" ? tid : pid + ":" + tid;          // CPL keeps plain IDs (older sheets)
+const metaType_ = (pid, type) => progId_(pid) === "cpl" ? type : type + ":" + pid;      // "since" / "seen" per program
 function promoSheet_() {
   const ss = ss_();
   let sh = ss.getSheetByName(PROMO_SHEET_);
@@ -1112,12 +1153,15 @@ function promoSheet_() {
   }
   return sh;
 }
+function promoClearCache_() {
+  try { CacheService.getScriptCache().removeAll(programs_().map(p => "promo_view_" + p.id).concat(["promo_view"])); } catch (e) {}
+}
 function promoAppend_(list) {
   const rows = list.map(e => [Utilities.getUuid().slice(0, 8), new Date(), e.type, "'" + e.c.key, e.c.callsign, cellSafe_(e.c.name), e.task, e.count || 0, e.form || "", cellSafe_(e.report || ""), e.date ? "'" + e.date : "", cellSafe_(e.note || ""), e.by || "", ""]);
   if (!rows.length) return;
   const sh = promoSheet_();
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  CacheService.getScriptCache().remove("promo_view");
+  promoClearCache_();
 }
 // "L-5##" -> /^L5\d\d$/ (letters/digits only, so "L-501", "L501" and "l 501" all match)
 function promoRe_(pattern) {
@@ -1129,115 +1173,133 @@ function promoTabId_(pc, which) {
   if (id != null) return id;
   if (!str_(name)) return null;
   const want = str_(name).toLowerCase();
-  const sh = rosterBook_().getSheets().find(x => x.getName() === name) || rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want);
+  const sheets = rosterBook_().getSheets();
+  const sh = sheets.find(x => x.getName() === name) || sheets.find(x => x.getName().trim().toLowerCase() === want) ||
+    (which !== "tig" && sheets.find(x => x.getName().toLowerCase().indexOf(want.replace(/s$/, "")) !== -1));   // "Onboarding" also finds "Onboarding - Roster"
   return sh ? sh.getSheetId() : null;
 }
-// CPLs on the roster: [{ key, callsign, name, id, tigDate }]
-function promoCandidates_(fresh) {
-  const pc = promoCfg_();
+// People in a program: [{ key, callsign, name, id, tigRaw }]
+function promoCandidates_(fresh, pid) {
+  const pc = promoCfg_(null, pid);
   const tabId = promoTabId_(pc);
   if (tabId == null) return { error: "Roster tab \"" + pc.rosterTabName + "\" not found in the roster sheet.", list: [] };
   // time in grade: a column on another tab (e.g. LSPD Personnel Roster col G), matched by Discord ID / callsign / name
   const tigTab = pc.tigCol ? promoTabId_(pc, "tig") : null;
-  const ownTab = pc.tigTabId == null && !str_(pc.tigTabName);            // no other tab named: the column is on the CPL tab itself
+  const ownTab = pc.tigTabId == null && !str_(pc.tigTabName);
   const sameTab = !!pc.tigCol && (ownTab || tigTab === tabId);
-  const cols = [pc.col].concat(sameTab ? [pc.tigCol] : []).filter((x, i, a) => a.indexOf(x) === i).sort();
-  const tab = getRosterTab_(tabId, !!fresh, cols);
+  const cols = [pc.col].concat(sameTab ? [pc.tigCol] : []).filter((x, i, a) => x && a.indexOf(x) === i).sort();
+  const tab = getRosterTab_(tabId, !!fresh, cols, false, !!pc.allRows);
   let tigPeople = [];
   if (pc.tigCol && !sameTab && tigTab != null) { try { tigPeople = getRosterTab_(tigTab, !!fresh, [pc.tigCol]).people || []; } catch (e) {} }
-  const re = promoRe_(pc.match), list = [], seen = {};
+  const re = str_(pc.match) ? promoRe_(pc.match) : null, list = [], seen = {};
   (tab.people || []).forEach(p => {
-    const cs = str_(p.more && p.more[pc.col]);
-    if (!cs || !re.test(cs.toUpperCase().replace(/[^A-Z0-9]/g, ""))) return;
-    const name = p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name.replace(cs, "").trim();
-    const key = p.id || "CS:" + callKey_(cs);
+    // callsign: the chosen column, else the "L-801 | Name" prefix the roster already gives
+    let cs = pc.col ? str_(p.more && p.more[pc.col]) : "";
+    if (!cs && p.name.indexOf("|") !== -1) cs = p.name.split("|")[0].trim();
+    if (re && (!cs || !re.test(cs.toUpperCase().replace(/[^A-Z0-9]/g, "")))) return;
+    const name = p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : (cs ? p.name.replace(cs, "").trim() : p.name);
+    const key = p.id || (cs ? "CS:" + callKey_(cs) : "NM:" + nameKey_(name || p.name));
     if (seen[key]) return; seen[key] = 1;
     let tigRaw = sameTab ? str_(p.more && p.more[pc.tigCol]) : "";
     if (!sameTab && tigPeople.length) {
       const ck = callKey_(cs), nk = nameKey_(name || p.name);
-      const m = (p.id && tigPeople.find(x => x.id === p.id)) || tigPeople.find(x => callKey_(x.name) === ck) || (nk && tigPeople.find(x => nameKey_(x.name) === nk));
+      const m = (p.id && tigPeople.find(x => x.id === p.id)) || (ck && tigPeople.find(x => callKey_(x.name) === ck)) || (nk && tigPeople.find(x => nameKey_(x.name) === nk));
       if (m) tigRaw = str_(m.more && m.more[pc.tigCol]);
     }
     list.push({ key: key, callsign: cs, name: name || p.name, id: p.id || "", tigRaw: tigRaw });
   });
-  list.sort((a, b) => a.callsign.localeCompare(b.callsign, undefined, { numeric: true }));
+  list.sort((a, b) => (a.callsign || "~").localeCompare(b.callsign || "~", undefined, { numeric: true }) || a.name.localeCompare(b.name));
   return { error: tab.error || "", list: list, tab: tab.tab };
 }
-function promoFind_(key) {
-  const c = promoCandidates_().list.find(x => x.key === str_(key));
-  if (!c) throw new Error("That CPL isn't on the roster any more.");
+function promoFind_(key, pid) {
+  const c = promoCandidates_(false, pid).list.find(x => x.key === str_(key));
+  if (!c) throw new Error("That person isn't on the roster tab any more.");
   return c;
 }
-function promoTask_(id) {
-  const t = promoCfg_().tasks.find(x => x.id === str_(id));
-  if (!t) throw new Error("Unknown task.");
+function promoTask_(id, pid) {
+  const t = promoCfg_(null, pid).tasks.find(x => x.id === str_(id));
+  if (!t) throw new Error("Unknown requirement.");
   return t;
 }
-// remember the first day each CPL showed up (used for time in grade when no date is set)
+// remember the first day each person showed up (used for time in grade when no date is set)
 function promoSync_() {
-  const cands = promoCandidates_().list;
-  if (!cands.length) return;
-  const have = {};
-  const data = promoSheet_().getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) if (data[i][2] === "since" || data[i][2] === "seen") have[str_(data[i][3]).replace(/^'/, "")] = 1;
-  const add = cands.filter(c => !have[c.key]).map(c => ({ type: "seen", c: c, task: "", date: ymd_(new Date()), by: "system" }));
+  const data = promoSheet_().getDataRange().getValues(), add = [];
+  programs_().forEach(pc => {
+    if (!pc.on || !pc.tigDays) return;
+    const cands = promoCandidates_(false, pc.id).list;
+    const have = {}, tS = metaType_(pc.id, "since"), tN = metaType_(pc.id, "seen");
+    for (let i = 1; i < data.length; i++) if (data[i][2] === tS || data[i][2] === tN) have[str_(data[i][3]).replace(/^'/, "")] = 1;
+    cands.filter(c => !have[c.key]).forEach(c => add.push({ type: tN, c: c, task: "", date: ymd_(new Date()), by: "system" }));
+  });
   if (add.length) withLock_(() => { promoAppend_(add); return { ok: true }; });
 }
-// A filed report -> credits for every CPL named in the right box of a matching report
+// A filed report -> credits for every person named in the right box of a matching report, in every program
 function promoFromReport_(cfg, form, values) {
-  const pc = promoCfg_(cfg);
-  if (!pc.on) return {};
-  const hits = [];
-  pc.tasks.forEach(t => (t.sources || []).forEach(src => {
-    if (src.form !== form.id) return;
-    if (src.field) {
-      const v = str_(values[src.field]).toLowerCase(), want = str_(src.value).toLowerCase();
-      if (want ? v.indexOf(want) === -1 : !v) return;
-    }
-    hits.push({ t: t, src: src });
-  }));
-  if (!hits.length) return {};
-  const cands = promoCandidates_().list;
   const caseF = allFields_(form).find(f => f.type === "case_number");
   const reportNo = caseF ? str_(values[caseF.id]) : "";
-  const out = [], done = {};
-  hits.forEach(h => {
-    peopleIn_(values[h.src.person]).forEach(p => {
-      const ck = callKey_(p.name), nk = nameKey_(p.name);
-      const c = cands.find(x => (p.id && x.id === p.id)) || (ck && cands.find(x => callKey_(x.callsign) === ck)) || (nk && cands.find(x => nameKey_(x.name) === nk));
-      if (!c || done[c.key + h.t.id]) return;
-      done[c.key + h.t.id] = 1;
-      out.push({ type: "credit", c: c, task: h.t.id, count: 1, form: form.id, report: reportNo, date: ymd_(parseYmd_(firstDate_(form, values)) || new Date()), by: "report" });
+  const out = [], missed = [];
+  programs_(cfg).forEach(pc => {
+    if (!pc.on) return;
+    const hits = [];
+    (pc.tasks || []).forEach(t => (t.sources || []).forEach(src => {
+      if (src.form !== form.id) return;
+      if (src.field) {
+        const v = str_(values[src.field]).toLowerCase(), want = str_(src.value).toLowerCase();
+        if (want ? v.indexOf(want) === -1 : !v) return;
+      }
+      hits.push({ t: t, src: src });
+    }));
+    if (!hits.length) return;
+    const cr = promoCandidates_(false, pc.id), cands = cr.list, done = {};
+    const tabId = cr.error ? null : promoTabId_(pc);
+    // only warn when the name box picks from this program's own roster tab (so a miss really is a mistake)
+    const linked = hits.some(h => { const f = allFields_(form).find(x => x.id === h.src.person); return f && tabId != null && Number(f.rosterTabId) === Number(tabId); });
+    let any = false;
+    hits.forEach(h => {
+      peopleIn_(values[h.src.person]).forEach(p => {
+        const ck = callKey_(p.name), nk = nameKey_(p.name);
+        const c = (p.id && cands.find(x => x.id === p.id)) || (ck && cands.find(x => x.callsign && callKey_(x.callsign) === ck)) || (nk && cands.find(x => nameKey_(x.name) === nk));
+        if (!c) return;
+        any = true;
+        if (done[c.key + h.t.id]) return;
+        done[c.key + h.t.id] = 1;
+        out.push({ type: "credit", c: c, task: taskKey_(pc.id, h.t.id), count: 1, form: form.id, report: reportNo, date: ymd_(parseYmd_(firstDate_(form, values)) || new Date()), by: "report" });
+      });
     });
+    if (!any && linked) missed.push(pc.title);
   });
-  if (!out.length) return { problem: hits.length ? "promotion tracker: no CPL from the roster was picked, so nothing was credited" : "" };
-  promoAppend_(out);
-  return { credited: out.length };
+  if (out.length) promoAppend_(out);
+  return { credited: out.length, problem: !out.length && missed.length ? "training progression (" + missed.join(", ") + "): nobody picked is on that roster tab, so nothing was checked off" : "" };
 }
 function firstDate_(form, values) { const f = allFields_(form).find(x => x.type === "date"); return f ? values[f.id] : ""; }
-// Everything the tracker page shows. admin=true adds entry IDs + notes for editing.
-function promoView_(admin) {
-  const cache = CacheService.getScriptCache();
-  if (!admin) { const hit = cache.get("promo_view"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
-  const cfg = getConfig_(), pc = promoCfg_(cfg);
-  const base = { on: pc.on, title: pc.title, subtitle: pc.subtitle, tigDays: pc.tigDays, tasks: pc.tasks.map(t => ({ id: t.id, title: t.title, desc: t.desc, need: t.need, final: t.final })) };
+// Everything a progression page shows. admin=true adds entry IDs + notes for editing.
+function promoView_(admin, pid) {
+  pid = progId_(pid);
+  const cache = CacheService.getScriptCache(), ck = "promo_view_" + pid;
+  if (!admin) { const hit = cache.get(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const cfg = getConfig_(), pc = promoCfg_(cfg, pid);
+  const base = { id: pc.id, noun: pc.noun || "Person", on: pc.on, title: pc.title, subtitle: pc.subtitle, tigDays: pc.tigDays,
+    tasks: (pc.tasks || []).map(t => ({ id: t.id, title: t.title, desc: t.desc, need: t.need, final: t.final })) };
   if (!pc.on && !admin) return base;
-  const cr = promoCandidates_();
+  const cr = promoCandidates_(false, pid);
   const data = promoSheet_().getDataRange().getValues();
   const byKey = {}, since = {}, seen = {}, excused = {};
+  const tS = metaType_(pid, "since"), tN = metaType_(pid, "seen");
+  const mine = {}; (pc.tasks || []).forEach(t => mine[taskKey_(pid, t.id)] = t.id);
   const keyFor = r => {
     const k = str_(r[3]).replace(/^'/, "");
     if (cr.list.some(c => c.key === k)) return k;
-    const ck = callKey_(str_(r[4])), c = ck && cr.list.find(x => callKey_(x.callsign) === ck);
+    const ck = callKey_(str_(r[4])), c = ck && cr.list.find(x => x.callsign && callKey_(x.callsign) === ck);
     return c ? c.key : k;
   };
   for (let i = 1; i < data.length; i++) {
-    const r = data[i], type = str_(r[2]), k = keyFor(r);
-    if (type === "since") since[k] = str_(r[10]).replace(/^'/, "");
-    else if (type === "seen") { if (!seen[k]) seen[k] = str_(r[10]).replace(/^'/, ""); }
-    else if (type === "excuse" || type === "unexcuse") excused[k + "|" + r[6]] = type === "excuse";
-    else if (type === "credit" && !str_(r[13])) {
-      (byKey[k] = byKey[k] || []).push({ entry: str_(r[0]), task: str_(r[6]), count: Number(r[7]) || 1, form: str_(r[8]), report: str_(r[9]), date: str_(r[10]).replace(/^'/, ""), by: str_(r[12]), note: admin ? str_(r[11]) : "" });
+    const r = data[i], type = str_(r[2]);
+    if (type === tS) since[keyFor(r)] = str_(r[10]).replace(/^'/, "");
+    else if (type === tN) { const k = keyFor(r); if (!seen[k]) seen[k] = str_(r[10]).replace(/^'/, ""); }
+    else if ((type === "excuse" || type === "unexcuse") && mine[str_(r[6])]) excused[keyFor(r) + "|" + mine[str_(r[6])]] = type === "excuse";
+    else if (type === "credit" && !str_(r[13]) && mine[str_(r[6])]) {
+      const k = keyFor(r);
+      (byKey[k] = byKey[k] || []).push({ entry: str_(r[0]), task: mine[str_(r[6])], count: Number(r[7]) || 1, form: str_(r[8]), report: str_(r[9]), date: str_(r[10]).replace(/^'/, ""), by: str_(r[12]), note: admin ? str_(r[11]) : "" });
     }
   }
   const forms = {}; cfg.forms.forEach(f => forms[f.id] = f.title);
@@ -1253,21 +1315,21 @@ function promoView_(admin) {
     if (!sinceDate && seen[c.key]) { sinceDate = seen[c.key]; sinceSrc = "first seen"; }
     const tig = sinceDate ? Math.max(0, Math.round((today - parseYmd_(sinceDate)) / 864e5)) : null;
     const tasks = {};
-    pc.tasks.forEach(t => {
+    (pc.tasks || []).forEach(t => {
       const items = credits.filter(x => x.task === t.id).sort((a, b) => a.date < b.date ? -1 : 1);
       const count = items.reduce((n, x) => n + x.count, 0);
       tasks[t.id] = { count: count, need: t.need, done: count >= t.need || !!excused[c.key + "|" + t.id], excused: !!excused[c.key + "|" + t.id],
         items: items.map(x => ({ entry: admin ? x.entry : undefined, date: x.date, count: x.count, source: x.form ? (forms[x.form] || x.form) : "Added by admin", report: x.report, note: x.note || undefined })) };
     });
-    const others = pc.tasks.filter(t => !t.final).every(t => tasks[t.id].done);
+    const others = (pc.tasks || []).filter(t => !t.final).every(t => tasks[t.id].done);
     const tigOk = !pc.tigDays || (tig != null && tig >= pc.tigDays);
-    pc.tasks.filter(t => t.final).forEach(t => { tasks[t.id].locked = !(others && tigOk); });
-    const doneN = pc.tasks.filter(t => tasks[t.id].done).length;
-    return { key: admin ? c.key : undefined, callsign: c.callsign, name: c.name, since: sinceDate, sinceSrc: admin ? sinceSrc : undefined, tig: tig, tigOk: tigOk,
-      tasks: tasks, done: doneN, total: pc.tasks.length, complete: doneN === pc.tasks.length && pc.tasks.length > 0 };
+    (pc.tasks || []).filter(t => t.final).forEach(t => { tasks[t.id].locked = !(others && tigOk); });
+    const doneN = (pc.tasks || []).filter(t => tasks[t.id].done).length;
+    return { key: admin ? c.key : undefined, callsign: c.callsign, name: c.name, since: sinceDate, sinceSrc: admin ? sinceSrc : undefined, tig: pc.tigDays ? tig : null, tigOk: tigOk,
+      tasks: tasks, done: doneN, total: (pc.tasks || []).length, complete: doneN === (pc.tasks || []).length && (pc.tasks || []).length > 0 };
   });
   base.updated = new Date().toISOString();
-  if (!admin) { const js = JSON.stringify(base); if (js.length < 95000) cache.put("promo_view", js, 120); }
+  if (!admin) { const js = JSON.stringify(base); if (js.length < 95000) cache.put(ck, js, 60); }
   return base;
 }
 
@@ -1606,35 +1668,38 @@ function handleAdmin_(d) {
       return { ok: true, rosters: rostersFor_(getConfig_().forms) };
     }
 
-    case "promoAdmin": return { ok: true, promo: promoView_(true), settings: promoCfg_() };
+    case "promoAdmin": {
+      const pid = progId_(d.program);
+      return { ok: true, promo: promoView_(true, pid), settings: promoCfg_(null, pid), programs: programs_().map(p => ({ id: p.id, title: p.title, on: p.on })) };
+    }
     case "promoCredit": {        // add a completion by hand
-      const c = promoFind_(d.key), t = promoTask_(d.taskId);
+      const pid = progId_(d.program), c = promoFind_(d.key, pid), t = promoTask_(d.taskId, pid);
       const n = Math.max(1, Math.min(10, parseInt(d.count, 10) || 1));
-      promoAppend_([{ type: "credit", c: c, task: t.id, count: n, form: "", report: "", date: str_(d.date) || ymd_(new Date()), note: clip_(str_(d.note), 300), by: me.username }]);
-      logAdmin_(me.username, "promotion credit", c.callsign + " " + c.name + " · " + t.title + (n > 1 ? " ×" + n : ""));
-      return { ok: true, promo: promoView_(true) };
+      promoAppend_([{ type: "credit", c: c, task: taskKey_(pid, t.id), count: n, form: "", report: "", date: str_(d.date) || ymd_(new Date()), note: clip_(str_(d.note), 300), by: me.username }]);
+      logAdmin_(me.username, "progression credit", promoCfg_(null, pid).title + " · " + (c.callsign ? c.callsign + " " : "") + c.name + " · " + t.title + (n > 1 ? " ×" + n : ""));
+      return { ok: true, promo: promoView_(true, pid) };
     }
     case "promoRemove": {        // take a completion back off (kept in the sheet, marked removed)
-      const sh = promoSheet_(), data = sh.getDataRange().getValues();
+      const pid = progId_(d.program), sh = promoSheet_(), data = sh.getDataRange().getValues();
       const i = data.findIndex((r, j) => j && str_(r[0]) === str_(d.rowId));
       if (i < 1) throw new Error("That entry no longer exists.");
       sh.getRange(i + 1, 14).setValue("removed by " + me.username + " " + ymd_(new Date()));
-      CacheService.getScriptCache().remove("promo_view");
-      logAdmin_(me.username, "promotion credit removed", str_(data[i][4]) + " " + str_(data[i][5]) + " · " + str_(data[i][6]));
-      return { ok: true, promo: promoView_(true) };
+      promoClearCache_();
+      logAdmin_(me.username, "progression credit removed", str_(data[i][4]) + " " + str_(data[i][5]) + " · " + str_(data[i][6]));
+      return { ok: true, promo: promoView_(true, pid) };
     }
     case "promoExcuse": {
-      const c = promoFind_(d.key), t = promoTask_(d.taskId);
-      promoAppend_([{ type: d.on ? "excuse" : "unexcuse", c: c, task: t.id, count: 0, note: clip_(str_(d.note), 300), by: me.username }]);
-      logAdmin_(me.username, d.on ? "promotion task excused" : "promotion excuse removed", c.callsign + " · " + t.title);
-      return { ok: true, promo: promoView_(true) };
+      const pid = progId_(d.program), c = promoFind_(d.key, pid), t = promoTask_(d.taskId, pid);
+      promoAppend_([{ type: d.on ? "excuse" : "unexcuse", c: c, task: taskKey_(pid, t.id), count: 0, note: clip_(str_(d.note), 300), by: me.username }]);
+      logAdmin_(me.username, d.on ? "progression requirement excused" : "progression excuse removed", (c.callsign || c.name) + " · " + t.title);
+      return { ok: true, promo: promoView_(true, pid) };
     }
-    case "promoSince": {         // date they became CPL (time in grade)
-      const c = promoFind_(d.key);
+    case "promoSince": {         // date they started the grade (time in grade)
+      const pid = progId_(d.program), c = promoFind_(d.key, pid);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(str_(d.date))) throw new Error("Pick a date.");
-      promoAppend_([{ type: "since", c: c, task: "", count: 0, date: str_(d.date), by: me.username }]);
-      logAdmin_(me.username, "CPL since date set", c.callsign + " → " + d.date);
-      return { ok: true, promo: promoView_(true) };
+      promoAppend_([{ type: metaType_(pid, "since"), c: c, task: "", count: 0, date: str_(d.date), by: me.username }]);
+      logAdmin_(me.username, "progression start date set", (c.callsign || c.name) + " → " + d.date);
+      return { ok: true, promo: promoView_(true, pid) };
     }
 
     case "hoursReport": {
@@ -1735,6 +1800,7 @@ function validateConfig_(c) {
       webhookId: str_(s.hours && s.hours.webhookId), title: clip_(str_(s.hours && s.hours.title), 120) }
   };
   out.settings.promo = cleanPromo_(s.promo);
+  out.settings.programs = cleanPrograms_(s.programs);
   if (out.settings.hours.board && !out.settings.hours.webhookId) throw new Error("Weekly hours board: pick which webhook it posts to (or turn it off).");
   if (out.settings.roster.verify.on && !out.settings.roster.verify.tab.trim() && out.settings.roster.verify.tabId == null) throw new Error("Roster: pick which tab is the main personnel roster (or turn the two-way check off).");
   if (out.settings.roster.verify.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.verify.url)) throw new Error("Main roster link must be a Google Sheets link.");
