@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 28;
+const BACKEND_VERSION = 29;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -237,6 +237,7 @@ function rostersFor_(forms, opts) {
     if (fd.rosterTabId == null || fd.rosterTabId === "") return;
     const set = ids[fd.rosterTabId] || (ids[fd.rosterTabId] = {});
     if (fd.pairCol && fd.pairFill) set[String(fd.pairCol).toUpperCase()] = 1;
+    if (fd.callCol) set[String(fd.callCol).toUpperCase()] = 1;            // this tab's own callsign column (for people not on the main roster)
   })));
   const out = {};
   Object.keys(ids).forEach(id => {
@@ -482,6 +483,7 @@ function getRoster_(fresh) {
     });
     // a plain "Roster" tab isn't a division
     out.people.forEach(p => { p.division = p.divisions.filter(d => !/^roster$/i.test(d)).join(", "); p.extra = clip_([p.division, p.rank].filter(Boolean).join(" · "), 100); delete p.divisions; });
+    try { const calls = callsignMap_(); if (calls) out.people.forEach(p => { p.name = clip_(withCallsign_(p, calls), 80); }); } catch (e) {}   // same "L-104 | Name" as the per-tab pickers
     if (!out.people.length && !out.error) out.error = "No officers found. Each tab needs a header row with a Name (or Callsign) column, and ideally a Discord ID column.";
   } catch (e) {
     out.error = "Couldn't open the roster sheet: " + errMsg_(e) + " (check the link, and that the Google account running the script can open that sheet).";
@@ -1762,6 +1764,7 @@ function validateConfig_(c) {
           fd.id = key(fd.id, fd.label || "field");
           if (fd.type === "select" && !(fd.options || []).length) throw new Error(f.title + ": dropdown \"" + (fd.label || fd.id) + "\" has no options.");
           if (fd.rosterTabId != null && fd.rosterTabId !== "") { fd.rosterTabId = Number(fd.rosterTabId); if (!isFinite(fd.rosterTabId)) delete fd.rosterTabId; }
+          if (fd.callCol !== undefined) { fd.callCol = /^[A-Za-z]{1,2}$/.test(str_(fd.callCol)) ? str_(fd.callCol).toUpperCase() : ""; if (!fd.callCol) delete fd.callCol; }
           if (fd.pairCol || fd.pairFill) {                       // "also fill <box> from roster column <J>"
             fd.pairCol = /^[A-Za-z]{1,2}$/.test(str_(fd.pairCol)) ? str_(fd.pairCol).toUpperCase() : "";
             fd.pairFill = /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(str_(fd.pairFill)) ? str_(fd.pairFill) : "";

@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Portal = (function () {
   // The WebApp.gs version this website expects (admin.html warns when Google is running an older one).
-  const BACKEND_NEEDS = 26;
+  const BACKEND_NEEDS = 29;
   // Apps Script Web App URL (Deploy > Manage deployments). Used by both pages.
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
 
@@ -167,6 +167,10 @@ window.Portal = (function () {
     return want.some(w => has.some(h => h === w || h.indexOf(w) !== -1 || initials(h) === w));
   }).map(p => {
     const pair = f && f.pairCol && p.more ? String(p.more[f.pairCol] || "").trim() : "";
+    // callsign from this tab's own column when the main roster didn't give one: "L-801 | A. Ramirez"
+    const cs = f && f.callCol && p.more ? String(p.more[f.callCol] || "").trim() : "";
+    const name = cs && p.name.indexOf("|") === -1 && p.name.indexOf(cs) === -1 ? cs + " | " + p.name : p.name;
+    p = Object.assign({}, p, { name: name });
     return { label: p.name, value: p.name, id: p.id, pair: pair, sub: [p.extra, pair ? "↳ " + pair : "", p.id ? "ID " + p.id : "no Discord ID"].filter(Boolean).join(" · "), search: (p.name + " " + (p.extra || "") + " " + pair + " " + (p.id || "")).toLowerCase() };
   });
 
