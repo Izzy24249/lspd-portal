@@ -148,11 +148,12 @@ function renderPrograms(){
   if(!list.length){ $("programs").innerHTML = ""; return; }
   const tiles = list.map(p => {
     const d = PROMOS[p.id], st = d && d.candidates, ready = st ? st.filter(c => c.complete).length : 0, noun = (d && d.noun) || p.noun || "person";
-    return { go: p.id === "cpl" ? "promo" : "promo:" + p.id, icon: progIcon(p), title: p.title || p.id,
+    const late = st ? st.filter(c => c.deadline && !c.complete && c.deadline.state === "over").length : 0, soon = st ? st.filter(c => c.deadline && !c.complete && c.deadline.state === "warn").length : 0;
+    return { go: p.id === "cpl" ? "promo" : "promo:" + p.id, icon: progIcon(p), title: p.title || p.id, count: st ? st.length : null, alert: late ? "over" : soon ? "warn" : "",
       sub: st ? st.length + " " + noun.toLowerCase() + (st.length === 1 ? "" : "s") + " · " + ready + " complete" : "View progress" };
   });
   $("programs").innerHTML = `<section class="fsec progsec"><div class="fsec-head"><span class="fsec-ico">📈</span><h2>Training Progression</h2></div>
-    <div class="prog-tiles">${tiles.map(t => `<a class="prog-tile" onclick="go('${t.go}')"><span class="pt-ico">${t.icon}</span><span class="pt-txt"><b>${Portal.esc(t.title)}</b><small>${Portal.esc(t.sub)}</small></span><span class="pt-go">→</span></a>`).join("")}</div></section>`;
+    <div class="prog-bubbles">${tiles.map(t => `<a class="prog-bubble" onclick="go('${t.go}')" title="${Portal.esc(t.sub)}"><span class="pb-ico">${t.icon}</span><b>${Portal.esc(t.title)}</b>${t.count != null ? `<span class="pb-n">${t.count}</span>` : ""}${t.alert ? `<span class="pb-alert ${t.alert}"></span>` : ""}</a>`).join("")}</div></section>`;
   list.forEach(p => { if(!PROMOS[p.id] && Date.now() - (PROMO_T[p.id] || 0) > 30000) fetchPromo(p.id).then(renderPrograms).catch(()=>{}); });
 }
 async function fetchPromo(pid){
@@ -170,13 +171,22 @@ function loadPromo(){
   fetchPromo(want).then(() => { if(PID === want) drawPromo(); }).catch(e => { if(!PROMOS[want]) $("promoMount").innerHTML = '<div class="loading">Could not load the tracker. ' + Portal.esc(e.message) + '</div>'; });
 }
 let promoOpen = new Set();
+// list order: callsign (default), progress, or deadline — remembered per browser
+let promoSort = "callsign"; try { promoSort = localStorage.getItem("lspd_prog_sort") || "callsign"; } catch (e) {}
+const byCall = (a, b) => (a.callsign || "~").localeCompare(b.callsign || "~", undefined, {numeric:true}) || a.name.localeCompare(b.name);
+function progSort(list, how){
+  const l = list.slice();
+  if (how === "progress") return l.sort((a, b) => (b.complete - a.complete) || (b.done - a.done) || byCall(a, b));
+  if (how === "deadline") { const k = c => !c.deadline || c.complete ? 1e6 : c.deadline.left; return l.sort((a, b) => k(a) - k(b) || byCall(a, b)); }
+  return l.sort(byCall);
+}
 function drawPromo(){
   const P = PROMOS[PID], E = Portal.esc;
   if(!P) return;
   const noun = P.noun || "Person", nouns = noun + (/s$/i.test(noun) ? "" : "s");
   if(!P.on){ $("promoMount").innerHTML = '<div class="loading">The tracker is turned off.</div>'; return; }
   const T = P.tasks || [];
-  const C = (P.candidates || []).slice().sort((a,b) => (b.complete - a.complete) || (b.done - a.done) || a.callsign.localeCompare(b.callsign, undefined, {numeric:true}));
+  const C = progSort(P.candidates || [], promoSort);
   const ready = C.filter(c => c.complete).length;
   const avg = C.length ? Math.round(C.reduce((n,c) => n + c.done / Math.max(1,c.total), 0) / C.length * 100) : 0;
   const q = promoQuery.toLowerCase();
@@ -212,6 +222,7 @@ function drawPromo(){
       <dl class="pb-stats"><div><dt>${E(nouns)}</dt><dd>${C.length}</dd></div><div><dt>${P.id === "cpl" ? "Ready" : "Complete"}</dt><dd class="g">${ready}</dd></div><div><dt>Average</dt><dd>${avg}%</dd></div></dl>
     </header>
     <div class="pb-tools"><input id="promoQ" placeholder="Search callsign or name" value="${E(promoQuery)}">
+      <label class="pb-sort">Order <select id="promoSort">${[["callsign","Callsign"],["progress","Progress"]].concat(P.deadlineDays ? [["deadline","Days left"]] : []).map(([k,l]) => `<option value="${k}" ${promoSort===k?"selected":""}>${l}</option>`).join("")}</select></label>
       <div class="seg">${[["all","All"],["prog","In progress"],["ready", P.id === "cpl" ? "Ready" : "Complete"]].map(([k,l]) => `<button data-pf="${k}" class="${promoFilter===k?"on":""}">${l}</button>`).join("")}</div></div>
     ${P.error ? `<div class="maint">${E(P.error)}</div>` : ""}
     <div class="pb-board" style="--cols:${T.length}">
@@ -231,6 +242,7 @@ function drawPromo(){
     <p class="promo-upd">${P.tigDays ? `Final step requires ${P.tigDays} days time in grade. ` : ""}${P.deadlineDays ? `Requirements must be finished within ${P.deadlineDays} days of joining${P.ext ? ` (finishing Basic Training in the last ${P.ext.window} days gives ${P.ext.days} more days for the ride-along)` : ""}. ` : ""}Updates when a report is filed · checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;
   const qi = $("promoQ"); qi.oninput = () => { promoQuery = qi.value; const pos = qi.selectionStart; drawPromo(); const n = $("promoQ"); n.focus(); n.setSelectionRange(pos, pos); };
   document.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => { promoFilter = b.dataset.pf; drawPromo(); });
+  $("promoSort").onchange = e => { promoSort = e.target.value; try { localStorage.setItem("lspd_prog_sort", promoSort); } catch (x) {} drawPromo(); };
   document.querySelectorAll("[data-row]").forEach(b => b.onclick = () => { const k = b.dataset.row; promoOpen.has(k) ? promoOpen.delete(k) : promoOpen.add(k); drawPromo(); });
 }
 $("formGrid").addEventListener("click", e => { const c = e.target.closest("[data-open]"); if(c) go(c.dataset.open); });

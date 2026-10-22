@@ -1549,7 +1549,7 @@ function pageHours(page) {
 }
 
 /* ---------------- TRAINING PROGRESSION (one or more programs) ---------------- */
-let PROMO_ADMIN = null, PROMO_OPEN = new Set(), SETUP_OPEN = false, PROMO_PID = "cpl", PROMO_PROGS = null;
+let PROMO_ADMIN = null, PROMO_OPEN = new Set(), SETUP_OPEN = false, PROMO_PID = "cpl", PROMO_PROGS = null, ADM_SORT = "callsign";
 // the settings object for a program inside CFG (CPL lives in settings.promo, the rest in settings.programs)
 function progSettings(pid, seed) {
   if (pid === "cpl") { if (!CFG.settings.promo && seed) adoptSetting("promo", clone(seed)); return CFG.settings.promo; }
@@ -1598,7 +1598,9 @@ function promoAct(action, data, box) {
 }
 function drawCands(box, P) {
   box.innerHTML = "";
-  const C = P.candidates || [], T = P.tasks || [];
+  const order = ADM_SORT, call = (a, b) => (a.callsign || "~").localeCompare(b.callsign || "~", undefined, { numeric: true }) || a.name.localeCompare(b.name);
+  const dk = c => !c.deadline || c.complete ? 1e6 : c.deadline.left;
+  const C = (P.candidates || []).slice().sort(order === "progress" ? (a, b) => (b.complete - a.complete) || (b.done - a.done) || call(a, b) : order === "deadline" ? (a, b) => dk(a) - dk(b) || call(a, b) : call), T = P.tasks || [];
   const ready = C.filter(c => c.complete).length;
   box.append(h("div", { class: "kpis" },
     h("div", { class: "kpi" }, h("small", { text: (P.noun || "Person") + "s" }), h("b", { text: String(C.length) })),
@@ -1606,6 +1608,10 @@ function drawCands(box, P) {
     h("div", { class: "kpi" }, h("small", { text: "Requirements" }), h("b", { text: String(T.length) })),
     h("div", { class: "kpi wide" }, h("small", { text: "Source" }), h("span", { class: "help", text: P.error ? "⚠ " + P.error : "Roster callsigns · credits from reports and admins" }))));
   if (!C.length) { box.append(h("div", { class: "sec empty-note", text: "Nobody matched. Check the roster tab (and callsign pattern, if any) under Setup." })); return; }
+  const sortSel = h("select", { class: "role-sel", onchange: () => { ADM_SORT = sortSel.value; drawCands(box, P); } },
+    [["callsign", "Order: Callsign"], ["progress", "Order: Progress"]].concat(P.deadlineDays ? [["deadline", "Order: Days left"]] : []).map(o => h("option", { value: o[0], text: o[1] })));
+  sortSel.value = ADM_SORT;
+  box.append(h("div", { style: "display:flex;justify-content:flex-end;margin:-4px 0 8px" }, sortSel));
   const board = h("div", { class: "sec flush aboard", style: "--cols:" + T.length });
   board.append(h("div", { class: "ab-row ab-th" }, h("span", { text: P.noun || "Person" }), T.map((t, i) => h("span", { class: "c", title: t.title, text: String(i + 1) })), h("span", { class: "r", text: "Progress" })));
   C.forEach(c => {
