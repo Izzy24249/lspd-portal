@@ -833,3 +833,16 @@ a.navlink:hover{border-color:var(--gold);color:var(--gold)}
   .paper:not(.hud) table.xl tr.dyn td.act{padding-top:6px}
   .paper:not(.hud) table.xl tr.addrow td,.paper:not(.hud) table.xl tr.empty td{padding:10px 14px}
 }
+
+/* onboarding deadline chips */
+.dl{display:inline-flex;align-items:center;gap:6px;font-size:.68rem;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.dl .ext{font-style:normal;font-size:.6rem;color:#93c5fd;margin-left:2px}
+.dl.st-warn{color:#fcd34d;border-color:rgba(245,197,66,.4);background:rgba(245,197,66,.07)}
+.dl.st-warn::before{content:"";width:7px;height:7px;border-radius:50%;background:#f5c542;animation:dlpulse 2.8s ease-in-out infinite}
+@keyframes dlpulse{0%,100%{opacity:1}50%{opacity:.3}}
+.dl.st-over{color:#fff;background:#dc2626;border-color:#dc2626}
+.pb-item.dl-warn{box-shadow:inset 3px 0 0 #f5c542}
+.pb-item.dl-over{box-shadow:inset 3px 0 0 #dc2626;background:rgba(220,38,38,.05)}
+.pd-dl{grid-column:1/-1;font-size:.8rem;padding:8px 12px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)}
+.pd-dl.st-warn{color:#fde68a;border-color:rgba(245,197,66,.3)} .pd-dl.st-over{color:#fecaca;border-color:rgba(220,38,38,.45);background:rgba(220,38,38,.08)} .pd-dl.st-done{color:#86efac}
+@media(prefers-reduced-motion:reduce){.dl.st-warn::before{animation:none}}

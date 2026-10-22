@@ -207,6 +207,8 @@
   .aboard .ab-row:not(.ab-th):hover{background:rgba(47,123,255,.05)}
   .aboard .ab-row.open{background:rgba(47,123,255,.08)}
   .aboard .ab-row.ready{box-shadow:inset 3px 0 0 var(--gold)}
+  .aboard .ab-row.dl-warn{box-shadow:inset 3px 0 0 #f5c542} .aboard .ab-row.dl-over{box-shadow:inset 3px 0 0 #dc2626;background:rgba(220,38,38,.05)}
+  .ab-task .acts{flex-wrap:nowrap;align-items:center} .ab-task .acts input.ab-date{width:150px!important;flex:none;height:32px;padding:0 8px;font-size:.8rem}
   .aboard .c{text-align:center}
   .aboard .r{display:flex;gap:10px;align-items:center;justify-content:flex-end}
   .ab-who{display:flex;gap:10px;align-items:center;min-width:0}
@@ -1609,14 +1611,17 @@ function drawCands(box, P) {
   C.forEach(c => {
     const open = PROMO_OPEN.has(c.key);
     const cellEl = t => { const s = c.tasks[t.id]; return h("span", { class: "c" }, h("i", { class: "ab-c " + (s.excused ? "ex" : s.done ? "ok" : s.locked ? "lk" : s.count ? "pt" : "no"), text: s.excused ? "EX" : s.done ? "✓" : s.locked ? "–" : s.count ? s.count + "/" + s.need : "·" })); };
-    const row = h("div", { class: "ab-row" + (open ? " open" : "") + (c.complete ? " ready" : ""), onclick: () => { open ? PROMO_OPEN.delete(c.key) : PROMO_OPEN.add(c.key); drawCands(box, P); } },
+    const ds = c.deadline && !c.complete ? c.deadline.state : "";
+    const row = h("div", { class: "ab-row" + (open ? " open" : "") + (c.complete ? " ready" : "") + (ds === "over" ? " dl-over" : ds === "warn" ? " dl-warn" : ""), onclick: () => { open ? PROMO_OPEN.delete(c.key) : PROMO_OPEN.add(c.key); drawCands(box, P); } },
       h("span", { class: "ab-who" }, c.callsign ? h("code", { text: c.callsign }) : null, h("b", { text: c.name }), P.tigDays || P.showTig ? h("small", { class: c.tigOk || !P.tigDays ? "ok" : "", title: c.since || "", text: (P.tigLabel || "TIG") + " " + (c.tig == null ? "—" : c.tig + "d") }) : null),
       T.map(cellEl),
-      h("span", { class: "r" }, c.complete ? h("em", { class: "rd", text: P.id === "cpl" ? "Ready" : "Done" }) : null, h("span", { class: "bar" }, h("i", { style: "width:" + Math.round(c.done / Math.max(1, c.total) * 100) + "%" })), h("b", { text: c.done + "/" + c.total })));
+      h("span", { class: "r" }, c.deadline && !c.complete ? h("span", { class: "dl st-" + c.deadline.state, title: "Deadline " + c.deadline.date + (c.deadline.extended ? " (extended)" : ""), text: c.deadline.state === "over" ? "Out of time" : c.deadline.left + "d left" + (c.deadline.extended ? " · ext" : "") }) : null,
+        c.complete ? h("em", { class: "rd", text: P.id === "cpl" ? "Ready" : "Done" }) : null, h("span", { class: "bar" }, h("i", { style: "width:" + Math.round(c.done / Math.max(1, c.total) * 100) + "%" })), h("b", { text: c.done + "/" + c.total })));
     board.append(row);
     if (open) {
       const sinceIn = h("input", { type: "date", value: c.since || "" });
       const det = h("div", { class: "ab-detail" },
+        c.deadline ? h("div", { class: "pd-dl st-" + (c.complete ? "done" : c.deadline.state), style: "margin-top:12px", text: c.complete ? "✓ All requirements completed." : (c.deadline.state === "over" ? "Out of time. Deadline was " : "Deadline ") + c.deadline.date + (c.deadline.state === "over" ? "" : " · " + c.deadline.left + " days left") + (c.deadline.extended ? " · extended after Basic Training" : "") }) : null,
         h("div", { class: "ab-since" }, h("span", { text: P.id === "cpl" ? "CPL since" : "Started on" }), sinceIn, h("button", { class: "btn ghost sm", onclick: () => promoAct("promoSince", { key: c.key, date: sinceIn.value }, box) }, "Save date"),
           h("small", { class: "help", text: c.sinceSrc ? "Currently from: " + ({ roster: "personnel roster", set: "set by an admin", "first seen": "first day on the tracker" }[c.sinceSrc] || c.sinceSrc) : "" })));
       T.forEach((t, i) => {
@@ -1626,9 +1631,10 @@ function drawCands(box, P) {
             h("span", { class: "st", text: s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked · " + s.count + "/" + s.need : s.count + " of " + s.need })),
           h("div", { class: "ab-hist" }, s.items.length ? s.items.map(x => h("span", { class: "hchip" }, x.date + " · " + x.source + (x.report ? " " + x.report : "") + (x.count > 1 ? " ×" + x.count : ""),
             h("button", { title: "Remove", onclick: ev => { ev.stopPropagation(); if (confirm("Remove this completion?")) promoAct("promoRemove", { rowId: x.entry }, box); } }, "×"))) : h("span", { class: "help", text: "Nothing logged" })),
-          h("div", { class: "acts" },
-            h("button", { class: "btn ghost sm", onclick: () => promoAct("promoCredit", { key: c.key, taskId: t.id, count: 1 }, box) }, "+1"),
-            h("button", { class: "btn ghost sm", onclick: () => promoAct("promoExcuse", { key: c.key, taskId: t.id, on: !s.excused }, box) }, s.excused ? "Un-excuse" : "Excuse"))));
+          (() => { const dIn = h("input", { type: "date", class: "ab-date", title: "Date it was completed", value: new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10) });
+            return h("div", { class: "acts" }, dIn,
+            h("button", { class: "btn ghost sm", title: "Add one completion on this date", onclick: () => promoAct("promoCredit", { key: c.key, taskId: t.id, count: 1, date: dIn.value }, box) }, "+1"),
+            h("button", { class: "btn ghost sm", onclick: () => promoAct("promoExcuse", { key: c.key, taskId: t.id, on: !s.excused }, box) }, s.excused ? "Un-excuse" : "Excuse")); })()));
       });
       board.append(det);
     }
@@ -1653,6 +1659,14 @@ function drawSetup(box, p) {
     h("div", { class: "g2" }, field("People are called", bind(p, "noun", { max: 30, placeholder: "Officer" }), "Shown as the column heading, e.g. Corporal or Officer."),
       h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(p, "allRows", "Include everyone on the tab (don't skip rows marked onboarding / inactive)"))),
     field("Text under the title", bind(p, "subtitle", { type: "textarea", rows: 2 })),
+    h("div", { class: "g3" },
+      field("Deadline (days from start date)", bind(p, "deadlineDays", { type: "number", set: v => Math.max(0, Number(v) || 0) }), "0 = no deadline. Uses the start/join date."),
+      field("Warn when this many days are left", bind(p, "warnDays", { type: "number", set: v => Math.max(0, Number(v) || 0) }), "Shows a soft yellow dot."),
+      (() => { p.ext = p.ext || { task: "", window: 4, days: 5 };
+        return field("Extension: if this is done near the end…", bind(p.ext, "task", { type: "select", options: [["", "— no extension —"]].concat((p.tasks || []).map(t => [t.id, t.title])) }), "…in the last " + (p.ext.window || 0) + " days, they get " + (p.ext.days || 0) + " days from that date."); })()),
+    p.ext && p.ext.task ? h("div", { class: "g2" },
+      field("…within the last (days)", bind(p.ext, "window", { type: "number", set: v => Math.max(0, Number(v) || 0) })),
+      field("…gives this many days from then", bind(p.ext, "days", { type: "number", set: v => Math.max(0, Number(v) || 0) }))) : null,
     h("div", { class: "g3" },
       field("Callsign column (optional)", bind(p, "col", { max: 2, placeholder: "C", set: v => v.trim().toUpperCase() })),
       field("Only callsigns like (optional)", bind(p, "match", { placeholder: "L-5##" }), "# = any digit. L-5## matches L-501 … L-599. Blank = everyone on the tab."),

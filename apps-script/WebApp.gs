@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 32;
+const BACKEND_VERSION = 33;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1095,6 +1095,7 @@ const PROMO_DEFAULT_ = {
 const ONBOARD_DEFAULT_ = {
   id: "onboard", noun: "Officer", on: true, title: "Onboarding", subtitle: "New officers' first steps. Boxes tick themselves when the Basic Training log or the Academy Evaluation is filed.",
   rosterTabId: null, rosterTabName: "Onboarding", col: "A", match: "L-8##", allRows: true, tigDays: 0, tigCol: "G", tigTabId: null, tigTabName: "",
+  deadlineDays: 14, warnDays: 4, ext: { task: "bpa", window: 4, days: 5 },   // 14 days from joining; Basic Training done in the last 4 days -> 5 more days
   tasks: [
     { id: "bpa", title: "Basic Training - BPA", need: 1, desc: "Complete Basic Training (BPA) with an instructor.", sources: [{ form: "bpalog", person: "bpTrainee", field: "bpResult", value: "Passed" }] },
     { id: "academyRa", title: "Academy in-depth RA", need: 1, desc: "Ride-along covered by the Academy Evaluation.", sources: [{ form: "academy", person: "traineeCallsign", field: "", value: "" }, { form: "academy", person: "traineeDiscordId", field: "", value: "" }] }
@@ -1113,6 +1114,9 @@ function cleanPromo_(p, dflt, id) {
     tigCol: /^[A-Za-z]{1,2}$/.test(str_(p.tigCol)) ? str_(p.tigCol).toUpperCase() : "",
     tigTabId: p.tigTabId != null && p.tigTabId !== "" && isFinite(Number(p.tigTabId)) ? Number(p.tigTabId) : null,
     tigTabName: String(p.tigTabName == null ? (dflt.tigTabName || "") : p.tigTabName).substring(0, 100),
+    deadlineDays: Math.max(0, Math.min(365, parseInt(p.deadlineDays == null ? dflt.deadlineDays : p.deadlineDays, 10) || 0)),
+    warnDays: Math.max(0, Math.min(60, parseInt(p.warnDays == null ? (dflt.warnDays == null ? 4 : dflt.warnDays) : p.warnDays, 10) || 0)),
+    ext: (() => { const e = p.ext === undefined ? dflt.ext : p.ext; return e && str_(e.task) ? { task: str_(e.task), window: Math.max(0, Math.min(60, parseInt(e.window, 10) || 0)), days: Math.max(0, Math.min(60, parseInt(e.days, 10) || 0)) } : null; })(),
     tasks: []
   };
   const ids = {};
@@ -1126,8 +1130,11 @@ function cleanPromo_(p, dflt, id) {
   });
   return out;
 }
-function onboardFix_(p) {          // Onboarding: callsigns in A, join date in G, only L-8## (unless set otherwise)
-  if (p && p.id === "onboard") { if (!p.col) p.col = "A"; if (!p.match) p.match = "L-8##"; if (!p.tigCol) p.tigCol = "G"; }
+function onboardFix_(p) {          // Onboarding: callsigns in A, join date in G, only L-8##, 14-day deadline (unless set otherwise)
+  if (p && p.id === "onboard") {
+    if (!p.col) p.col = "A"; if (!p.match) p.match = "L-8##"; if (!p.tigCol) p.tigCol = "G";
+    if (p.deadlineDays == null) p.deadlineDays = 14; if (p.warnDays == null) p.warnDays = 4; if (p.ext === undefined) p.ext = { task: "bpa", window: 4, days: 5 };
+  }
   return p;
 }
 function cleanPrograms_(list) {
@@ -1297,6 +1304,7 @@ function promoView_(admin, pid) {
   if (!admin) { const hit = cache.get(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   const cfg = getConfig_(), pc = promoCfg_(cfg, pid);
   const base = { id: pc.id, noun: pc.noun || "Person", on: pc.on, title: pc.title, subtitle: pc.subtitle, tigDays: pc.tigDays,
+    deadlineDays: pc.deadlineDays || 0, warnDays: pc.warnDays || 0, ext: pc.ext || null,
     showTig: !!(pc.tigDays || pc.tigCol), tigLabel: pc.id === "cpl" ? "TIG" : "Joined",
     tasks: (pc.tasks || []).map(t => ({ id: t.id, title: t.title, desc: t.desc, need: t.need, final: t.final })) };
   if (!pc.on && !admin) return base;
@@ -1344,8 +1352,23 @@ function promoView_(admin, pid) {
     const tigOk = !pc.tigDays || (tig != null && tig >= pc.tigDays);
     (pc.tasks || []).filter(t => t.final).forEach(t => { tasks[t.id].locked = !(others && tigOk); });
     const doneN = (pc.tasks || []).filter(t => tasks[t.id].done).length;
+    const complete = doneN === (pc.tasks || []).length && (pc.tasks || []).length > 0;
+    // deadline: N days from the start date; finishing the "extension" requirement in the last few days buys extra days from that date
+    let dl = null;
+    if (pc.deadlineDays && sinceDate) {
+      let end = parseYmd_(sinceDate).getTime() + pc.deadlineDays * 864e5, extended = false;
+      const ex = pc.ext && tasks[pc.ext.task];
+      if (ex && ex.done && ex.items.length) {
+        const need = Math.max(1, ex.need || 1), at = ex.items[Math.min(need, ex.items.length) - 1].date;
+        const t = at && parseYmd_(at) ? parseYmd_(at).getTime() : null;
+        if (t != null && t >= end - pc.ext.window * 864e5 && t <= end && t + pc.ext.days * 864e5 > end) { end = t + pc.ext.days * 864e5; extended = true; }
+      }
+      const left = Math.round((end - today.getTime()) / 864e5);
+      dl = { date: ymd_(new Date(end)), left: left, extended: extended,
+        state: complete ? "done" : left <= 0 ? "over" : left <= (pc.warnDays || 0) ? "warn" : "ok" };
+    }
     return { key: admin ? c.key : undefined, callsign: c.callsign, name: c.name, since: sinceDate, sinceSrc: admin ? sinceSrc : undefined, tig: pc.tigDays || pc.tigCol ? tig : null, tigOk: tigOk,
-      tasks: tasks, done: doneN, total: (pc.tasks || []).length, complete: doneN === (pc.tasks || []).length && (pc.tasks || []).length > 0 };
+      tasks: tasks, done: doneN, total: (pc.tasks || []).length, complete: complete, deadline: dl };
   });
   base.updated = new Date().toISOString();
   if (!admin) { const js = JSON.stringify(base); if (js.length < 95000) cache.put(ck, js, 60); }

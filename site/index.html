@@ -191,13 +191,17 @@ function drawPromo(){
     if (!s.count) return `<span class="pb-c zero" title="Not started">·</span>`;
     return `<span class="pb-c part" title="${s.count} of ${s.need}"><i style="--p:${Math.round(s.count / s.need * 100)}%"></i>${s.count}/${s.need}</span>`;
   };
-  const detail = c => `<div class="pb-detail">${T.map((t, i) => {
+  const detail = c => `<div class="pb-detail">${c.deadline ? `<div class="pd-dl st-${c.complete ? "done" : c.deadline.state}">${c.complete ? "✓ All requirements completed." : c.deadline.state === "over" ? "Out of time: the deadline was " + E(fmtDl(c.deadline.date)) + "." : "Deadline " + E(fmtDl(c.deadline.date)) + " · " + c.deadline.left + " day" + (c.deadline.left === 1 ? "" : "s") + " left"}${c.deadline.extended && !c.complete ? " (extended " + ((P.ext && P.ext.days) || "") + " days after Basic Training)" : ""}</div>` : ""}${T.map((t, i) => {
     const s = c.tasks[t.id] || {count:0, need:t.need, items:[]};
     const st = s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked" : s.count + " of " + s.need;
     return `<div class="pd-item ${s.done ? "ok" : ""}"><div class="pd-h"><span class="pd-n">${i + 1}</span><b>${E(t.title)}</b><em>${st}</em></div>
       ${s.items.length ? `<ul>${s.items.map(x => `<li>${E(fmtD(x.date))} · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.count > 1 ? " ×" + x.count : ""}</li>`).join("")}</ul>`
         : `<p>${s.locked && !s.done ? "Unlocks after every other requirement" + (P.tigDays ? " and " + P.tigDays + " days TIG" : "") + "." : "Nothing logged yet."}</p>`}</div>`;
   }).join("")}</div>`;
+  const fmtDl = d => d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric"}) : "";
+  const dlChip = c => { const d = c.deadline; if (!d || d.state === "done") return "";
+    const txt = d.state === "over" ? "Out of time" : d.left === 1 ? "1 day left" : d.left + " days left";
+    return `<span class="dl st-${d.state}" title="Deadline ${E(fmtDl(d.date))}${d.extended ? " (extended after Basic Training)" : ""}">${txt}${d.extended ? '<i class="ext">+' + ((P.ext && P.ext.days) || "") + 'd</i>' : ""}</span>`; };
   const tigTxt = c => P.id === "cpl" || !P.tigLabel ? (c.tig == null ? "TIG —" : "TIG " + c.tig + "d") : (c.tig == null ? "Joined —" : "Joined " + (c.tig === 0 ? "today" : c.tig + "d ago"));
   $("promoMount").innerHTML = `
     <header class="pb-head">
@@ -214,16 +218,17 @@ function drawPromo(){
       <div class="pb-row pb-th"><span class="pb-who">${E(noun)}</span>${T.map((t, i) => `<span class="pb-task" title="${E(t.title)} (×${t.need})"><b>${i + 1}</b><small>${E(short(t))}</small></span>`).join("")}<span class="pb-prog">Progress</span></div>
       ${shown.length ? shown.map(c => {
         const k = c.callsign || c.name, open = promoOpen.has(k);
-        return `<div class="pb-item ${c.complete ? "ready" : ""} ${open ? "open" : ""}">
+        const ds = c.deadline && !c.complete ? c.deadline.state : "";
+        return `<div class="pb-item ${c.complete ? "ready" : ""} ${ds === "over" ? "dl-over" : ds === "warn" ? "dl-warn" : ""} ${open ? "open" : ""}">
           <button class="pb-row" data-row="${E(k)}" aria-expanded="${open}">
             <span class="pb-who">${c.callsign ? `<code>${E(c.callsign)}</code>` : ""}<span class="nm">${E(c.name)}</span>${P.tigDays || P.showTig ? `<span class="tg ${c.tigOk || !P.tigDays ? "ok" : ""}" title="${c.since ? E(c.since) : ""}">${tigTxt(c)}</span>` : ""}</span>
             ${T.map((t, i) => `<span class="pb-cell" data-n="${i + 1}">${cell(c, t)}</span>`).join("")}
-            <span class="pb-prog">${c.complete ? `<span class="rd">${P.id === "cpl" ? "Ready" : "Done"}</span>` : ""}<span class="bar"><i style="width:${Math.round(c.done / Math.max(1,c.total) * 100)}%"></i></span><b>${c.done}/${c.total}</b></span>
+            <span class="pb-prog">${dlChip(c)}${c.complete ? `<span class="rd">${P.id === "cpl" ? "Ready" : "Done"}</span>` : ""}<span class="bar"><i style="width:${Math.round(c.done / Math.max(1,c.total) * 100)}%"></i></span><b>${c.done}/${c.total}</b></span>
           </button>${open ? detail(c) : ""}</div>`;
       }).join("") : `<div class="pb-empty">${C.length ? "No one matches." : "No " + nouns.toLowerCase() + " found on the roster tab."}</div>`}
     </div>
     <ol class="pb-legend">${T.map(t => `<li><span>${E(t.title)}</span><b>×${t.need}</b>${t.final ? "<em>final</em>" : ""}</li>`).join("")}</ol>
-    <p class="promo-upd">${P.tigDays ? `Final step requires ${P.tigDays} days time in grade. ` : ""}Updates when a report is filed · checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;
+    <p class="promo-upd">${P.tigDays ? `Final step requires ${P.tigDays} days time in grade. ` : ""}${P.deadlineDays ? `Requirements must be finished within ${P.deadlineDays} days of joining${P.ext ? ` (finishing Basic Training in the last ${P.ext.window} days gives ${P.ext.days} more days for the ride-along)` : ""}. ` : ""}Updates when a report is filed · checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;
   const qi = $("promoQ"); qi.oninput = () => { promoQuery = qi.value; const pos = qi.selectionStart; drawPromo(); const n = $("promoQ"); n.focus(); n.setSelectionRange(pos, pos); };
   document.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => { promoFilter = b.dataset.pf; drawPromo(); });
   document.querySelectorAll("[data-row]").forEach(b => b.onclick = () => { const k = b.dataset.row; promoOpen.has(k) ? promoOpen.delete(k) : promoOpen.add(k); drawPromo(); });
