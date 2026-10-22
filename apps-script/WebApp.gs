@@ -1371,12 +1371,14 @@ function classicFields_(form, values, checklists, repFields) {
   };
   let sec = null;
   const flush = () => { if (sec && sec.lines.length) out.push({ name: clip_("📘 " + sec.title, 256), value: clip_(sec.lines.join("\n"), 1024), inline: false }); sec = null; };
+  const IGN_RE = /in[\s-]?game|\bign\b|character name/i, igns = [];   // "Trainee in Game Name" goes into the Trainee cell
   (form.blocks || []).forEach((b, bi) => {
     const inHeader = firstHeading === -1 || bi < firstHeading;
     if (b.type === "fields" || b.type === "strip") {
       (b.fields || []).forEach(f => {
         if (f.type === "static") return;
         const v = str_(values[f.id]), label = cleanLabel_(f.label || f.id);
+        if (IGN_RE.test(label) && f.type !== "discord_id") { if (v) igns.push({ label: label, value: v }); return; }
         if (inHeader) {
           const prev = header[header.length - 1];
           if (f.type === "discord_id") {
@@ -1409,10 +1411,16 @@ function classicFields_(form, values, checklists, repFields) {
   });
   flush();
   // header row: leaders (instructor / FTO / lead) first, then other people, then dates and the rest
-  const rank = h => h.person ? (/instructor|fto|lead|supervisor|handler|pilot|commander/i.test(h.label) ? 0 : 1) : h.date ? 2 : 3;
+  const LEAD_RE = /instructor|fto|lead|supervisor|handler|pilot|commander/i;
+  const rank = h => h.person ? (LEAD_RE.test(h.label) ? 0 : 1) : h.date ? 2 : 3;
+  igns.forEach(g => {                                   // attach each in-game name to the person it's about (else the first non-leader)
+    const word = (g.label.replace(IGN_RE, " ").match(/[a-z]{3,}/i) || [""])[0].toLowerCase();
+    const who = header.find(h => h.person && word && h.label.toLowerCase().indexOf(word) !== -1) || header.find(h => h.person && !LEAD_RE.test(h.label)) || header.find(h => h.person);
+    if (who) who.ign = g.value; else status.push({ name: g.label, value: g.value });
+  });
   const top = header.filter(h => h.raw || h.mention).sort((a, b) => rank(a) - rank(b)).map(h => ({
     name: clip_(h.date && /completed/i.test(h.label) ? "Session Date" : h.label, 256),
-    value: clip_(h.person ? personVal(h.raw, h.mention) : h.date ? displayValue_(h.f, h.raw) : h.f ? displayValue_(h.f, h.raw) : h.raw, 1024), inline: true }));
+    value: clip_(h.person ? personVal(h.raw, h.mention) + (h.ign ? "\n🎮 " + h.ign : "") : h.date ? displayValue_(h.f, h.raw) : h.f ? displayValue_(h.f, h.raw) : h.raw, 1024), inline: true }));
   while (top.length % 3) top.push({ name: "​", value: "​", inline: true });
   return { fields: top.concat(status.map(x => ({ name: x.name, value: x.value, inline: false })), out), follow: follow };
 }
