@@ -107,7 +107,7 @@ window.Portal = (function () {
         const fs = b.fields || [], sp = spans(fs.length);
         return `<tr class="gap3"><td colspan="4"></td></tr>` +
           `<tr class="hdr1">${fs.map((f, i) => `<td colspan="${sp[i]}">${esc(f.label)}${req(f)}</td>`).join("")}</tr>` +
-          `<tr class="sess">${fs.map((f, i) => `<td colspan="${sp[i]}" class="${f.type === "date" || f.type === "time" ? "datecell" : f.type === "static" ? "c static" : ""}">${inputHTML(f, true)}</td>`).join("")}</tr>` +
+          `<tr class="sess">${fs.map((f, i) => `<td colspan="${sp[i]}" data-label="${esc(f.label)}" class="${f.type === "date" || f.type === "time" ? "datecell" : f.type === "static" ? "c static" : ""}">${inputHTML(f, true)}</td>`).join("")}</tr>` +
           `<tr class="gap3"><td colspan="4"></td></tr>`;
       }
       case "text": {
@@ -120,7 +120,7 @@ window.Portal = (function () {
           <tr class="colhdr"><td>${esc(b.colTopic || "Topic")}</td><td colspan="2">${esc(b.colStandard || "Standard")}</td><td>${esc(b.colCheck || "Done")}</td></tr>` +
           (b.items || []).map((it, i) => `
           <tr class="item ${i % 2 ? "z" : ""}">
-            <td class="topic">${esc(it.topic)}</td><td colspan="2">${esc(it.standard)}</td>
+            <td class="topic">${esc(it.topic)}</td><td colspan="2" class="std">${esc(it.standard)}</td>
             <td class="ck"><label class="xck"><input type="checkbox" data-chk="${esc(b.id)}" data-topic="${esc(it.topic)}"><span class="bx">${CHECK_SVG}</span></label></td>
           </tr>`).join("");
       case "repeater": {
@@ -382,7 +382,7 @@ window.Portal = (function () {
       } else {
         tr = document.createElement("tr");
         tr.className = "dyn"; tr.dataset.rep = b.id;
-        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}">${ctl(c)}</td>`).join("") +
+        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}">${ctl(c)}</td>`).join("") +
           `<td class="act"><div class="actcell">${hasCheck ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
       }
       // a new row's "pick from list" boxes default to the previous row's choice (same suspect)
