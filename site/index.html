@@ -153,7 +153,7 @@ function renderPrograms(){
       sub: st ? st.length + " " + noun.toLowerCase() + (st.length === 1 ? "" : "s") + " · " + ready + " complete" : "View progress" };
   });
   $("programs").innerHTML = `<section class="fsec progsec"><div class="fsec-head"><span class="fsec-ico">📈</span><h2>Training Progression</h2></div>
-    <div class="prog-bubbles">${tiles.map(t => `<a class="prog-bubble" onclick="go('${t.go}')" title="${Portal.esc(t.sub)}"><span class="pb-ico">${t.icon}</span><b>${Portal.esc(t.title)}</b>${t.count != null ? `<span class="pb-n">${t.count}</span>` : ""}${t.alert ? `<span class="pb-alert ${t.alert}"></span>` : ""}</a>`).join("")}</div></section>`;
+    <div class="prog-bubbles">${tiles.map(t => `<a class="prog-bubble" onclick="go('${t.go}')"><span class="pb-ico">${t.icon}</span><b>${Portal.esc(t.title)}</b><small class="pb-status">${t.alert ? `<i class="pb-alert ${t.alert}"></i>` : ""}${Portal.esc(t.sub)}</small><span class="pb-go">VIEW →</span></a>`).join("")}</div></section>`;
   list.forEach(p => { if(!PROMOS[p.id] && Date.now() - (PROMO_T[p.id] || 0) > 30000) fetchPromo(p.id).then(renderPrograms).catch(()=>{}); });
 }
 async function fetchPromo(pid){

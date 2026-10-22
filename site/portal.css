@@ -847,14 +847,18 @@ a.navlink:hover{border-color:var(--gold);color:var(--gold)}
 .pd-dl.st-warn{color:#fde68a;border-color:rgba(245,197,66,.3)} .pd-dl.st-over{color:#fecaca;border-color:rgba(220,38,38,.45);background:rgba(220,38,38,.08)} .pd-dl.st-done{color:#86efac}
 @media(prefers-reduced-motion:reduce){.dl.st-warn::before{animation:none}}
 
-/* home: Training Progression as horizontal bubbles */
-.prog-bubbles{display:flex;gap:10px;margin-top:14px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
-.prog-bubble{position:relative;flex:none;display:inline-flex;align-items:center;gap:10px;padding:8px 16px 8px 8px;border-radius:999px;background:var(--panel);border:1px solid var(--line);cursor:pointer;text-decoration:none;color:inherit;white-space:nowrap;transition:.2s}
-.prog-bubble:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 10px 24px -16px rgba(242,182,50,.7)}
-.prog-bubble .pb-ico{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:rgba(242,182,50,.12);border:1px solid rgba(242,182,50,.32);font-size:.95rem}
-.prog-bubble b{font-size:.9rem;font-weight:600}
-.prog-bubble .pb-n{font-size:.72rem;font-weight:700;color:var(--muted);background:rgba(255,255,255,.06);border-radius:999px;padding:2px 8px;font-variant-numeric:tabular-nums}
-.prog-bubble .pb-alert{position:absolute;top:2px;right:4px;width:9px;height:9px;border-radius:50%;border:2px solid var(--bg)}
+/* home: Training Progression as small square cards in a horizontal row */
+.prog-bubbles{display:flex;gap:12px;margin-top:14px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.prog-bubble{position:relative;flex:none;width:190px;min-height:150px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px;border-radius:14px;overflow:hidden;
+  background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);cursor:pointer;text-decoration:none;color:inherit;transition:.25s}
+.prog-bubble::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--gold),#ffd978);opacity:0;transition:.25s}
+.prog-bubble:hover{transform:translateY(-3px);border-color:var(--gold);box-shadow:0 14px 30px -18px rgba(242,182,50,.55)}
+.prog-bubble:hover::before{opacity:1}
+.prog-bubble .pb-ico{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:rgba(242,182,50,.1);border:1px solid rgba(242,182,50,.32);font-size:1.05rem;margin-bottom:4px}
+.prog-bubble b{font-size:.95rem;font-weight:700;line-height:1.25}
+.prog-bubble .pb-status{margin-top:auto;display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.74rem;line-height:1.35}
+.prog-bubble .pb-go{font-size:.68rem;font-weight:800;letter-spacing:.08em;color:var(--gold)}
+.prog-bubble .pb-alert{flex:none;width:8px;height:8px;border-radius:50%}
 .prog-bubble .pb-alert.warn{background:#f5c542;animation:dlpulse 2.8s ease-in-out infinite}
 .prog-bubble .pb-alert.over{background:#dc2626}
 .pb-tools .pb-sort{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;color:var(--muted)}
