@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 26;
+const BACKEND_VERSION = 27;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1318,7 +1318,7 @@ function adminsSheet_() {
   let sh = ss.getSheetByName(ADMINS_SHEET_);
   if (!sh) {
     sh = ss.insertSheet(ADMINS_SHEET_);
-    sh.appendRow(["Username", "Role", "Salt", "Password Hash", "Created", "Last Login"]);
+    sh.appendRow(["Username", "Role", "Salt", "Password Hash", "Created", "Last Login", "Signed Out"]);
     sh.setFrozenRows(1);
     sh.hideSheet();
   }
@@ -1329,7 +1329,8 @@ function getAdmins_() {
   const out = [];
   for (let i = 1; i < data.length; i++) {
     if (!str_(data[i][0])) continue;
-    out.push({ row: i + 1, username: str_(data[i][0]), role: str_(data[i][1]) || "admin", salt: str_(data[i][2]), hash: str_(data[i][3]), created: data[i][4], lastLogin: data[i][5] });
+    out.push({ row: i + 1, username: str_(data[i][0]), role: str_(data[i][1]) || "admin", salt: str_(data[i][2]), hash: str_(data[i][3]), created: data[i][4], lastLogin: data[i][5],
+      signedOut: data[i][6] instanceof Date ? data[i][6].getTime() : Number(data[i][6]) || 0 });
   }
   return out;
 }
@@ -1355,16 +1356,36 @@ function setAdmin_(username, password, role) {
   const salt = Utilities.getUuid();
   const hash = hashPw_(password, salt);
   const sh = adminsSheet_(), existing = findAdmin_(username);
-  if (existing) sh.getRange(existing.row, 2, 1, 3).setValues([[role, salt, hash]]);
+  if (existing) { sh.getRange(existing.row, 2, 1, 3).setValues([[role, salt, hash]]); sh.getRange(existing.row, 7).setValue(Date.now()); }   // new password signs out every device
   else sh.appendRow([username, role, salt, hash, new Date(), ""]);
 }
 
-function newSession_(admin) {
-  const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, "");
-  CacheService.getScriptCache().put("sess_" + token, admin.username, SESSION_SECONDS_);
-  return token;
+// Sessions are signed tokens (username|expires|issued + HMAC), so they survive cache resets and can last days ("keep me signed in").
+// Signing out, or a password change, stamps "Signed Out" on the admin row, which ends every older token for that admin.
+const REMEMBER_MS_ = 14 * 864e5, SHORT_MS_ = 12 * 3600e3;
+function sessSecret_() {
+  let k = PROPS_.getProperty("SESSION_SECRET");
+  if (!k) { k = Utilities.getUuid() + Utilities.getUuid(); PROPS_.setProperty("SESSION_SECRET", k); }
+  return k;
+}
+function sessSign_(payload) { return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, sessSecret_())).replace(/=+$/, ""); }
+function newSession_(admin, remember) {
+  const now = Date.now();
+  const payload = Utilities.base64EncodeWebSafe(admin.username + "|" + (now + (remember ? REMEMBER_MS_ : SHORT_MS_)) + "|" + now, Utilities.Charset.UTF_8).replace(/=+$/, "");
+  return payload + "." + sessSign_(payload);
 }
 function sessionAdmin_(token) {
+  const t = str_(token);
+  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(t)) {
+    const parts = t.split(".");
+    if (sessSign_(parts[0]) !== parts[1]) return null;
+    let raw; try { raw = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0] + "===".slice((parts[0].length + 3) % 4))).getDataAsString(); } catch (e) { return null; }
+    const bits = raw.split("|"), exp = Number(bits[1]), issued = Number(bits[2]);
+    if (!(exp > Date.now())) return null;
+    const admin = findAdmin_(bits[0]);
+    if (!admin || (admin.signedOut && issued < admin.signedOut)) return null;
+    return admin;
+  }
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   const cache = CacheService.getScriptCache();
   const username = cache.get("sess_" + token);
@@ -1392,6 +1413,22 @@ function readLog_(n) {
 // =====================================================================
 // ADMIN API
 // =====================================================================
+function allPayload_(me) {
+  const cfg = getConfig_(), missing = [], isOwner = me.role === "owner";
+  try { ensureWarmTrigger_(); } catch (e) {}
+  const rosters = rostersFor_(cfg.forms, { cacheOnly: true, missing: missing });   // instant; anything not cached loads after sign-in
+  return {
+    ok: true,
+    me: { username: me.username, role: me.role },
+    backend: BACKEND_VERSION,
+    config: cfg,
+    rosters: rosters, rostersMissing: missing,
+    roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_() : []; } catch (e) { return []; } })(),
+    webhooks: maskWebhooks_(),
+    admins: (isOwner ? getAdmins_() : getAdmins_().filter(x => x.username === me.username)).map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })),
+    log: readLog_(200)
+  };
+}
 function handleAdmin_(d) {
   const a = d.action;
 
@@ -1408,7 +1445,8 @@ function handleAdmin_(d) {
     cache.remove(failKey);
     adminsSheet_().getRange(admin.row, 6).setValue(new Date());
     logAdmin_(admin.username, "login", "");
-    return { ok: true, token: newSession_(admin), me: { username: admin.username, role: admin.role } };
+    admin.lastLogin = new Date();
+    return Object.assign(allPayload_(admin), { ok: true, token: newSession_(admin, d.remember !== false) });   // one trip: sign in + load the portal
   }
 
   const me = sessionAdmin_(d.token);
@@ -1419,24 +1457,10 @@ function handleAdmin_(d) {
   switch (a) {
     case "logout":
       CacheService.getScriptCache().remove("sess_" + d.token);
+      if (d.everywhere) adminsSheet_().getRange(me.row, 7).setValue(Date.now());
       return { ok: true };
 
-    case "getAll": {
-      const cfg = getConfig_(), missing = [];
-      try { ensureWarmTrigger_(); } catch (e) {}
-      const rosters = rostersFor_(cfg.forms, { cacheOnly: true, missing: missing });   // instant; anything not cached loads after sign-in
-      return {
-        ok: true,
-        me: { username: me.username, role: me.role },
-        backend: BACKEND_VERSION,
-        config: cfg,
-        rosters: rosters, rostersMissing: missing,
-        roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_() : []; } catch (e) { return []; } })(),
-        webhooks: maskWebhooks_(),
-        admins: isOwner ? getAdmins_().map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })) : [],
-        log: readLog_(200)
-      };
-    }
+    case "getAll": return allPayload_(me);
 
     case "saveConfig": {
       const cur = getConfig_();
@@ -1602,7 +1626,8 @@ function handleAdmin_(d) {
       if (hashPw_(String(d.current || ""), me.salt) !== me.hash) throw new Error("Current password is wrong.");
       setAdmin_(me.username, d.next, me.role);
       logAdmin_(me.username, "change own password", "");
-      return { ok: true };
+      Utilities.sleep(5);                                   // the new token must be issued after the "signed out" stamp
+      return { ok: true, token: newSession_(findAdmin_(me.username), true) };   // other devices are signed out; this one stays in
     }
 
     case "adminAdd": {

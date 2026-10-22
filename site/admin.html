@@ -285,6 +285,11 @@
   @media(max-width:800px){.acc-grid{grid-template-columns:1fr}}
   /* Login */
   .login .sec{padding:28px}
+  .login .keep{margin:2px 0 14px;font-size:.82rem;color:var(--muted)}
+  .syncing{display:none;align-items:center;gap:7px;font-size:.72rem;color:var(--muted);margin-right:6px}
+  .syncing.on{display:inline-flex}
+  .syncing i{width:8px;height:8px;border-radius:50%;background:var(--blue2);animation:syncp 1s ease-in-out infinite}
+  @keyframes syncp{50%{opacity:.25}}
   .lg-brand{display:flex;gap:14px;align-items:center;margin-bottom:10px}
   .lg-brand img{width:52px;height:52px;object-fit:contain;filter:drop-shadow(0 4px 14px rgba(47,123,255,.4))}
   .lg-brand span{font-size:.62rem;letter-spacing:.24em;color:var(--gold);font-weight:800}
@@ -300,6 +305,7 @@
       <div><b>LSPD</b><small>MANAGE PORTAL</small></div>
     </a>
     <div class="spacer"></div>
+    <span class="syncing" id="syncing"><i></i>Syncing</span>
     <div class="who" id="who" style="display:none"><span>Signed in as <b id="whoName"></b> <span class="badge" id="whoRole"></span></span><button class="btn ghost sm" id="logoutBtn">Log out</button></div>
     <div class="pill admin" id="adminPill"><span class="dot" style="background:var(--gold);box-shadow:0 0 10px var(--gold)"></span> Admin</div>
   </div>
@@ -313,6 +319,7 @@
       <p>Sign in to manage forms, rosters, training and portal settings.</p>
       <label class="f"><span>Username</span><input type="text" id="lgUser" autocomplete="username" required></label>
       <label class="f"><span>Password</span><input type="password" id="lgPass" autocomplete="current-password" required></label>
+      <label class="tog keep"><input type="checkbox" id="lgKeep" checked> Keep me signed in on this device (14 days)</label>
       <button class="btn primary" id="lgBtn">Sign in</button>
       <div class="msg" id="lgMsg"></div>
     </form>
@@ -357,8 +364,15 @@
    STATE + API
    ===================================================================== */
 const $ = id => document.getElementById(id);
+// Sign-in token: kept in this browser for 14 days when "Keep me signed in" is ticked, otherwise until the tab closes.
 let TOKEN = null;
-try { TOKEN = sessionStorage.getItem("lspd_admin_token"); } catch (e) {}
+try { TOKEN = localStorage.getItem("lspd_admin_token") || sessionStorage.getItem("lspd_admin_token"); } catch (e) {}
+function saveToken(t, remember) {
+  TOKEN = t;
+  try { localStorage.removeItem("lspd_admin_token"); sessionStorage.removeItem("lspd_admin_token"); (remember ? localStorage : sessionStorage).setItem("lspd_admin_token", t); } catch (e) {}
+}
+const SNAP_KEY = "lspd_admin_snap";      // last loaded portal, so the admin opens instantly next time and refreshes behind the scenes
+function saveSnap(res) { try { localStorage.setItem(SNAP_KEY, JSON.stringify({ me: res.me, config: res.config, webhooks: res.webhooks, backend: res.backend, admins: res.admins, log: (res.log || []).slice(0, 60), at: Date.now() })); } catch (e) {} }
 let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [];
 let TAB = "forms", EDIT = null;           // EDIT = id of form being edited
 let PV = "side";                          // preview layout: side | below | off
@@ -452,7 +466,7 @@ $("modal").addEventListener("click", e => { if (e.target.id === "modal") $("moda
    AUTH + LOADING
    ===================================================================== */
 function signedOut(msg) {
-  TOKEN = null; try { sessionStorage.removeItem("lspd_admin_token"); } catch (e) {}
+  TOKEN = null; try { sessionStorage.removeItem("lspd_admin_token"); localStorage.removeItem("lspd_admin_token"); localStorage.removeItem(SNAP_KEY); } catch (e) {}
   $("appView").style.display = "none"; $("who").style.display = "none"; $("bootMsg").style.display = "none";
   $("loginView").style.display = ""; $("lgMsg").textContent = msg || ""; $("lgUser").focus();
   $("savebar").classList.remove("show");
@@ -461,13 +475,15 @@ $("loginForm").addEventListener("submit", async e => {
   e.preventDefault();
   $("lgBtn").disabled = true; $("lgMsg").textContent = "";
   try {
-    const res = await Portal.post({ action: "login", username: $("lgUser").value.trim(), password: $("lgPass").value });
+    const remember = $("lgKeep").checked;
+    $("lgBtn").textContent = "Signing in…";
+    const res = await Portal.post({ action: "login", username: $("lgUser").value.trim(), password: $("lgPass").value, remember: remember });
     if (!res.ok) throw new Error(res.error);
-    TOKEN = res.token; try { sessionStorage.setItem("lspd_admin_token", TOKEN); } catch (e) {}
+    saveToken(res.token, remember);
     $("lgPass").value = "";
-    await loadAll();
+    if (res.config) applyAll(res); else await loadAll();     // new backend sends everything with the sign-in (one trip)
   } catch (err) { $("lgMsg").textContent = err.message; }
-  finally { $("lgBtn").disabled = false; }
+  finally { $("lgBtn").disabled = false; $("lgBtn").textContent = "Sign in"; }
 });
 $("logoutBtn").onclick = async () => {
   if (isDirty() && !confirm("You have unsaved changes. Log out anyway?")) return;
@@ -477,6 +493,11 @@ $("logoutBtn").onclick = async () => {
 
 async function loadAll(keepEdits) {
   const res = await api("getAll");
+  applyAll(res, keepEdits);
+}
+function applyAll(res, keepEdits) {
+  saveSnap(res);
+  $("syncing").classList.remove("on");
   ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log;
   if (Portal.setRoster) Portal.setRoster(res.roster || []);
   if (Portal.setRosters) { Portal.setRosters(res.rosters || {}); window.__rosters = res.rosters || {}; }
@@ -1699,11 +1720,17 @@ function pageAccount(page) {
         h("div", {}, h("dt", { text: "Last sign-in" }), h("dd", { text: me.lastLogin ? new Date(me.lastLogin).toLocaleString() : "—" })),
         h("div", {}, h("dt", { text: "Account created" }), h("dd", { text: me.created ? new Date(me.created).toLocaleDateString() : "—" })),
         h("div", {}, h("dt", { text: "Session" }), h("dd", { text: "Signs out after 6 hours of inactivity" }))),
-      h("button", { class: "btn ghost sm", onclick: () => $("logoutBtn").click() }, "Sign out")),
+      h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
+        h("button", { class: "btn ghost sm", onclick: () => $("logoutBtn").click() }, "Sign out"),
+        h("button", { class: "btn ghost sm", title: "Ends every saved sign-in, e.g. on a shared or lost computer", onclick: async () => {
+          if (!confirm("Sign out on every device, including this one?")) return;
+          try { await api("logout", { everywhere: true }); } catch (e) {}
+          CFG = null; signedOut("Signed out on all devices.");
+        } }, "Sign out everywhere"))),
     h("form", { class: "sec acc-pw", onsubmit: async e => {
       e.preventDefault(); msg.textContent = "";
       if (nx.value !== cf.value) { msg.textContent = "New passwords don't match."; return; }
-      try { await api("changePassword", { current: cur.value, next: nx.value }); cur.value = nx.value = cf.value = ""; nx.oninput(); toast("Password changed.", "ok"); }
+      try { const r = await api("changePassword", { current: cur.value, next: nx.value }); if (r.token) saveToken(r.token, !!localStorage.getItem("lspd_admin_token")); cur.value = nx.value = cf.value = ""; nx.oninput(); toast("Password changed. Other devices have been signed out.", "ok"); }
       catch (err) { msg.textContent = err.message; }
     } }, h("h3", { text: "Change password" }), h("p", { class: "help", text: "Use at least 8 characters. A mix of letters, numbers and symbols is stronger." }),
       field("Current password", cur), field("New password", h("div", {}, nx, meter)), field("Confirm new password", cf),
@@ -1713,7 +1740,18 @@ function pageAccount(page) {
 /* =====================================================================
    BOOT
    ===================================================================== */
-if (TOKEN) loadAll().catch(e => signedOut(e.message === "Failed to fetch" ? "Can't reach the server." : ""));
+if (TOKEN) {
+  let snap = null; try { snap = JSON.parse(localStorage.getItem(SNAP_KEY) || "null"); } catch (e) {}
+  if (snap && snap.config && snap.me) {                         // open instantly from the last visit…
+    applyAll(Object.assign({ rosters: {}, roster: [], rostersMissing: [] }, snap));
+    $("syncing").classList.add("on");
+    api("getAll").then(res => applyAll(res, isDirty())).catch(e => {   // …then refresh behind the scenes (keeps edits you've started)
+      $("syncing").classList.remove("on");
+      if (e.message !== "Failed to fetch") return;
+      toast("Couldn't reach Google. Showing your last loaded copy.", "bad");
+    });
+  } else loadAll().catch(e => signedOut(e.message === "Failed to fetch" ? "Can't reach the server." : ""));
+}
 else signedOut("");
 </script>
 </body>
