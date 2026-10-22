@@ -144,6 +144,151 @@
   .modal{position:fixed;inset:0;background:rgba(3,6,12,.7);backdrop-filter:blur(4px);display:none;place-items:center;z-index:60;padding:16px}
   .modal.show{display:grid}
   .modal .sec{width:min(480px,100%);margin:0}
+  /* ===== professional layer (sidebar, page headers, settings, hours, progression, admins, activity, account) ===== */
+  nav.side{gap:2px;padding:6px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,rgba(14,22,39,.85),rgba(10,16,30,.85))}
+  nav.side .ng{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:#5d6d90;font-weight:800;padding:14px 12px 6px}
+  nav.side .ng:first-child{padding-top:8px}
+  nav.side .ng.sp{padding:6px 0 0;margin:6px 8px 4px;border-top:1px solid var(--line)}
+  nav.side button{padding:9px 12px;border-radius:10px;font-size:.86rem;font-weight:500;gap:11px;border:1px solid transparent;position:relative}
+  nav.side button svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
+  nav.side button.on{background:rgba(47,123,255,.12);border-color:rgba(47,123,255,.28);color:#fff;font-weight:600}
+  nav.side button.on::before{content:"";position:absolute;left:-7px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--blue)}
+  nav.side button.on svg{opacity:1;color:var(--blue2)}
+  @media(max-width:900px){nav.side{grid-template-columns:repeat(2,1fr)} nav.side .ng{grid-column:1/-1;padding:8px 8px 2px} nav.side button.on::before{display:none}}
+  .pagehead.v2{align-items:flex-end;padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--line)}
+  .pagehead.v2 .ph-t{display:grid;gap:3px}
+  .ph-kicker{font-size:.62rem;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);font-weight:800}
+  .pagehead.v2 h2{font-size:1.5rem;font-weight:800;letter-spacing:-.01em}
+  .pagehead.v2 p{margin-top:2px}
+  .sec.flush{padding:0;overflow:hidden}
+  /* KPI strip */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+  .kpi{padding:12px 16px;border-radius:12px;background:var(--panel);border:1px solid var(--line);display:grid;gap:4px;align-content:start;min-width:0}
+  .kpi.wide{grid-column:span 2}
+  .kpi small{font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .kpi b{font-size:1.45rem;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+  .kpi b.g{color:var(--gold)}
+  .kpi select{height:34px;padding:0 10px;font-size:.85rem}
+  @media(max-width:600px){.kpi.wide{grid-column:auto}}
+  .note-line{margin:-6px 2px 14px}
+  .pg .sec.empty-note{padding:18px 20px}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .toolbar input{flex:1;min-width:200px;max-width:380px;height:38px}
+  .toolbar .seg{margin-left:auto}
+  /* Settings: index + label/control rows */
+  .set-wrap{display:grid;grid-template-columns:190px minmax(0,1fr);gap:22px;align-items:start}
+  .set-toc{position:sticky;top:96px;display:grid;gap:2px}
+  .set-toc a{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:9px;color:var(--muted);font-size:.84rem;cursor:pointer;text-decoration:none}
+  .set-toc a:hover{background:var(--panel2);color:var(--text)}
+  .set-toc .n{font-family:ui-monospace,Consolas,monospace;font-size:.7rem;color:#5d6d90}
+  .set-main{display:grid;gap:16px}
+  .pg-settings .set-panel{padding:0;scroll-margin-top:96px;gap:0!important}
+  .pg-settings .set-panel>h3{margin:0;padding:16px 22px;font-size:.95rem;letter-spacing:0;text-transform:none;color:var(--text);font-weight:700;border-bottom:1px solid var(--line);background:rgba(255,255,255,.015)}
+  .pg-settings .set-panel>*:not(h3){margin:0 22px}
+  .pg-settings .set-panel>*:not(h3):first-of-type{margin-top:0}
+  .pg-settings .set-panel>p.help{padding:14px 0 0}
+  .pg-settings .set-panel>:last-child{margin-bottom:18px}
+  .pg-settings .set-panel label.f,.pg-settings .set-panel .g2>label.f,.pg-settings .set-panel .g3>label.f{display:grid;grid-template-columns:minmax(180px,34%) minmax(0,1fr);column-gap:24px;row-gap:2px;align-items:start;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .pg-settings .set-panel label.f>span{grid-column:1;grid-row:1;padding-top:9px;font-size:.84rem;font-weight:600;color:var(--text)}
+  .pg-settings .set-panel label.f>small{grid-column:1;grid-row:2;margin-top:0}
+  .pg-settings .set-panel label.f>:not(span):not(small){grid-column:2;grid-row:1/span 2}
+  .pg-settings .set-panel .g2,.pg-settings .set-panel .g3{grid-template-columns:1fr;gap:0}
+  .pg-settings .set-panel>.tog,.pg-settings .set-panel .g2>.tog{padding:14px 0 14px calc(min(34%,9999px) + 24px);border-bottom:1px solid rgba(255,255,255,.05)}
+  .pg-settings .set-panel>div:not(.g2):not(.g3):not(.sub){padding:12px 0}
+  @media(max-width:1000px){.set-wrap{grid-template-columns:1fr}.set-toc{display:none}}
+  @media(max-width:700px){.pg-settings .set-panel label.f{grid-template-columns:1fr}.pg-settings .set-panel label.f>*{grid-column:1!important;grid-row:auto!important}.pg-settings .set-panel>.tog{padding-left:0}}
+  /* Hours tables */
+  .pg-hours .sec h3{font-size:.95rem;letter-spacing:0;text-transform:none;color:var(--text)}
+  .pg-hours table.list td{padding:9px 10px}
+  /* Progression admin board */
+  .aboard .ab-row{display:grid;grid-template-columns:minmax(230px,1.6fr) repeat(var(--cols),minmax(52px,.6fr)) minmax(170px,1fr);align-items:center;min-height:50px;border-top:1px solid rgba(255,255,255,.05);cursor:pointer}
+  .aboard .ab-row>span{padding:8px 12px}
+  .aboard .ab-th{min-height:40px;border-top:0;background:rgba(255,255,255,.02);font-size:.64rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);cursor:default}
+  .aboard .ab-row:not(.ab-th):hover{background:rgba(47,123,255,.05)}
+  .aboard .ab-row.open{background:rgba(47,123,255,.08)}
+  .aboard .ab-row.ready{box-shadow:inset 3px 0 0 var(--gold)}
+  .aboard .c{text-align:center}
+  .aboard .r{display:flex;gap:10px;align-items:center;justify-content:flex-end}
+  .ab-who{display:flex;gap:10px;align-items:center;min-width:0}
+  .ab-who code{font-family:ui-monospace,Consolas,monospace;font-size:.74rem;color:var(--blue2);background:rgba(47,123,255,.1);border-radius:5px;padding:2px 6px}
+  .ab-who b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ab-who small{font-size:.68rem;color:#fcd34d;white-space:nowrap} .ab-who small.ok{color:#86efac}
+  .ab-c{font-style:normal;display:inline-grid;place-items:center;min-width:28px;height:22px;border-radius:6px;font-size:.72rem;font-weight:700}
+  .ab-c.ok{background:rgba(46,204,113,.14);color:#4ade80} .ab-c.pt{background:rgba(255,255,255,.06);padding:0 6px}
+  .ab-c.no,.ab-c.lk{color:rgba(255,255,255,.25)} .ab-c.ex{background:rgba(167,139,250,.12);color:#c4b5fd;font-size:.6rem;padding:0 5px}
+  .aboard .bar{width:80px;height:5px;border-radius:9px;background:rgba(255,255,255,.07);overflow:hidden}.aboard .bar i{display:block;height:100%;background:var(--blue)}
+  .aboard .ready .bar i{background:var(--gold)}
+  .aboard em.rd{font-style:normal;font-size:.58rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#1a1405;background:var(--gold);border-radius:4px;padding:2px 6px}
+  .ab-detail{padding:4px 18px 16px;background:rgba(47,123,255,.04);border-top:1px solid rgba(47,123,255,.12)}
+  .ab-since{display:flex;gap:10px;align-items:center;padding:12px 0;flex-wrap:wrap;font-size:.84rem}
+  .ab-since input{max-width:170px;height:34px;padding:0 10px}
+  .ab-task{display:grid;grid-template-columns:minmax(260px,1.2fr) 2fr auto;gap:14px;align-items:center;padding:10px 0;border-top:1px solid rgba(255,255,255,.05)}
+  .ab-tt{display:flex;gap:10px;align-items:center;min-width:0}
+  .ab-tt .n{width:20px;height:20px;flex:none;border-radius:6px;display:grid;place-items:center;font-size:.66rem;font-weight:800;background:rgba(255,255,255,.07);color:var(--muted)}
+  .ab-task.done .ab-tt .n{background:rgba(46,204,113,.2);color:#4ade80}
+  .ab-tt b{font-weight:600;font-size:.86rem}
+  .ab-tt .st{font-size:.72rem;color:var(--muted);white-space:nowrap;margin-left:auto}
+  .ab-hist{display:flex;flex-wrap:wrap;gap:6px}
+  .hchip{display:inline-flex;gap:6px;align-items:center;font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:999px;padding:3px 4px 3px 10px}
+  .hchip button{all:unset;cursor:pointer;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+  .hchip button:hover{background:rgba(255,77,94,.18);color:#ff8a95}
+  @media(max-width:900px){.ab-task{grid-template-columns:1fr}.aboard .ab-row{grid-template-columns:1fr auto}.aboard .ab-row .c{display:none}}
+  details.setup-fold{margin-top:16px;padding:0}
+  details.sec.setup-fold>summary{list-style:none;cursor:pointer;padding:16px 20px;display:grid;gap:2px;text-transform:none;letter-spacing:0;color:var(--text)}
+  details.sec.setup-fold>summary::after{display:none}
+  details.setup-fold>summary::-webkit-details-marker{display:none}
+  details.setup-fold>summary span{font-weight:700;font-size:.95rem;letter-spacing:0}
+  details.setup-fold>summary span::after{content:" ▸";color:var(--muted)}
+  details.setup-fold[open]>summary span::after{content:" ▾"}
+  details.setup-fold>summary small{color:var(--muted);font-size:.78rem}
+  details.setup-fold .fold-part{padding:0 20px 18px;display:grid;gap:14px}
+  /* Admins */
+  .ulist .urow{display:grid;grid-template-columns:44px 1fr auto auto;gap:14px;align-items:center;padding:14px 20px;border-top:1px solid rgba(255,255,255,.05)}
+  .ulist .urow:first-child{border-top:0}
+  .av{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-weight:800;font-size:.85rem;letter-spacing:.04em;background:rgba(47,123,255,.16);color:var(--blue2);border:1px solid rgba(47,123,255,.3)}
+  .av.owner{background:rgba(242,182,50,.14);color:var(--gold);border-color:rgba(242,182,50,.35)}
+  .av.big{width:68px;height:68px;border-radius:18px;font-size:1.3rem}
+  .who-t{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0}
+  .who-t small{flex-basis:100%;color:var(--muted);font-size:.76rem}
+  .you{font-size:.6rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--blue2);background:rgba(47,123,255,.12);border-radius:4px;padding:2px 6px}
+  .rpill{font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .rpill.owner{color:var(--gold);border-color:rgba(242,182,50,.4)}
+  .role-sel{width:auto;height:32px;padding:0 10px;font-size:.8rem}
+  @media(max-width:700px){.ulist .urow{grid-template-columns:40px 1fr}.ulist .urow>.acts,.ulist .urow>select,.ulist .urow>.rpill{grid-column:2}}
+  /* Activity timeline */
+  .tlwrap{margin-bottom:12px}
+  .tl-day{padding:10px 20px;font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;font-weight:800;color:var(--muted);background:rgba(255,255,255,.02);border-bottom:1px solid var(--line)}
+  .tl-row{display:grid;grid-template-columns:32px 1fr auto;gap:12px;align-items:start;padding:11px 20px;border-top:1px solid rgba(255,255,255,.04)}
+  .tl-row:first-child{border-top:0}
+  .tl-ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.05);color:var(--muted)}
+  .tl-ic svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .tl-ic.sign-in{color:#86efac;background:rgba(46,204,113,.1)} .tl-ic.forms{color:var(--blue2);background:rgba(47,123,255,.12)}
+  .tl-ic.training{color:var(--gold);background:rgba(242,182,50,.1)} .tl-ic.accounts{color:#c4b5fd;background:rgba(167,139,250,.12)}
+  .tl-t{min-width:0;padding-top:1px}
+  .tl-t b{font-weight:600;font-size:.88rem}
+  .tl-by{margin-left:8px;font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.05);border-radius:999px;padding:1px 8px}
+  .tl-t small{display:block;color:var(--muted);font-size:.8rem;margin-top:2px;line-height:1.45}
+  .tl-row time{font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:4px;white-space:nowrap}
+  /* Account */
+  .acc-grid{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,520px);gap:16px;align-items:start}
+  .acc-card{display:grid;justify-items:start;gap:10px}
+  .acc-card h3{font-size:1.2rem;letter-spacing:0;text-transform:none;color:var(--text);margin-top:4px}
+  .acc-dl{display:grid;gap:10px;margin:8px 0 6px;width:100%}
+  .acc-dl div{display:grid;gap:1px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06)}
+  .acc-dl dt{font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .acc-dl dd{margin:0;font-size:.86rem}
+  .acc-pw{display:grid;gap:14px}
+  .acc-pw h3{font-size:1rem;letter-spacing:0;text-transform:none;color:var(--text)}
+  .pwm{height:4px;border-radius:9px;background:rgba(255,255,255,.07);margin-top:8px;overflow:hidden}
+  .pwm i{display:block;height:100%;width:0;transition:.3s;background:var(--red)}
+  .pwm[data-s=ok] i{background:var(--gold)} .pwm[data-s=strong] i{background:var(--green)}
+  @media(max-width:800px){.acc-grid{grid-template-columns:1fr}}
+  /* Login */
+  .login .sec{padding:28px}
+  .lg-brand{display:flex;gap:14px;align-items:center;margin-bottom:10px}
+  .lg-brand img{width:52px;height:52px;object-fit:contain;filter:drop-shadow(0 4px 14px rgba(47,123,255,.4))}
+  .lg-brand span{font-size:.62rem;letter-spacing:.24em;color:var(--gold);font-weight:800}
+  .login .lg-brand h2{font-size:1.35rem;margin:2px 0 0}
 </style>
 </head>
 <body class="admin">
@@ -164,8 +309,8 @@
   <!-- LOGIN -->
   <section id="loginView" class="login" style="display:none">
     <form class="sec" id="loginForm" autocomplete="on">
-      <h2>Admin sign-in</h2>
-      <p>Manage forms, webhooks and portal settings.</p>
+      <div class="lg-brand"><img src="img/lspd-patch.png" alt=""><div><span>LSPD RECORDS</span><h2>Manage Portal</h2></div></div>
+      <p>Sign in to manage forms, rosters, training and portal settings.</p>
       <label class="f"><span>Username</span><input type="text" id="lgUser" autocomplete="username" required></label>
       <label class="f"><span>Password</span><input type="password" id="lgPass" autocomplete="current-password" required></label>
       <button class="btn primary" id="lgBtn">Sign in</button>
@@ -178,15 +323,18 @@
   <section id="appView" style="display:none">
     <div class="layout">
       <nav class="side" id="nav">
-        <button data-tab="forms">📝 Forms</button>
-        <button data-tab="webhooks">🔗 Webhooks</button>
-        <button data-tab="settings">⚙️ Portal Settings</button>
-        <button data-tab="hours">⏱️ Hours</button>
-        <button data-tab="promo">📈 Progression</button>
-        <div class="sep"></div>
-        <button data-tab="admins">👮 Admins</button>
-        <button data-tab="activity">🕘 Activity Log</button>
-        <button data-tab="account">🔑 My Account</button>
+        <div class="ng">Build</div>
+<button data-tab="forms"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg><span>Forms</span></button>
+<button data-tab="webhooks"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span>Webhooks</span></button>
+        <div class="ng">Operations</div>
+<button data-tab="hours"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg><span>Hours</span></button>
+<button data-tab="promo"><svg viewBox="0 0 24 24"><path d="M5 15l7-5 7 5M5 20l7-5 7 5M5 10l7-5 7 5"/></svg><span>Progression</span></button>
+        <div class="ng">Administration</div>
+<button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Portal Settings</span></button>
+<button data-tab="admins"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a6 6 0 0 1 3 6"/></svg><span>Admins</span></button>
+<button data-tab="activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Activity Log</span></button>
+        <div class="ng sp"></div>
+<button data-tab="account"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>My Account</span></button>
       </nav>
       <div id="page"></div>
     </div>
@@ -404,12 +552,21 @@ $("nav").addEventListener("click", e => {
 function renderPage(keepScroll) {
   const y = window.scrollY;
   document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
-  const page = $("page"); page.innerHTML = "";
+  const page = $("page"); page.innerHTML = ""; page.className = "pg pg-" + TAB;
   ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
   if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
 }
+const TAB_GROUP = { hours: "Operations", promo: "Operations", settings: "Administration", admins: "Administration", activity: "Administration", account: "Account" };
 function head(title, desc, ...right) {
-  return h("div", { class: "pagehead" }, h("h2", { text: title }), h("div", { class: "spacer" }), right, desc ? h("p", { text: desc }) : null);
+  const kick = TAB_GROUP[TAB] ? h("span", { class: "ph-kicker", text: TAB_GROUP[TAB] }) : null;
+  return h("div", { class: "pagehead" + (kick ? " v2" : "") }, kick ? h("div", { class: "ph-t" }, kick, h("h2", { text: title })) : h("h2", { text: title }), h("div", { class: "spacer" }), right, desc ? h("p", { text: desc }) : null);
+}
+const initials = n => String(n || "?").replace(/[^A-Za-z0-9 ._-]/g, "").split(/[ ._-]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
+function ago(iso) {
+  if (!iso) return "never";
+  const d = (Date.now() - new Date(iso)) / 1000;
+  if (d < 60) return "just now"; if (d < 3600) return Math.floor(d / 60) + " min ago"; if (d < 86400) return Math.floor(d / 3600) + " h ago";
+  if (d < 86400 * 7) return Math.floor(d / 86400) + " d ago"; return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 const STATUS_TXT = { live: "Live", soon: "Coming soon", hidden: "Hidden" };
 
@@ -1160,6 +1317,20 @@ function rosterTabPicker(r) {
 }
 
 function pageSettings(page) {
+  pageSettingsInner(page);
+  // professional layout: section index on the left, panels on the right
+  const secs = [...page.children].filter(el => el.classList.contains("sec"));
+  if (!secs.length) return;
+  const toc = h("nav", { class: "set-toc" }), main = h("div", { class: "set-main" });
+  secs.forEach((sec, i) => {
+    const t = sec.querySelector("h3"); const name = t ? t.textContent.replace(/\s*\(.*\)\s*$/, "") : "Section " + (i + 1);
+    sec.id = "set-" + i; sec.classList.add("set-panel");
+    toc.append(h("a", { onclick: () => sec.scrollIntoView({ behavior: "smooth", block: "start" }) }, h("span", { class: "n", text: String(i + 1).padStart(2, "0") }), name));
+    main.append(sec);
+  });
+  page.append(h("div", { class: "set-wrap" }, toc, main));
+}
+function pageSettingsInner(page) {
   const s = CFG.settings = CFG.settings || {};
   s.roster = s.roster || { url: "", tab: "Roster" };
   s.announcement = s.announcement || { text: "", style: "info" };
@@ -1254,29 +1425,36 @@ function pageSettings(page) {
 
 /* ---------------- ADMINS ---------------- */
 function pageAdmins(page) {
-  page.append(head("Admins", ME.role === "owner" ? "Owners can manage admin accounts. Admins can do everything else." : "",
+  page.append(head("Admins", ME.role === "owner" ? "People who can sign in to this portal. Owners can manage accounts; admins can do everything else." : "",
     ME.role === "owner" ? h("button", { class: "btn primary sm", onclick: addAdminModal }, "+ Add admin") : null));
   if (ME.role !== "owner") { page.append(h("div", { class: "sec empty-note", text: "Only an owner can view and manage admin accounts." })); return; }
-  const tbl = h("table", { class: "list" }, h("tr", {}, ["Username", "Role", "Last login", ""].map(t => h("th", { text: t }))));
-  ADMINS.forEach(a => {
-    const role = h("select", { style: "width:auto" }, h("option", { value: "admin", text: "Admin" }), h("option", { value: "owner", text: "Owner" }));
+  const owners = ADMINS.filter(a => a.role === "owner").length;
+  page.append(h("div", { class: "kpis" },
+    h("div", { class: "kpi" }, h("small", { text: "Accounts" }), h("b", { text: String(ADMINS.length) })),
+    h("div", { class: "kpi" }, h("small", { text: "Owners" }), h("b", { text: String(owners) })),
+    h("div", { class: "kpi" }, h("small", { text: "Active this week" }), h("b", { text: String(ADMINS.filter(a => a.lastLogin && Date.now() - new Date(a.lastLogin) < 7 * 864e5).length) }))));
+  const list = h("div", { class: "ulist" });
+  ADMINS.slice().sort((x, y) => (y.role === "owner") - (x.role === "owner") || x.username.localeCompare(y.username)).forEach(a => {
+    const me = a.username === ME.username;
+    const role = h("select", { class: "role-sel" }, h("option", { value: "admin", text: "Admin" }), h("option", { value: "owner", text: "Owner" }));
     role.value = a.role;
     role.onchange = async () => {
-      try { await api("adminRole", { username: a.username, role: role.value }); a.role = role.value; toast("Role updated.", "ok"); }
+      try { await api("adminRole", { username: a.username, role: role.value }); a.role = role.value; toast("Role updated.", "ok"); renderPage(true); }
       catch (e) { toast(e.message, "bad"); role.value = a.role; }
     };
-    tbl.append(h("tr", {},
-      h("td", {}, h("b", { text: a.username }), a.username === ME.username ? h("span", { class: "mono", text: "  (you)" }) : null),
-      h("td", {}, a.username === ME.username ? h("span", { class: "badge owner", text: a.role }) : role),
-      h("td", { class: "help", text: a.lastLogin ? new Date(a.lastLogin).toLocaleString() : "never" }),
-      h("td", {}, h("div", { class: "acts" },
+    list.append(h("div", { class: "urow" },
+      h("div", { class: "av " + a.role, text: initials(a.username) }),
+      h("div", { class: "who-t" }, h("b", { text: a.username }), me ? h("span", { class: "you", text: "You" }) : null,
+        h("small", { title: a.lastLogin ? new Date(a.lastLogin).toLocaleString() : "", text: "Last sign-in " + ago(a.lastLogin) + (a.created ? " · added " + new Date(a.created).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "") })),
+      me ? h("span", { class: "rpill " + a.role, text: a.role }) : role,
+      h("div", { class: "acts" },
         h("button", { class: "btn ghost sm", onclick: () => resetModal(a) }, "Reset password"),
-        a.username === ME.username ? null : h("button", { class: "btn danger sm", onclick: async () => {
+        me ? null : h("button", { class: "btn danger sm", onclick: async () => {
           if (!confirm("Remove " + a.username + "? They are signed out immediately.")) return;
           try { await api("adminRemove", { username: a.username }); await loadAll(true); toast("Admin removed.", "ok"); } catch (e) { toast(e.message, "bad"); }
-        } }, "Remove")))));
+        } }, "Remove"))));
   });
-  page.append(h("div", { class: "sec" }, h("div", { class: "tablewrap" }, tbl)));
+  page.append(h("div", { class: "sec flush" }, list));
 }
 function addAdminModal() {
   modal(close => {
@@ -1320,9 +1498,12 @@ function pageHours(page) {
     wsel.value = H.week;
     const total = H.divisions.reduce((n, d) => n + d.officers.reduce((a, o) => a + o.minutes, 0), 0);
     const people = new Set(); H.divisions.forEach(d => d.officers.forEach(o => people.add(o.id || o.name)));
-    out.append(h("div", { class: "sec", style: "display:flex;gap:18px;align-items:center;flex-wrap:wrap" }, field("Week", wsel),
-      h("div", { class: "stat" }, h("b", { text: fmt(total) }), h("small", { text: "total hours" })),
-      h("div", { class: "stat" }, h("b", { text: String(people.size) }), h("small", { text: "officers" })),
+    out.append(h("div", { class: "kpis" },
+      h("div", { class: "kpi" }, h("small", { text: "Week" }), wsel),
+      h("div", { class: "kpi" }, h("small", { text: "Total hours" }), h("b", { text: fmt(total) })),
+      h("div", { class: "kpi" }, h("small", { text: "Officers" }), h("b", { text: String(people.size) })),
+      h("div", { class: "kpi" }, h("small", { text: "Divisions" }), h("b", { text: String(H.divisions.length) }))));
+    out.append(h("div", { class: "note-line" },
       h("div", { class: "help", text: tracked.length ? "Counting: " + tracked.map(f => f.title).join(", ") : "No form counts hours yet: open a form → Hours → Count hours from this form." })));
     if (!H.divisions.length) out.append(h("div", { class: "sec empty-note", text: "No hours logged for this week." }));
     H.divisions.forEach(d => {
@@ -1340,7 +1521,7 @@ function pageHours(page) {
 }
 
 /* ---------------- PROMOTIONS (SGT tracker) ---------------- */
-let PROMO_ADMIN = null, PROMO_OPEN = new Set();
+let PROMO_ADMIN = null, PROMO_OPEN = new Set(), SETUP_OPEN = false;
 function pagePromo(page) {
   page.append(head("Training Progression · " + ((CFG.settings.promo || {}).title || "CPL → SGT"), "Corporals are read from the roster automatically. Reports credit their tasks; you can add, remove or excuse anything here. Changes to completions save straight away; the setup below needs Save & publish.",
     h("a", { class: "btn ghost sm", href: "index.html#promo", target: "_blank" }, "Open public page ↗"),
@@ -1355,6 +1536,9 @@ function pagePromo(page) {
       const b = JSON.parse(BASE); b.settings.promo = clone(r.settings); BASE = JSON.stringify(b);
     }
     drawSetup(setupBox); drawCands(candBox, r.promo);
+    const det = h("details", { class: "sec setup-fold", open: SETUP_OPEN, ontoggle: () => { SETUP_OPEN = det.open; } }, h("summary", {}, h("span", { text: "Setup & requirements" }), h("small", { text: "Roster, callsign pattern, time in grade and what counts for each requirement · needs Save & publish" })));
+    [...setupBox.children].forEach(ch => { ch.classList.remove("sec"); ch.classList.add("fold-part"); det.append(ch); });
+    setupBox.append(det);
   }).catch(e => { candBox.innerHTML = ""; candBox.append(h("div", { class: "sec empty-note", text: e.message })); });
 }
 function promoAct(action, data, box) {
@@ -1362,40 +1546,44 @@ function promoAct(action, data, box) {
 }
 function drawCands(box, P) {
   box.innerHTML = "";
-  const C = P.candidates || [];
+  const C = P.candidates || [], T = P.tasks || [];
   const ready = C.filter(c => c.complete).length;
-  box.append(h("div", { class: "sec", style: "display:flex;gap:18px;align-items:center;flex-wrap:wrap" },
-    h("div", { class: "stat" }, h("b", { text: String(C.length) }), h("small", { text: "corporals" })),
-    h("div", { class: "stat" }, h("b", { text: String(ready) }), h("small", { text: "ready for SGT" })),
-    h("div", { class: "help", text: P.error ? "⚠ " + P.error : "Found by callsign in the roster tab. Click a name to edit their progress." })));
-  if (!C.length) { box.append(h("div", { class: "sec empty-note", text: "No corporals matched. Check the roster tab, column and callsign pattern in the setup below." })); return; }
+  box.append(h("div", { class: "kpis" },
+    h("div", { class: "kpi" }, h("small", { text: "Corporals" }), h("b", { text: String(C.length) })),
+    h("div", { class: "kpi" }, h("small", { text: "Ready for SGT" }), h("b", { class: "g", text: String(ready) })),
+    h("div", { class: "kpi" }, h("small", { text: "Requirements" }), h("b", { text: String(T.length) })),
+    h("div", { class: "kpi wide" }, h("small", { text: "Source" }), h("span", { class: "help", text: P.error ? "⚠ " + P.error : "Roster callsigns · credits from reports and admins" }))));
+  if (!C.length) { box.append(h("div", { class: "sec empty-note", text: "No corporals matched. Check the roster tab, column and callsign pattern under Setup." })); return; }
+  const board = h("div", { class: "sec flush aboard", style: "--cols:" + T.length });
+  board.append(h("div", { class: "ab-row ab-th" }, h("span", { text: "Corporal" }), T.map((t, i) => h("span", { class: "c", title: t.title, text: String(i + 1) })), h("span", { class: "r", text: "Progress" })));
   C.forEach(c => {
     const open = PROMO_OPEN.has(c.key);
-    const card = h("div", { class: "sec pcard" + (c.complete ? " ready" : "") });
-    const bar = h("div", { class: "hbar", style: "flex:1;max-width:220px" }, h("i", { style: "width:" + Math.round(c.done / Math.max(1, c.total) * 100) + "%" }));
-    card.append(h("div", { class: "pc-head", onclick: () => { open ? PROMO_OPEN.delete(c.key) : PROMO_OPEN.add(c.key); drawCands(box, P); } },
-      h("span", { class: "mono pcs", text: c.callsign }), h("b", { text: c.name }), bar, h("span", { class: "help", text: c.done + "/" + c.total + " tasks" }),
-      h("span", { class: "badge " + (c.tigOk ? "live" : "soon"), text: c.tig == null ? "TIG not set" : "TIG " + c.tig + "d" }),
-      c.complete ? h("span", { class: "badge owner", text: "READY" }) : null, h("span", { class: "help", text: open ? "▲" : "▼" })));
+    const cellEl = t => { const s = c.tasks[t.id]; return h("span", { class: "c" }, h("i", { class: "ab-c " + (s.excused ? "ex" : s.done ? "ok" : s.locked ? "lk" : s.count ? "pt" : "no"), text: s.excused ? "EX" : s.done ? "✓" : s.locked ? "–" : s.count ? s.count + "/" + s.need : "·" })); };
+    const row = h("div", { class: "ab-row" + (open ? " open" : "") + (c.complete ? " ready" : ""), onclick: () => { open ? PROMO_OPEN.delete(c.key) : PROMO_OPEN.add(c.key); drawCands(box, P); } },
+      h("span", { class: "ab-who" }, h("code", { text: c.callsign }), h("b", { text: c.name }), h("small", { class: c.tigOk ? "ok" : "", text: c.tig == null ? "TIG —" : "TIG " + c.tig + "d" })),
+      T.map(cellEl),
+      h("span", { class: "r" }, c.complete ? h("em", { class: "rd", text: "Ready" }) : null, h("span", { class: "bar" }, h("i", { style: "width:" + Math.round(c.done / Math.max(1, c.total) * 100) + "%" })), h("b", { text: c.done + "/" + c.total })));
+    board.append(row);
     if (open) {
       const sinceIn = h("input", { type: "date", value: c.since || "" });
-      card.append(h("div", { class: "pc-since" }, h("span", { class: "help", text: "CPL since" + (c.sinceSrc ? " (" + (c.sinceSrc === "roster" ? "from roster" : c.sinceSrc) + ")" : "") + ":" }), sinceIn,
-        h("button", { class: "btn ghost sm", onclick: () => promoAct("promoSince", { key: c.key, date: sinceIn.value }, box) }, "Set date")));
-      P.tasks.forEach(t => {
+      const det = h("div", { class: "ab-detail" },
+        h("div", { class: "ab-since" }, h("span", { text: "CPL since" }), sinceIn, h("button", { class: "btn ghost sm", onclick: () => promoAct("promoSince", { key: c.key, date: sinceIn.value }, box) }, "Save date"),
+          h("small", { class: "help", text: c.sinceSrc ? "Currently from: " + ({ roster: "personnel roster", set: "set by an admin", "first seen": "first day on the tracker" }[c.sinceSrc] || c.sinceSrc) : "" })));
+      T.forEach((t, i) => {
         const s = c.tasks[t.id];
-        const row = h("div", { class: "pc-task" + (s.done ? " done" : "") },
-          h("div", { class: "pc-tt" }, h("b", { text: t.title }), h("span", { class: "help", text: " " + s.count + "/" + s.need + (s.excused ? " · excused" : "") + (s.locked && !s.done ? " · locked" : "") })),
+        det.append(h("div", { class: "ab-task" + (s.done ? " done" : "") },
+          h("div", { class: "ab-tt" }, h("span", { class: "n", text: String(i + 1) }), h("b", { text: t.title }),
+            h("span", { class: "st", text: s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked · " + s.count + "/" + s.need : s.count + " of " + s.need })),
+          h("div", { class: "ab-hist" }, s.items.length ? s.items.map(x => h("span", { class: "hchip" }, x.date + " · " + x.source + (x.report ? " " + x.report : "") + (x.count > 1 ? " ×" + x.count : ""),
+            h("button", { title: "Remove", onclick: ev => { ev.stopPropagation(); if (confirm("Remove this completion?")) promoAct("promoRemove", { rowId: x.entry }, box); } }, "×"))) : h("span", { class: "help", text: "Nothing logged" })),
           h("div", { class: "acts" },
-            h("button", { class: "btn ghost sm", title: "Add one completion", onclick: () => promoAct("promoCredit", { key: c.key, taskId: t.id, count: 1 }, box) }, "+1"),
-            h("button", { class: "btn ghost sm", onclick: () => promoAct("promoExcuse", { key: c.key, taskId: t.id, on: !s.excused }, box) }, s.excused ? "Un-excuse" : "Excuse")));
-        const list = h("ul", { class: "pc-hist" }, s.items.length ? s.items.map(x => h("li", {},
-          h("span", { text: x.date + " · " + x.source + (x.report ? " " + x.report : "") + (x.count > 1 ? " ×" + x.count : "") }),
-          h("button", { class: "ibtn", title: "Remove this completion", onclick: () => { if (confirm("Remove this completion?")) promoAct("promoRemove", { rowId: x.entry }, box); } }, "×"))) : h("li", { class: "help", text: "Nothing logged." }));
-        card.append(row, list);
+            h("button", { class: "btn ghost sm", onclick: () => promoAct("promoCredit", { key: c.key, taskId: t.id, count: 1 }, box) }, "+1"),
+            h("button", { class: "btn ghost sm", onclick: () => promoAct("promoExcuse", { key: c.key, taskId: t.id, on: !s.excused }, box) }, s.excused ? "Un-excuse" : "Excuse"))));
       });
+      board.append(det);
     }
-    box.append(card);
   });
+  box.append(board, h("p", { class: "help", style: "margin:8px 2px 0", text: "Click a corporal to add completions, excuse a requirement, remove an entry or set their CPL date. These save immediately and are recorded in the Activity Log." }));
 }
 function drawSetup(box) {
   box.innerHTML = "";
@@ -1455,26 +1643,71 @@ function drawSetup(box) {
 }
 
 /* ---------------- ACTIVITY ---------------- */
+let ACT_Q = "", ACT_KIND = "all";
+const ACT_KINDS = [["all", "All"], ["sign-in", "Sign-ins"], ["forms", "Forms & settings"], ["training", "Training"], ["accounts", "Accounts"]];
+function actKind(a) {
+  a = String(a || "").toLowerCase();
+  if (/login|logout|sign/.test(a)) return "sign-in";
+  if (/promotion|cpl|hours/.test(a)) return "training";
+  if (/admin|password|role/.test(a)) return "accounts";
+  return "forms";
+}
+const ACT_ICON = { "sign-in": '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>', forms: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  training: '<path d="M5 15l7-5 7 5M5 20l7-5 7 5M5 10l7-5 7 5"/>', accounts: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>' };
 function pageActivity(page) {
-  page.append(head("Activity log", "Every sign-in and change made through this portal (last 200). The full log is the “Admin Log” tab in the Google Sheet.",
+  page.append(head("Activity log", "Every sign-in and change made through this portal (latest 200). The full history is the “Admin Log” tab in the Google Sheet.",
     h("button", { class: "btn ghost sm", onclick: async () => { try { await loadAll(true); } catch (e) { toast(e.message, "bad"); } } }, "Refresh")));
-  const tbl = h("table", { class: "list" }, h("tr", {}, ["When", "Admin", "Action", "Detail"].map(t => h("th", { text: t }))));
-  LOG.forEach(l => tbl.append(h("tr", {}, h("td", { class: "help", style: "white-space:nowrap", text: new Date(l.when).toLocaleString() }), h("td", { text: l.user }), h("td", { text: l.action }), h("td", { class: "help", text: l.detail }))));
-  page.append(h("div", { class: "sec" }, LOG.length ? h("div", { class: "tablewrap" }, tbl) : h("div", { class: "empty-note", text: "Nothing yet." })));
+  const q = h("input", { type: "text", placeholder: "Search actions, people, details…", value: ACT_Q });
+  const seg = h("div", { class: "seg" }, ACT_KINDS.map(([k, l]) => h("button", { class: ACT_KIND === k ? "on" : "", onclick: () => { ACT_KIND = k; renderPage(true); } }, l)));
+  const body = h("div", {});
+  const draw = () => {
+    body.innerHTML = "";
+    const t = ACT_Q.toLowerCase();
+    const rows = LOG.filter(l => (ACT_KIND === "all" || actKind(l.action) === ACT_KIND) && (!t || (l.user + " " + l.action + " " + (l.detail || "")).toLowerCase().includes(t)));
+    if (!rows.length) { body.append(h("div", { class: "sec empty-note", text: LOG.length ? "Nothing matches." : "Nothing yet." })); return; }
+    const dayName = d => { const t0 = new Date(); t0.setHours(0, 0, 0, 0); const x = new Date(d); x.setHours(0, 0, 0, 0); const diff = Math.round((t0 - x) / 864e5);
+      return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : x.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }); };
+    let cur = null, box = null;
+    rows.forEach(l => {
+      const dn = dayName(l.when);
+      if (dn !== cur) { cur = dn; box = h("div", { class: "tl" }); body.append(h("div", { class: "sec flush tlwrap" }, h("div", { class: "tl-day", text: dn }), box)); }
+      const k = actKind(l.action);
+      const ic = h("span", { class: "tl-ic " + k }); ic.innerHTML = '<svg viewBox="0 0 24 24">' + ACT_ICON[k] + "</svg>";
+      box.append(h("div", { class: "tl-row" }, ic,
+        h("div", { class: "tl-t" }, h("div", {}, h("b", { text: l.action.charAt(0).toUpperCase() + l.action.slice(1) }), h("span", { class: "tl-by", text: l.user })), l.detail ? h("small", { text: l.detail }) : null),
+        h("time", { title: new Date(l.when).toLocaleString(), text: new Date(l.when).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) })));
+    });
+  };
+  q.oninput = () => { ACT_Q = q.value; draw(); };
+  page.append(h("div", { class: "toolbar" }, q, seg), body);
+  draw();
 }
 
 /* ---------------- ACCOUNT ---------------- */
 function pageAccount(page) {
-  page.append(head("My account", "Signed in as " + ME.username + " (" + ME.role + ")."));
+  page.append(head("My account", "Your sign-in details for the manage portal."));
+  const me = ADMINS.find(a => a.username === ME.username) || {};
   const cur = h("input", { type: "password", autocomplete: "current-password" }), nx = h("input", { type: "password", autocomplete: "new-password" }), cf = h("input", { type: "password", autocomplete: "new-password" });
-  const msg = h("div", { class: "msg" });
-  page.append(h("form", { class: "sec", style: "display:grid;gap:14px;max-width:460px", onsubmit: async e => {
-    e.preventDefault(); msg.textContent = "";
-    if (nx.value !== cf.value) { msg.textContent = "New passwords don't match."; return; }
-    try { await api("changePassword", { current: cur.value, next: nx.value }); cur.value = nx.value = cf.value = ""; toast("Password changed.", "ok"); }
-    catch (err) { msg.textContent = err.message; }
-  } }, h("h3", { text: "Change password" }), field("Current password", cur), field("New password", nx, "At least 8 characters."), field("Confirm new password", cf),
-    h("div", {}, h("button", { class: "btn primary" }, "Change password")), msg));
+  const msg = h("div", { class: "msg" }), meter = h("div", { class: "pwm" }, h("i"));
+  nx.oninput = () => { const v = nx.value; const sc = (v.length >= 8) + (v.length >= 12) + (/[A-Z]/.test(v) && /[a-z]/.test(v)) + /\d/.test(v) + /[^A-Za-z0-9]/.test(v);
+    meter.firstChild.style.width = (sc / 5 * 100) + "%"; meter.dataset.s = sc <= 2 ? "weak" : sc <= 3 ? "ok" : "strong"; };
+  page.append(h("div", { class: "acc-grid" },
+    h("div", { class: "sec acc-card" },
+      h("div", { class: "av big " + ME.role, text: initials(ME.username) }),
+      h("h3", { text: ME.username }), h("span", { class: "rpill " + ME.role, text: ME.role }),
+      h("dl", { class: "acc-dl" },
+        h("div", {}, h("dt", { text: "Last sign-in" }), h("dd", { text: me.lastLogin ? new Date(me.lastLogin).toLocaleString() : "—" })),
+        h("div", {}, h("dt", { text: "Account created" }), h("dd", { text: me.created ? new Date(me.created).toLocaleDateString() : "—" })),
+        h("div", {}, h("dt", { text: "Session" }), h("dd", { text: "Signs out after 6 hours of inactivity" }))),
+      h("button", { class: "btn ghost sm", onclick: () => $("logoutBtn").click() }, "Sign out")),
+    h("form", { class: "sec acc-pw", onsubmit: async e => {
+      e.preventDefault(); msg.textContent = "";
+      if (nx.value !== cf.value) { msg.textContent = "New passwords don't match."; return; }
+      try { await api("changePassword", { current: cur.value, next: nx.value }); cur.value = nx.value = cf.value = ""; nx.oninput(); toast("Password changed.", "ok"); }
+      catch (err) { msg.textContent = err.message; }
+    } }, h("h3", { text: "Change password" }), h("p", { class: "help", text: "Use at least 8 characters. A mix of letters, numbers and symbols is stronger." }),
+      field("Current password", cur), field("New password", h("div", {}, nx, meter)), field("Confirm new password", cf),
+      h("div", {}, h("button", { class: "btn primary" }, "Update password")), msg)));
 }
 
 /* =====================================================================
