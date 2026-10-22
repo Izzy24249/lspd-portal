@@ -754,3 +754,15 @@ a.navlink:hover{border-color:var(--gold);color:var(--gold)}
 .stale{margin:0 0 16px;padding:12px 16px;border-radius:12px;background:rgba(245,197,66,.08);border:1px solid rgba(245,197,66,.35);color:#fde68a;font-size:.88rem}
 .stale a{color:var(--gold);font-weight:700;cursor:pointer;margin-left:6px;text-decoration:underline}
 .stale small{display:block;color:var(--muted);margin-top:4px;font-size:.75rem}
+
+/* Training Progression: compact tiles (one per program) */
+.prog-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:14px}
+.prog-tile{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:var(--panel);border:1px solid var(--line);cursor:pointer;text-decoration:none;color:inherit;transition:.2s}
+.prog-tile:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 12px 28px -18px rgba(242,182,50,.6)}
+.pt-ico{width:36px;height:36px;flex:none;border-radius:10px;display:grid;place-items:center;background:rgba(242,182,50,.12);border:1px solid rgba(242,182,50,.32);font-size:1rem}
+.pt-txt{flex:1;min-width:0}
+.pt-txt b{display:block;font-size:.95rem}
+.pt-txt small{display:block;color:var(--muted);font-size:.76rem;margin-top:2px}
+.pt-go{color:var(--gold);font-weight:800}
+.progsec .fsec-head::after{background:linear-gradient(90deg,var(--gold),transparent)}
+#programs .fsec{margin-top:38px}

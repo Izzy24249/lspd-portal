@@ -1042,7 +1042,7 @@ function updateHoursBoard_(cfg) {
 // SGT PROMOTION TRACKER (CPL candidates from a roster tab; tasks credited by reports or by an admin)
 // =====================================================================
 const PROMO_DEFAULT_ = {
-  on: true, title: "SGT Promotion Tracker", subtitle: "Corporal requirements for promotion to Sergeant. Progress updates automatically when a report is filed.",
+  on: true, title: "CPL → SGT", subtitle: "Corporal requirements for promotion to Sergeant. Progress updates automatically when a report is filed.",
   rosterTabId: null, rosterTabName: "FTO - Roster", col: "C", match: "L-5##", tigDays: 14, tigCol: "G", tigTabId: null, tigTabName: "LSPD Personnel Roster",
   tasks: [
     { id: "gomWitness", title: "Witness a Global Operation Manual Training", need: 1, desc: "Sit in on a GOM training hosted by a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a Global Operation Manual Training" }] },
@@ -1055,7 +1055,7 @@ const PROMO_DEFAULT_ = {
 function cleanPromo_(p) {
   if (!p) return JSON.parse(JSON.stringify(PROMO_DEFAULT_));
   const out = {
-    on: p.on !== false, title: clip_(str_(p.title) || PROMO_DEFAULT_.title, 80), subtitle: clip_(str_(p.subtitle), 300),
+    on: p.on !== false, title: clip_(str_(p.title) && str_(p.title) !== "SGT Promotion Tracker" ? str_(p.title) : PROMO_DEFAULT_.title, 80), subtitle: clip_(str_(p.subtitle), 300),
     rosterTabId: p.rosterTabId != null && p.rosterTabId !== "" && isFinite(Number(p.rosterTabId)) ? Number(p.rosterTabId) : null,
     rosterTabName: String(p.rosterTabName || "").substring(0, 100),
     col: /^[A-Za-z]{1,2}$/.test(str_(p.col)) ? str_(p.col).toUpperCase() : "C",
@@ -1076,7 +1076,7 @@ function cleanPromo_(p) {
   });
   return out;
 }
-function promoCfg_(cfg) { return ((cfg || getConfig_()).settings || {}).promo || PROMO_DEFAULT_; }
+function promoCfg_(cfg) { const p = ((cfg || getConfig_()).settings || {}).promo || PROMO_DEFAULT_; if (p.title === "SGT Promotion Tracker") p.title = PROMO_DEFAULT_.title; return p; }
 function promoSheet_() {
   const ss = ss_();
   let sh = ss.getSheetByName(PROMO_SHEET_);

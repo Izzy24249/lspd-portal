@@ -17,7 +17,6 @@
       <div><b id="brandName">LSPD</b><small id="brandSub">LOS SANTOS POLICE DEPT.</small></div>
     </a>
     <div class="spacer"></div>
-    <a class="pill navlink" id="promoNav" onclick="go('promo')" style="display:none">🎖️ Promotions</a>
     <div class="pill"><span class="dot"></span> Records Portal</div>
   </div>
 </header>
@@ -40,7 +39,7 @@
 
   <!-- SGT PROMOTION TRACKER -->
   <section class="view" id="view-promo">
-    <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; <span id="promoCrumb">Promotion Tracker</span></div>
+    <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; Training Progression &nbsp;/&nbsp; <span id="promoCrumb">CPL → SGT</span></div>
     <div id="promoMount"><div class="loading">Loading tracker…</div></div>
   </section>
 
@@ -138,17 +137,12 @@ function promoOn(){ const p = (CONFIG.settings || {}).promo; return !!(p && p.on
 let PROMO = null, PROMO_T = 0, promoFilter = "all", promoQuery = "";
 function renderPrograms(){
   const p = (CONFIG.settings || {}).promo, on = promoOn();
-  $("promoNav").style.display = on ? "" : "none";
   if(!on){ $("programs").innerHTML = ""; return; }
   const st = PROMO && PROMO.candidates ? PROMO.candidates : null;
   const ready = st ? st.filter(c => c.complete).length : 0;
-  $("programs").innerHTML = `<section class="fsec"><div class="fsec-head"><span class="fsec-ico">🎖️</span><h2>Programs</h2></div>
-    <a class="prog-card" onclick="go('promo')">
-      <div class="prog-medal"><svg viewBox="0 0 64 64"><path d="M22 4h20l-4 18H26z" fill="#2f7bff"/><path d="M26 4h12l-2 18h-8z" fill="#f2b632"/><circle cx="32" cy="40" r="17" fill="#f2b632"/><circle cx="32" cy="40" r="12.5" fill="none" stroke="#0e1627" stroke-width="2" opacity=".55"/><path d="M32 30l3 6.2 6.8.9-5 4.7 1.2 6.7-6-3.2-6 3.2 1.2-6.7-5-4.7 6.8-.9z" fill="#0e1627" opacity=".75"/></svg></div>
-      <div class="prog-txt"><span class="prog-kicker">FTO PROGRAM · CORPORAL TO SERGEANT</span><h3>${Portal.esc(p.title || "SGT Promotion Tracker")}</h3>
-        <p>${Portal.esc(p.subtitle || "Track each corporal's progress toward Sergeant.")}</p></div>
-      <div class="prog-stats">${st ? `<div><b>${st.length}</b><small>Corporals</small></div><div><b>${ready}</b><small>Ready</small></div>` : ""}<span class="prog-go">VIEW TRACKER →</span></div>
-    </a></section>`;
+  const tiles = [{ go: "promo", title: p.title || "CPL → SGT", sub: st ? st.length + " corporal" + (st.length === 1 ? "" : "s") + " · " + ready + " ready" : "View progress" }];   // more programs can be added here later
+  $("programs").innerHTML = `<section class="fsec progsec"><div class="fsec-head"><span class="fsec-ico">📈</span><h2>Training Progression</h2></div>
+    <div class="prog-tiles">${tiles.map(t => `<a class="prog-tile" onclick="go('${t.go}')"><span class="pt-ico">🎖️</span><span class="pt-txt"><b>${Portal.esc(t.title)}</b><small>${Portal.esc(t.sub)}</small></span><span class="pt-go">→</span></a>`).join("")}</div></section>`;
   if(!st && Date.now() - PROMO_T > 30000) fetchPromo().then(renderPrograms).catch(()=>{});
 }
 async function fetchPromo(){
@@ -164,7 +158,7 @@ function ring(done, total, size){
 }
 function loadPromo(){
   const p = (CONFIG.settings || {}).promo || {};
-  $("promoCrumb").textContent = p.title || "Promotion Tracker";
+  $("promoCrumb").textContent = p.title || "CPL → SGT";
   if(PROMO && PROMO.candidates) drawPromo();
   fetchPromo().then(drawPromo).catch(e => { if(!PROMO) $("promoMount").innerHTML = '<div class="loading">Could not load the tracker. ' + Portal.esc(e.message) + '</div>'; });
 }
@@ -186,7 +180,7 @@ function drawPromo(){
   };
   $("promoMount").innerHTML = `
     <div class="promo-hero">
-      <div class="ph-txt"><span class="ph-kick">FTO PROGRAM · CPL → SGT</span><h1>${E(P.title)}</h1><p>${E(P.subtitle || "")}</p></div>
+      <div class="ph-txt"><span class="ph-kick">TRAINING PROGRESSION</span><h1>${E(P.title)}</h1><p>${E(P.subtitle || "")}</p></div>
       <div class="ph-stats"><div><b>${C.length}</b><small>Corporals</small></div><div><b>${ready}</b><small>Ready for SGT</small></div><div><b>${avg}%</b><small>Avg. progress</small></div></div>
     </div>
     <div class="promo-req"><h3>Requirements</h3><ol>${P.tasks.map(t => `<li><span>${E(t.title)}${t.final ? ' <em>FINAL</em>' : ""}</span><b>×${t.need}</b></li>`).join("")}</ol>
