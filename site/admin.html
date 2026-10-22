@@ -232,6 +232,7 @@
   .ab-tt .st{font-size:.72rem;color:var(--muted);white-space:nowrap;margin-left:auto}
   .ab-hist{display:flex;flex-wrap:wrap;gap:6px}
   .hchip{display:inline-flex;gap:6px;align-items:center;font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:999px;padding:3px 4px 3px 10px}
+  .hchip.old{opacity:.55;text-decoration:line-through}
   .hchip button{all:unset;cursor:pointer;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
   .hchip button:hover{background:rgba(255,77,94,.18);color:#ff8a95}
   @media(max-width:900px){.ab-task{grid-template-columns:1fr}.aboard .ab-row{grid-template-columns:1fr auto}.aboard .ab-row .c{display:none}}
@@ -1635,7 +1636,7 @@ function drawCands(box, P) {
         det.append(h("div", { class: "ab-task" + (s.done ? " done" : "") },
           h("div", { class: "ab-tt" }, h("span", { class: "n", text: String(i + 1) }), h("b", { text: t.title }),
             h("span", { class: "st", text: s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked · " + s.count + "/" + s.need : s.count + " of " + s.need })),
-          h("div", { class: "ab-hist" }, s.items.length ? s.items.map(x => h("span", { class: "hchip" }, x.date + " · " + x.source + (x.report ? " " + x.report : "") + (x.count > 1 ? " ×" + x.count : ""),
+          h("div", { class: "ab-hist" }, s.items.length ? s.items.map(x => h("span", { class: "hchip" + (x.expired ? " old" : ""), title: x.expired ? "Older than " + t.freshDays + " days: kept in the record, not counted" : "" }, x.date + " · " + x.source + (x.report ? " " + x.report : "") + (x.count > 1 ? " ×" + x.count : "") + (x.expired ? " · not counted" : ""),
             h("button", { title: "Remove", onclick: ev => { ev.stopPropagation(); if (confirm("Remove this completion?")) promoAct("promoRemove", { rowId: x.entry }, box); } }, "×"))) : h("span", { class: "help", text: "Nothing logged" })),
           (() => { const dIn = h("input", { type: "date", class: "ab-date", title: "Date it was completed", value: new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10) });
             return h("div", { class: "acts" }, dIn,
@@ -1703,7 +1704,8 @@ function drawSetup(box, p) {
     });
     tb.append(h("div", { class: "sub" },
       h("div", { class: "subhead" }, h("b", { text: (i + 1) + ". " + (t.title || "New requirement") }), ctrls(p.tasks, i)),
-      h("div", { class: "g2" }, field("Requirement", bind(t, "title", { max: 120 })), field("How many times", bind(t, "need", { type: "number", set: v => Math.max(1, Number(v) || 1) }))),
+      h("div", { class: "g3" }, field("Requirement", bind(t, "title", { max: 120 })), field("How many times", bind(t, "need", { type: "number", set: v => Math.max(1, Number(v) || 1) })),
+        field("Only count the last … days", bind(t, "freshDays", { type: "number", placeholder: "0", set: v => Math.max(0, Number(v) || 0) }), "0 = every report counts. Older ones stay in the record.")),
       field("Short description (shown on the public page)", bind(t, "desc", { max: 300 })),
       toggle(t, "final", "Final step: locked until every other requirement and the time in grade are done", true),
       h("div", { class: "help", text: "Counts from:" }), srcs.length ? srcs : h("div", { class: "help", text: "No reports yet: only admin-added completions count." }),

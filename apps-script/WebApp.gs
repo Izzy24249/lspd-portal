@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 33;
+const BACKEND_VERSION = 34;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1087,8 +1087,8 @@ const PROMO_DEFAULT_ = {
   tasks: [
     { id: "gomWitness", title: "Witness a Global Operation Manual Training", need: 1, desc: "Sit in on a GOM training hosted by a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a Global Operation Manual Training" }] },
     { id: "gomLead", title: "Lead a GOM Training with a SGT+ hosting", need: 1, desc: "Run the training while a SGT+ hosts and observes.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Lead a GOM Training with a SGT+ hosting" }] },
-    { id: "gomSolo", title: "Complete GOM Trainings on their own", need: 2, desc: "Host and complete the training without a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Complete a GOM Training on their own" }] },
-    { id: "witness71", title: "Witness a SGT+ handle a 10-71 request", need: 3, desc: "Observe a SGT+ respond to a supervisor (71) request.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a SGT+ handle a 71 request" }] },
+    { id: "gomSolo", title: "Complete GOM Trainings on their own", need: 2, freshDays: 21, desc: "Host and complete the training without a SGT+. Only the last 21 days count.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Complete a GOM Training on their own" }] },
+    { id: "witness71", title: "Witness a SGT+ handle a 10-71 request", need: 3, freshDays: 21, desc: "Observe a SGT+ respond to a supervisor (71) request. Only the last 21 days count.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a SGT+ handle a 71 request" }] },
     { id: "supervisorRa", title: "Supervisor Ride-Along with a SGM+", need: 1, desc: "Final step: only after the 14-day time in grade and every other requirement.", final: true, sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Supervisor Ride-Along with a SGM+" }] }
   ]
 };
@@ -1125,7 +1125,9 @@ function cleanPromo_(p, dflt, id) {
     if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(tid) || ids[tid]) throw new Error(out.title + ": every requirement needs its own ID (letters/numbers).");
     ids[tid] = 1;
     if (!str_(t.title)) throw new Error(out.title + ": a requirement has no title.");
+    const fd = t.freshDays == null ? ((dflt.tasks || []).find(x => x.id === tid) || {}).freshDays : t.freshDays;   // "only the last N days count"
     out.tasks.push({ id: tid, title: clip_(str_(t.title), 120), desc: clip_(str_(t.desc), 300), need: Math.max(1, Math.min(50, parseInt(t.need, 10) || 1)), final: !!t.final,
+      freshDays: Math.max(0, Math.min(365, parseInt(fd, 10) || 0)),
       sources: (t.sources || []).slice(0, 6).map(x => ({ form: str_(x.form), person: str_(x.person), field: str_(x.field), value: clip_(str_(x.value), 120) })).filter(x => x.form && x.person) });
   });
   return out;
@@ -1155,6 +1157,7 @@ function programs_(cfg) {
   const cpl = Object.assign({}, PROMO_DEFAULT_, s.promo || {}, { id: "cpl" });
   if (cpl.title === "SGT Promotion Tracker") cpl.title = PROMO_DEFAULT_.title;
   if (!cpl.noun) cpl.noun = "Corporal";
+  cpl.tasks = (cpl.tasks || []).map(t => t.freshDays == null && (PROMO_DEFAULT_.tasks.find(x => x.id === t.id) || {}).freshDays ? Object.assign({}, t, { freshDays: PROMO_DEFAULT_.tasks.find(x => x.id === t.id).freshDays }) : t);
   if (s.promo && !s.promo.col && s.promo.match) cpl.col = "C";
   const more = (Array.isArray(s.programs) ? s.programs : []).map(p => Object.assign({}, p));
   if (!more.some(p => p.id === "onboard")) more.unshift(JSON.parse(JSON.stringify(ONBOARD_DEFAULT_)));
@@ -1306,7 +1309,7 @@ function promoView_(admin, pid) {
   const base = { id: pc.id, noun: pc.noun || "Person", on: pc.on, title: pc.title, subtitle: pc.subtitle, tigDays: pc.tigDays,
     deadlineDays: pc.deadlineDays || 0, warnDays: pc.warnDays || 0, ext: pc.ext || null,
     showTig: !!(pc.tigDays || pc.tigCol), tigLabel: pc.id === "cpl" ? "TIG" : "Joined",
-    tasks: (pc.tasks || []).map(t => ({ id: t.id, title: t.title, desc: t.desc, need: t.need, final: t.final })) };
+    tasks: (pc.tasks || []).map(t => ({ id: t.id, title: t.title, desc: t.desc, need: t.need, final: t.final, freshDays: t.freshDays || 0 })) };
   if (!pc.on && !admin) return base;
   const cr = promoCandidates_(false, pid);
   const data = promoSheet_().getDataRange().getValues();
@@ -1344,9 +1347,12 @@ function promoView_(admin, pid) {
     const tasks = {};
     (pc.tasks || []).forEach(t => {
       const items = credits.filter(x => x.task === t.id).sort((a, b) => a.date < b.date ? -1 : 1);
-      const count = items.reduce((n, x) => n + x.count, 0);
+      // "only the last N days count": older completions stay in the record but don't count (and can expire)
+      const cutoff = t.freshDays ? today.getTime() - t.freshDays * 864e5 : null;
+      const isOld = x => cutoff != null && (!parseYmd_(x.date) || parseYmd_(x.date).getTime() < cutoff);
+      const count = items.reduce((n, x) => n + (isOld(x) ? 0 : x.count), 0);
       tasks[t.id] = { count: count, need: t.need, done: count >= t.need || !!excused[c.key + "|" + t.id], excused: !!excused[c.key + "|" + t.id],
-        items: items.map(x => ({ entry: admin ? x.entry : undefined, date: x.date, count: x.count, source: x.form ? (forms[x.form] || x.form) : "Added by admin", report: x.report, note: x.note || undefined })) };
+        items: items.map(x => ({ entry: admin ? x.entry : undefined, date: x.date, count: x.count, source: x.form ? (forms[x.form] || x.form) : "Added by admin", report: x.report, note: x.note || undefined, expired: isOld(x) || undefined })) };
     });
     const others = (pc.tasks || []).filter(t => !t.final).every(t => tasks[t.id].done);
     const tigOk = !pc.tigDays || (tig != null && tig >= pc.tigDays);

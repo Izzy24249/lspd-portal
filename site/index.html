@@ -205,7 +205,8 @@ function drawPromo(){
     const s = c.tasks[t.id] || {count:0, need:t.need, items:[]};
     const st = s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked" : s.count + " of " + s.need;
     return `<div class="pd-item ${s.done ? "ok" : ""}"><div class="pd-h"><span class="pd-n">${i + 1}</span><b>${E(t.title)}</b><em>${st}</em></div>
-      ${s.items.length ? `<ul>${s.items.map(x => `<li>${E(fmtD(x.date))} · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.count > 1 ? " ×" + x.count : ""}</li>`).join("")}</ul>`
+      ${t.freshDays ? `<p class="pd-fresh">Only the last ${t.freshDays} days count.</p>` : ""}
+      ${s.items.length ? `<ul>${s.items.map(x => `<li class="${x.expired ? "old" : ""}">${E(fmtD(x.date))} · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.count > 1 ? " ×" + x.count : ""}${x.expired ? ` <em>older than ${t.freshDays} days · not counted</em>` : ""}</li>`).join("")}</ul>`
         : `<p>${s.locked && !s.done ? "Unlocks after every other requirement" + (P.tigDays ? " and " + P.tigDays + " days TIG" : "") + "." : "Nothing logged yet."}</p>`}</div>`;
   }).join("")}</div>`;
   const fmtDl = d => d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric"}) : "";
@@ -238,7 +239,7 @@ function drawPromo(){
           </button>${open ? detail(c) : ""}</div>`;
       }).join("") : `<div class="pb-empty">${C.length ? "No one matches." : "No " + nouns.toLowerCase() + " found on the roster tab."}</div>`}
     </div>
-    <ol class="pb-legend">${T.map(t => `<li><span>${E(t.title)}</span><b>×${t.need}</b>${t.final ? "<em>final</em>" : ""}</li>`).join("")}</ol>
+    <ol class="pb-legend">${T.map(t => `<li><span>${E(t.title)}</span><b>×${t.need}</b>${t.freshDays ? `<small>in the last ${t.freshDays} days</small>` : ""}${t.final ? "<em>final</em>" : ""}</li>`).join("")}</ol>
     <p class="promo-upd">${P.tigDays ? `Final step requires ${P.tigDays} days time in grade. ` : ""}${P.deadlineDays ? `Requirements must be finished within ${P.deadlineDays} days of joining${P.ext ? ` (finishing Basic Training in the last ${P.ext.window} days gives ${P.ext.days} more days for the ride-along)` : ""}. ` : ""}Updates when a report is filed · checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;
   const qi = $("promoQ"); qi.oninput = () => { promoQuery = qi.value; const pos = qi.selectionStart; drawPromo(); const n = $("promoQ"); n.focus(); n.setSelectionRange(pos, pos); };
   document.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => { promoFilter = b.dataset.pf; drawPromo(); });
