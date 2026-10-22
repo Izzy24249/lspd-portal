@@ -162,42 +162,62 @@ function loadPromo(){
   if(PROMO && PROMO.candidates) drawPromo();
   fetchPromo().then(drawPromo).catch(e => { if(!PROMO) $("promoMount").innerHTML = '<div class="loading">Could not load the tracker. ' + Portal.esc(e.message) + '</div>'; });
 }
+let promoOpen = new Set();
 function drawPromo(){
   const P = PROMO, E = Portal.esc;
   if(!P.on){ $("promoMount").innerHTML = '<div class="loading">The tracker is turned off.</div>'; return; }
+  const T = P.tasks || [];
   const C = (P.candidates || []).slice().sort((a,b) => (b.complete - a.complete) || (b.done - a.done) || a.callsign.localeCompare(b.callsign, undefined, {numeric:true}));
-  const ready = C.filter(c => c.complete).length, avg = C.length ? Math.round(C.reduce((n,c) => n + c.done / Math.max(1,c.total), 0) / C.length * 100) : 0;
+  const ready = C.filter(c => c.complete).length;
+  const avg = C.length ? Math.round(C.reduce((n,c) => n + c.done / Math.max(1,c.total), 0) / C.length * 100) : 0;
   const q = promoQuery.toLowerCase();
   const shown = C.filter(c => (promoFilter === "all" || (promoFilter === "ready" ? c.complete : !c.complete)) && (!q || (c.callsign + " " + c.name).toLowerCase().includes(q)));
-  const fmtD = d => d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric", year:"numeric"}) : "";
-  const taskRow = (c, t, i) => {
-    const s = c.tasks[t.id] || {count:0, need:t.need, items:[]}, pct = Math.min(1, s.count / s.need);
-    const pips = Array.from({length: s.need}, (_, k) => `<i class="${k < s.count || s.excused ? "on" : ""}"></i>`).join("");
-    const state = s.excused ? '<span class="st ex">Excused</span>' : s.done ? '<span class="st ok">✓ Done</span>' : s.locked ? '<span class="st lk">🔒 Locked</span>' : `<span class="st">${s.count}/${s.need}</span>`;
-    const hist = s.items.length ? s.items.map(x => `<li><b>${E(fmtD(x.date))}</b> · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.count > 1 ? ` ×${x.count}` : ""}</li>`).join("") : `<li class="none">Nothing logged yet.</li>`;
-    return `<details class="ptask ${s.done ? "done" : ""} ${s.locked && !s.done ? "locked" : ""}"><summary><span class="pn">${i + 1}</span><span class="pt">${E(t.title)}${t.final ? ' <em>FINAL</em>' : ""}</span><span class="pips">${pips}</span>${state}</summary>
-      <div class="phist">${t.desc ? `<p>${E(t.desc)}</p>` : ""}${s.locked && !s.done ? `<p class="lockwhy">Unlocks when every other requirement is done${P.tigDays ? " and " + P.tigDays + " days time in grade" : ""}.</p>` : ""}<ul>${hist}</ul></div></details>`;
+  const fmtD = d => d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric"}) : "";
+  const short = t => t.title.replace(/Global Operation Manual/i, "GOM").replace(/^(Witness|Lead|Complete|Do)\s+(a|an)?\s*/i, m => m.split(" ")[0] + " ");
+  const cell = (c, t) => {
+    const s = c.tasks[t.id] || {count:0, need:t.need};
+    if (s.excused) return `<span class="pb-c ex" title="Excused">EX</span>`;
+    if (s.done) return `<span class="pb-c ok" title="Done">✓</span>`;
+    if (s.locked) return `<span class="pb-c lk" title="Locked until the other requirements and time in grade are done"><svg viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3.5" y="7" width="9" height="7" rx="1.5" fill="currentColor"/></svg></span>`;
+    if (!s.count) return `<span class="pb-c zero" title="Not started">·</span>`;
+    return `<span class="pb-c part" title="${s.count} of ${s.need}"><i style="--p:${Math.round(s.count / s.need * 100)}%"></i>${s.count}/${s.need}</span>`;
   };
+  const detail = c => `<div class="pb-detail">${T.map((t, i) => {
+    const s = c.tasks[t.id] || {count:0, need:t.need, items:[]};
+    const st = s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked" : s.count + " of " + s.need;
+    return `<div class="pd-item ${s.done ? "ok" : ""}"><div class="pd-h"><span class="pd-n">${i + 1}</span><b>${E(t.title)}</b><em>${st}</em></div>
+      ${s.items.length ? `<ul>${s.items.map(x => `<li>${E(fmtD(x.date))} · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.count > 1 ? " ×" + x.count : ""}</li>`).join("")}</ul>`
+        : `<p>${s.locked && !s.done ? "Unlocks after every other requirement" + (P.tigDays ? " and " + P.tigDays + " days TIG" : "") + "." : "Nothing logged yet."}</p>`}</div>`;
+  }).join("")}</div>`;
+  const tigTxt = c => c.tig == null ? "TIG —" : "TIG " + c.tig + "d";
   $("promoMount").innerHTML = `
-    <div class="promo-hero">
-      <div class="ph-txt"><span class="ph-kick">TRAINING PROGRESSION</span><h1>${E(P.title)}</h1><p>${E(P.subtitle || "")}</p></div>
-      <div class="ph-stats"><div><b>${C.length}</b><small>Corporals</small></div><div><b>${ready}</b><small>Ready for SGT</small></div><div><b>${avg}%</b><small>Avg. progress</small></div></div>
-    </div>
-    <div class="promo-req"><h3>Requirements</h3><ol>${P.tasks.map(t => `<li><span>${E(t.title)}${t.final ? ' <em>FINAL</em>' : ""}</span><b>×${t.need}</b></li>`).join("")}</ol>
-      ${P.tigDays ? `<p class="tig-note">⏱ Minimum ${P.tigDays} days time in grade (TIG) as CPL before the final step.</p>` : ""}</div>
-    <div class="promo-bar"><input id="promoQ" placeholder="Search callsign or name…" value="${E(promoQuery)}">
+    <header class="pb-head">
+      <div class="pb-title">
+        <div class="pb-rank" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M8 14l12-7 12 7M8 21l12-7 12 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M8 28l12-7 12 7" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 5" opacity=".9"/></svg></div>
+        <div><span class="pb-kick">Training Progression</span><h1>${E(P.title)}</h1>${P.subtitle ? `<p>${E(P.subtitle)}</p>` : ""}</div>
+      </div>
+      <dl class="pb-stats"><div><dt>Corporals</dt><dd>${C.length}</dd></div><div><dt>Ready</dt><dd class="g">${ready}</dd></div><div><dt>Average</dt><dd>${avg}%</dd></div></dl>
+    </header>
+    <div class="pb-tools"><input id="promoQ" placeholder="Search callsign or name" value="${E(promoQuery)}">
       <div class="seg">${[["all","All"],["prog","In progress"],["ready","Ready"]].map(([k,l]) => `<button data-pf="${k}" class="${promoFilter===k?"on":""}">${l}</button>`).join("")}</div></div>
     ${P.error ? `<div class="maint">${E(P.error)}</div>` : ""}
-    <div class="promo-grid">${shown.length ? shown.map(c => `
-      <article class="pc ${c.complete ? "complete" : ""}">
-        ${c.complete ? '<div class="pc-ribbon">READY FOR SGT</div>' : ""}
-        <header>${ring(c.done, c.total)}<div class="pc-id"><span class="cs">${E(c.callsign)}</span><h3>${E(c.name)}</h3>
-          <span class="tig ${c.tigOk ? "ok" : ""}">${c.tig == null ? "TIG not set" : "TIG " + c.tig + (P.tigDays ? " / " + P.tigDays : "") + " days"}</span></div></header>
-        <div class="pc-tasks">${P.tasks.map((t, i) => taskRow(c, t, i)).join("")}</div>
-      </article>`).join("") : `<div class="loading">${C.length ? "No one matches." : "No corporals found on the roster."}</div>`}</div>
-    <p class="promo-upd">Updates automatically when a report is filed · last checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;
+    <div class="pb-board" style="--cols:${T.length}">
+      <div class="pb-row pb-th"><span class="pb-who">Corporal</span>${T.map((t, i) => `<span class="pb-task" title="${E(t.title)} (×${t.need})"><b>${i + 1}</b><small>${E(short(t))}</small></span>`).join("")}<span class="pb-prog">Progress</span></div>
+      ${shown.length ? shown.map(c => {
+        const k = c.callsign, open = promoOpen.has(k);
+        return `<div class="pb-item ${c.complete ? "ready" : ""} ${open ? "open" : ""}">
+          <button class="pb-row" data-row="${E(k)}" aria-expanded="${open}">
+            <span class="pb-who"><code>${E(c.callsign)}</code><span class="nm">${E(c.name)}</span><span class="tg ${c.tigOk ? "ok" : ""}">${tigTxt(c)}</span></span>
+            ${T.map((t, i) => `<span class="pb-cell" data-n="${i + 1}">${cell(c, t)}</span>`).join("")}
+            <span class="pb-prog">${c.complete ? '<span class="rd">Ready</span>' : ""}<span class="bar"><i style="width:${Math.round(c.done / Math.max(1,c.total) * 100)}%"></i></span><b>${c.done}/${c.total}</b></span>
+          </button>${open ? detail(c) : ""}</div>`;
+      }).join("") : `<div class="pb-empty">${C.length ? "No one matches." : "No corporals found on the roster."}</div>`}
+    </div>
+    <ol class="pb-legend">${T.map(t => `<li><span>${E(t.title)}</span><b>×${t.need}</b>${t.final ? "<em>final</em>" : ""}</li>`).join("")}</ol>
+    <p class="promo-upd">${P.tigDays ? `Final step requires ${P.tigDays} days time in grade. ` : ""}Updates when a report is filed · checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;
   const qi = $("promoQ"); qi.oninput = () => { promoQuery = qi.value; const pos = qi.selectionStart; drawPromo(); const n = $("promoQ"); n.focus(); n.setSelectionRange(pos, pos); };
   document.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => { promoFilter = b.dataset.pf; drawPromo(); });
+  document.querySelectorAll("[data-row]").forEach(b => b.onclick = () => { const k = b.dataset.row; promoOpen.has(k) ? promoOpen.delete(k) : promoOpen.add(k); drawPromo(); });
 }
 $("formGrid").addEventListener("click", e => { const c = e.target.closest("[data-open]"); if(c) go(c.dataset.open); });
 
