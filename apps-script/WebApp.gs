@@ -1420,7 +1420,7 @@ function classicFields_(form, values, checklists, repFields) {
   });
   const top = header.filter(h => h.raw || h.mention).sort((a, b) => rank(a) - rank(b)).map(h => ({
     name: clip_(h.date && /completed/i.test(h.label) ? "Session Date" : h.label, 256),
-    value: clip_(h.person ? personVal(h.raw, h.mention) + (h.ign ? "\n🎮 " + h.ign : "") : h.date ? displayValue_(h.f, h.raw) : h.f ? displayValue_(h.f, h.raw) : h.raw, 1024), inline: true }));
+    value: clip_(h.person ? personVal(h.raw, h.mention) + (h.ign ? "\nIn-Game Name: " + h.ign : "") : h.date ? displayValue_(h.f, h.raw) : h.f ? displayValue_(h.f, h.raw) : h.raw, 1024), inline: true }));
   while (top.length % 3) top.push({ name: "​", value: "​", inline: true });
   return { fields: top.concat(status.map(x => ({ name: x.name, value: x.value, inline: false })), out), follow: follow };
 }
