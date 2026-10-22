@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 27;
+const BACKEND_VERSION = 28;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -259,7 +259,30 @@ function ensureWarmTrigger_() {
   const cache = CacheService.getScriptCache();
   if (cache.get("warm_trigger_ok")) return;
   if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "warmRosters")) ScriptApp.newTrigger("warmRosters").timeBased().everyMinutes(10).create();
+  try { ensureRosterChangeTrigger_(); } catch (e) {}
   cache.put("warm_trigger_ok", "1", 21600);
+}
+// Roster edits show up within seconds: a change in the roster spreadsheet re-reads the rosters straight away.
+function rosterSheetId_() {
+  const r = ((getConfig_().settings || {}).roster) || {};
+  if (str_(r.url)) { const m = /\/d\/([\w-]+)/.exec(str_(r.url)); return m ? m[1] : ""; }
+  return ss_().getId();
+}
+function ensureRosterChangeTrigger_() {
+  const id = rosterSheetId_();
+  if (!id) return;
+  const mine = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "onRosterChange");
+  if (mine.length === 1 && mine[0].getTriggerSourceId() === id) return;
+  mine.forEach(t => ScriptApp.deleteTrigger(t));                // roster sheet link changed: move the trigger
+  ScriptApp.newTrigger("onRosterChange").forSpreadsheet(id).onChange().create();
+}
+function onRosterChange(e) {
+  const c = CacheService.getScriptCache();
+  if (c.get("roster_busy")) { c.put("roster_pending", "1", 300); return; }   // a refresh is already running: run once more after it
+  c.put("roster_busy", "1", 120);
+  try {
+    for (let i = 0; i < 3; i++) { c.remove("roster_pending"); warmRosters(); if (!c.get("roster_pending")) break; }
+  } finally { c.remove("roster_busy"); }
 }
 function usesOldRoster_(forms) {
   return forms.some(f => (f.blocks || []).some(b => (b.fields || []).some(fd => (fd.roster || fd.type === "officers" || fd.type === "officer") && (fd.rosterTabId == null || fd.rosterTabId === ""))));
@@ -1468,12 +1491,14 @@ function handleAdmin_(d) {
         return { ok: false, error: "CONFLICT", message: (cur.updatedBy || "Another admin") + " saved changes since you loaded the page. Reload to get their version (your unsaved edits will be lost)." };
       }
       const next = validateConfig_(d.config);
+      CacheService.getScriptCache().remove("warm_trigger_ok");
       next.version = Number(cur.version) + 1;
       writeConfig_(next, me.username);
       CacheService.getScriptCache().removeAll(["portal_roster", "roster_calls"]);
       const tabKeys = []; next.forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") tabKeys.push("roster_tab_" + fd.rosterTabId); })));
       if (tabKeys.length) CacheService.getScriptCache().removeAll(tabKeys);
       logAdmin_(me.username, "save config", diffSummary_(cur, next));
+      try { ensureWarmTrigger_(); } catch (e) {}
       return { ok: true, config: next };
     }
 
@@ -2167,7 +2192,7 @@ function defaultConfig_() {
         blocks: [
           { type: "banner", title: "LSPD - 1-HOUR 30-MINUTE MANDATORY ACADEMY TRAINING CHECKLIST", subtitle: "Streamlined Single-Session Academy: Covers CAD, Traffic Stops, Code 5, Investigation, Medical, and SOPs." },
           { type: "fields", fields: [
-            { id: "traineeCallsign", label: "Trainee callsign (L-8XX | J. Doe ):", type: "text", required: true },
+            { id: "traineeCallsign", label: "Trainee callsign (L-8XX | J. Doe ):", type: "text", required: true, roster: true, fillId: "traineeDiscordId" },
             { id: "traineeDiscordId", label: "Trainee Discord ID:", type: "discord_id" } ] },
           { type: "fields", fields: [
             { id: "ftoCallsign", label: "Instructor Callsign: ( L-XXX | J. Doe )", type: "text", roster: true, fillId: "ftoDiscordId" },
