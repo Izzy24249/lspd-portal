@@ -1413,16 +1413,13 @@ function classicFields_(form, values, checklists, repFields) {
   // header row: leaders (instructor / FTO / lead) first, then other people, then dates and the rest
   const LEAD_RE = /instructor|fto|lead|supervisor|handler|pilot|commander/i;
   const rank = h => h.person ? (LEAD_RE.test(h.label) ? 0 : 1) : h.date ? 2 : 3;
-  igns.forEach(g => {                                   // attach each in-game name to the person it's about (else the first non-leader)
-    const word = (g.label.replace(IGN_RE, " ").match(/[a-z]{3,}/i) || [""])[0].toLowerCase();
-    const who = header.find(h => h.person && word && h.label.toLowerCase().indexOf(word) !== -1) || header.find(h => h.person && !LEAD_RE.test(h.label)) || header.find(h => h.person);
-    if (who) who.ign = g.value; else status.push({ name: g.label, value: g.value });
-  });
+  // in-game name(s) get their own line right above Evaluation Status
+  const ignFields = igns.map(g => ({ name: igns.length > 1 ? g.label.replace(IGN_RE, "In-Game Name").replace(/\s+/g, " ").trim() : "In-Game Name", value: g.value, inline: false }));
   const top = header.filter(h => h.raw || h.mention).sort((a, b) => rank(a) - rank(b)).map(h => ({
     name: clip_(h.date && /completed/i.test(h.label) ? "Session Date" : h.label, 256),
-    value: clip_(h.person ? personVal(h.raw, h.mention) + (h.ign ? "\nIn-Game Name: " + h.ign : "") : h.date ? displayValue_(h.f, h.raw) : h.f ? displayValue_(h.f, h.raw) : h.raw, 1024), inline: true }));
+    value: clip_(h.person ? personVal(h.raw, h.mention) : h.date ? displayValue_(h.f, h.raw) : h.f ? displayValue_(h.f, h.raw) : h.raw, 1024), inline: true }));
   while (top.length % 3) top.push({ name: "​", value: "​", inline: true });
-  return { fields: top.concat(status.map(x => ({ name: x.name, value: x.value, inline: false })), out), follow: follow };
+  return { fields: top.concat(ignFields, status.map(x => ({ name: x.name, value: x.value, inline: false })), out), follow: follow };
 }
 
 // =====================================================================
