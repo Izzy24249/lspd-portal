@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 36;
+const BACKEND_VERSION = 37;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -669,20 +669,28 @@ function handleSubmit_(d) {
   tags = tags.map(str_).filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 5);
 
   // ---- "Classic" Discord layout (per form): people + date across the top, then each section as a ticked list ----
-  const classic = form.discordStyle === "classic";
-  if (classic) {
+  const record = form.discordStyle === "record";
+  const classic = form.discordStyle === "classic" || record;
+  let recColor = null;
+  if (record) {
+    const c = recordFields_(form, values, checklists, repeaters);
+    embedFields.length = 0; embedFields.push(...c.fields);
+    followTexts.length = 0; followTexts.push(...c.follow);
+    recColor = c.color;
+  } else if (classic) {
     const c = classicFields_(form, values, checklists, repFields);
     embedFields.length = 0; embedFields.push(...c.fields);
     followTexts.length = 0; followTexts.push(...c.follow);
   }
 
   // ---- post ----
-  const color = parseInt(String(form.color || "#3498db").replace("#", ""), 16) || 3447003;
+  const color = recColor != null ? recColor : parseInt(String(form.color || "#3498db").replace("#", ""), 16) || 3447003;
   const title = clip_(fillTemplate_(form.embedTitle || form.title, values), 256);
   // ---- details grid: three columns, grouped so related things sit together ----
   //   row(s) 1: case identity (case #, CAD #, status) · row(s) 2: incident details · row(s) 3: people
   const PEOPLE_RE = /detective|officer|instructor|trainee|supervisor|fto|lead|assist|unit|deputy|trooper|agent|member|reporting|arresting|filed by|handler|partner|pilot|crew|commander|supported/i;
   const groups = { id: [], info: [], people: [] }, statusItems = [];
+  const emoji = !!form.discordEmoji, dateVal = (detailBlocks.find(d => d.type === "date") || {}).raw || "";
   detailBlocks.forEach(d => {
     const L = d.label;
     let val = d.value || "—";
@@ -694,7 +702,19 @@ function handleSubmit_(d) {
     }).join("\n") || "—";
     else if (d.mention) val = (d.value || "—") + "\n<@" + d.mention + ">";
     else if (d.type === "discord_id" && d.raw) val = "<@" + d.raw + ">";
-    const item = { name: clip_(L, 256), value: clip_(val, 1024), inline: true };
+    let name = L;
+    if (emoji) {
+      if (d.type === "time" && d.raw) val = discordTime_(dateVal, d.raw) || val;
+      if (d.type === "date" && d.raw) { const p = d.raw.split("-"); if (p.length === 3) val = p[1] + "/" + p[2] + "/" + p[0].slice(2); }
+      if (/duration|minutes|mins/i.test(L) && /^\d+(\.\d+)?$/.test(d.raw || "")) val = d.raw + " mins";
+      if (/complete|result|status|outcome/i.test(L) && /^(yes|no|pass|passed|fail|failed)$/i.test(d.raw || "")) {
+        const good = /^(yes|pass)/i.test(d.raw); val = (good ? "✅ " : "❌ ") + "**" + d.raw + "**";
+        if (recColor == null) recColor = good ? 0x2ECC71 : 0xE74C3C;
+        if (/^completed .{12,}/i.test(name)) name = "Completed?";
+      }
+      name = (fieldIcon_(L) ? fieldIcon_(L) + " " : "") + name;
+    }
+    const item = { name: clip_(name, 256), value: clip_(val, 1024), inline: true };
     const notPerson = /check|type|date|time|status|result|location|postal|#|number|area|aircraft|takeoff|landing/i.test(L);
     if (d.person || (PEOPLE_RE.test(L) && !notPerson)) groups.people.push(item);
     else if (/status|result|outcome|verdict/i.test(L)) statusItems.push(item);
@@ -709,10 +729,17 @@ function handleSubmit_(d) {
     while (g.length % 3) { g.push(0); grid.push({ name: "\u200b", value: "\u200b", inline: true }); }   // keep each group on its own row(s)
   });
   if (!classic) embedFields.unshift(...grid);
+  if (emoji && !classic) embedFields.forEach(f => {          // list titles: "📋 TRAINEES" → "👥 Trainees (2)"
+    if (f.inline || !/^\S+\s[A-Z0-9 &/()'-]+(\(cont\.\))?$/.test(f.name)) return;
+    const t = f.name.replace(/^\S+\s/, ""), ic = fieldIcon_(t), b = (form.blocks || []).find(x => x.type === "repeater" && String(x.title || "").toUpperCase() === t.replace(/ \(cont\.\)$/, ""));
+    const n = b ? (repeaters[b.id] || []).filter(r => (b.columns || []).some(c => str_(r[c.id]))).length : null;
+    f.name = clip_((ic || f.name.split(" ")[0]) + " " + titleWord_(t) + (n != null && !/cont\./.test(t) ? " (" + n + ")" : ""), 256);
+  });
+  const embedColor = recColor != null ? recColor : color;
 
-  const extras = { footer: { text: "LSPD Records Portal  •  " + clip_(form.title, 80) }, timestamp: new Date().toISOString() };
+  const extras = record ? { footer: { text: "Sent from the LSPD Records Portal" } } : { footer: { text: "LSPD Records Portal  •  " + clip_(form.title, 80) }, timestamp: new Date().toISOString() };
   if (/^https:\/\/[^\s"'<>]+$/.test(str_(form.discordThumb))) extras.thumbnail = { url: str_(form.discordThumb) };
-  const embeds = packEmbeds_(embedFields, title, color, "", extras);
+  const embeds = packEmbeds_(embedFields, title, embedColor, "", extras);
   const isForum = webhook.kind !== "text";
 
   // ---- ONE post when it fits; otherwise post 1 = full case report, then the narrative on its own ----
@@ -720,7 +747,7 @@ function handleSubmit_(d) {
   const LIMIT = 5900;
   const sizeOf = e => (e.title || "").length + (e.description || "").length + ((e.footer && e.footer.text) || "").length + (e.fields || []).reduce((n, f) => n + f.name.length + f.value.length, 0);
   const total = list => list.reduce((n, e) => n + sizeOf(e), 0);
-  const textCards = followTexts.map(t => ({ title: clip_("📝 " + t.title, 256), description: t.text, color: color }));
+  const textCards = followTexts.map(t => ({ title: clip_("📝 " + t.title, 256), description: t.text, color: embedColor }));
   const allCards = embeds.concat(textCards);
   const messages = [];
   if (allCards.length <= 10 && total(allCards) <= LIMIT && textCards.every(c => c.description.length <= 4096)) {
@@ -741,7 +768,7 @@ function handleSubmit_(d) {
       });
       if (cur.length) posts.push(cur);
       posts.forEach((parts, pi) => messages.push(parts.map((part, ci) => {
-        const card = { description: part, color: color };
+        const card = { description: part, color: embedColor };
         if (ci === 0) card.title = clip_("📝 " + t.title + (posts.length > 1 ? " (" + (pi + 1) + "/" + posts.length + ")" : ""), 256);
         return card;
       })));
@@ -750,7 +777,14 @@ function handleSubmit_(d) {
 
   const first = { embeds: messages[0], allowed_mentions: { parse: [] } };
   if (isForum) {
-    first.thread_name = clip_(fillTemplate_(form.threadTitle || form.title, values) || form.title, 100);
+    // {count:listId} → "3 Trainees" (the list's title, singular when 1)
+    const tt = String(form.threadTitle || form.title).replace(/\{count:(\w+)\}/g, (m, id) => {
+      const b = (form.blocks || []).find(x => x.id === id && x.type === "repeater"); if (!b) return "";
+      const n = (repeaters[id] || []).filter(r => (b.columns || []).some(c => str_(r[c.id]))).length;
+      const noun = titleWord_(b.title || "Entries");
+      return n + " " + (n === 1 ? noun.replace(/ies$/, "y").replace(/s$/, "") : noun);
+    });
+    first.thread_name = clip_(fillTemplate_(tt, values) || form.title, 100);
     if (tags.length) first.applied_tags = tags;
   }
   const r1 = discordPost_(webhook.url, first, null);
@@ -1470,6 +1504,86 @@ function classicFields_(form, values, checklists, repFields) {
   return { fields: top.concat(ignFields, status.map(x => ({ name: x.name, value: x.value, inline: false })), out), follow: follow };
 }
 
+const FIELD_ICONS_ = [[/date/i, "📅"], [/time/i, "⏰"], [/duration|length|minutes|mins/i, "⏱️"], [/complete|result|status|outcome|pass/i, "🎯"],
+  [/supervis/i, "🛡️"], [/instructor|fto\b|trainer|teacher/i, "👨‍🏫"], [/witness|observ/i, "👀"], [/trainee|student|attend|cadet/i, "👥"],
+  [/location|where|area|postal/i, "📍"], [/note|comment|remark/i, "📝"], [/officer|unit|member/i, "👮"]];
+function fieldIcon_(l) { for (const [re, e] of FIELD_ICONS_) if (re.test(l)) return e; return ""; }
+function titleWord_(t) { return String(t || "").toLowerCase().replace(/(^|\s)([a-z])/g, (m, a, b) => a + b.toUpperCase()); }
+
+// "Simple record" Discord layout: emoji labels, Date · Time · Duration across the top,
+// people as @mentions, lists as bullets (the original Google Sheets training post)
+function recordFields_(form, values, checklists, repeaters) {
+  const out = [], follow = [];
+  const icon = l => fieldIcon_(l) || "🔹";
+  const who = raw => {                                   // "L-505 | J. Raines (1234…)" → <@1234…>
+    const m = /^(.*?)\s*\((\d{15,21})\)\s*$/.exec(str_(raw));
+    return m ? "<@" + m[2] + ">" : str_(raw);
+  };
+  const fieldsAll = [];
+  (form.blocks || []).forEach(b => { if (b.type === "fields" || b.type === "strip") (b.fields || []).forEach(f => fieldsAll.push(f)); });
+  const filledBy = {};                                     // Discord ID boxes filled from a roster pick
+  fieldsAll.forEach(f => { if (f.fillId) filledBy[f.fillId] = f; });
+  const dateF = fieldsAll.find(f => f.type === "date"), timeF = fieldsAll.find(f => f.type === "time");
+  let color = null, top = [];
+  fieldsAll.forEach(f => {
+    if (f.type === "static" || filledBy[f.id]) return;
+    const v = str_(values[f.id]), label = cleanLabel_(f.label || f.id).replace(/^completed .*$/i, "Completed?");
+    let val;
+    if (f.type === "time" && v) val = discordTime_(dateF ? str_(values[dateF.id]) : "", v) || v;
+    else if (f.type === "date" && v) { const p = v.split("-"); val = p.length === 3 ? p[1] + "/" + p[2] + "/" + p[0].slice(2) : v; }
+    else if (f.type === "officer" || f.type === "officers") {
+      if (!v && !(f.fillId && str_(values[f.fillId]))) return;
+      const id = f.fillId ? str_(values[f.fillId]) : "";
+      val = v ? str_(v).split(";").map(x => x.trim()).filter(Boolean).map(x => /\(\d{15,21}\)\s*$/.test(x) ? who(x) : id ? "<@" + id + ">" : x).join("\n") : "<@" + id + ">";
+    } else if (f.type === "discord_id") { if (!v) return; val = "<@" + v + ">"; }
+    else if (f.type === "select" && /yes|no|pass|fail/i.test(v) && /complete|result|status|outcome|pass/i.test(label)) {
+      const good = /^(yes|pass|passed|complete|completed|approved)$/i.test(v);
+      val = (good ? "✅ " : "❌ ") + "**" + v + "**"; if (color == null) color = good ? 0x2ECC71 : 0xE74C3C;
+    } else { if (!v) return; val = v; }
+    if (/duration|minutes|mins/i.test(f.label || "") && /^\d+(\.\d+)?$/.test(v)) val = v + " mins";
+    const it = { name: clip_(icon(label) + " " + label, 256), value: clip_(val || "—", 1024), inline: f.type === "date" || f.type === "time" || /duration/i.test(label) };
+    top.push(it);
+  });
+  // date / time / duration share the first row
+  const row = top.filter(x => x.inline), rest = top.filter(x => !x.inline);
+  out.push(...row); if (row.length % 3 && rest.length) while (out.length % 3) out.push({ name: "\u200b", value: "\u200b", inline: true });
+  out.push(...rest);
+  (form.blocks || []).forEach(b => {
+    if (b.type === "repeater") {
+      const cols = b.columns || [];
+      const rows = (repeaters[b.id] || []).filter(r => cols.some(c => str_(r[c.id])));
+      const lines = rows.map(r => {
+        const parts = cols.map(c => str_(r[c.id]));
+        const head = cols[0] && (cols[0].type === "officer" || /\(\d{15,21}\)\s*$/.test(parts[0])) ? who(parts[0]) : /^\d{15,21}$/.test(parts[0]) ? "<@" + parts[0] + ">" : parts[0];
+        const extra = parts.slice(1).filter(Boolean).map(x => "*" + x + "*").join(" · ");
+        return "• " + (head || "—") + (extra ? " — " + extra : "");
+      });
+      const t = titleWord_(b.title || "List");
+      addListFields_(out, icon(t) + " " + t + " (" + rows.length + ")", lines.length ? lines : ["*None listed*"]);
+    } else if (b.type === "checklist") {
+      const st = checklists[b.id] || {};
+      addListFields_(out, "☑️ " + titleWord_(b.title || "Checklist"), (b.items || []).map(it => (st[it.topic] === true ? "✅ " : "❌ ") + it.topic));
+    } else if (b.type === "longtext") {
+      const v = str_(values[b.id]); if (!v) return;
+      if (v.length > 1000) follow.push({ title: String(b.title || "Notes").toUpperCase(), text: v });
+      else out.push({ name: "📝 " + titleWord_(b.title || "Notes"), value: clip_(v, 1024), inline: false });
+    }
+  });
+  return { fields: out, follow: follow, color: color };
+}
+
+// "2026-10-22" + "15:38" (Eastern) → <t:…:t>, which Discord shows in each reader's own time
+function discordTime_(date, time) {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || "") || (() => { const n = new Date(); return [0, n.getFullYear(), n.getMonth() + 1, n.getDate()]; })();
+  const t = /^(\d{1,2}):(\d{2})/.exec(time || ""); if (!t) return "";
+  const guess = Date.UTC(+d[1], +d[2] - 1, +d[3], +t[1], +t[2]);
+  let off;
+  try { off = Utilities.formatDate(new Date(guess), "America/New_York", "Z"); } catch (e) { return ""; }
+  const m = /^([+-])(\d{2})(\d{2})$/.exec(off || ""); if (!m) return "";
+  const mins = (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]);
+  return "<t:" + Math.floor((guess - mins * 60000) / 1000) + ":t>";
+}
+
 // =====================================================================
 // DISCORD HELPERS
 // =====================================================================
@@ -2000,7 +2114,8 @@ function validateConfig_(c) {
     }
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
     f.section = clip_(str_(f.section), 40);
-    f.discordStyle = f.discordStyle === "classic" ? "classic" : "";
+    f.discordStyle = f.discordStyle === "classic" || f.discordStyle === "record" ? f.discordStyle : "";
+    f.discordEmoji = !!f.discordEmoji;
     f.theme = /^[a-z][a-z0-9-]{1,20}$/.test(str_(f.theme)) ? str_(f.theme) : "sheet"; // any look the website offers
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
     if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");

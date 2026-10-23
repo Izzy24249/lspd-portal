@@ -34,14 +34,14 @@ window.PORTAL_TEMPLATES = [
   },
   "id": "gomtraining",
   "section": "Training",
-  "discordThumb": "https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/img/lspd-badge.png",
+  "discordEmoji": true,
   "icon": "📋",
   "title": "Global Operation Manual Training",
   "description": "Official training record & log: instructor, trainees, CPL witness and supervising FTO. Updates Onboarding and CPL progression.",
   "submitLabel": "Submit to Training Log",
   "color": "#2ECC71",
   "embedTitle": "📋 Global Operation Manual - Training Record",
-  "threadTitle": "Global Operation Manual training - {gtDate} {gtTime} EST",
+  "threadTitle": "Global Operation Manual training - {gtDate} {gtTime} EST - {count:gtTrainees}",
   "archiveSheet": "GOM Training Log",
   "blocks": [
    {

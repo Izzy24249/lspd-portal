@@ -765,7 +765,8 @@ function pageEditor(page) {
   const embedT = bind(form, "embedTitle", { placeholder: "🚔 Record — {callsign}" }), threadT = bind(form, "threadTitle", { placeholder: "{callsign}" });
   left.append(sec("Discord & sheet", true,
     field("Post to webhook", bind(form, "webhookId", { type: "select", options: hookOpts, structural: true }), HOOKS.length ? "Add or fix webhooks in the Webhooks tab." : "No webhooks yet: add one in the Webhooks tab first."),
-    field("Discord post layout", bind(form, "discordStyle", { type: "select", options: [["", "Report grid (details in 3 columns, checklists as progress bars)"], ["classic", "Classic list (people across the top, every checklist item ticked ✅ / ❌)"]] }), "Classic is the original Academy Evaluation look."),
+    field("Discord post layout", bind(form, "discordStyle", { type: "select", options: [["", "Report grid (details in 3 columns, checklists as progress bars)"], ["classic", "Classic list (people across the top, every checklist item ticked ✅ / ❌)"], ["record", "Simple record (emoji labels, @mentions, bullet list — the old Google Sheets training post)"]] }), "Classic is the original Academy Evaluation look."),
+        h("div", { style: "margin:-4px 0 12px" }, toggle(form, "discordEmoji", "Emoji labels on the Discord post (📅 Date, ⏰ Time, 👨‍🏫 Instructor …) with a ✅ green / ❌ red side bar from Completed / Result")),
     field("Embed title", embedT), chipRow(embedT),
     field("Forum thread name", threadT, "Only used for forum-channel webhooks. Click a {field} to insert the officer's answer."), chipRow(threadT),
     h("div", { class: "g2" }, field("Embed colour", bind(form, "color", { type: "color" })), field("Sheet tab for submissions", bind(form, "archiveSheet", { placeholder: form.title }), "Created automatically on first submission.")),
