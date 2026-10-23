@@ -560,8 +560,15 @@ $("saveBtn").onclick = async () => {
       setTimeout(() => toast("Heads up: Google didn't keep your roster tab choices. Your Apps Script is out of date. Paste the latest WebApp.gs and deploy a New version.", "bad"), 1600);
     }
     dirty(); renderPage(true);
-    toast("Saved. The live portal now shows these changes.", "ok");
-    loadAll(true).catch(() => {});  // refresh activity log
+    if (SNAP && SNAP.on) {                // fast loading: push the new copy to the site straight away (its own request, so saving isn't held up)
+      toast("Saved. Updating the main site now (about 30 seconds)…", "ok");
+      api("snapshotPublish").then(r => { SNAP = r.snapshot || SNAP; toast("Saved and sent to the main site. It shows there in about 20 seconds.", "ok"); })
+        .catch(e => toast("Saved, but updating the main site's copy failed: " + e.message + " (it retries by itself within 10 minutes).", "bad"))
+        .finally(() => loadAll(true).catch(() => {}));
+    } else {
+      toast("Saved. The main site picks this up the next time it reaches Google.", "ok");
+      loadAll(true).catch(() => {});  // refresh activity log
+    }
   } catch (err) { toast(err.message, "bad"); }
   finally { btn.disabled = false; btn.textContent = "Save & publish"; }
 };
