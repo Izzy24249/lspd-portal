@@ -468,19 +468,26 @@ $("modal").addEventListener("click", e => { if (e.target.id === "modal") $("moda
 /* =====================================================================
    AUTH + LOADING
    ===================================================================== */
+// start Google up as soon as the sign-in page shows, so signing in itself is quick
+let woke = 0;
+function wakeGoogle() { if (Date.now() - woke < 60000) return; woke = Date.now(); try { fetch(Portal.ENDPOINT + "?action=wake&t=" + woke).catch(() => {}); } catch (e) {} }
 function signedOut(msg) {
+  wakeGoogle();
   TOKEN = null; try { sessionStorage.removeItem("lspd_admin_token"); localStorage.removeItem("lspd_admin_token"); localStorage.removeItem(SNAP_KEY); } catch (e) {}
   $("appView").style.display = "none"; $("who").style.display = "none"; $("bootMsg").style.display = "none";
   $("loginView").style.display = ""; $("lgMsg").textContent = msg || ""; $("lgUser").focus();
   $("savebar").classList.remove("show");
 }
+$("lgUser").addEventListener("focus", wakeGoogle);
 $("loginForm").addEventListener("submit", async e => {
   e.preventDefault();
   $("lgBtn").disabled = true; $("lgMsg").textContent = "";
   try {
     const remember = $("lgKeep").checked;
     $("lgBtn").textContent = "Signing in…";
+    const slow = setTimeout(() => { $("lgBtn").textContent = "Signing in… (Google is waking up)"; }, 5000);
     const res = await Portal.post({ action: "login", username: $("lgUser").value.trim(), password: $("lgPass").value, remember: remember });
+    clearTimeout(slow);
     if (!res.ok) throw new Error(res.error);
     saveToken(res.token, remember);
     $("lgPass").value = "";

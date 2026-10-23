@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 38;
+const BACKEND_VERSION = 39;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -40,6 +40,7 @@ function doGet(e) {
     const action = (e && e.parameter && e.parameter.action) || "";
     if (action === "config") return json_({ ok: true, config: publicConfig_() });
     if (action === "promo") return json_({ ok: true, promo: promoView_(false, e.parameter.p) });
+    if (action === "wake") { try { getAdmins_(); getConfig_(); readLog_(1); } catch (x) {} return json_({ ok: true }); }   // admin sign-in page: get Google ready while they type
     return json_({ ok: true, service: "LSPD Forms Portal" });
   } catch (err) {
     return json_({ ok: false, error: errMsg_(err) });
@@ -69,7 +70,7 @@ function doPost(e) {
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(45000)) return { ok: false, error: "Server busy, please try again in a few seconds." };
-  try { return fn(); } finally { lock.releaseLock(); }
+  try { try { flushDeferred_(); } catch (e) {} return fn(); } finally { lock.releaseLock(); }
 }
 
 function json_(obj) {
@@ -330,6 +331,7 @@ function rostersFor_(forms, opts) {
 }
 // Runs every 10 minutes (time trigger) so the website and admin never wait on reading the roster sheet.
 function warmRosters() {
+  try { flushDeferred_(); } catch (e) {}
   const cfg = getConfig_();
   try { callsignMap_(true); } catch (e) {}
   rostersFor_(cfg.forms, { fresh: true });
@@ -1743,7 +1745,16 @@ function adminsSheet_() {
   }
   return sh;
 }
+// the admin list is read on every admin request (to check the session), so it's kept in the cache
+function adminsDirty_() { CacheService.getScriptCache().remove("admins_list"); }
 function getAdmins_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get("admins_list");
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const list = readAdmins_().map(a => Object.assign({}, a, { created: isDate_(a.created) ? a.created.toISOString() : a.created || "", lastLogin: isDate_(a.lastLogin) ? a.lastLogin.toISOString() : a.lastLogin || "" }));
+  try { cache.put("admins_list", JSON.stringify(list), 21600); } catch (e) {}
+  return list;
+}
+function readAdmins_() {
   const data = adminsSheet_().getDataRange().getValues();
   const out = [];
   for (let i = 1; i < data.length; i++) {
@@ -1777,6 +1788,7 @@ function setAdmin_(username, password, role) {
   const sh = adminsSheet_(), existing = findAdmin_(username);
   if (existing) { sh.getRange(existing.row, 2, 1, 3).setValues([[role, salt, hash]]); sh.getRange(existing.row, 7).setValue(Date.now()); }   // new password signs out every device
   else sh.appendRow([username, role, salt, hash, new Date(), ""]);
+  adminsDirty_();
 }
 
 // Sessions are signed tokens (username|expires|issued + HMAC), so they survive cache resets and can last days ("keep me signed in").
@@ -1815,18 +1827,45 @@ function sessionAdmin_(token) {
   return admin;
 }
 
-function logAdmin_(user, action, detail) {
+function logAdmin_(user, action, detail, when) {
   const ss = ss_();
   let sh = ss.getSheetByName(LOG_SHEET_);
   if (!sh) { sh = ss.insertSheet(LOG_SHEET_); sh.appendRow(["When", "Admin", "Action", "Detail"]); sh.setFrozenRows(1); }
-  sh.appendRow([new Date(), user, action, cellSafe_(clip_(detail || "", 1000))]);
+  const at = when ? new Date(when) : new Date(), text = cellSafe_(clip_(detail || "", 1000));
+  sh.appendRow([at, user, action, text]);
+  const cache = CacheService.getScriptCache(), hit = cache.get("admin_log");   // keep the cached copy current
+  if (hit) { try { const list = JSON.parse(hit); list.unshift({ when: at.toISOString(), user: user, action: action, detail: text }); list.sort((a, b) => String(b.when).localeCompare(String(a.when))); cache.put("admin_log", JSON.stringify(list.slice(0, 200)), 21600); } catch (e) { cache.remove("admin_log"); } }
 }
 function readLog_(n) {
-  const sh = ss_().getSheetByName(LOG_SHEET_);
-  if (!sh || sh.getLastRow() < 2) return [];
-  const count = Math.min(n, sh.getLastRow() - 1);
-  return sh.getRange(sh.getLastRow() - count + 1, 1, count, 4).getValues().reverse()
-    .map(r => ({ when: isDate_(r[0]) ? r[0].toISOString() : String(r[0]), user: r[1], action: r[2], detail: r[3] }));
+  const cache = CacheService.getScriptCache(), pending = deferred_().map(x => ({ when: x.when, user: x.user, action: "login", detail: "" }));
+  let list = null;
+  const hit = cache.get("admin_log");
+  if (hit) { try { list = JSON.parse(hit); } catch (e) {} }
+  if (!list) {
+    const sh = ss_().getSheetByName(LOG_SHEET_);
+    if (!sh || sh.getLastRow() < 2) list = [];
+    else {
+      const count = Math.min(200, sh.getLastRow() - 1);
+      list = sh.getRange(sh.getLastRow() - count + 1, 1, count, 4).getValues().reverse()
+        .map(r => ({ when: isDate_(r[0]) ? r[0].toISOString() : String(r[0]), user: r[1], action: r[2], detail: r[3] }));
+    }
+    try { cache.put("admin_log", JSON.stringify(list), 21600); } catch (e) {}
+  }
+  return pending.concat(list).slice(0, n);
+}
+// sign-in bookkeeping waits in a small queue and is written by the next save or the 10-minute trigger
+function deferred_() { try { return JSON.parse(CacheService.getScriptCache().get("defer_logins") || "[]"); } catch (e) { return []; } }
+function deferLogin_(user) {
+  const q = deferred_(); q.unshift({ user: user, when: new Date().toISOString() });
+  CacheService.getScriptCache().put("defer_logins", JSON.stringify(q.slice(0, 100)), 21600);
+}
+function flushDeferred_() {
+  const q = deferred_(); if (!q.length) return;
+  CacheService.getScriptCache().remove("defer_logins");
+  const sh = adminsSheet_(), admins = readAdmins_(), latest = {};
+  q.slice().reverse().forEach(x => { logAdmin_(x.user, "login", "", x.when); latest[x.user.toLowerCase()] = x.when; });
+  admins.forEach(a => { const w = latest[a.username.toLowerCase()]; if (w) sh.getRange(a.row, 6).setValue(new Date(w)); });
+  adminsDirty_();
 }
 
 // =====================================================================
@@ -1844,7 +1883,10 @@ function allPayload_(me) {
     rosters: rosters, rostersMissing: missing,
     roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_() : []; } catch (e) { return []; } })(),
     webhooks: maskWebhooks_(),
-    admins: (isOwner ? getAdmins_() : getAdmins_().filter(x => x.username === me.username)).map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })),
+    admins: (isOwner ? getAdmins_() : getAdmins_().filter(x => x.username === me.username)).map(x => {
+      const p = deferred_().find(q => q.user.toLowerCase() === x.username.toLowerCase());
+      return { username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: p ? p.when : x.lastLogin ? new Date(x.lastLogin).toISOString() : "" };
+    }),
     log: readLog_(200),
     snapshot: snapshotStatus_()
   };
@@ -1863,9 +1905,8 @@ function handleAdmin_(d) {
       return { ok: false, error: "Wrong username or password." };
     }
     cache.remove(failKey);
-    adminsSheet_().getRange(admin.row, 6).setValue(new Date());
-    logAdmin_(admin.username, "login", "");
-    admin.lastLogin = new Date();
+    deferLogin_(admin.username);                         // "last login" + activity line are written later, so signing in is quick
+    admin.lastLogin = new Date().toISOString();
     return Object.assign(allPayload_(admin), { ok: true, token: newSession_(admin, d.remember !== false) });   // one trip: sign in + load the portal
   }
 
@@ -1877,7 +1918,7 @@ function handleAdmin_(d) {
   switch (a) {
     case "logout":
       CacheService.getScriptCache().remove("sess_" + d.token);
-      if (d.everywhere) adminsSheet_().getRange(me.row, 7).setValue(Date.now());
+      if (d.everywhere) { adminsSheet_().getRange(me.row, 7).setValue(Date.now()); adminsDirty_(); }
       return { ok: true };
 
     case "getAll": return allPayload_(me);
@@ -2094,7 +2135,7 @@ function handleAdmin_(d) {
       const t = findAdmin_(d.username);
       if (!t) throw new Error("Admin not found.");
       if (t.role === "owner" && d.role !== "owner" && getAdmins_().filter(x => x.role === "owner").length < 2) throw new Error("There must always be at least one owner.");
-      adminsSheet_().getRange(t.row, 2).setValue(d.role === "owner" ? "owner" : "admin");
+      adminsSheet_().getRange(t.row, 2).setValue(d.role === "owner" ? "owner" : "admin"); adminsDirty_();
       logAdmin_(me.username, "change role", t.username + " -> " + d.role);
       return { ok: true };
     }
@@ -2104,7 +2145,7 @@ function handleAdmin_(d) {
       if (!t) throw new Error("Admin not found.");
       if (t.username === me.username) throw new Error("You can't remove yourself.");
       if (t.role === "owner" && getAdmins_().filter(x => x.role === "owner").length < 2) throw new Error("There must always be at least one owner.");
-      adminsSheet_().deleteRow(t.row);
+      adminsSheet_().deleteRow(t.row); adminsDirty_();
       logAdmin_(me.username, "remove admin", t.username);
       return { ok: true };
     }
