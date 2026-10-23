@@ -375,8 +375,8 @@ function saveToken(t, remember) {
   try { localStorage.removeItem("lspd_admin_token"); sessionStorage.removeItem("lspd_admin_token"); (remember ? localStorage : sessionStorage).setItem("lspd_admin_token", t); } catch (e) {}
 }
 const SNAP_KEY = "lspd_admin_snap";      // last loaded portal, so the admin opens instantly next time and refreshes behind the scenes
-function saveSnap(res) { try { localStorage.setItem(SNAP_KEY, JSON.stringify({ me: res.me, config: res.config, webhooks: res.webhooks, backend: res.backend, admins: res.admins, log: (res.log || []).slice(0, 60), at: Date.now() })); } catch (e) {} }
-let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [], SNAP = null;
+function saveSnap(res) { try { localStorage.setItem(SNAP_KEY, JSON.stringify({ me: res.me, config: res.config, webhooks: res.webhooks, backend: res.backend, admins: res.admins, log: (res.log || []).slice(0, 60), snapshot: res.snapshot || SNAP || null, at: Date.now() })); } catch (e) {} }
+let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [], SNAP = null, BACKEND_HAVE = 0;
 let TAB = "forms", EDIT = null;           // EDIT = id of form being edited
 let PV = "side";                          // preview layout: side | below | off
 try { PV = localStorage.getItem("lspd_admin_preview") || "side"; } catch (e) {}
@@ -508,10 +508,10 @@ async function loadAll(keepEdits) {
 function applyAll(res, keepEdits) {
   saveSnap(res);
   $("syncing").classList.remove("on");
-  ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log; SNAP = res.snapshot || null;
+  ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log; if (res.snapshot) SNAP = res.snapshot;   // the quick-open copy may not carry it: keep what we know
   if (Portal.setRoster) Portal.setRoster(res.roster || []);
   if (Portal.setRosters) { Portal.setRosters(res.rosters || {}); window.__rosters = res.rosters || {}; }
-  showBackendWarning(res.backend || 0);
+  showBackendWarning(res.backend || 0); BACKEND_HAVE = res.backend || BACKEND_HAVE;
   if (!keepEdits) {
     CFG = res.config; VERSION = res.config.version;
     if (typeof Portal.withDefaults === "function") CFG.forms = CFG.forms.map(f => Portal.withDefaults(f)); // built-in guides for forms saved before guides existed
@@ -1487,7 +1487,7 @@ function fastLoadingSec() {
     const st = SNAP || { on: false };
     box.append(h("h3", { text: "Fast loading" }),
       h("p", { class: "help", text: "Visitors load the forms, rosters and progression from a copy saved on the website itself, so the site opens instantly even when Google is slow. Google still receives every submission and refreshes the copy by itself (within a few minutes of any change)." }));
-    if (!SNAP) { box.append(h("div", { class: "help", text: "Paste the new WebApp.gs (version 38) and deploy a new version to use this." })); return; }
+    if (!SNAP) { box.append(h("div", { class: "help", text: BACKEND_HAVE >= 38 ? "Loading status…" : "Paste the new WebApp.gs (version 38 or newer) and deploy a new version to use this." })); return; }
     box.append(h("div", { class: "kpis" },
       h("div", { class: "kpi" }, h("small", { text: "Status" }), h("b", { text: st.on ? (st.error ? "Problem" : "On") : "Off", style: "color:" + (st.on ? (st.error ? "#f87171" : "#4ade80") : "var(--muted)") })),
       h("div", { class: "kpi" }, h("small", { text: "Copy last updated" }), h("b", { text: ago(st.last) })),
