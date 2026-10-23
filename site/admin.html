@@ -376,7 +376,7 @@ function saveToken(t, remember) {
 }
 const SNAP_KEY = "lspd_admin_snap";      // last loaded portal, so the admin opens instantly next time and refreshes behind the scenes
 function saveSnap(res) { try { localStorage.setItem(SNAP_KEY, JSON.stringify({ me: res.me, config: res.config, webhooks: res.webhooks, backend: res.backend, admins: res.admins, log: (res.log || []).slice(0, 60), at: Date.now() })); } catch (e) {} }
-let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [];
+let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [], SNAP = null;
 let TAB = "forms", EDIT = null;           // EDIT = id of form being edited
 let PV = "side";                          // preview layout: side | below | off
 try { PV = localStorage.getItem("lspd_admin_preview") || "side"; } catch (e) {}
@@ -501,7 +501,7 @@ async function loadAll(keepEdits) {
 function applyAll(res, keepEdits) {
   saveSnap(res);
   $("syncing").classList.remove("on");
-  ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log;
+  ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log; SNAP = res.snapshot || null;
   if (Portal.setRoster) Portal.setRoster(res.roster || []);
   if (Portal.setRosters) { Portal.setRosters(res.rosters || {}); window.__rosters = res.rosters || {}; }
   showBackendWarning(res.backend || 0);
@@ -1451,11 +1451,45 @@ function pageSettingsInner(page) {
       try { await api("hoursRefresh", {}); toast("Hours board updated in Discord.", "ok"); } catch (err) { toast(err.message, "bad"); }
       e.target.disabled = false;
     } }, "Post / refresh board now")) : null));
+  page.append(fastLoadingSec());
   page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
     h("h3", { text: "Maintenance mode" }),
     h("p", { class: "help", text: "Shows a red notice and blocks all submissions until turned off. Officers' drafts are kept in their browser." }),
     toggle(s.maintenance, "on", "Maintenance mode is ON"),
     field("Message", bind(s.maintenance, "message", { type: "textarea", rows: 2 }))));
+}
+
+/* fast loading: the site keeps its own copy of the forms/rosters (published to GitHub by the backend) */
+function fastLoadingSec() {
+  const box = h("div", { class: "sec", style: "display:grid;gap:12px" });
+  const ago = iso => { if (!iso) return "never"; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : new Date(iso).toLocaleString(); };
+  const draw = () => {
+    box.innerHTML = "";
+    const st = SNAP || { on: false };
+    box.append(h("h3", { text: "Fast loading" }),
+      h("p", { class: "help", text: "Visitors load the forms, rosters and progression from a copy saved on the website itself, so the site opens instantly even when Google is slow. Google still receives every submission and refreshes the copy by itself (within a few minutes of any change)." }));
+    if (!SNAP) { box.append(h("div", { class: "help", text: "Paste the new WebApp.gs (version 38) and deploy a new version to use this." })); return; }
+    box.append(h("div", { class: "kpis" },
+      h("div", { class: "kpi" }, h("small", { text: "Status" }), h("b", { text: st.on ? (st.error ? "Problem" : "On") : "Off", style: "color:" + (st.on ? (st.error ? "#f87171" : "#4ade80") : "var(--muted)") })),
+      h("div", { class: "kpi" }, h("small", { text: "Copy last updated" }), h("b", { text: ago(st.last) })),
+      h("div", { class: "kpi" }, h("small", { text: "Last checked" }), h("b", { text: ago(st.checked) }))));
+    if (st.error) box.append(h("div", { class: "msg bad", style: "display:block", text: st.error }));
+    if (ME.role !== "owner") return;
+    const tok = h("input", { type: "password", autocomplete: "off", placeholder: st.on ? "Leave blank to keep the current token" : "github_pat_…" });
+    const repo = h("input", { type: "text", value: st.repo || "Izzy24249/lspd-portal" });
+    const run = async (data, okMsg) => {
+      try { const r = await api("snapshotSetup", data); SNAP = r.snapshot; toast(okMsg, "ok"); }
+      catch (e) { toast(e.message, "bad"); try { const r = await api("getAll"); SNAP = r.snapshot; } catch (x) {} }
+      draw();
+    };
+    box.append(h("div", { class: "g2" }, field("GitHub token", tok, "Fine-grained token with Contents: Read and write on the repository only. Stored in Apps Script, never shown again."), field("Repository", repo)),
+      h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
+        h("button", { class: "btn primary sm", onclick: e => { e.target.disabled = true; run({ githubToken: tok.value.trim(), repo: repo.value.trim() }, "Fast loading is on. The site updates in about a minute."); } }, st.on ? "Save & publish now" : "Turn on fast loading"),
+        st.on ? h("button", { class: "btn ghost sm", onclick: async e => { e.target.disabled = true; try { const r = await api("snapshotPublish"); SNAP = r.snapshot; toast("Published. The site updates in about a minute.", "ok"); } catch (err) { toast(err.message, "bad"); } draw(); } }, "Publish now") : null,
+        st.on ? h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Turn off fast loading? The site will load from Google again.")) run({ off: true, repo: repo.value.trim() }, "Fast loading turned off."); } }, "Turn off") : null));
+  };
+  draw();
+  return box;
 }
 
 /* ---------------- ADMINS ---------------- */

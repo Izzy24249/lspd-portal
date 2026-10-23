@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 37;
+const BACKEND_VERSION = 38;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -53,8 +53,14 @@ function doPost(e) {
   let d;
   try { d = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "Bad request." }); }
   try {
-    if (d.action) return json_(WRITE_ACTIONS_[d.action] ? withLock_(() => handleAdmin_(d)) : handleAdmin_(d));
-    return json_(handleSubmit_(d));
+    if (d.action) {
+      const out = WRITE_ACTIONS_[d.action] ? withLock_(() => handleAdmin_(d)) : handleAdmin_(d);
+      if (out && out.ok && /^promo(Credit|Remove|Excuse|Since)$/.test(d.action)) snapshotSoon_();
+      return json_(out);
+    }
+    const res = handleSubmit_(d);
+    if (res && res.ok) snapshotSoon_();                     // progression may have moved
+    return json_(res);
   } catch (err) {
     return json_({ ok: false, error: errMsg_(err) });
   }
@@ -124,6 +130,80 @@ function cacheConfig_(cfg) {
 }
 
 // What the public website is allowed to see (everything except internal stamps).
+// =====================================================================
+// FAST LOADING: a copy of the public data saved ON THE WEBSITE (site/data/portal.json via GitHub)
+// Visitors load that file straight from the site (instant); Google only handles submissions
+// and keeps the copy up to date. A new copy is published only when something actually changed.
+// =====================================================================
+const SNAP_REPO_DEFAULT_ = "Izzy24249/lspd-portal", SNAP_PATH_ = "site/data/portal.json";
+function snapshotData_() {
+  const cfg = getConfig_(), promo = {};
+  programs_(cfg).forEach(p => { try { if (p.on) promo[p.id] = promoView_(false, p.id); } catch (e) {} });
+  return { config: publicConfig_(), promo: promo };
+}
+function snapshotStatus_() {
+  return { on: !!PROPS_.getProperty("GITHUB_TOKEN"), repo: PROPS_.getProperty("SNAP_REPO") || SNAP_REPO_DEFAULT_,
+    last: PROPS_.getProperty("SNAP_LAST") || "", checked: PROPS_.getProperty("SNAP_CHECKED") || "", error: PROPS_.getProperty("SNAP_ERROR") || "" };
+}
+// after a save / submission: publish in the background (a one-off trigger), so nobody waits for GitHub
+function snapshotSoon_() {
+  try {
+    if (!PROPS_.getProperty("GITHUB_TOKEN")) return;
+    const c = CacheService.getScriptCache();
+    if (c.get("snap_soon")) return;
+    c.put("snap_soon", "1", 90);
+    ScriptApp.newTrigger("publishSnapshot").timeBased().after(20 * 1000).create();
+  } catch (e) {}
+}
+function publishSnapshot() {                                   // trigger entry point
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "publishSnapshot").forEach(t => { try { ScriptApp.deleteTrigger(t); } catch (e) {} });
+  CacheService.getScriptCache().remove("snap_soon");
+  publishSnapshot_();
+}
+function publishSnapshot_(force) {
+  const token = PROPS_.getProperty("GITHUB_TOKEN");
+  if (!token) return { ok: false, error: "Fast loading isn't set up (no GitHub token)." };
+  const repo = PROPS_.getProperty("SNAP_REPO") || SNAP_REPO_DEFAULT_;
+  const data = snapshotData_(), body = JSON.stringify(data, (k, v) => k === "updated" ? undefined : v);   // "updated" stamps change every run
+  const hash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, body, Utilities.Charset.UTF_8));
+  PROPS_.setProperty("SNAP_CHECKED", new Date().toISOString());
+  if (!force && hash === PROPS_.getProperty("SNAP_HASH")) return { ok: true, unchanged: true };
+  const file = JSON.stringify(Object.assign({ published: new Date().toISOString() }, data));
+  const api = "https://api.github.com/repos/" + repo + "/contents/" + SNAP_PATH_;
+  const head = { Authorization: "Bearer " + token, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  const getSha = () => {
+    const r = UrlFetchApp.fetch(api + "?ref=main", { method: "get", headers: head, muteHttpExceptions: true });
+    if (r.getResponseCode() === 404) return "";
+    if (r.getResponseCode() !== 200) throw new Error(ghError_(r));
+    return JSON.parse(r.getContentText()).sha || "";
+  };
+  const put = sha => UrlFetchApp.fetch(api, { method: "put", headers: head, contentType: "application/json", muteHttpExceptions: true,
+    payload: JSON.stringify(Object.assign({ message: "Portal data update (automatic)", branch: "main",
+      content: Utilities.base64Encode(file, Utilities.Charset.UTF_8) }, sha ? { sha: sha } : {})) });
+  try {
+    let sha = PROPS_.getProperty("SNAP_SHA");
+    if (sha == null) sha = getSha();
+    let r = put(sha);
+    if (r.getResponseCode() === 409 || r.getResponseCode() === 422) r = put(getSha());   // the file changed on GitHub: get its id and retry
+    if (r.getResponseCode() !== 200 && r.getResponseCode() !== 201) throw new Error(ghError_(r));
+    PROPS_.setProperty("SNAP_SHA", JSON.parse(r.getContentText()).content.sha);
+    PROPS_.setProperty("SNAP_HASH", hash);
+    PROPS_.setProperty("SNAP_LAST", new Date().toISOString());
+    PROPS_.deleteProperty("SNAP_ERROR");
+    return { ok: true };
+  } catch (e) {
+    PROPS_.setProperty("SNAP_ERROR", clip_(errMsg_(e), 300));
+    return { ok: false, error: errMsg_(e) };
+  }
+}
+function ghError_(r) {
+  const code = r.getResponseCode(); let msg = "";
+  try { msg = JSON.parse(r.getContentText()).message || ""; } catch (e) {}
+  if (code === 401) return "GitHub said the token is wrong or expired (401). Make a new one and paste it again.";
+  if (code === 403 || code === 404) return "GitHub refused (" + code + "): the token needs \"Contents: Read and write\" on the repository. " + msg;
+  return "GitHub error " + code + ": " + msg;
+}
+
 function publicConfig_() {
   const cfg = getConfig_();
   return {
@@ -258,6 +338,7 @@ function warmRosters() {
   try { promoSync_(); } catch (e) {}
   promoClearCache_();
   programs_(cfg).forEach(p => { try { if (p.on) promoView_(false, p.id); } catch (e) {} });   // progression pages answer from the saved copy
+  try { publishSnapshot_(); } catch (e) {}                   // copy on the website itself (only when something changed)
 }
 function ensureWarmTrigger_() {
   const cache = CacheService.getScriptCache();
@@ -1764,7 +1845,8 @@ function allPayload_(me) {
     roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_() : []; } catch (e) { return []; } })(),
     webhooks: maskWebhooks_(),
     admins: (isOwner ? getAdmins_() : getAdmins_().filter(x => x.username === me.username)).map(x => ({ username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: x.lastLogin ? new Date(x.lastLogin).toISOString() : "" })),
-    log: readLog_(200)
+    log: readLog_(200),
+    snapshot: snapshotStatus_()
   };
 }
 function handleAdmin_(d) {
@@ -1800,6 +1882,23 @@ function handleAdmin_(d) {
 
     case "getAll": return allPayload_(me);
 
+    case "snapshotSetup": {      // owner pastes a GitHub token: the site then loads from its own copy
+      ownerOnly();
+      const tok = str_(d.githubToken), repo = str_(d.repo) || SNAP_REPO_DEFAULT_;
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("Repository should look like owner/name.");
+      if (tok) PROPS_.setProperty("GITHUB_TOKEN", tok);
+      if (d.off) PROPS_.deleteProperty("GITHUB_TOKEN");
+      PROPS_.setProperty("SNAP_REPO", repo);
+      PROPS_.deleteProperty("SNAP_HASH"); PROPS_.deleteProperty("SNAP_SHA");
+      logAdmin_(me.username, "fast loading", d.off ? "turned off" : "set up for " + repo);
+      const r = d.off ? { ok: true } : publishSnapshot_(true);
+      return { ok: r.ok, error: r.error, snapshot: snapshotStatus_() };
+    }
+    case "snapshotPublish": {
+      const r = publishSnapshot_(true);
+      return { ok: r.ok, error: r.error, snapshot: snapshotStatus_() };
+    }
+
     case "saveConfig": {
       const cur = getConfig_();
       if (Number(d.baseVersion) !== Number(cur.version)) {
@@ -1815,6 +1914,7 @@ function handleAdmin_(d) {
       promoClearCache_();                                  // progression setup may have changed
       logAdmin_(me.username, "save config", diffSummary_(cur, next));
       try { ensureWarmTrigger_(); } catch (e) {}
+      snapshotSoon_();
       return { ok: true, config: next };
     }
 

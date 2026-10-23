@@ -141,7 +141,7 @@ function progList(){
   return all.filter(p => p && p.on !== false && (p.id !== "cpl" || st.promo));
 }
 function promoOn(){ return progList().length > 0; }
-let PROMOS = {}, PROMO_T = {}, PID = "cpl", promoFilter = "all", promoQuery = "";
+let PROMOS = {}, PROMO_T = {}, PROMO_LIVE = {}, PID = "cpl", promoFilter = "all", promoQuery = "";
 const progIcon = p => p.id === "cpl" ? "🎖️" : p.id === "onboard" ? "🧭" : "📋";
 function renderPrograms(){
   const list = progList();
@@ -167,7 +167,7 @@ async function fetchPromo(pid){
   finally { if (timer) clearTimeout(timer); }
   const data = await res.json();
   if(!data.ok) throw new Error(data.error || "Could not load the tracker");
-  PROMOS[pid] = data.promo;
+  PROMOS[pid] = data.promo; PROMO_LIVE[pid] = 1;
   try { localStorage.setItem("lspd_promos", JSON.stringify(PROMOS)); } catch (e) {}
   return data.promo;
 }
@@ -180,7 +180,7 @@ function loadPromo(){
   fetchPromo(want).then(() => { if(PID === want) drawPromo(); }).catch(e => {
     if(PID !== want) return;
     if(!PROMOS[want]) $("promoMount").innerHTML = '<div class="loading">Could not load this page. ' + Portal.esc(e.message) + '<br><button class="btn ghost" style="margin-top:12px" onclick="loadPromo()">Try again</button></div>';
-    else { const u = document.querySelector(".promo-upd"); if(u) u.insertAdjacentHTML("afterbegin", '<span style="color:#fcd34d">Showing the last saved copy (' + Portal.esc(e.message) + '). </span>'); }
+    else if(!(SNAP_AT && Date.now() - SNAP_AT < 6 * 3600e3)) { const u = document.querySelector(".promo-upd"); if(u) u.insertAdjacentHTML("afterbegin", '<span style="color:#fcd34d">Showing the last saved copy (' + Portal.esc(e.message) + '). </span>'); }
   });
 }
 let promoOpen = new Set();
@@ -318,16 +318,30 @@ function apply(cfg){
   if(h) go(h);
   else if(current) openForm(current.id);
 }
-try{ const c = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); if(c) apply(c); }catch(e){}
-Portal.loadConfig().then(cfg => {
+// 1) this browser's last copy  2) the site's own copy (data/portal.json, instant)  3) Google, live, in the background
+let LIVE = false, SNAP_AT = 0;
+function useCfg(cfg){
   const changed = !CONFIG || CONFIG.version !== cfg.version;
   const rosterChanged = !CONFIG || JSON.stringify([CONFIG.roster || [], CONFIG.rosters || {}]) !== JSON.stringify([cfg.roster || [], cfg.rosters || {}]);
   try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
   if(changed) apply(cfg);
   else if(rosterChanged){ CONFIG = cfg; if (Portal.setRoster) Portal.setRoster(cfg.roster || []); if (Portal.setRosters) Portal.setRosters(cfg.rosters || {}); }   // fresh roster, no form reload needed
+}
+try{ const c = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); if(c) apply(c); }catch(e){}
+const snapReady = fetch("data/portal.json?t=" + Date.now(), { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(snap => {
+  if(!snap || !snap.config) return;
+  SNAP_AT = Date.parse(snap.published) || 0;
+  Object.keys(snap.promo || {}).forEach(pid => { if(!PROMO_LIVE[pid]) PROMOS[pid] = snap.promo[pid]; });
+  try { localStorage.setItem("lspd_promos", JSON.stringify(PROMOS)); } catch (e) {}
+  if(!LIVE && !(CONFIG && CONFIG.version > snap.config.version)) useCfg(snap.config);
+  else if(CONFIG) renderPrograms();
+  if(/^#promo/.test(location.hash) && PROMOS[PID] && PROMOS[PID].candidates && typeof drawPromo === "function") drawPromo();
   $("stale").style.display = "none";
-}).catch(err => {
-  if(CONFIG){ $("stale").style.display = ""; $("stale").innerHTML = "⚠️ Couldn't get the latest forms from the server, so this is the last saved copy. <a onclick=\"location.reload()\">Try again</a><small>" + Portal.esc(err.message) + "</small>"; }
+}).catch(() => {});
+Portal.loadConfig().then(cfg => { LIVE = true; useCfg(cfg); $("stale").style.display = "none"; }).catch(async err => {
+  await snapReady;
+  const fresh = SNAP_AT && Date.now() - SNAP_AT < 6 * 3600e3;
+  if(CONFIG && !fresh){ $("stale").style.display = ""; $("stale").innerHTML = "⚠️ Couldn't reach the server, so this is the last saved copy. Submitting may not work right now. <a onclick=\"location.reload()\">Try again</a><small>" + Portal.esc(err.message) + "</small>"; }
   if(!CONFIG) $("formGrid").innerHTML = '<div class="loading">Could not load forms. Check your connection and refresh.<br><small>' + Portal.esc(err.message) + '</small></div>';
 });
 </script>
