@@ -154,21 +154,34 @@ function renderPrograms(){
   });
   $("programs").innerHTML = `<section class="fsec progsec"><div class="fsec-head"><span class="fsec-ico">📈</span><h2>Training Progression</h2></div>
     <div class="prog-bubbles">${tiles.map(t => `<a class="prog-bubble" onclick="go('${t.go}')"><span class="pb-ico">${t.icon}</span><b>${Portal.esc(t.title)}</b><small class="pb-status">${t.alert ? `<i class="pb-alert ${t.alert}"></i>` : ""}${Portal.esc(t.sub)}</small><span class="pb-go">VIEW →</span></a>`).join("")}</div></section>`;
-  list.forEach(p => { if(!PROMOS[p.id] && Date.now() - (PROMO_T[p.id] || 0) > 30000) fetchPromo(p.id).then(renderPrograms).catch(()=>{}); });
+  list.forEach(p => { if(Date.now() - (PROMO_T[p.id] || 0) > 60000) fetchPromo(p.id).then(renderPrograms).catch(()=>{}); });
 }
+// last loaded copy of each progression page, so it opens instantly and refreshes behind the scenes
+try { PROMOS = JSON.parse(localStorage.getItem("lspd_promos") || "{}") || {}; } catch (e) { PROMOS = {}; }
 async function fetchPromo(pid){
   pid = pid || PID; PROMO_T[pid] = Date.now();
-  const res = await fetch(Portal.ENDPOINT + "?action=promo&p=" + encodeURIComponent(pid) + "&t=" + Date.now());
+  const ac = typeof AbortController === "function" ? new AbortController() : null, timer = ac && setTimeout(() => ac.abort(), 30000);
+  let res;
+  try { res = await fetch(Portal.ENDPOINT + "?action=promo&p=" + encodeURIComponent(pid) + "&t=" + Date.now(), ac ? { signal: ac.signal } : undefined); }
+  catch (e) { throw new Error(e.name === "AbortError" ? "Google took too long to answer (30s)." : e.message); }
+  finally { if (timer) clearTimeout(timer); }
   const data = await res.json();
   if(!data.ok) throw new Error(data.error || "Could not load the tracker");
-  PROMOS[pid] = data.promo; return data.promo;
+  PROMOS[pid] = data.promo;
+  try { localStorage.setItem("lspd_promos", JSON.stringify(PROMOS)); } catch (e) {}
+  return data.promo;
 }
 function loadPromo(){
   const p = progList().find(x => x.id === PID) || {};
   $("promoCrumb").textContent = p.title || "Progression";
-  if(PROMOS[PID] && PROMOS[PID].candidates) drawPromo(); else $("promoMount").innerHTML = '<div class="loading">Loading…</div>';
+  const have = PROMOS[PID] && PROMOS[PID].candidates;
+  if(have) drawPromo(); else $("promoMount").innerHTML = '<div class="loading">Loading…</div>';
   const want = PID;
-  fetchPromo(want).then(() => { if(PID === want) drawPromo(); }).catch(e => { if(!PROMOS[want]) $("promoMount").innerHTML = '<div class="loading">Could not load the tracker. ' + Portal.esc(e.message) + '</div>'; });
+  fetchPromo(want).then(() => { if(PID === want) drawPromo(); }).catch(e => {
+    if(PID !== want) return;
+    if(!PROMOS[want]) $("promoMount").innerHTML = '<div class="loading">Could not load this page. ' + Portal.esc(e.message) + '<br><button class="btn ghost" style="margin-top:12px" onclick="loadPromo()">Try again</button></div>';
+    else { const u = document.querySelector(".promo-upd"); if(u) u.insertAdjacentHTML("afterbegin", '<span style="color:#fcd34d">Showing the last saved copy (' + Portal.esc(e.message) + '). </span>'); }
+  });
 }
 let promoOpen = new Set();
 // list order: callsign (default), progress, or deadline — remembered per browser

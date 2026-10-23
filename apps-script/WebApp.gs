@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 34;
+const BACKEND_VERSION = 35;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -257,6 +257,7 @@ function warmRosters() {
   programs_(cfg).forEach(p => { try { if (p.on) promoCandidates_(true, p.id); } catch (e) {} });
   try { promoSync_(); } catch (e) {}
   promoClearCache_();
+  programs_(cfg).forEach(p => { try { if (p.on) promoView_(false, p.id); } catch (e) {} });   // progression pages answer from the saved copy
 }
 function ensureWarmTrigger_() {
   const cache = CacheService.getScriptCache();
@@ -1184,6 +1185,7 @@ function promoSheet_() {
 function promoClearCache_() {
   try { CacheService.getScriptCache().removeAll(programs_().map(p => "promo_view_" + p.id).concat(["promo_view"])); } catch (e) {}
 }
+function promoRebuild_() { programs_().forEach(p => { try { if (p.on) promoView_(false, p.id); } catch (e) {} }); }
 function promoAppend_(list) {
   const rows = list.map(e => [Utilities.getUuid().slice(0, 8), new Date(), e.type, "'" + e.c.key, e.c.callsign, cellSafe_(e.c.name), e.task, e.count || 0, e.form || "", cellSafe_(e.report || ""), e.date ? "'" + e.date : "", cellSafe_(e.note || ""), e.by || "", ""]);
   if (!rows.length) return;
@@ -1377,7 +1379,7 @@ function promoView_(admin, pid) {
       tasks: tasks, done: doneN, total: (pc.tasks || []).length, complete: complete, deadline: dl };
   });
   base.updated = new Date().toISOString();
-  if (!admin) { const js = JSON.stringify(base); if (js.length < 95000) cache.put(ck, js, 60); }
+  if (!admin) { const js = JSON.stringify(base); if (js.length < 95000) cache.put(ck, js, 1200); }   // 20 min; cleared whenever a completion changes, rebuilt every 10 min
   return base;
 }
 
