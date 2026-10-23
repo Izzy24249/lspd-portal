@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 41;
+const BACKEND_VERSION = 42;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -964,7 +964,13 @@ function displayValue_(f, v) {
 
 function fillTemplate_(tpl, values) {
   // dates in titles read like 10/22/26 or 1/5/26 (month/day/2-digit year, no leading zeros)
-  const val = k => { const v = str_(values[k]), d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v); return d ? (+d[2]) + "/" + (+d[3]) + "/" + d[1].slice(2) : v; };
+  // and times like 8:00 PM
+  const val = k => {
+    const v = str_(values[k]), d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v), t = /^(\d{1,2}):(\d{2})$/.exec(v);
+    if (d) return (+d[2]) + "/" + (+d[3]) + "/" + d[1].slice(2);
+    if (t && +t[1] < 24) return ((+t[1] % 12) || 12) + ":" + t[2] + " " + (+t[1] < 12 ? "AM" : "PM");
+    return v;
+  };
   return String(tpl || "").replace(/\{(\w+)\}/g, (m, k) => val(k).replace(/\s*\(\d{15,21}\)/g, "")).replace(/\s*\|\s*(\|\s*)+/g, " | ").replace(/^\s*\|\s*|\s*\|\s*$/g, "").trim();
 }
 
