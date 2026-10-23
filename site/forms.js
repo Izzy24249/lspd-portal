@@ -658,7 +658,7 @@ window.Portal = (function () {
         changed(); return;
       }
       const rm = t.closest(".rm");
-      if (rm) { rm.closest(".dyn").remove(); refresh(); changed(); return; }
+      if (rm) { rm.closest(".dyn").remove(); fillRows(); refresh(); changed(); return; }
       const nowB = t.closest("[data-now]");
       if (nowB) { const d = new Date(); q(`[data-f="${CSS.escape(nowB.dataset.now)}"]`).value = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); changed(); return; }
       const today = t.closest("[data-today]");

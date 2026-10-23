@@ -144,9 +144,9 @@ window.PORTAL_TEMPLATES = [
     "type": "repeater",
     "id": "gtTrainees",
     "title": "TRAINEES",
-    "addLabel": "+ Add Row",
+    "addLabel": "+ Add Trainee",
     "numbered": true,
-    "startRows": 15,
+    "startRows": 1,
     "columns": [
      {
       "id": "trainee",
