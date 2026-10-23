@@ -158,7 +158,14 @@ window.Portal = (function () {
     return { label: m[1], value: o, sub: sub, badge: m[2][0].toUpperCase(), cls: m[2].toLowerCase(), search: o.toLowerCase() };
   }
   // optional division filter, e.g. "CID, Detectives" (matches the roster tab names)
-  const rosterItems = (only, f) => (fieldRoster(f) || ROSTER).filter(p => {
+  // "L-5##" → letters/digits only, # = any digit, * = anything ("L-501", "L501" both match)
+  const onlyRe = pat => new RegExp("^" + String(pat || "").toUpperCase().replace(/[^A-Z0-9#*]/g, "").replace(/#/g, "\\d").replace(/\*/g, "[A-Z0-9]*") + "$");
+  const onlyFilter = (list, f) => {
+    if (!f || !f.onlyCol || !f.onlyMatch || !list.some(p => p.more && f.onlyCol in p.more)) return list;   // column not loaded yet: show everyone
+    const re = onlyRe(f.onlyMatch);
+    return list.filter(p => re.test(String((p.more || {})[f.onlyCol] || "").toUpperCase().replace(/[^A-Z0-9]/g, "")));
+  };
+  const rosterItems = (only, f) => onlyFilter(fieldRoster(f) || ROSTER, f).filter(p => {
     const want = fieldRoster(f) ? [] : String(only || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
     if (!want.length) return true;
     const has = String(p.division || "").toLowerCase().split(",").map(x => x.trim()).filter(Boolean);

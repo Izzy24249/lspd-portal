@@ -124,6 +124,8 @@ window.PORTAL_TEMPLATES = [
       "label": "Witness (CPL):",
       "type": "officer",
       "rosterTabName": "FTO - Roster",
+      "onlyCol": "C",
+      "onlyMatch": "L-5##",
       "allowTyped": true
      },
      {

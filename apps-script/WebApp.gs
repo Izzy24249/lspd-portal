@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 39;
+const BACKEND_VERSION = 40;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -319,6 +319,7 @@ function rostersFor_(forms, opts) {
     const set = ids[fd.rosterTabId] || (ids[fd.rosterTabId] = {});
     if (fd.pairCol && fd.pairFill) set[String(fd.pairCol).toUpperCase()] = 1;
     if (fd.callCol) set[String(fd.callCol).toUpperCase()] = 1;            // this tab's own callsign column (for people not on the main roster)
+    if (fd.onlyCol) set[String(fd.onlyCol).toUpperCase()] = 1;            // "only show people whose column C is L-5##"
   })));
   const out = {};
   Object.keys(ids).forEach(id => {
@@ -2224,6 +2225,10 @@ function validateConfig_(c) {
           if (fd.type === "select" && !(fd.options || []).length) throw new Error(f.title + ": dropdown \"" + (fd.label || fd.id) + "\" has no options.");
           if (fd.rosterTabId != null && fd.rosterTabId !== "") { fd.rosterTabId = Number(fd.rosterTabId); if (!isFinite(fd.rosterTabId)) delete fd.rosterTabId; }
           if (fd.callCol !== undefined) { fd.callCol = /^[A-Za-z]{1,2}$/.test(str_(fd.callCol)) ? str_(fd.callCol).toUpperCase() : ""; if (!fd.callCol) delete fd.callCol; }
+          if (fd.onlyCol !== undefined || fd.onlyMatch !== undefined) {
+            fd.onlyCol = /^[A-Za-z]{1,2}$/.test(str_(fd.onlyCol)) ? str_(fd.onlyCol).toUpperCase() : ""; fd.onlyMatch = clip_(str_(fd.onlyMatch), 40);
+            if (!fd.onlyCol || !fd.onlyMatch) { delete fd.onlyCol; delete fd.onlyMatch; }
+          }
           if (fd.pairCol || fd.pairFill) {                       // "also fill <box> from roster column <J>"
             fd.pairCol = /^[A-Za-z]{1,2}$/.test(str_(fd.pairCol)) ? str_(fd.pairCol).toUpperCase() : "";
             fd.pairFill = /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(str_(fd.pairFill)) ? str_(fd.pairFill) : "";

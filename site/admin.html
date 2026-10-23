@@ -1004,6 +1004,9 @@ function fieldCard(form, b, f, fi) {
   if (f.type === "officer" || f.type === "officers") {
     kids.push(rosterTabSelect(f));
     kids.push(callColField());
+    kids.push(h("div", { class: "g2" },
+      field("Only show people where column…", bind(f, "onlyCol", { max: 2, placeholder: "e.g. C", set: v => v.trim().toUpperCase() })),
+      field("…matches", bind(f, "onlyMatch", { max: 40, placeholder: "e.g. L-5##" }), "# = any digit. Example: column C + L-5## lists only the L-500s (CPLs). Leave empty to list everyone in the tab.")));
     if (f.type === "officer") kids.push(field("Also fill in this Discord ID box (optional)", bind(f, "fillId", { type: "select", options: [["", "— nothing —"]].concat(idFields.map(k => [k.id, (k.label || k.id).replace(/[:(].*$/, "").trim()])) }),
       "Picking a person fills their Discord ID there automatically (keeps leaderboards and tag rules working)."));
     if (f.type === "officer") {
