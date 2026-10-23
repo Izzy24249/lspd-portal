@@ -2,7 +2,7 @@
    Generated: edit freely, or change the forms in the builder after adding them. */
 window.PORTAL_TEMPLATES = [
  {
-  "theme": "hud",
+  "theme": "sheet",
   "status": "hidden",
   "copyText": true,
   "webhookId": "",
@@ -34,12 +34,11 @@ window.PORTAL_TEMPLATES = [
   },
   "id": "gomtraining",
   "section": "Training",
-  "logoUrl": "img/lspd-badge.png",
   "discordThumb": "https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/img/lspd-badge.png",
   "icon": "📋",
   "title": "Global Operation Manual Training",
-  "description": "Log a GOM training: instructor, trainees, and a CPL witness or supervising FTO. Updates Onboarding and CPL progression.",
-  "submitLabel": "Submit Training Record",
+  "description": "Official training record & log: instructor, trainees, CPL witness and supervising FTO. Updates Onboarding and CPL progression.",
+  "submitLabel": "Submit to Training Log",
   "color": "#2ECC71",
   "embedTitle": "📋 Global Operation Manual - Training Record",
   "threadTitle": "Global Operation Manual training - {gtDate} {gtTime} EST",
@@ -47,39 +46,39 @@ window.PORTAL_TEMPLATES = [
   "blocks": [
    {
     "type": "banner",
-    "title": "LSPD - GLOBAL OPERATION MANUAL TRAINING",
-    "subtitle": "Training record. Trainees who complete it are checked off on Onboarding; the CPL witness and a CPL instructor are credited on CPL → SGT."
+    "title": "GLOBAL OPERATION MANUAL",
+    "subtitle": "OFFICIAL TRAINING RECORD & LOG"
    },
    {
-    "type": "strip",
+    "type": "fields",
     "fields": [
      {
       "id": "gtDate",
-      "label": "Date",
+      "label": "Date:",
       "type": "date",
       "defaultToday": true,
       "required": true
-     },
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
      {
       "id": "gtTime",
-      "label": "Time (EST)",
+      "label": "Time (EST):",
       "type": "time",
       "required": true
-     },
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
      {
       "id": "gtDuration",
-      "label": "Duration (mins)",
+      "label": "Duration (in mins):",
       "type": "number"
-     },
-     {
-      "id": "gtCompleted",
-      "label": "Completed?",
-      "type": "select",
-      "required": true,
-      "options": [
-       "Yes",
-       "No"
-      ]
      }
     ]
    },
@@ -97,8 +96,23 @@ window.PORTAL_TEMPLATES = [
      },
      {
       "id": "gtInstructorId",
-      "label": "Instructor Discord ID:",
+      "label": "Instructor (Discord ID):",
       "type": "discord_id"
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "gtCompleted",
+      "label": "Completed Global Operation Manual Training:",
+      "type": "select",
+      "required": true,
+      "options": [
+       "Yes",
+       "No"
+      ]
      }
     ]
    },
@@ -114,7 +128,7 @@ window.PORTAL_TEMPLATES = [
      },
      {
       "id": "gtSupervisor",
-      "label": "Supervising Certified FTO (if a CPL is leading):",
+      "label": "Supervising Certified FTO:",
       "type": "officer",
       "rosterTabName": "FTO - Roster",
       "allowTyped": true
@@ -124,17 +138,19 @@ window.PORTAL_TEMPLATES = [
    {
     "type": "text",
     "style": "hint",
-    "text": "Witness: a CPL sitting in counts toward their \"Witness a GOM Training\" requirement.  Supervising FTO: fill this in when a CPL is the instructor, and it counts as their \"Lead a GOM Training\" requirement (left empty, it counts as running one on their own)."
+    "text": "Witness: a CPL sitting in (counts toward their \"Witness a GOM Training\"). Supervising FTO: only when a CPL is the instructor (counts as their \"Lead a GOM Training\"; left empty it counts as running one on their own)."
    },
    {
     "type": "repeater",
     "id": "gtTrainees",
     "title": "TRAINEES",
-    "addLabel": "+ Add Trainee",
+    "addLabel": "+ Add Row",
+    "numbered": true,
+    "startRows": 15,
     "columns": [
      {
       "id": "trainee",
-      "label": "Trainee",
+      "label": "Trainee (Discord ID)",
       "type": "officer",
       "rosterTabName": "Onboarding",
       "callCol": "A",
@@ -142,9 +158,8 @@ window.PORTAL_TEMPLATES = [
      },
      {
       "id": "notes",
-      "label": "Notes",
-      "type": "text",
-      "placeholder": "optional"
+      "label": "Additional Notes",
+      "type": "text"
      }
     ]
    }

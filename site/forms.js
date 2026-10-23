@@ -370,19 +370,19 @@ window.Portal = (function () {
           ? `<select class="g c" data-k="${esc(c.id)}" data-link="1"></select>`
           : c.type === "select"
           ? `<select class="g c" data-k="${esc(c.id)}">${c.blank ? `<option value="">— choose —</option>` : ""}${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select>`
-          : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || (c.type === "officer" ? "Search the roster…" : ""))}"${c.type === "search" || c.type === "officer" ? ` data-search="1" autocomplete="off"` : ""}>`;
+          : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || (c.type === "officer" ? "Search the roster…" : b.numbered ? c.label : ""))}"${c.type === "search" || c.type === "officer" ? ` data-search="1" autocomplete="off"` : ""}>`;
       const hasCheck = b.check && b.check.id;
       let tr;
       if (hud) {
         tr = document.createElement("div");
         tr.className = "dyn hud-row"; tr.dataset.rep = b.id;
         tr.style.gridTemplateColumns = hudCols(b);
-        tr.innerHTML = cols.map(c => `<div class="cell" data-label="${esc(c.label)}">${ctl(c)}</div>`).join("") +
+        tr.innerHTML = cols.map((c, i) => `<div class="cell" data-label="${esc(c.label)}">${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</div>`).join("") +
           `<div class="act">${hasCheck ? `<label class="hud-tick" title="${esc(b.check.label)}"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx"></span><em>${esc(b.check.label)}</em></label>` : ""}<button type="button" class="rm" title="Remove row">✕</button></div>`;
       } else {
         tr = document.createElement("tr");
-        tr.className = "dyn"; tr.dataset.rep = b.id;
-        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}">${ctl(c)}</td>`).join("") +
+        tr.className = "dyn" + (b.numbered ? " numd" : ""); tr.dataset.rep = b.id;
+        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}">${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</td>`).join("") +
           `<td class="act"><div class="actcell">${hasCheck ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
       }
       // a new row's "pick from list" boxes default to the previous row's choice (same suspect)
@@ -607,9 +607,10 @@ window.Portal = (function () {
           if (cc) cc.textContent = boxes.filter(x => x.checked).length + " / " + boxes.length;
         }
         if (b.type === "repeater") {
-          const n = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).length;
+          const rows = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`), n = b.startRows ? rows.filter(tr => [...tr.querySelectorAll("[data-k]")].some(el => el.type === "checkbox" ? el.checked : el.value.trim())).length : rows.length;
+          if (b.numbered) rows.forEach((tr, i) => { const r = tr.querySelector(".rnum"); if (r) r.textContent = String(i + 1).padStart(2, "0"); });
           q(`[data-rc="${CSS.escape(b.id)}"]`).textContent = n + (n === 1 ? " entry" : " entries");
-          q(`[data-empty="${CSS.escape(b.id)}"]`).style.display = n ? "none" : "";
+          q(`[data-empty="${CSS.escape(b.id)}"]`).style.display = (b.startRows ? rows.length : n) ? "none" : "";
         }
         if (b.type === "longtext") {
           const el = q(`[data-f="${CSS.escape(b.id)}"]`), cnt = q(`[data-count="${CSS.escape(b.id)}"]`);
@@ -683,17 +684,22 @@ window.Portal = (function () {
           const o = {};
           tr.querySelectorAll("[data-k]").forEach(el => o[el.dataset.k] = el.type === "checkbox" ? el.checked : el.value.trim());
           return o;
-        });
+        }).filter(o => !b.startRows || Object.values(o).some(v => v));   // pre-filled blank rows aren't sent
       });
       return { form: form.id, values: values, checklists: checklists, repeaters: reps };
     }
 
+    // lists with "startRows": show that many blank, numbered rows ready to fill in (like a paper sheet)
+    function fillRows() {
+      const phone = window.matchMedia && matchMedia("(max-width:760px)").matches;
+      repeaters.forEach(b => { if (!b.startRows) return; const want = phone ? Math.min(b.startRows, 5) : b.startRows; let n = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).length; while (n < want) { addRow(b); n++; } });
+    }
     function load(d) {
       if (!d) return;
       Object.keys(d.values || {}).forEach(k => { const el = q(`[data-f="${CSS.escape(k)}"]`); if (el) el.value = d.values[k]; });
       Object.keys(d.checklists || {}).forEach(id => qa(`[data-chk="${CSS.escape(id)}"]`).forEach(x => x.checked = !!d.checklists[id][x.dataset.topic]));
-      repeaters.forEach(b => ((d.repeaters || {})[b.id] || []).forEach(r => addRow(b, r)));
-      refresh();
+      repeaters.forEach(b => { if (b.startRows) qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => tr.remove()); ((d.repeaters || {})[b.id] || []).forEach(r => addRow(b, r)); });
+      fillRows(); refresh();
     }
 
     function isEmpty(d) {
@@ -721,7 +727,7 @@ window.Portal = (function () {
       qa("input,select,textarea").forEach(el => { if (el.type === "checkbox") el.checked = false; else el.value = ""; });
       qa(".dyn").forEach(tr => tr.remove());
       qa(".err").forEach(x => x.classList.remove("err"));
-      setDefaults(); refresh(); clearDraft();
+      setDefaults(); fillRows(); refresh(); clearDraft();
     }
 
     function toText() {
@@ -778,6 +784,7 @@ window.Portal = (function () {
     }
 
     setDefaults();
+    fillRows();
     refresh();
     return { collect, validate, clear, toText, restoreDraft, saveDraft: () => { clearTimeout(timer); saveDraft(); } };
   }

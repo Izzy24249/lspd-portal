@@ -868,3 +868,27 @@ a.navlink:hover{border-color:var(--gold);color:var(--gold)}
 .pd-item li.old em{display:inline-block;text-decoration:none;font-style:normal;font-size:.68rem;color:#fcd34d;margin-left:4px}
 .pd-item .pd-fresh{font-style:normal;font-size:.7rem;color:var(--muted);margin:-2px 0 6px}
 .pb-legend small{font-size:.66rem;color:#fcd34d}
+
+/* numbered list rows ("01", "02" … like a paper sheet) */
+.rnum{display:inline-grid;place-items:center;min-width:26px;height:22px;margin-right:8px;font-size:11px;font-weight:700;color:#64748b;font-variant-numeric:tabular-nums;vertical-align:middle;flex:none}
+table.xl tr.dyn td:first-child{white-space:nowrap}
+table.xl tr.dyn td:first-child .rnum + input.g{width:calc(100% - 34px);display:inline-block}
+.paper.hud .hud-row .cell:first-child{display:flex;align-items:center}
+.paper.hud .hud-row .cell:first-child .rnum{color:var(--hm)}
+@media(max-width:760px){
+  .paper:not(.hud) table.xl tr.dyn td:first-child{white-space:normal}
+  .paper:not(.hud) table.xl tr.dyn td:first-child .rnum{display:inline-grid;margin:0 6px 0 0}
+}
+
+/* numbered sheet lists on phones: "01  [trainee]  ✕" with the notes box underneath */
+@media(max-width:760px){
+  .paper:not(.hud) table.xl tr.dyn.numd{display:grid;grid-template-columns:1fr auto;column-gap:8px;row-gap:6px;align-items:center;padding:10px 12px}
+  .paper:not(.hud) table.xl tr.dyn.numd td{padding:0;background:transparent!important}
+  .paper:not(.hud) table.xl tr.dyn.numd:nth-of-type(even){background:rgba(120,130,150,.06)}
+  .paper:not(.hud) table.xl tr.dyn.numd td[data-label]::before{display:none}
+  .paper:not(.hud) table.xl tr.dyn.numd td:first-child{grid-column:1;grid-row:1;display:flex;align-items:center}
+  .paper:not(.hud) table.xl tr.dyn.numd td:first-child .rnum + input.g{flex:1;width:auto}
+  .paper:not(.hud) table.xl tr.dyn.numd td.act{grid-column:2;grid-row:1;width:auto!important;padding:0}
+  .paper:not(.hud) table.xl tr.dyn.numd td:not(:first-child):not(.act){grid-column:1/-1;padding-left:34px}
+  .paper:not(.hud) table.xl tr.dyn.numd td:not(:first-child):not(.act) .g{height:38px}
+}

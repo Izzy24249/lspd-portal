@@ -910,6 +910,9 @@ function blockBody(form, b) {
           c.type !== "select" && c.type !== "link" ? field("Placeholder", bind(c, "placeholder")) : null));
       });
       if (b.columns.length < 3) out.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { b.columns.push({ id: "col" + (b.columns.length + 1), label: "Column", type: "text" }); changed(true); } }, "+ Add column")));
+      out.push(h("div", { class: "g2" },
+        h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(b, "numbered", "Number the rows (01, 02, 03 …)")),
+        field("Blank rows ready to fill in", bind(b, "startRows", { type: "number", placeholder: "0", set: v => Math.max(0, Math.min(50, Number(v) || 0)) }), "Like a paper sheet, e.g. 15. Empty rows aren't sent.")));
       const on = { v: !!b.check.id };
       out.push(h("label", { class: "tog" }, h("input", { type: "checkbox", checked: on.v, onchange: e => { b.check = e.target.checked ? { id: "checked", label: "Done" } : { id: "", label: "" }; changed(true); } }), "Tick box at the end of each row"));
       if (b.check.id) out.push(h("div", { class: "g2" }, field("Tick column header", bind(b.check, "label")), field("Tick ID", keyInput(form, b.check, "id"))));
