@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 42;
+const BACKEND_VERSION = 43;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1406,11 +1406,18 @@ function promoFromReport_(cfg, form, values, repeaters) {
   const caseF = allFields_(form).find(f => f.type === "case_number");
   const reportNo = caseF ? str_(values[caseF.id]) : "";
   const out = [], missed = [];
+  // the report's result ("Completed: No", "Final Result: FAILED", "Needs retake", "Half Way Completed"):
+  // the person being evaluated is NOT checked off, but the report is kept in their record marked with that result
+  const outF = allFields_(form).find(f => f.type === "select" && /complete|result|status|outcome|pass|evaluation/i.test(f.label || ""));
+  const outVal = outF ? str_(values[outF.id]).replace(/^[-–•\s]+/, "") : "";
+  const failed = !!outVal && FAIL_RE_.test(outVal);
+  const evaluated = src => src.field ? src.field === (outF && outF.id) : TRAINEE_RE_.test(src.person + " " + fieldLabel_(form, src.person));
   programs_(cfg).forEach(pc => {
     if (!pc.on) return;
     const hits = [];
     (pc.tasks || []).forEach(t => (t.sources || []).forEach(src => {
       if (src.form !== form.id) return;
+      if (failed && evaluated(src)) { hits.push({ t: t, src: src, fail: true }); return; }
       if (src.field) {
         const v = str_(values[src.field]).toLowerCase(), want = str_(src.value).toLowerCase();
         if (src.op === "empty") { if (v) return; }                       // e.g. counts only when nobody supervised
@@ -1436,13 +1443,22 @@ function promoFromReport_(cfg, form, values, repeaters) {
         any = true;
         if (done[c.key + h.t.id]) return;
         done[c.key + h.t.id] = 1;
-        out.push({ type: "credit", c: c, task: taskKey_(pc.id, h.t.id), count: 1, form: form.id, report: reportNo, date: ymd_(parseYmd_(firstDate_(form, values)) || new Date()), by: "report" });
+        out.push({ type: h.fail ? "fail" : "credit", c: c, task: taskKey_(pc.id, h.t.id), count: h.fail ? 0 : 1, form: form.id, report: reportNo, date: ymd_(parseYmd_(firstDate_(form, values)) || new Date()), by: "report",
+          note: h.fail ? (/^no\b/i.test(outVal) ? "Not Complete" : clip_(outVal, 60)) : "" });
       }));
     });
     if (!any && linked) missed.push(pc.title);
   });
   if (out.length) promoAppend_(out);
   return { credited: out.length, problem: !out.length && missed.length ? "training progression (" + missed.join(", ") + "): nobody picked is on that roster tab, so nothing was checked off" : "" };
+}
+const FAIL_RE_ = /fail|not\s*complete|incomplete|unfinished|half|partial|retake|redo|^no\b|denied|terminat|reject|did\s*not|didn't|unsat/i;
+const TRAINEE_RE_ = /trainee|student|cadet|recruit|onboard|candidate/i;
+function fieldLabel_(form, path) {
+  const p = String(path || ""), f = allFields_(form).find(x => x.id === p);
+  if (f) return f.label || "";
+  const b = (form.blocks || []).find(x => x.id === p.split(".")[0]), c = b && (b.columns || []).find(x => x.id === p.split(".")[1]);
+  return (b ? (b.title || "") + " " : "") + (c ? c.label || "" : "");
 }
 function firstDate_(form, values) { const f = allFields_(form).find(x => x.type === "date"); return f ? values[f.id] : ""; }
 // Everything a progression page shows. admin=true adds entry IDs + notes for editing.
@@ -1472,9 +1488,10 @@ function promoView_(admin, pid) {
     if (type === tS) since[keyFor(r)] = str_(r[10]).replace(/^'/, "");
     else if (type === tN) { const k = keyFor(r); if (!seen[k]) seen[k] = str_(r[10]).replace(/^'/, ""); }
     else if ((type === "excuse" || type === "unexcuse") && mine[str_(r[6])]) excused[keyFor(r) + "|" + mine[str_(r[6])]] = type === "excuse";
-    else if (type === "credit" && !str_(r[13]) && mine[str_(r[6])]) {
-      const k = keyFor(r);
-      (byKey[k] = byKey[k] || []).push({ entry: str_(r[0]), task: mine[str_(r[6])], count: Number(r[7]) || 1, form: str_(r[8]), report: str_(r[9]), date: str_(r[10]).replace(/^'/, ""), by: str_(r[12]), note: admin ? str_(r[11]) : "" });
+    else if ((type === "credit" || type === "fail") && !str_(r[13]) && mine[str_(r[6])]) {
+      const k = keyFor(r), fail = type === "fail";
+      (byKey[k] = byKey[k] || []).push({ entry: str_(r[0]), task: mine[str_(r[6])], count: fail ? 0 : Number(r[7]) || 1, form: str_(r[8]), report: str_(r[9]), date: str_(r[10]).replace(/^'/, ""), by: str_(r[12]),
+        note: admin && !fail ? str_(r[11]) : "", failed: fail ? str_(r[11]) || "Not complete" : "" });
     }
   }
   const forms = {}; cfg.forms.forEach(f => forms[f.id] = f.title);
@@ -1497,7 +1514,7 @@ function promoView_(admin, pid) {
       const isOld = x => cutoff != null && (!parseYmd_(x.date) || parseYmd_(x.date).getTime() < cutoff);
       const count = items.reduce((n, x) => n + (isOld(x) ? 0 : x.count), 0);
       tasks[t.id] = { count: count, need: t.need, done: count >= t.need || !!excused[c.key + "|" + t.id], excused: !!excused[c.key + "|" + t.id],
-        items: items.map(x => ({ entry: admin ? x.entry : undefined, date: x.date, count: x.count, source: x.form ? (forms[x.form] || x.form) : "Added by admin", report: x.report, note: x.note || undefined, expired: isOld(x) || undefined })) };
+        items: items.map(x => ({ entry: admin ? x.entry : undefined, date: x.date, count: x.count, source: x.form ? (forms[x.form] || x.form) : "Added by admin", report: x.report, note: x.note || undefined, failed: x.failed || undefined, expired: !x.failed && isOld(x) || undefined })) };
     });
     const others = (pc.tasks || []).filter(t => !t.final).every(t => tasks[t.id].done);
     const tigOk = !pc.tigDays || (tig != null && tig >= pc.tigDays);
@@ -1509,8 +1526,9 @@ function promoView_(admin, pid) {
     if (pc.deadlineDays && sinceDate) {
       let end = parseYmd_(sinceDate).getTime() + pc.deadlineDays * 864e5, extended = false;
       const ex = pc.ext && tasks[pc.ext.task];
-      if (ex && ex.done && ex.items.length) {
-        const need = Math.max(1, ex.need || 1), at = ex.items[Math.min(need, ex.items.length) - 1].date;
+      const passed = ex ? ex.items.filter(x => !x.failed) : [];
+      if (ex && ex.done && passed.length) {
+        const need = Math.max(1, ex.need || 1), at = passed[Math.min(need, passed.length) - 1].date;
         const t = at && parseYmd_(at) ? parseYmd_(at).getTime() : null;
         if (t != null && t >= end - pc.ext.window * 864e5 && t <= end && t + pc.ext.days * 864e5 > end) { end = t + pc.ext.days * 864e5; extended = true; }
       }

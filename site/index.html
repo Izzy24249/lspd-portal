@@ -219,7 +219,7 @@ function drawPromo(){
     const st = s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked" : s.count + " of " + s.need;
     return `<div class="pd-item ${s.done ? "ok" : ""}"><div class="pd-h"><span class="pd-n">${i + 1}</span><b>${E(t.title)}</b><em>${st}</em></div>
       ${t.freshDays ? `<p class="pd-fresh">Only the last ${t.freshDays} days count.</p>` : ""}
-      ${s.items.length ? `<ul>${s.items.map(x => `<li class="${x.expired ? "old" : ""}">${E(fmtD(x.date))} · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.count > 1 ? " ×" + x.count : ""}${x.expired ? ` <em>older than ${t.freshDays} days · not counted</em>` : ""}</li>`).join("")}</ul>`
+      ${s.items.length ? `<ul>${s.items.map(x => `<li class="${x.expired ? "old" : ""}${x.failed ? " failed" : ""}">${E(fmtD(x.date))} · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.failed ? ` <b class="fail-tag">— ${E(x.failed)}</b>` : ""}${x.count > 1 ? " ×" + x.count : ""}${x.expired ? ` <em>older than ${t.freshDays} days · not counted</em>` : ""}</li>`).join("")}</ul>`
         : `<p>${s.locked && !s.done ? "Unlocks after every other requirement" + (P.tigDays ? " and " + P.tigDays + " days TIG" : "") + "." : "Nothing logged yet."}</p>`}</div>`;
   }).join("")}</div>`;
   const fmtDl = d => d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric"}) : "";

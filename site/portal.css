@@ -897,3 +897,7 @@ table.xl tr.dyn td:first-child .rnum + input.g{width:calc(100% - 34px);display:i
 .paper:not(.hud) table.xl tr.inrow td.datecell:last-child input.g{width:calc(100% - 54px);padding-left:4px;padding-right:2px;font-size:12px}
 .paper:not(.hud) table.xl tr.inrow td.datecell:last-child button{padding:0 6px;font-size:11px;margin-left:2px}
 @media(max-width:760px){.paper:not(.hud) table.xl tr.inrow td.datecell:last-child input.g{width:calc(100% - 84px);font-size:16px;padding:0 8px}.paper:not(.hud) table.xl tr.inrow td.datecell:last-child button{padding:0 10px;font-size:12px}}
+
+/* a report that says Fail / Not complete: kept in the record, not counted */
+.pd-item li.failed{color:var(--muted)}
+.pd-item .fail-tag{color:#f87171;font-weight:700}

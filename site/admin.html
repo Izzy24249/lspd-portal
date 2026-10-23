@@ -297,6 +297,7 @@
   .lg-brand img{width:52px;height:52px;object-fit:contain;filter:drop-shadow(0 4px 14px rgba(47,123,255,.4))}
   .lg-brand span{font-size:.62rem;letter-spacing:.24em;color:var(--gold);font-weight:800}
   .login .lg-brand h2{font-size:1.35rem;margin:2px 0 0}
+.hchip.failed{border-color:rgba(248,113,113,.45);color:#fca5a5;background:rgba(248,113,113,.08)}
 </style>
 </head>
 <body class="admin">
@@ -1695,7 +1696,7 @@ function drawCands(box, P) {
         det.append(h("div", { class: "ab-task" + (s.done ? " done" : "") },
           h("div", { class: "ab-tt" }, h("span", { class: "n", text: String(i + 1) }), h("b", { text: t.title }),
             h("span", { class: "st", text: s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked · " + s.count + "/" + s.need : s.count + " of " + s.need })),
-          h("div", { class: "ab-hist" }, s.items.length ? s.items.map(x => h("span", { class: "hchip" + (x.expired ? " old" : ""), title: x.expired ? "Older than " + t.freshDays + " days: kept in the record, not counted" : "" }, x.date + " · " + x.source + (x.report ? " " + x.report : "") + (x.count > 1 ? " ×" + x.count : "") + (x.expired ? " · not counted" : ""),
+          h("div", { class: "ab-hist" }, s.items.length ? s.items.map(x => h("span", { class: "hchip" + (x.expired ? " old" : "") + (x.failed ? " failed" : ""), title: x.failed ? "The report says " + x.failed + ": kept in the record, not counted" : x.expired ? "Older than " + t.freshDays + " days: kept in the record, not counted" : "" }, x.date + " · " + x.source + (x.report ? " " + x.report : "") + (x.failed ? " — " + x.failed : "") + (x.count > 1 ? " ×" + x.count : "") + (x.expired ? " · not counted" : ""),
             h("button", { title: "Remove", onclick: ev => { ev.stopPropagation(); if (confirm("Remove this completion?")) promoAct("promoRemove", { rowId: x.entry }, box); } }, "×"))) : h("span", { class: "help", text: "Nothing logged" })),
           (() => { const dIn = h("input", { type: "date", class: "ab-date", title: "Date it was completed", value: new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10) });
             return h("div", { class: "acts" }, dIn,
