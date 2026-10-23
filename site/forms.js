@@ -263,7 +263,7 @@ window.Portal = (function () {
 
   // ===================== FUTURISTIC HUD LAYOUT (form Look = "hud") =====================
   // column widths: "narrow" | "normal" | "wide" (searchable lists default to wide)
-  const colW = c => ({ narrow: ".45fr", wide: "2.1fr" }[c.width || (c.type === "search" ? "wide" : "normal")] || "1fr");
+  const colW = c => ({ narrow: ".45fr", wide: "2.1fr" }[c.width || (c.type === "search" || c.type === "officer" ? "wide" : "normal")] || "1fr");
   const hudCols = b => (b.columns || []).slice(0, 3).map(c => "minmax(0," + colW(c) + ")").join(" ") + " " + (b.check && b.check.id ? "minmax(118px,auto)" : "44px");
   function hudField(f) {
     if (f.type === "static") return `<div class="hud-field"><span class="hud-lbl">${esc(f.label)}</span><div class="hud-static">${esc(f.text || "")}</div></div>`;
@@ -370,7 +370,7 @@ window.Portal = (function () {
           ? `<select class="g c" data-k="${esc(c.id)}" data-link="1"></select>`
           : c.type === "select"
           ? `<select class="g c" data-k="${esc(c.id)}">${c.blank ? `<option value="">— choose —</option>` : ""}${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select>`
-          : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || "")}"${c.type === "search" ? ` data-search="1" autocomplete="off"` : ""}>`;
+          : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || (c.type === "officer" ? "Search the roster…" : ""))}"${c.type === "search" || c.type === "officer" ? ` data-search="1" autocomplete="off"` : ""}>`;
       const hasCheck = b.check && b.check.id;
       let tr;
       if (hud) {
@@ -522,6 +522,10 @@ window.Portal = (function () {
     function pickerFor(el) {
       if (el.dataset.search) {
         const row = el.closest(".dyn"), b = repeaters.find(x => x.id === row.dataset.rep), c = (b.columns || []).find(x => x.id === el.dataset.k);
+        if (c && c.type === "officer") {                     // a person from a roster tab, inside a list row: "L-801 | A. Ramirez (8010…)"
+          return { items: rosterItems(null, c), noun: "on the roster", emptyText: "Not on the roster. What you typed will be kept.",
+            onPick: it => { if (!it) return; el.value = it.label + (it.id ? " (" + it.id + ")" : ""); el.title = el.value; el.dispatchEvent(new Event("input", { bubbles: true })); pkClose(); } };
+        }
         return { items: (c.options || []).map(chargeItem), noun: c.label ? "options" : "options", emptyText: "No match. Your text will be kept as typed.",
           onPick: it => { if (!it) return; el.value = it.value; el.title = it.value; el.dispatchEvent(new Event("input", { bubbles: true })); pkClose();
             const next = row.querySelectorAll("input[type=text],select")[[...row.querySelectorAll("input[type=text],select")].indexOf(el) + 1]; if (next) next.focus(); } };

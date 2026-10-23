@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 35;
+const BACKEND_VERSION = 36;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -233,7 +233,7 @@ function withCallsign_(p, calls) {
 function rostersFor_(forms, opts) {
   opts = opts || {};
   const ids = {};
-  forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => {
+  forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).concat((b.columns || []).filter(c => c.type === "officer")).forEach(fd => {
     if (fd.rosterTabId == null || fd.rosterTabId === "") return;
     const set = ids[fd.rosterTabId] || (ids[fd.rosterTabId] = {});
     if (fd.pairCol && fd.pairFill) set[String(fd.pairCol).toUpperCase()] = 1;
@@ -619,7 +619,7 @@ function handleSubmit_(d) {
       const rows = (repeaters[b.id] || []).filter(r => cols.some(c => ((c.type !== "select" && c.type !== "link") || c.blank) && str_(r[c.id])));
       const tick = r => b.check && b.check.id && r[b.check.id] ? "  ✅ " + (b.check.label || "") : "";
       const totalsOn = b.totals && b.totals.on;
-      const fmtCell = (c, v) => totalsOn && c.id === b.totals.col ? chargeText_(v) : v;
+      const fmtCell = (c, v) => totalsOn && c.id === b.totals.col ? chargeText_(v) : c.type === "officer" ? v.replace(/\s*\((\d{15,21})\)\s*$/, " (<@$1>)") : v;
       let lines = [];
       if (b.groupBy && cols.some(c => c.id === b.groupBy)) {
         const groups = {}, order = [];
@@ -771,7 +771,7 @@ function handleSubmit_(d) {
       lbSheet_().appendRow([new Date(), form.id, "'" + str_(values[lb.countField])]);
       try { updateLeaderboard_(form); } catch (e) { warning = warning || "leaderboard not updated: " + errMsg_(e); }
     }
-    try { const n = promoFromReport_(cfg, form, values); if (n.problem) warning = warning || n.problem; } catch (e) { warning = warning || "promotion tracker not updated: " + errMsg_(e); }
+    try { const n = promoFromReport_(cfg, form, values, repeaters); if (n.problem) warning = warning || n.problem; } catch (e) { warning = warning || "promotion tracker not updated: " + errMsg_(e); }
     if (form.hours && form.hours.on) {
       try {
         const h = logHours_(form, values);
@@ -1086,9 +1086,9 @@ const PROMO_DEFAULT_ = {
   id: "cpl", noun: "Corporal", on: true, title: "CPL → SGT", subtitle: "Corporal requirements for promotion to Sergeant. Progress updates automatically when a report is filed.",
   rosterTabId: null, rosterTabName: "FTO - Roster", col: "C", match: "L-5##", allRows: false, tigDays: 14, tigCol: "G", tigTabId: null, tigTabName: "LSPD Personnel Roster",
   tasks: [
-    { id: "gomWitness", title: "Witness a Global Operation Manual Training", need: 1, desc: "Sit in on a GOM training hosted by a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a Global Operation Manual Training" }] },
-    { id: "gomLead", title: "Lead a GOM Training with a SGT+ hosting", need: 1, desc: "Run the training while a SGT+ hosts and observes.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Lead a GOM Training with a SGT+ hosting" }] },
-    { id: "gomSolo", title: "Complete GOM Trainings on their own", need: 2, freshDays: 21, desc: "Host and complete the training without a SGT+. Only the last 21 days count.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Complete a GOM Training on their own" }] },
+    { id: "gomWitness", title: "Witness a Global Operation Manual Training", need: 1, desc: "Sit in on a GOM training hosted by a SGT+.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a Global Operation Manual Training" }, { form: "gomtraining", person: "gtWitness", field: "", value: "" }] },
+    { id: "gomLead", title: "Lead a GOM Training with a SGT+ hosting", need: 1, desc: "Run the training while a SGT+ hosts and observes.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Lead a GOM Training with a SGT+ hosting" }, { form: "gomtraining", person: "gtInstructor", field: "gtSupervisor", value: "" }] },
+    { id: "gomSolo", title: "Complete GOM Trainings on their own", need: 2, freshDays: 21, desc: "Host and complete the training without a SGT+. Only the last 21 days count.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Complete a GOM Training on their own" }, { form: "gomtraining", person: "gtInstructor", field: "gtSupervisor", value: "", op: "empty" }] },
     { id: "witness71", title: "Witness a SGT+ handle a 10-71 request", need: 3, freshDays: 21, desc: "Observe a SGT+ respond to a supervisor (71) request. Only the last 21 days count.", sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Witness a SGT+ handle a 71 request" }] },
     { id: "supervisorRa", title: "Supervisor Ride-Along with a SGM+", need: 1, desc: "Final step: only after the 14-day time in grade and every other requirement.", final: true, sources: [{ form: "suptask", person: "stCpl", field: "stTask", value: "Supervisor Ride-Along with a SGM+" }] }
   ]
@@ -1098,7 +1098,7 @@ const ONBOARD_DEFAULT_ = {
   rosterTabId: null, rosterTabName: "Onboarding", col: "A", match: "L-8##", allRows: true, tigDays: 0, tigCol: "G", tigTabId: null, tigTabName: "",
   deadlineDays: 14, warnDays: 4, ext: { task: "bpa", window: 4, days: 5 },   // 14 days from joining; Basic Training done in the last 4 days -> 5 more days
   tasks: [
-    { id: "bpa", title: "Basic Training - BPA", need: 1, desc: "Complete Basic Training (BPA) with an instructor.", sources: [{ form: "bpalog", person: "bpTrainee", field: "bpResult", value: "Passed" }] },
+    { id: "bpa", title: "Basic Training - BPA", need: 1, desc: "Complete Basic Training (BPA): the Global Operation Manual training.", sources: [{ form: "bpalog", person: "bpTrainee", field: "bpResult", value: "Passed" }, { form: "gomtraining", person: "gtTrainees.trainee", field: "gtCompleted", value: "Yes" }] },
     { id: "academyRa", title: "Academy in-depth RA", need: 1, desc: "Ride-along covered by the Academy Evaluation.", sources: [{ form: "academy", person: "traineeCallsign", field: "", value: "" }, { form: "academy", person: "traineeDiscordId", field: "", value: "" }] }
   ]
 };
@@ -1129,7 +1129,7 @@ function cleanPromo_(p, dflt, id) {
     const fd = t.freshDays == null ? ((dflt.tasks || []).find(x => x.id === tid) || {}).freshDays : t.freshDays;   // "only the last N days count"
     out.tasks.push({ id: tid, title: clip_(str_(t.title), 120), desc: clip_(str_(t.desc), 300), need: Math.max(1, Math.min(50, parseInt(t.need, 10) || 1)), final: !!t.final,
       freshDays: Math.max(0, Math.min(365, parseInt(fd, 10) || 0)),
-      sources: (t.sources || []).slice(0, 6).map(x => ({ form: str_(x.form), person: str_(x.person), field: str_(x.field), value: clip_(str_(x.value), 120) })).filter(x => x.form && x.person) });
+      sources: (t.sources || []).slice(0, 6).map(x => ({ form: str_(x.form), person: str_(x.person), field: str_(x.field), value: clip_(str_(x.value), 120), op: x.op === "empty" ? "empty" : "" })).filter(x => x.form && x.person) });
   });
   return out;
 }
@@ -1153,6 +1153,14 @@ function cleanPrograms_(list) {
   return out;
 }
 // every program, CPL first
+// saved setups made before the GOM Training form get its sources added (once a source for that form exists it's left alone)
+function addDefaultSources_(p, dflt) {
+  (p.tasks || []).forEach(t => {
+    const d = (dflt.tasks || []).find(x => x.id === t.id); if (!d) return;
+    (d.sources || []).forEach(ds => { if (!(t.sources || []).some(x => x.form === ds.form)) t.sources = (t.sources || []).concat([Object.assign({}, ds)]); });
+  });
+  return p;
+}
 function programs_(cfg) {
   const s = (cfg || getConfig_()).settings || {};
   const cpl = Object.assign({}, PROMO_DEFAULT_, s.promo || {}, { id: "cpl" });
@@ -1163,7 +1171,8 @@ function programs_(cfg) {
   const more = (Array.isArray(s.programs) ? s.programs : []).map(p => Object.assign({}, p));
   if (!more.some(p => p.id === "onboard")) more.unshift(JSON.parse(JSON.stringify(ONBOARD_DEFAULT_)));
   if (more.length && more[0].id === "onboard" && !(more[0].tasks || []).length) more[0].tasks = JSON.parse(JSON.stringify(ONBOARD_DEFAULT_.tasks));
-  return [cpl].concat(more.map(onboardFix_));
+  addDefaultSources_(cpl, PROMO_DEFAULT_);
+  return [cpl].concat(more.map(onboardFix_).map(p => p.id === "onboard" ? addDefaultSources_(p, ONBOARD_DEFAULT_) : p));
 }
 function promoCfg_(cfg, pid) {
   const all = programs_(cfg);
@@ -1264,7 +1273,10 @@ function promoSync_() {
   if (add.length) withLock_(() => { promoAppend_(add); return { ok: true }; });
 }
 // A filed report -> credits for every person named in the right box of a matching report, in every program
-function promoFromReport_(cfg, form, values) {
+function promoFromReport_(cfg, form, values, repeaters) {
+  repeaters = repeaters || {};
+  // "trainees.trainee" = every row of list "trainees", column "trainee"
+  const personVals = path => path.indexOf(".") === -1 ? [values[path]] : (repeaters[path.split(".")[0]] || []).map(r => r[path.split(".")[1]]).filter(Boolean);
   const caseF = allFields_(form).find(f => f.type === "case_number");
   const reportNo = caseF ? str_(values[caseF.id]) : "";
   const out = [], missed = [];
@@ -1275,7 +1287,8 @@ function promoFromReport_(cfg, form, values) {
       if (src.form !== form.id) return;
       if (src.field) {
         const v = str_(values[src.field]).toLowerCase(), want = str_(src.value).toLowerCase();
-        if (want ? v.indexOf(want) === -1 : !v) return;
+        if (src.op === "empty") { if (v) return; }                       // e.g. counts only when nobody supervised
+        else if (want ? v.indexOf(want) === -1 : !v) return;
       }
       hits.push({ t: t, src: src });
     }));
@@ -1283,10 +1296,14 @@ function promoFromReport_(cfg, form, values) {
     const cr = promoCandidates_(false, pc.id), cands = cr.list, done = {};
     const tabId = cr.error ? null : promoTabId_(pc);
     // only warn when the name box picks from this program's own roster tab (so a miss really is a mistake)
-    const linked = hits.some(h => { const f = allFields_(form).find(x => x.id === h.src.person); return f && tabId != null && Number(f.rosterTabId) === Number(tabId); });
+    const linked = hits.some(h => {
+      let f = allFields_(form).find(x => x.id === h.src.person);
+      if (!f && h.src.person.indexOf(".") !== -1) { const b = (form.blocks || []).find(x => x.id === h.src.person.split(".")[0]); f = b && (b.columns || []).find(c => c.id === h.src.person.split(".")[1]); }
+      return f && tabId != null && Number(f.rosterTabId) === Number(tabId);
+    });
     let any = false;
     hits.forEach(h => {
-      peopleIn_(values[h.src.person]).forEach(p => {
+      personVals(h.src.person).forEach(pv => peopleIn_(pv).forEach(p => {
         const ck = callKey_(p.name), nk = nameKey_(p.name);
         const c = (p.id && cands.find(x => x.id === p.id)) || (ck && cands.find(x => x.callsign && callKey_(x.callsign) === ck)) || (nk && cands.find(x => nameKey_(x.name) === nk));
         if (!c) return;
@@ -1294,7 +1311,7 @@ function promoFromReport_(cfg, form, values) {
         if (done[c.key + h.t.id]) return;
         done[c.key + h.t.id] = 1;
         out.push({ type: "credit", c: c, task: taskKey_(pc.id, h.t.id), count: 1, form: form.id, report: reportNo, date: ymd_(parseYmd_(firstDate_(form, values)) || new Date()), by: "report" });
-      });
+      }));
     });
     if (!any && linked) missed.push(pc.title);
   });
@@ -1966,6 +1983,7 @@ function validateConfig_(c) {
         const ck = {};
         b.columns.concat(b.check && b.check.id ? [b.check] : []).forEach(col => {
           if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(str_(col.id)) || ck[col.id]) throw new Error(f.title + ": list \"" + b.title + "\" has a missing or repeated column ID.");
+          if (col.rosterTabId != null && col.rosterTabId !== "") { col.rosterTabId = Number(col.rosterTabId); if (!isFinite(col.rosterTabId)) delete col.rosterTabId; }
           ck[col.id] = 1;
         });
       }

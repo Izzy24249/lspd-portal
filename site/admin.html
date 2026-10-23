@@ -632,7 +632,7 @@ function addTemplate(t) {
   const f = clone(t);
   f.id = uniqueFormId(t.id); f.status = "hidden";
   const missing = [];
-  (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => {
+  (f.blocks || []).forEach(b => (b.fields || []).concat(b.columns || []).forEach(fd => {
     if (!fd.rosterTabName) return;
     const tab = ROSTER_TABS && (ROSTER_TABS.tabs.find(x => x.name === fd.rosterTabName) || ROSTER_TABS.tabs.find(x => x.name.trim().toLowerCase() === fd.rosterTabName.trim().toLowerCase()));
     if (tab) { fd.rosterTabId = tab.id; fd.rosterTabName = tab.name; } else if (!missing.includes(fd.rosterTabName)) missing.push(fd.rosterTabName);
@@ -897,9 +897,11 @@ function blockBody(form, b) {
         out.push(h("div", { class: "sub" },
           h("div", { class: "subhead" }, h("b", { text: "Column " + (ci + 1) }), ctrls(b.columns, ci)),
           h("div", { class: "g3" }, field("Header", bind(c, "label")), field("ID", keyInput(form, c, "id")),
-            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"], ["link", "Pick from another list (e.g. suspects)"]] }))),
+            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"], ["officer", "Officer from roster"], ["link", "Pick from another list (e.g. suspects)"]] }))),
           field("Width (Futuristic HUD look)", bind(c, "width", { type: "select", options: [["", c.type === "search" ? "Auto (wide)" : "Auto (normal)"], ["narrow", "Narrow"], ["normal", "Normal"], ["wide", "Wide"]] })),
           c.type === "link" ? linkEditor(form, b, c) : null,
+          c.type === "officer" ? rosterTabSelect(c) : null,
+          c.type === "officer" ? field("Callsign column in this tab (optional)", bind(c, "callCol", { max: 2, placeholder: "e.g. A", set: v => v.trim().toUpperCase() })) : null,
           c.type === "select" ? h("label", { class: "tog" }, h("input", { type: "checkbox", checked: !!c.blank, onchange: e => { c.blank = e.target.checked; changed(); } }), "Start blank (\u2014 choose \u2014) so a row counts as soon as something is picked") : null,
           c.type === "select" || c.type === "search"
             ? field("Options (one per line)" + ((c.options || []).length ? " · " + c.options.length + " options" : ""), bind(c, "options", { type: "textarea", rows: c.type === "search" ? 8 : 4, get: linesGet, set: linesSet }),
@@ -1697,9 +1699,12 @@ function drawSetup(box, p) {
       const fdef = f && src.field ? f.blocks.flatMap(b => b.fields || []).find(x => x.id === src.field) : null;
       return h("div", { class: "src" },
         field("Report", bind(src, "form", { type: "select", structural: true, options: [["", "— form —"]].concat(CFG.forms.map(x => [x.id, x.title])) })),
-        field("Person's name is in", bind(src, "person", { type: "select", options: [["", "— box —"]].concat(keys.filter(k => ["officer", "officers", "discord_id", "text"].includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")])) })),
+        field("Person's name is in", bind(src, "person", { type: "select", options: [["", "— box —"]].concat(keys.filter(k => ["officer", "officers", "discord_id", "text"].includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")]))
+          .concat(f ? f.blocks.filter(b => b.type === "repeater").flatMap(b => (b.columns || []).filter(c => c.type === "officer" || c.type === "text").map(c => [b.id + "." + c.id, (b.title || b.id) + " → " + (c.label || c.id) + " (every row)"])) : []) })),
         field("Only if box", bind(src, "field", { type: "select", structural: true, options: [["", "— any report —"]].concat(keys.filter(k => !["repeater", "checklist"].includes(k.type)).map(k => [k.id, (k.label || k.id).replace(/:\s*$/, "")])) })),
-        src.field ? field("contains", fdef && fdef.type === "select" ? bind(src, "value", { type: "select", options: [["", "— filled in —"]].concat((fdef.options || []).map(o => [o, o])) }) : bind(src, "value", { placeholder: "text (blank = filled in)" })) : h("div"),
+        src.field ? h("div", { style: "display:grid;gap:6px" },
+          field("Condition", bind(src, "op", { type: "select", structural: true, options: [["", "contains / is filled in"], ["empty", "is empty"]] })),
+          src.op === "empty" ? h("div") : (fdef && fdef.type === "select" ? bind(src, "value", { type: "select", options: [["", "— filled in —"]].concat((fdef.options || []).map(o => [o, o])) }) : bind(src, "value", { placeholder: "text (blank = filled in)" }))) : h("div"),
         h("button", { class: "ibtn", title: "Remove", style: "align-self:end;margin-bottom:8px", onclick: () => { t.sources.splice(si, 1); changed(true); } }, "×"));
     });
     tb.append(h("div", { class: "sub" },

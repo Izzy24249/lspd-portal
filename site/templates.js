@@ -2,6 +2,155 @@
    Generated: edit freely, or change the forms in the builder after adding them. */
 window.PORTAL_TEMPLATES = [
  {
+  "theme": "hud",
+  "status": "hidden",
+  "copyText": true,
+  "webhookId": "",
+  "watermarkMode": "single",
+  "tags": {
+   "base": [],
+   "rules": [
+    {
+     "field": "gtCompleted",
+     "op": "equals",
+     "value": "Yes",
+     "tag": "1547353647380439161"
+    },
+    {
+     "field": "gtCompleted",
+     "op": "equals",
+     "value": "No",
+     "tag": "1547353957934833724"
+    }
+   ]
+  },
+  "leaderboard": {
+   "enabled": false,
+   "countField": "gtInstructorId",
+   "webhookId": "",
+   "messageId": "1545003227102187640",
+   "title": "LSPD Academy - Monthly Leaderboard",
+   "heading": "📊 **Global Operation Manual - FTO Submission Tracker** 📊"
+  },
+  "id": "gomtraining",
+  "section": "Training",
+  "logoUrl": "img/lspd-badge.png",
+  "discordThumb": "https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/img/lspd-badge.png",
+  "icon": "📋",
+  "title": "Global Operation Manual Training",
+  "description": "Log a GOM training: instructor, trainees, and a CPL witness or supervising FTO. Updates Onboarding and CPL progression.",
+  "submitLabel": "Submit Training Record",
+  "color": "#2ECC71",
+  "embedTitle": "📋 Global Operation Manual - Training Record",
+  "threadTitle": "Global Operation Manual training - {gtDate} {gtTime} EST",
+  "archiveSheet": "GOM Training Log",
+  "blocks": [
+   {
+    "type": "banner",
+    "title": "LSPD - GLOBAL OPERATION MANUAL TRAINING",
+    "subtitle": "Training record. Trainees who complete it are checked off on Onboarding; the CPL witness and a CPL instructor are credited on CPL → SGT."
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "gtDate",
+      "label": "Date",
+      "type": "date",
+      "defaultToday": true,
+      "required": true
+     },
+     {
+      "id": "gtTime",
+      "label": "Time (EST)",
+      "type": "time",
+      "required": true
+     },
+     {
+      "id": "gtDuration",
+      "label": "Duration (mins)",
+      "type": "number"
+     },
+     {
+      "id": "gtCompleted",
+      "label": "Completed?",
+      "type": "select",
+      "required": true,
+      "options": [
+       "Yes",
+       "No"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "gtInstructor",
+      "label": "Instructor:",
+      "type": "officer",
+      "required": true,
+      "rosterTabName": "FTO - Roster",
+      "fillId": "gtInstructorId",
+      "allowTyped": true
+     },
+     {
+      "id": "gtInstructorId",
+      "label": "Instructor Discord ID:",
+      "type": "discord_id"
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "gtWitness",
+      "label": "Witness (CPL):",
+      "type": "officer",
+      "rosterTabName": "FTO - Roster",
+      "allowTyped": true
+     },
+     {
+      "id": "gtSupervisor",
+      "label": "Supervising Certified FTO (if a CPL is leading):",
+      "type": "officer",
+      "rosterTabName": "FTO - Roster",
+      "allowTyped": true
+     }
+    ]
+   },
+   {
+    "type": "text",
+    "style": "hint",
+    "text": "Witness: a CPL sitting in counts toward their \"Witness a GOM Training\" requirement.  Supervising FTO: fill this in when a CPL is the instructor, and it counts as their \"Lead a GOM Training\" requirement (left empty, it counts as running one on their own)."
+   },
+   {
+    "type": "repeater",
+    "id": "gtTrainees",
+    "title": "TRAINEES",
+    "addLabel": "+ Add Trainee",
+    "columns": [
+     {
+      "id": "trainee",
+      "label": "Trainee",
+      "type": "officer",
+      "rosterTabName": "Onboarding",
+      "callCol": "A",
+      "width": "wide"
+     },
+     {
+      "id": "notes",
+      "label": "Notes",
+      "type": "text",
+      "placeholder": "optional"
+     }
+    ]
+   }
+  ]
+ },
+ {
   "theme": "k9",
   "status": "hidden",
   "copyText": true,
