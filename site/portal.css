@@ -892,3 +892,8 @@ table.xl tr.dyn td:first-child .rnum + input.g{width:calc(100% - 34px);display:i
   .paper:not(.hud) table.xl tr.dyn.numd td:not(:first-child):not(.act){grid-column:1/-1;padding-left:34px}
   .paper:not(.hud) table.xl tr.dyn.numd td:not(:first-child):not(.act) .g{height:38px}
 }
+
+/* date/time in the narrow right-hand column: smaller Today/Now button so the date isn't cut off */
+.paper:not(.hud) table.xl tr.inrow td.datecell:last-child input.g{width:calc(100% - 54px);padding-left:4px;padding-right:2px;font-size:12px}
+.paper:not(.hud) table.xl tr.inrow td.datecell:last-child button{padding:0 6px;font-size:11px;margin-left:2px}
+@media(max-width:760px){.paper:not(.hud) table.xl tr.inrow td.datecell:last-child input.g{width:calc(100% - 84px);font-size:16px;padding:0 8px}.paper:not(.hud) table.xl tr.inrow td.datecell:last-child button{padding:0 10px;font-size:12px}}
