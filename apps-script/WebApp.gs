@@ -1681,6 +1681,7 @@ function handleAdmin_(d) {
       CacheService.getScriptCache().removeAll(["portal_roster", "roster_calls"]);
       const tabKeys = []; next.forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") tabKeys.push("roster_tab_" + fd.rosterTabId); })));
       if (tabKeys.length) CacheService.getScriptCache().removeAll(tabKeys);
+      promoClearCache_();                                  // progression setup may have changed
       logAdmin_(me.username, "save config", diffSummary_(cur, next));
       try { ensureWarmTrigger_(); } catch (e) {}
       return { ok: true, config: next };
