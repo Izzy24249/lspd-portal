@@ -158,12 +158,24 @@ window.Portal = (function () {
     return { label: m[1], value: o, sub: sub, badge: m[2][0].toUpperCase(), cls: m[2].toLowerCase(), search: o.toLowerCase() };
   }
   // optional division filter, e.g. "CID, Detectives" (matches the roster tab names)
-  // "L-5##" → letters/digits only, # = any digit, * = anything ("L-501", "L501" both match)
-  const onlyRe = pat => new RegExp("^" + String(pat || "").toUpperCase().replace(/[^A-Z0-9#*]/g, "").replace(/#/g, "\\d").replace(/\*/g, "[A-Z0-9]*") + "$");
+  // "…matches" accepts a callsign pattern and/or words, comma-separated, e.g. "L-5##", "FTO", "L-4##, Sergeant"
+  //   callsign pattern (has a digit, # or *): letters/digits only, # = any digit, * = anything ("L-501", "L501" both match)
+  //   word: found anywhere in the cell as a whole word, any capitals ("FTO" matches "Senior FTO" but not "FTOS")
+  const onlyTest = pat => {
+    const tests = String(pat || "").split(",").map(t => t.trim()).filter(Boolean).map(t => {
+      if (/[0-9#*]/.test(t)) {
+        const re = new RegExp("^" + t.toUpperCase().replace(/[^A-Z0-9#*]/g, "").replace(/#/g, "\\d").replace(/\*/g, "[A-Z0-9]*") + "$");
+        return v => re.test(v.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+      }
+      const re = new RegExp("(^|[^a-z0-9])" + t.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "($|[^a-z0-9])", "i");
+      return v => re.test(v);
+    });
+    return v => tests.some(t => t(String(v || "")));
+  };
   const onlyFilter = (list, f) => {
     if (!f || !f.onlyCol || !f.onlyMatch || !list.some(p => p.more && f.onlyCol in p.more)) return list;   // column not loaded yet: show everyone
-    const re = onlyRe(f.onlyMatch);
-    return list.filter(p => re.test(String((p.more || {})[f.onlyCol] || "").toUpperCase().replace(/[^A-Z0-9]/g, "")));
+    const ok = onlyTest(f.onlyMatch);
+    return list.filter(p => ok((p.more || {})[f.onlyCol]));
   };
   const rosterItems = (only, f) => onlyFilter(fieldRoster(f) || ROSTER, f).filter(p => {
     const want = fieldRoster(f) ? [] : String(only || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
