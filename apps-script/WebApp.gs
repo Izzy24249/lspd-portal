@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 43;
+const BACKEND_VERSION = 44;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -701,7 +701,7 @@ function handleSubmit_(d) {
     } else if (b.type === "repeater") {
       const cols = b.columns || [];
       const rows = (repeaters[b.id] || []).filter(r => cols.some(c => ((c.type !== "select" && c.type !== "link") || c.blank) && str_(r[c.id])));
-      const tick = r => b.check && b.check.id && r[b.check.id] ? "  ✅ " + (b.check.label || "") : "";
+      const tick = r => (b.check && b.check.id && r[b.check.id] ? "  ✅ " + (b.check.label || "") : "") + (str_(r._tags) ? "  🔗 " + str_(r._tags) : "");   // people this item is linked to
       const totalsOn = b.totals && b.totals.on;
       const fmtCell = (c, v) => totalsOn && c.id === b.totals.col ? chargeText_(v) : c.type === "officer" ? v.replace(/\s*\((\d{15,21})\)\s*$/, " (<@$1>)") : v;
       let lines = [];
@@ -732,7 +732,7 @@ function handleSubmit_(d) {
       const repStart = embedFields.length;
       addListFields_(embedFields, sectionIcon_(b.title) + " " + clip_(String(b.title || "List").toUpperCase(), 230), lines.length ? lines : ["*None recorded.*"]);
       repFields[b.id] = embedFields.slice(repStart);
-      archiveCols.push({ id: b.id, label: b.title || b.id, value: rows.map(r => cols.map(c => str_(r[c.id])).filter(Boolean).join(" / ") + (b.check && r[b.check.id] ? " [" + b.check.label + "]" : "")).join("; ") });
+      archiveCols.push({ id: b.id, label: b.title || b.id, value: rows.map(r => cols.map(c => str_(r[c.id])).filter(Boolean).join(" / ") + (b.check && r[b.check.id] ? " [" + b.check.label + "]" : "") + (str_(r._tags) ? " (linked: " + str_(r._tags) + ")" : "")).join("; ") });
     } else if (b.type === "longtext") {
       const v = str_(values[b.id]).substring(0, b.maxLength || 8000);
       if (b.followUp) {

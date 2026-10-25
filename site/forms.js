@@ -305,10 +305,11 @@ window.Portal = (function () {
     const g = b.guide, steps = g.steps || [], tips = g.tips || [];
     return `<div class="nguide" data-guide="${esc(b.id)}">
       <div class="ng-top"><span class="ng-title">✍️ Writing guide</span>
-        ${steps.length ? `<button type="button" class="ng-btn" data-outline="${esc(b.id)}">Insert full outline</button>` : ""}
+        ${steps.length ? `<button type="button" class="ng-btn" data-draft="${esc(b.id)}" title="Writes a first draft from everything already filled in above">⚡ Draft from my report</button><button type="button" class="ng-btn ghost" data-outline="${esc(b.id)}">Blank outline</button>` : ""}
         ${tips.length ? `<button type="button" class="ng-btn ghost" data-tips="${esc(b.id)}">Tips</button>` : ""}</div>
       ${steps.length ? `<div class="ng-steps">${steps.map((st, i) => `<button type="button" class="ng-step" data-step="${i}" data-for="${esc(b.id)}" data-help="${esc(st.help || "")}"><b>${i + 1}</b>${esc(st.label)}</button>`).join("")}</div>
-      <div class="ng-help" data-ghelp="${esc(b.id)}">Click a step to add its sentence starter, then type over the <b>[brackets]</b>. Hover a step to see what to cover.</div>` : ""}
+      <div class="ng-help" data-ghelp="${esc(b.id)}">Click a step to add it. Steps use what you've already entered (people, evidence, vehicles, charges); type over anything in <b>[brackets]</b>.</div>` : ""}
+      <div class="ng-gaps" data-ggaps="${esc(b.id)}" hidden></div>
       ${tips.length ? `<ul class="ng-tips" data-gtips="${esc(b.id)}" hidden>${tips.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
       <div class="ng-checks" data-gchecks="${esc(b.id)}"></div>
     </div>`;
@@ -431,11 +432,12 @@ window.Portal = (function () {
         tr.className = "dyn hud-row"; tr.dataset.rep = b.id;
         tr.style.gridTemplateColumns = hudCols(b);
         tr.innerHTML = cols.map((c, i) => `<div class="cell${c.type === "link" ? " linkcell" : ""}" data-label="${esc(c.label)}">${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</div>`).join("") +
+          (tagSrc(b) ? `<input type="hidden" data-k="_tags"><div class="tagline"><button type="button" class="tag-add" data-tag>🔗 Link person</button><span class="tag-chips"></span></div>` : "") +
           `<div class="act">${hasCheck ? `<label class="hud-tick" title="${esc(b.check.label)}"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx"></span><em>${esc(b.check.label)}</em></label>` : ""}<button type="button" class="rm" title="Remove row">✕</button></div>`;
       } else {
         tr = document.createElement("tr");
         tr.className = "dyn" + (b.numbered ? " numd" : ""); tr.dataset.rep = b.id;
-        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}"${c.type === "link" ? ' class="linkcell"' : ""}>${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</td>`).join("") +
+        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}"${c.type === "link" ? ' class="linkcell"' : ""}>${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}${i === 0 && tagSrc(b) ? `<input type="hidden" data-k="_tags"><div class="tagline"><button type="button" class="tag-add" data-tag>🔗 Link person</button><span class="tag-chips"></span></div>` : ""}</td>`).join("") +
           `<td class="act"><div class="actcell">${hasCheck ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
       }
       // a new row's "pick from list" boxes default to the previous row's choice (same suspect)
@@ -455,6 +457,138 @@ window.Portal = (function () {
     }
 
     // ---- "Browse charges" pop-out: suspect first, then tap charges (one category at a time), set counts, add them all ----
+    // ---- tag evidence / vehicles to people from Involved Persons ----
+    // automatic for lists titled Evidence / Vehicles when the form has a persons list (Role + Name); a list can set  tag: false  to opt out
+    function tagSrc(b) {
+      if (!b || b.tag === false) return null;
+      const src = repeaters.find(x => x !== b && (x.columns || []).some(c => /^name$/i.test(c.id) || /\bname\b/i.test(c.label || "")) && (x.columns || []).some(c => /role/i.test(c.id + " " + (c.label || ""))));
+      if (!src) return null;
+      if (!(b.tag && b.tag.source) && !/evidence|vehicle|propert|item|weapon/i.test(b.title || "")) return null;
+      const nc = src.columns.find(c => /^name$/i.test(c.id)) || src.columns.find(c => /\bname\b/i.test(c.label || "")), rc = src.columns.find(c => /role/i.test(c.id + " " + (c.label || "")));
+      return { source: (b.tag && b.tag.source) || src.id, col: nc.id, roleCol: rc && rc.id };
+    }
+    const tagList = v => String(v || "").split(";").map(x => x.trim()).filter(Boolean);
+    function tagPeople(b) {
+      const t = tagSrc(b); if (!t) return [];
+      const seen = new Set(), out = [];
+      rowsOf(t.source).forEach(r => { const n = String(r[t.col] || "").trim(); if (n && !seen.has(n)) { seen.add(n); out.push({ name: n, role: t.roleCol ? r[t.roleCol] || "" : "" }); } });
+      return out;
+    }
+    const roleCls = r => "r-" + String(r || "other").toLowerCase().replace(/[^a-z]+/g, "-");
+    const initials = n => ((n.match(/\b[A-Za-z]/g) || ["?"]).slice(0, 2).join("")).toUpperCase();
+    function drawTags() {
+      repeaters.filter(tagSrc).forEach(b => {
+        const people = tagPeople(b), roleOf = n => (people.find(p => p.name === n) || {}).role;
+        qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => {
+          const hid = tr.querySelector('[data-k="_tags"]'), box = tr.querySelector(".tag-chips"), btn = tr.querySelector("[data-tag]"); if (!hid || !box) return;
+          const names = tagList(hid.value), key = JSON.stringify([names, names.map(roleOf)]);
+          if (box.dataset.ck === key) return; box.dataset.ck = key;
+          box.innerHTML = names.map(n => { const r = roleOf(n); return `<span class="tchip ${roleCls(r)}${r === undefined ? " gone" : ""}" title="${r === undefined ? "No longer in Involved Persons" : esc(r)}"><i>${esc(initials(n))}</i>${esc(n)}${r ? `<small>${esc(r)}</small>` : ""}<button type="button" class="tx" data-untag="${esc(n)}" aria-label="Unlink ${esc(n)}">✕</button></span>`; }).join("");
+          btn.textContent = names.length ? "＋ Link" : "🔗 Link person";
+        });
+      });
+    }
+    let TAGPOP = null;
+    function closeTagPop() { if (TAGPOP) { TAGPOP.remove(); TAGPOP = null; } }
+    function openTagPop(btn) {
+      closeTagPop();
+      const tr = btn.closest(".dyn"), b = repeaters.find(x => x.id === tr.dataset.rep), hid = tr.querySelector('[data-k="_tags"]');
+      const people = tagPeople(b), src = blocks.find(x => x.id === tagSrc(b).source);
+      const pop = document.createElement("div"); pop.className = "tag-pop"; TAGPOP = pop;
+      const draw = () => { const cur = tagList(hid.value);
+        pop.innerHTML = `<div class="tp-h">Link to someone in ${esc(titleWords((src && src.title) || "Involved Persons"))}</div>` + (people.length
+          ? people.map(p => `<button type="button" class="tp-i${cur.includes(p.name) ? " on" : ""}" data-n="${esc(p.name)}"><span class="tp-ck"></span><i class="${roleCls(p.role)}">${esc(initials(p.name))}</i><b>${esc(p.name)}</b>${p.role ? `<small>${esc(p.role)}</small>` : ""}</button>`).join("")
+          : `<div class="tp-none">Nobody listed yet. Add people in ${esc(titleWords((src && src.title) || "Involved Persons"))} first.</div>`) + `<button type="button" class="tp-done">Done</button>`; };
+      draw();
+      pop.addEventListener("click", e => {
+        const i = e.target.closest(".tp-i");
+        if (i) { const cur = tagList(hid.value), n = i.dataset.n; hid.value = (cur.includes(n) ? cur.filter(x => x !== n) : cur.concat(n)).join("; "); draw(); drawTags(); changed(); return; }
+        if (e.target.closest(".tp-done")) closeTagPop();
+      });
+      document.body.appendChild(pop);
+      const r = btn.getBoundingClientRect(), w = Math.min(300, innerWidth - 16);
+      pop.style.width = w + "px"; pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+      const below = innerHeight - r.bottom;
+      if (below < 260 && r.top > below) { pop.style.bottom = (innerHeight - r.top + 6) + "px"; } else pop.style.top = (r.bottom + 6) + "px";
+      setTimeout(() => document.addEventListener("mousedown", function off(e) { if (!pop.contains(e.target) && e.target !== btn) { closeTagPop(); document.removeEventListener("mousedown", off); } }), 0);
+    }
+    const titleWords = t => String(t || "").toLowerCase().replace(/\b\w/g, m => m.toUpperCase());
+
+    // ---- what the report already says, turned into narrative sentences ----
+    function reportFacts() {
+      const F = { date: "", time: "", location: "", type: "", persons: [], evidence: [], vehicles: [], charges: [] };
+      const fv = re => { const f = fieldDefs.find(x => re.test(x.id + " " + (x.label || "")) && x.type !== "static"); const el = f && q(`[data-f="${CSS.escape(f.id)}"]`); return el ? el.value.trim() : ""; };
+      const df = fieldDefs.find(x => x.type === "date"); if (df) { const v = (q(`[data-f="${CSS.escape(df.id)}"]`) || {}).value || ""; if (v) F.date = new Date(v + "T00:00").toLocaleDateString("en-US"); }
+      const tf = fieldDefs.find(x => x.type === "time"); if (tf) { const v = (q(`[data-f="${CSS.escape(tf.id)}"]`) || {}).value || ""; if (v) F.time = v.replace(":", ""); }
+      F.location = fv(/location|postal|address|where/i); F.type = fv(/case type|incident type|call type|\btype\b/i);
+      const col = (b, re) => (b.columns || []).find(c => re.test(c.id + " " + (c.label || "")));
+      repeaters.forEach(b => {
+        const rows = rowsOf(b.id), t = (b.title || "") + " " + b.id;
+        const g = (r, c) => c ? String(r[c.id] == null ? "" : r[c.id]).trim() : "";
+        if (tagSrc(b) === null && col(b, /role/i) && col(b, /\bname\b|^name/i)) {
+          const rc = col(b, /role/i), nc = col(b, /\bname\b|^name/i), oc = col(b, /note|detail|info/i);
+          rows.forEach(r => { if (g(r, nc)) F.persons.push({ role: g(r, rc), name: g(r, nc), notes: g(r, oc) }); });
+        } else if (/evidence/i.test(t)) {
+          const tc = col(b, /type|kind|item/i), dc = col(b, /desc/i), wc = col(b, /serial|where|location|found/i);
+          rows.forEach(r => { if (g(r, tc) || g(r, dc)) F.evidence.push({ type: g(r, tc), desc: g(r, dc), where: g(r, wc), whereLabel: wc ? wc.label : "", logged: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
+        } else if (/vehicle/i.test(t)) {
+          const pc = col(b, /plate|tag/i), cc = col(b, /colou?r/i), mc = col(b, /make|model/i);
+          rows.forEach(r => { if (g(r, pc) || g(r, mc)) F.vehicles.push({ plate: g(r, pc), color: g(r, cc), model: g(r, mc), run: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
+        } else if (suspectFirst(b)) {
+          const lc = linkColOf(b), c = browseCol(b), by = {};
+          rows.forEach(r => { const who = g(r, lc) || "the suspect", ch = g(r, c); if (!ch) return; const m = CLASS_RE.exec(ch); (by[who] = by[who] || { suspect: who, items: [], warrant: false }).items.push({ name: m ? m[1] : ch, count: Math.max(1, parseInt(r[(b.totals && b.totals.countCol) || "count"], 10) || 1) }); if (b.check && r[b.check.id]) by[who].warrant = true; });
+          F.charges = Object.values(by);
+        }
+      });
+      return F;
+    }
+    const a_n = w => /^[aeiou]/i.test(w) ? "an " : "a ";
+    const S = {
+      call: F => `On ${F.date || "[date]"} at approximately ${F.time || "[time]"} hours, I [was dispatched / responded] to ${F.location || "[location]"} regarding a reported ${F.type ? F.type.toLowerCase() : "[incident]"}.`,
+      person: p => /victim|complain/i.test(p.role) ? `I made contact with the ${p.role.toLowerCase()}, ${p.name}${p.notes ? " (" + p.notes + ")" : ""}, who stated "[their words]".`
+        : /witness/i.test(p.role) ? `I spoke with a witness, ${p.name}${p.notes ? " (" + p.notes + ")" : ""}, who stated that [what they saw].`
+        : /suspect/i.test(p.role) ? `I identified ${p.name}${p.notes ? " (" + p.notes + ")" : ""} as a suspect based on [probable cause].`
+        : `${p.name}${p.notes ? " (" + p.notes + ")" : ""} was identified as ${p.role ? a_n(p.role) + p.role.toLowerCase() : "an involved person"} because [reason].`,
+      evidence: e => { const what = (e.type && !/other/i.test(e.type) ? e.type.toLowerCase() : "item") + (e.desc ? " (" + e.desc + ")" : "");
+        const where = e.where ? (/serial/i.test(e.whereLabel) && !/\s/.test(e.where) ? `, serial number ${e.where},` : /^(at|in|on|under|behind|inside|outside|near|next|beside|by|from|along|across|between|underneath|beneath)\b/i.test(e.where) ? ` ${e.where}` : ` at ${e.where}`) : " at [where it was found]";
+        return `I located ${a_n(what)}${what}${where}${e.tags.length ? " which is linked to " + nice(e.tags) : ""}. ${e.logged ? "I collected it and logged it into CAD evidence." : "I collected it and [logged it into CAD evidence]."}`.replace(/,\s+which/, ", which").replace(/ +/g, " "); },
+      vehicle: v => `${v.color || v.model ? "A" : "A vehicle"}${v.color ? " " + v.color.toLowerCase() : ""}${v.model ? " " + v.model : ""}${v.plate ? " bearing plate " + v.plate.toUpperCase() : " [plate]"} was involved${v.tags.length ? " and is linked to " + nice(v.tags) : ""}. ${v.run ? "I ran the plate in CAD, which showed [registered owner / flags]." : "[I ran the plate in CAD, which showed registered owner / flags.]"}`,
+      charges: c => `Based on the above, I charged ${c.suspect} with ${nice(c.items.map(i => i.count > 1 ? i.name + " (" + i.count + " counts)" : i.name))}.${c.warrant ? " A warrant was requested." : ""}`
+    };
+    function factSentences(kind, F) {
+      F = F || reportFacts();
+      if (kind === "call") return S.call(F);
+      if (kind === "persons") return F.persons.filter(p => !/suspect/i.test(p.role)).map(S.person).join(" ");
+      if (kind === "suspects") return F.persons.filter(p => /suspect/i.test(p.role)).map(S.person).concat(F.charges.map(S.charges)).join(" ");
+      if (kind === "evidence") return [F.evidence.map(S.evidence).join(" "), F.vehicles.map(S.vehicle).join(" ")].filter(Boolean).join("\n\n");
+      return "";
+    }
+    // which guide step a sentence group belongs to
+    const stepKind = label => /dispatch|call|respond/i.test(label) ? "call" : /contact|statement|victim|witness/i.test(label) ? "persons" : /evidence|vehicle/i.test(label) ? "evidence" : /suspect|arrest|charge/i.test(label) ? "suspects" : "";
+    function stepText(st) {
+      const k = stepKind(st.label || ""), auto = k ? factSentences(k) : "";
+      return auto || fillStarter(st.starter);
+    }
+    // facts in the report the narrative doesn't mention yet (tap one to add its sentence)
+    function narrativeGaps(b) {
+      const F = reportFacts(), low = ((q(`[data-f="${CSS.escape(b.id)}"]`) || {}).value || "").toLowerCase(), out = [];
+      const has = s => s && low.includes(String(s).toLowerCase());
+      F.persons.forEach(p => { if (!has(p.name.split(/[·,(]/)[0].trim())) out.push({ icon: /suspect/i.test(p.role) ? "🎯" : /victim/i.test(p.role) ? "🩹" : "👤", label: p.name.split(/[·(]/)[0].trim() + (p.role ? " · " + p.role : ""), text: S.person(p) }); });
+      F.evidence.forEach(e => { if (!(has(e.desc) || has(e.where))) out.push({ icon: "🧪", label: (e.type || "Evidence") + (e.desc ? ": " + e.desc : ""), text: S.evidence(e) }); });
+      F.vehicles.forEach(v => { if (!(has(v.plate) || has(v.model))) out.push({ icon: "🚗", label: [v.color, v.model, v.plate].filter(Boolean).join(" "), text: S.vehicle(v) }); });
+      F.charges.forEach(c => { if (!c.items.every(i => has(i.name))) out.push({ icon: "⚖️", label: "Charges for " + c.suspect, text: S.charges(c) }); });
+      if (F.location && !has(F.location)) out.unshift({ icon: "📍", label: F.location, text: S.call(F) });
+      return out;
+    }
+    function drawGaps() {
+      blocks.filter(b => b.type === "longtext" && hasGuide(b)).forEach(b => {
+        const box = q(`[data-ggaps="${CSS.escape(b.id)}"]`); if (!box) return;
+        const gaps = narrativeGaps(b); box._gaps = gaps;
+        const html = gaps.length ? `<span class="ng-gl">📋 From your report, not in the narrative yet:</span>${gaps.map((g, i) => `<button type="button" class="ng-gap" data-gap="${i}" data-for="${esc(b.id)}" title="Add: ${esc(g.text)}">${g.icon} ${esc(g.label)}<em>＋</em></button>`).join("")}` : "";
+        if (box.dataset.ck !== html) { box.dataset.ck = html; box.innerHTML = html; box.hidden = !gaps.length; }
+      });
+    }
+
     const linkColOf = b => (b.columns || []).find(x => x.type === "link");
     const suspectFirst = b => !!(browseCol(b) && linkColOf(b));          // charges list: no blank rows, start from a suspect
     // "Add charges for:  [John Doe · 2]  [Jane Roe]" — one button per suspect listed in Involved Persons
@@ -463,7 +597,7 @@ window.Portal = (function () {
         const bar = q(`[data-whobar="${CSS.escape(b.id)}"]`); if (!bar) return;
         const lc = linkColOf(b), who = linkChoices(lc), noun = (lc.filterValue || lc.label || "suspect").toLowerCase();
         const counts = {}; qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => { const el = tr.querySelector(`[data-k="${CSS.escape(lc.id)}"]`); const v = el ? el.value : ""; if (v) counts[v] = (counts[v] || 0) + 1; });
-        const key = JSON.stringify([who, counts]); if (bar.dataset.k === key) return; bar.dataset.k = key;
+        const key = JSON.stringify([who, counts]); if (bar.dataset.ck === key) return; bar.dataset.ck = key;
         bar.innerHTML = who.length
           ? `<span class="wb-l">${browseCol(b) && isChargeList(browseCol(b)) ? "⚖️ Add charges for" : "Add for"}</span>${who.map(w => `<button type="button" class="wb-who" data-browse="${esc(b.id)}" data-who="${esc(w)}"><span class="wb-av">${esc((w.match(/\b\w/g) || ["?"]).slice(0, 2).join("").toUpperCase())}</span>${esc(w)}${counts[w] ? `<i>${counts[w]}</i>` : ""}</button>`).join("")}`
           : `<span class="wb-none">Add a ${esc(noun)} in ${esc(((blocks.find(x => x.id === lc.source) || {}).title || "the persons list").replace(/\b\w+/g, w => w[0] + w.slice(1).toLowerCase()))} first, then tap their name here to charge them.</span>`;
@@ -841,6 +975,8 @@ window.Portal = (function () {
     function refresh() {
       renderOfc();
       drawWhoBars();
+      drawTags();
+      drawGaps();
       blocks.forEach(b => {
         if (b.type === "longtext" && hasGuide(b)) {
           const box = q(`[data-gchecks="${CSS.escape(b.id)}"]`);
@@ -892,8 +1028,24 @@ window.Portal = (function () {
       const step = t.closest("[data-step]");
       if (step) {
         const b = blocks.find(x => x.id === step.dataset.for), st = b.guide.steps[+step.dataset.step];
-        insertText(q(`[data-f="${CSS.escape(b.id)}"]`), fillStarter(st.starter));
+        insertText(q(`[data-f="${CSS.escape(b.id)}"]`), stepText(st));
         step.classList.add("used"); return;
+      }
+      const tagB = t.closest("[data-tag]");
+      if (tagB) { if (TAGPOP) closeTagPop(); else openTagPop(tagB); return; }
+      const untag = t.closest("[data-untag]");
+      if (untag) { const hid = untag.closest(".dyn").querySelector('[data-k="_tags"]'); hid.value = tagList(hid.value).filter(x => x !== untag.dataset.untag).join("; "); drawTags(); changed(); return; }
+      const gap = t.closest("[data-gap]");
+      if (gap) { const box = gap.closest("[data-ggaps]"), g = box._gaps && box._gaps[+gap.dataset.gap]; if (g) insertText(q(`[data-f="${CSS.escape(gap.dataset.for)}"]`), g.text); return; }
+      const draft = t.closest("[data-draft]");
+      if (draft) {
+        const b = blocks.find(x => x.id === draft.dataset.draft), ta = q(`[data-f="${CSS.escape(b.id)}"]`);
+        if (ta.value.trim() && !confirm("Add a draft built from your report below what you've already written?")) return;
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        const F = reportFacts(), used = new Set();
+        const parts = b.guide.steps.map(st => { const k = stepKind(st.label || ""); if (k && used.has(k)) return ""; if (k) used.add(k); const auto = k ? factSentences(k, F) : ""; return auto || fillStarter(st.starter); }).filter(Boolean);
+        insertText(ta, parts.join("\n\n"));
+        return;
       }
       const outline = t.closest("[data-outline]");
       if (outline) {

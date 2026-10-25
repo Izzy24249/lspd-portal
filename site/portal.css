@@ -1162,3 +1162,49 @@ table.xl tr.dyn.sf td.linkcell select{visibility:hidden}
   .paper.hud .hud-row.sf .cell:nth-child(3) input.g{width:70px}
   .paper.hud .hud-row.sf .act{justify-content:flex-end}
 }
+
+/* ===== link evidence / vehicles to people ===== */
+.tagline{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.hud-row .tagline{grid-column:1/-1;order:9;padding:0 2px 2px}
+.hud-row .act{order:8}
+table.xl tr.dyn td .tagline{margin-top:6px}
+.tag-add{height:28px;padding:0 11px;border-radius:999px;border:1px dashed rgba(var(--hcr,47,123,255),.55);background:transparent;color:var(--hc,#2f7bff);font:600 11.5px/1 "Inter",sans-serif;letter-spacing:.03em;cursor:pointer}
+.tag-add:hover{border-style:solid;background:rgba(var(--hcr,47,123,255),.1)}
+table.xl .tag-add{color:#334D6E;border-color:#8a9ab3;height:24px}
+.tag-chips{display:contents}
+.tchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px 0 3px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#e8eefc;font-size:12px;font-weight:600}
+.tchip i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:9.5px;font-weight:800;background:#64748b;color:#fff}
+.tchip small{font-size:10px;font-weight:600;opacity:.65;text-transform:uppercase;letter-spacing:.06em}
+.tchip .tx{width:20px;height:20px;border-radius:50%;border:0;background:transparent;color:inherit;opacity:.55;cursor:pointer;font-size:10px}
+.tchip .tx:hover{opacity:1;background:rgba(255,255,255,.12)}
+.tchip.gone{opacity:.5;text-decoration:line-through}
+.r-suspect i,i.r-suspect{background:#ef4444}.tchip.r-suspect{border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.12)}
+.r-victim i,i.r-victim{background:#f59e0b}.tchip.r-victim{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.12)}
+.r-witness i,i.r-witness{background:#3b82f6}.tchip.r-witness{border-color:rgba(59,130,246,.5);background:rgba(59,130,246,.12)}
+.r-person-of-interest i,i.r-person-of-interest{background:#a855f7}.tchip.r-person-of-interest{border-color:rgba(168,85,247,.5);background:rgba(168,85,247,.12)}
+.r-complainant i,i.r-complainant{background:#14b8a6}.tchip.r-complainant{border-color:rgba(20,184,166,.5);background:rgba(20,184,166,.12)}
+table.xl .tchip{color:#1c2333;background:#eef2f8;border-color:#c9d3e3}
+.tag-pop{position:fixed;z-index:250;background:linear-gradient(160deg,#121d33,#0b1324);border:1px solid #24365c;border-radius:14px;padding:8px;box-shadow:0 24px 60px -20px rgba(0,0,0,.85);color:#e8eefc;font-family:"Inter",system-ui,sans-serif;display:grid;gap:2px;max-height:340px;overflow:auto}
+.tp-h{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#8fa0c4;padding:6px 8px 8px}
+.tp-i{display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.tp-i:hover{background:#16233d}
+.tp-i.on{background:rgba(47,123,255,.16)}
+.tp-i i{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:800;color:#fff;background:#64748b;flex:none}
+.tp-i b{flex:1;font-size:.88rem;font-weight:600}
+.tp-i small{font-size:.7rem;color:#8fa0c4}
+.tp-ck{width:18px;height:18px;border-radius:5px;border:1.5px solid #3b5590;flex:none;display:grid;place-items:center}
+.tp-i.on .tp-ck{background:#2f7bff;border-color:#2f7bff}
+.tp-i.on .tp-ck::after{content:"";width:8px;height:5px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+.tp-none{padding:12px 8px;font-size:.84rem;color:#fcd34d}
+.tp-done{margin-top:6px;height:34px;border-radius:10px;border:0;background:#2f7bff;color:#fff;font:inherit;font-weight:700;cursor:pointer}
+
+/* ===== writing guide: facts from the report ===== */
+.ng-gaps{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 2px}
+.ng-gaps[hidden]{display:none}
+.ng-gl{font-size:11.5px;font-weight:700;color:var(--hm,#4A607A);margin-right:4px}
+.ng-gap{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border-radius:999px;border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.1);color:#fde68a;font:600 12px/1 "Inter",sans-serif;cursor:pointer}
+.ng-gap em{font-style:normal;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:rgba(245,158,11,.3);color:#fff;font-size:12px}
+.ng-gap:hover{background:rgba(245,158,11,.22)}
+.paper:not(.hud) .ng-gap{color:#7c4a03;background:#fff6e0;border-color:#f0c36d}
+.paper:not(.hud) .ng-gap em{background:#f0c36d;color:#5a3600}
+.tp-i i.r-suspect{background:#ef4444}.tp-i i.r-victim{background:#f59e0b}.tp-i i.r-witness{background:#3b82f6}.tp-i i.r-person-of-interest{background:#a855f7}.tp-i i.r-complainant{background:#14b8a6}
