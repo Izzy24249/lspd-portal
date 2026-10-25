@@ -475,7 +475,7 @@ window.Portal = (function () {
       const charges = isChargeList(c), groups = chargeGroups(c.options), picked = new Map();
       const who = linkC ? linkChoices(linkC) : [];
       if (preWho && who.indexOf(preWho) === -1) who.unshift(preWho);
-      const slip = charges && window.CHG_SLIP !== false && !!window.CHG_SLIP;   // live booking slip beside the bubbles
+      const slip = charges && window.CHG_SLIP !== false;   // live booking slip beside the bubbles (on for charge lists)
       const style = (window.CHG_STYLE || "pills");   // "pills" (bubbles, the default) or "tiles" (squares)
       let active = 0;                                   // the category being shown
       const ov = document.createElement("div");
