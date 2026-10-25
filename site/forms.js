@@ -484,10 +484,10 @@ window.Portal = (function () {
         const people = tagPeople(b), roleOf = n => (people.find(p => p.name === n) || {}).role;
         qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => {
           const hid = tr.querySelector('[data-k="_tags"]'), box = tr.querySelector(".tag-chips"), btn = tr.querySelector("[data-tag]"); if (!hid || !box) return;
-          const names = tagList(hid.value), key = JSON.stringify([names, names.map(roleOf)]);
+          const names = tagList(hid.value), key = JSON.stringify([names, names.map(roleOf), tr.classList.contains("tg")]);
           if (box.dataset.ck === key) return; box.dataset.ck = key;
           box.innerHTML = names.map(n => { const r = roleOf(n); return `<span class="tchip ${roleCls(r)}${r === undefined ? " gone" : ""}" title="${r === undefined ? "No longer in Involved Persons" : esc(r)}"><i>${esc(initials(n))}</i>${esc(n)}${r ? `<small>${esc(r)}</small>` : ""}<button type="button" class="tx" data-untag="${esc(n)}" aria-label="Unlink ${esc(n)}">✕</button></span>`; }).join("");
-          btn.textContent = names.length ? "＋ Link" : "🔗 Link person";
+          btn.textContent = names.length ? (tr.classList.contains("tg") ? "🔗 Change link" : "＋ Link") : "🔗 Link person";
         });
       });
     }
@@ -757,6 +757,58 @@ window.Portal = (function () {
       });
       const sr = b.totals && b.totals.on && q(`[data-sum="${CSS.escape(b.id)}"]`);
       if (sr && groups.length < 2) sr.style.display = "none";          // one suspect: their header already shows the total
+    }
+    // ---- evidence / vehicles: same look as charges — one bracketed header per person, their items underneath ----
+    const tagKey = tr => { const h = tr.querySelector('[data-k="_tags"]'); return tagList(h && h.value).join("; "); };
+    const itemNoun = b => /vehicle/i.test(b.title || b.id) ? ["vehicle", "vehicles", "🚗"] : /evidence/i.test(b.title || b.id) ? ["item", "items", "🧪"] : ["entry", "entries", "📄"];
+    function setupTagBars() {
+      repeaters.filter(tagSrc).forEach(b => {
+        const add = q(`[data-add="${CSS.escape(b.id)}"]`); if (!add || q(`[data-tagbar="${CSS.escape(b.id)}"]`)) return;
+        const bar = document.createElement("div"); bar.className = "whobar" + (add.classList.contains("hud-add") ? " hud-whobar" : ""); bar.dataset.tagbar = b.id;
+        add.before(bar); add.hidden = true;
+      });
+    }
+    function drawTagBars() {
+      repeaters.filter(tagSrc).forEach(b => {
+        const bar = q(`[data-tagbar="${CSS.escape(b.id)}"]`); if (!bar) return;
+        const people = tagPeople(b), counts = {}, nn = itemNoun(b);
+        qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => tagList((tr.querySelector('[data-k="_tags"]') || {}).value).forEach(n => counts[n] = (counts[n] || 0) + 1));
+        const key = JSON.stringify([people, counts]); if (bar.dataset.ck === key) return; bar.dataset.ck = key;
+        const what = /vehicle/i.test(b.title || b.id) ? "a vehicle" : /evidence/i.test(b.title || b.id) ? "evidence" : "an entry";
+        bar.innerHTML = `<span class="wb-l">${nn[2]} Add ${what} for</span>` + people.map(p => `<button type="button" class="wb-who ${roleCls(p.role)}" data-addfor="${esc(b.id)}" data-who="${esc(p.name)}" title="${esc(p.role || "")}"><span class="wb-av">${esc(initials(p.name))}</span>${esc(p.name)}${counts[p.name] ? `<i>${counts[p.name]}</i>` : ""}</button>`).join("")
+          + `<button type="button" class="wb-who wb-free" data-addfor="${esc(b.id)}" data-who=""><span class="wb-av">＋</span>Not linked to anyone</button>`;
+      });
+    }
+    function groupTagRows(b) {
+      const anchor = q(`[data-anchor="${CSS.escape(b.id)}"]`); if (!anchor) return;
+      const rows = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`), people = tagPeople(b).map(p => p.name), nn = itemNoun(b);
+      rows.forEach(tr => { if (!tr.dataset.rid) tr.dataset.rid = String(++RID); tr.classList.add("tg"); });
+      const keys = [...new Set(rows.map(tagKey))];
+      const rank = k => { if (!k) return 1e6; const i = people.indexOf(tagList(k)[0]); return i === -1 ? 1e5 : i * 10 + tagList(k).length; };
+      keys.sort((a, c) => rank(a) - rank(c));
+      const groups = keys.map(k => ({ k: k, rows: rows.filter(r => tagKey(r) === k) }));
+      const key = JSON.stringify(groups.map(g => [g.k, g.rows.map(r => r.dataset.rid)]));
+      const sheet = anchor.tagName === "TR";
+      if (anchor.dataset.gk !== key) {
+        anchor.dataset.gk = key;
+        qa(`[data-sg="${CSS.escape(b.id)}"]`).forEach(x => x.remove());
+        groups.forEach(g => {
+          const names = tagList(g.k), head = document.createElement(sheet ? "tr" : "div");
+          head.className = "sg-head" + (names.length ? "" : " sg-free"); head.dataset.sg = b.id; head.dataset.who = g.k;
+          const av = names.length ? names.map(n => `<span class="sg-av">${esc(initials(n))}</span>`).join("") : `<span class="sg-av">?</span>`;
+          const inner = `<div class="sg-br"><span class="sg-l"></span><button type="button" class="sg-name" data-addfor="${esc(b.id)}" data-who="${esc(g.k)}" title="Add another ${esc(nn[0])} for ${esc(names.length ? nice(names) : "no one")}">${av}<b>${esc(names.length ? nice(names) : "Not linked to anyone")}</b><em>＋ Add</em></button><span class="sg-l"></span></div><div class="sg-meta"></div>`;
+          head.innerHTML = sheet ? `<td colspan="4">${inner}</td>` : inner;
+          anchor.before(head);
+          g.rows.forEach((r, i) => { r.classList.toggle("sg-first", i === 0); r.classList.toggle("sg-last", i === g.rows.length - 1); anchor.before(r); });
+        });
+      }
+      groups.forEach(g => {
+        const head = q(`[data-sg="${CSS.escape(b.id)}"][data-who="${CSS.escape(g.k)}"]`); if (!head) return;
+        const done = b.check && b.check.id ? g.rows.filter(r => { const c = r.querySelector(`[data-k="${CSS.escape(b.check.id)}"]`); return c && c.checked; }).length : null;
+        const roles = tagList(g.k).map(n => (tagPeople(b).find(p => p.name === n) || {}).role).filter(Boolean);
+        const html = `<span><b>${g.rows.length}</b> ${g.rows.length === 1 ? nn[0] : nn[1]}</span>${done != null ? `<span><b>${done}</b> ${esc(String(b.check.label || "").toLowerCase())}</span>` : ""}${roles.length ? `<span>${esc([...new Set(roles)].join(" · "))}</span>` : ""}`;
+        const meta = head.querySelector(".sg-meta"); if (meta.innerHTML !== html) meta.innerHTML = html;
+      });
     }
     function countOf(b, tr) {
       const cc = (b.columns || []).find(x => x.id === (b.totals && b.totals.countCol)) || (b.columns || []).find(x => /count|qty|quantity/i.test(x.id + " " + x.label));
@@ -1095,6 +1147,7 @@ window.Portal = (function () {
       renderOfc();
       drawWhoBars();
       drawTags();
+      drawTagBars();
       blocks.filter(b => b.type === "longtext" && hasGuide(b)).forEach(b => { const sw = q(`[data-sync="${CSS.escape(b.id)}"]`); if (sw) sw.checked = !!narr(b.id).on; syncNarrative(b); });
       drawGaps();
       blocks.forEach(b => {
@@ -1121,6 +1174,7 @@ window.Portal = (function () {
           q(`[data-rc="${CSS.escape(b.id)}"]`).textContent = n + (n === 1 ? " entry" : " entries");
           q(`[data-empty="${CSS.escape(b.id)}"]`).style.display = (b.startRows ? rows.length : n) ? "none" : "";
           if (suspectFirst(b)) groupRows(b);
+          else if (tagSrc(b)) { groupTagRows(b); drawTags(); }
         }
         if (b.type === "longtext") {
           const el = q(`[data-f="${CSS.escape(b.id)}"]`), cnt = q(`[data-count="${CSS.escape(b.id)}"]`);
@@ -1152,6 +1206,13 @@ window.Portal = (function () {
         const n = narr(b.id), fresh = facts.filter(it => !n.items.some(x => x.key === it.key));
         if (fresh.length) fresh.forEach(it => addFact(b, it)); else insertText(q(`[data-f="${CSS.escape(b.id)}"]`), fillStarter(st.starter));
         step.classList.add("used"); return;
+      }
+      const addFor = t.closest("[data-addfor]");
+      if (addFor) {
+        const b = repeaters.find(x => x.id === addFor.dataset.addfor), tr = addRow(b, { _tags: addFor.dataset.who || "" });
+        drawTags(); refresh(); changed();
+        const f = tr.querySelector("input[type=text],select"); if (f) { f.focus(); if (tr.scrollIntoView) tr.scrollIntoView({ behavior: "smooth", block: "center" }); }
+        return;
       }
       const tagB = t.closest("[data-tag]");
       if (tagB) { if (TAGPOP) closeTagPop(); else openTagPop(tagB); return; }
@@ -1323,6 +1384,7 @@ window.Portal = (function () {
 
     setDefaults();
     fillRows();
+    setupTagBars();
     refresh();
     return { collect, validate, clear, toText, restoreDraft, saveDraft: () => { clearTimeout(timer); saveDraft(); } };
   }

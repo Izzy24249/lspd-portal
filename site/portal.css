@@ -1219,3 +1219,26 @@ table.xl .tchip{color:#1c2333;background:#eef2f8;border-color:#c9d3e3}
 .ng-sync input:checked+.sw::after{left:17px}
 .ng-sync input:focus-visible+.sw{outline:2px solid var(--hc,#2f7bff);outline-offset:2px}
 .ng-syncst{font-size:11.5px;color:var(--hm,#6b7280)}
+
+/* evidence / vehicles grouped under the person they're linked to (same look as charges) */
+.hud-row.tg{position:relative;margin-left:30px}
+.hud-row.tg::before{content:"";position:absolute;left:-19px;top:-9px;bottom:-9px;border-left:2px solid rgba(var(--hcr,47,123,255),.45)}
+.hud-row.tg.sg-first::before{top:-14px}
+.hud-row.tg.sg-last::before{bottom:50%;border-bottom:2px solid rgba(var(--hcr,47,123,255),.45);border-bottom-left-radius:10px;width:12px}
+.hud-row.tg:not(.sg-last)::after{content:"";position:absolute;left:-19px;top:50%;width:12px;border-top:2px solid rgba(var(--hcr,47,123,255),.45)}
+.sg-name .sg-av+.sg-av{margin-left:-14px;box-shadow:0 0 0 2px #0b1324}
+.sg-head.sg-free .sg-name{border-style:dashed;background:transparent}
+.sg-head.sg-free .sg-av{background:#334155;color:#cbd5e1}
+.sg-head.sg-free .sg-name::before,.sg-head.sg-free .sg-name::after{opacity:.4}
+.wb-who.wb-free{border-style:dashed;background:transparent;color:inherit}
+.hud-whobar .wb-who.wb-free{background:transparent}
+.wb-who.r-suspect .wb-av{background:#ef4444;color:#fff}.wb-who.r-victim .wb-av{background:#f59e0b;color:#fff}.wb-who.r-witness .wb-av{background:#3b82f6;color:#fff}
+.wb-who.r-person-of-interest .wb-av{background:#a855f7;color:#fff}.wb-who.r-complainant .wb-av{background:#14b8a6;color:#fff}
+.hud-addrow:has(.whobar) .hud-add[hidden]{display:none}
+@media(max-width:760px){
+  .hud-row.tg{margin-left:22px}
+  .hud-row.tg::before{left:-14px}
+  .hud-row.tg:not(.sg-last)::after{left:-14px;width:9px}
+}
+.hud-add[hidden],.mini[hidden]{display:none!important}
+.dyn.tg .tag-chips{display:none}
