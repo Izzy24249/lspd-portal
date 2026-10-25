@@ -131,7 +131,7 @@ window.Portal = (function () {
           <tr class="empty" data-empty="${esc(b.id)}"><td colspan="4">None added.</td></tr>
           <tr class="anchor" data-anchor="${esc(b.id)}" style="display:none"><td colspan="4"></td></tr>
           ${b.totals && b.totals.on ? `<tr class="sumrow" data-sum="${esc(b.id)}" style="display:none"><td colspan="4"></td></tr>` : ""}
-          <tr class="addrow"><td colspan="4"><button type="button" class="mini" data-add="${esc(b.id)}">${esc(b.addLabel || "+ Add Row")}</button>${browseCol(b) ? ` <button type="button" class="mini browse" data-browse="${esc(b.id)}">${esc(browseLabel(b))}</button>` : ""}</td></tr>`;
+          <tr class="addrow"><td colspan="4">${browseCol(b) && (b.columns || []).some(x => x.type === "link") ? `<div class="whobar" data-whobar="${esc(b.id)}"></div>` : `<button type="button" class="mini" data-add="${esc(b.id)}">${esc(b.addLabel || "+ Add Row")}</button>${browseCol(b) ? ` <button type="button" class="mini browse" data-browse="${esc(b.id)}">${esc(browseLabel(b))}</button>` : ""}`}</td></tr>`;
       }
       case "longtext":
         return `<tr class="gap3"><td colspan="4"></td></tr>
@@ -368,7 +368,7 @@ window.Portal = (function () {
           <div class="hud-empty" data-empty="${esc(b.id)}">Nothing added yet.</div>
           <div class="anchor" data-anchor="${esc(b.id)}" style="display:none"></div>
           ${b.totals && b.totals.on ? `<div class="hud-sum" data-sum="${esc(b.id)}" style="display:none"><span></span></div>` : ""}
-          <div class="hud-addrow"><button type="button" class="hud-add" data-add="${esc(b.id)}"><span>＋</span>${esc(String(b.addLabel || "Add Row").replace(/^\+\s*/, ""))}</button>${browseCol(b) ? `<button type="button" class="hud-add hud-browse" data-browse="${esc(b.id)}">${esc(browseLabel(b))}</button>` : ""}</div>
+          ${browseCol(b) && (b.columns || []).some(x => x.type === "link") ? `<div class="whobar hud-whobar" data-whobar="${esc(b.id)}"></div>` : `<div class="hud-addrow"><button type="button" class="hud-add" data-add="${esc(b.id)}"><span>＋</span>${esc(String(b.addLabel || "Add Row").replace(/^\+\s*/, ""))}</button>${browseCol(b) ? `<button type="button" class="hud-add hud-browse" data-browse="${esc(b.id)}">${esc(browseLabel(b))}</button>` : ""}</div>`}
         </section>`;
       }
       case "longtext":
@@ -453,21 +453,40 @@ window.Portal = (function () {
       return tr;
     }
 
-    // ---- "Browse charges" pop-out: pick a suspect, tick several charges (by category), set counts, add them all ----
-    function openBrowser(b) {
+    // ---- "Browse charges" pop-out: suspect first, then tap charges (one category at a time), set counts, add them all ----
+    const linkColOf = b => (b.columns || []).find(x => x.type === "link");
+    const suspectFirst = b => !!(browseCol(b) && linkColOf(b));          // charges list: no blank rows, start from a suspect
+    // "Add charges for:  [John Doe · 2]  [Jane Roe]" — one button per suspect listed in Involved Persons
+    function drawWhoBars() {
+      repeaters.filter(suspectFirst).forEach(b => {
+        const bar = q(`[data-whobar="${CSS.escape(b.id)}"]`); if (!bar) return;
+        const lc = linkColOf(b), who = linkChoices(lc), noun = (lc.filterValue || lc.label || "suspect").toLowerCase();
+        const counts = {}; qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => { const el = tr.querySelector(`[data-k="${CSS.escape(lc.id)}"]`); const v = el ? el.value : ""; if (v) counts[v] = (counts[v] || 0) + 1; });
+        const key = JSON.stringify([who, counts]); if (bar.dataset.k === key) return; bar.dataset.k = key;
+        bar.innerHTML = who.length
+          ? `<span class="wb-l">${browseCol(b) && isChargeList(browseCol(b)) ? "⚖️ Add charges for" : "Add for"}</span>${who.map(w => `<button type="button" class="wb-who" data-browse="${esc(b.id)}" data-who="${esc(w)}"><span class="wb-av">${esc((w.match(/\b\w/g) || ["?"]).slice(0, 2).join("").toUpperCase())}</span>${esc(w)}${counts[w] ? `<i>${counts[w]}</i>` : ""}</button>`).join("")}`
+          : `<span class="wb-none">Add a ${esc(noun)} in ${esc(((blocks.find(x => x.id === lc.source) || {}).title || "the persons list").replace(/\b\w+/g, w => w[0] + w.slice(1).toLowerCase()))} first, then tap their name here to charge them.</span>`;
+      });
+    }
+    function openBrowser(b, preWho) {
       const c = browseCol(b); if (!c) return;
-      const linkC = (b.columns || []).find(x => x.type === "link");
+      const linkC = linkColOf(b);
       const countC = (b.columns || []).find(x => x.id === (b.totals && b.totals.countCol)) || (b.columns || []).find(x => x !== c && x !== linkC && /count|qty|quantity/i.test(x.id + " " + x.label));
       const charges = isChargeList(c), groups = chargeGroups(c.options), picked = new Map();
       const who = linkC ? linkChoices(linkC) : [];
-      const themeCls = root.closest(".hud") || root.querySelector(".hud") ? "chg-hud" : "";
+      if (preWho && who.indexOf(preWho) === -1) who.unshift(preWho);
+      const style = (window.CHG_STYLE || "pills");   // "pills" (bubbles, the default) or "tiles" (squares)
+      let active = 0;                                   // the category being shown
       const ov = document.createElement("div");
-      ov.className = "chg-ov " + themeCls;
+      ov.className = "chg-ov";
       ov.innerHTML = `<div class="chg-modal" role="dialog" aria-modal="true" aria-label="${esc(charges ? "Add charges" : "Add from list")}">
-        <header class="chg-head"><div><b>${charges ? "⚖️ Add charges" : "☰ " + esc(c.label || "Add from list")}</b><small>${charges ? "Tick every charge for this suspect, set counts, then add them all at once." : "Tick everything you need, then add them all at once."}</small></div><button type="button" class="chg-x" aria-label="Close">✕</button></header>
-        ${linkC ? `<div class="chg-who"><label>${esc(linkC.label || "Suspect")}</label>${who.length ? `<select class="chg-sel">${who.map(w => `<option>${esc(w)}</option>`).join("")}</select>` : `<span class="chg-none">No ${esc((linkC.filterValue || linkC.label || "suspect").toLowerCase())}s listed yet. Add them in ${esc(((blocks.find(x => x.id === linkC.source) || {}).title || "the persons list").toLowerCase())} first, or add the charges now and pick later.</span>`}</div>` : ""}
-        <div class="chg-search"><input type="search" placeholder="${charges ? "Search all charges, e.g. robbery" : "Search…"}" autocomplete="off"></div>
-        <div class="chg-body"><nav class="chg-nav">${groups.map((g, i) => `<button type="button" data-g="${i}"><span>${g.icon}</span><em>${esc(g.name)}</em><i>${g.items.length}</i></button>`).join("")}</nav><div class="chg-list"></div></div>
+        <header class="chg-head"><div><b>${charges ? "⚖️ Add charges" : "☰ " + esc(c.label || "Add from list")}</b><small>${charges ? "Tap every charge for this " + esc((linkC && linkC.filterValue || "suspect").toLowerCase()) + ", set counts, then add them all at once." : "Tap everything you need, then add them all at once."}</small></div>
+          ${linkC && who.length ? `<div class="chg-who"><label>${esc(linkC.label || "Suspect")}</label><select class="chg-sel">${who.map(w => `<option${w === preWho ? " selected" : ""}>${esc(w)}</option>`).join("")}</select></div>` : ""}
+          <button type="button" class="chg-x" aria-label="Close">✕</button></header>
+        <div class="chg-body"><nav class="chg-nav"><div class="chg-search"><input type="search" placeholder="${charges ? "Search all charges…" : "Search…"}" autocomplete="off"></div>
+          <button type="button" class="chg-picked" data-g="picked"><span>✅</span><em>Selected</em><i>0</i></button>
+          ${groups.map((g, i) => `<button type="button" data-g="${i}"><span>${g.icon}</span><em>${esc(g.name)}</em><i>${g.items.length}</i></button>`).join("")}</nav>
+          <div class="chg-list"></div></div>
         <footer class="chg-foot"><div class="chg-sum">Nothing selected</div><button type="button" class="chg-clear">Clear</button><button type="button" class="chg-go" disabled>Add</button></footer></div>`;
       document.body.appendChild(ov);
       document.documentElement.classList.add("chg-lock");
@@ -475,19 +494,34 @@ window.Portal = (function () {
       const badge = o => { const m = CLASS_RE.exec(o); return m ? m[2][0].toUpperCase() : ""; };
       const nameOf = o => { const m = CLASS_RE.exec(o); return m ? m[1] : o; };
       const sub = o => { if (!charges) return ""; const x = sentence(o, 1); return [x.months ? x.months + " mo" : "", x.fine ? "$" + x.fine.toLocaleString("en-US") : ""].filter(Boolean).join(" · "); };
-      const item = o => `<label class="chg-item${picked.has(o) ? " on" : ""}" data-o="${esc(o)}"><input type="checkbox"${picked.has(o) ? " checked" : ""}><span class="chg-box"></span>
-          <span class="chg-t"><b>${esc(nameOf(o))}</b>${sub(o) ? `<small>${esc(sub(o))}</small>` : ""}</span>${badge(o) ? `<span class="chg-cls c-${badge(o)}">${badge(o)}</span>` : ""}
-          ${countC ? `<span class="chg-cnt"${picked.has(o) ? "" : " hidden"}><button type="button" data-d="-1">−</button><input type="text" inputmode="numeric" value="${picked.get(o) || 1}"><button type="button" data-d="1">+</button></span>` : ""}</label>`;
+      const CLS = { F: "Felony", M: "Misdemeanor", I: "Infraction" };
+      const tile = o => { const on = picked.has(o), k = badge(o);
+        return `<div class="chg-tile c-${k || "x"}${on ? " on" : ""}" data-o="${esc(o)}" role="button" tabindex="0" aria-pressed="${on}">
+          ${style === "tiles" ? `<div class="ct-top">${k ? `<span class="chg-cls c-${k}">${CLS[k]}</span>` : "<span></span>"}<span class="ct-ck"></span></div>` : `<span class="ct-ck"></span>`}
+          <b>${esc(nameOf(o))}</b>${sub(o) ? `<small>${esc(sub(o))}</small>` : ""}${style !== "tiles" && k ? `<span class="ct-dot c-${k}" title="${CLS[k]}"></span>` : ""}
+          ${countC && on ? `<span class="chg-cnt"><button type="button" data-d="-1" aria-label="Fewer">−</button><input type="text" inputmode="numeric" value="${picked.get(o) || 1}" aria-label="Counts"><button type="button" data-d="1" aria-label="More">+</button></span>` : ""}</div>`; };
       function draw() {
         const qv = search.value.trim().toLowerCase(), toks = qv.split(/\s+/).filter(Boolean);
         const match = o => toks.every(t => o.toLowerCase().indexOf(t) !== -1);
-        let html = "", n = 0;
-        groups.forEach((g, i) => {
-          const its = g.items.filter(match); if (!its.length) return; n += its.length;
-          html += `<section data-sec="${i}"><h4><span>${g.icon}</span>${esc(g.name)}<i>${its.length}</i></h4>${its.map(item).join("")}</section>`;
-        });
-        list.innerHTML = html || `<div class="chg-empty">No ${charges ? "charges" : "matches"} match “${esc(search.value)}”.</div>`;
-        ov.querySelectorAll(".chg-nav button").forEach(bt => { const g = groups[+bt.dataset.g]; const k = g.items.filter(match).length; bt.hidden = !k; bt.querySelector("i").textContent = k; bt.classList.toggle("has", g.items.some(o => picked.has(o))); });
+        const grid = its => `<div class="chg-grid ${style}">${its.map(tile).join("")}</div>`;
+        let html = "";
+        if (toks.length) {                                   // searching: results from every category
+          groups.forEach(g => { const its = g.items.filter(match); if (its.length) html += `<h4><span>${g.icon}</span>${esc(g.name)}<i>${its.length}</i></h4>${grid(its)}`; });
+          if (!html) html = `<div class="chg-empty">No ${charges ? "charges" : "matches"} match “${esc(search.value)}”.</div>`;
+        } else if (active === "picked") {
+          const its = [...picked.keys()];
+          html = its.length ? `<h4><span>✅</span>Selected<i>${its.length}</i></h4>${grid(its)}` : `<div class="chg-empty">Nothing selected yet. Pick a category on the left and tap the charges.</div>`;
+        } else {
+          const g = groups[active];
+          html = `<h4><span>${g.icon}</span>${esc(g.name)}<i>${g.items.length}</i></h4>${grid(g.items)}`;
+        }
+        list.innerHTML = html;
+        ov.querySelectorAll(".chg-nav button[data-g]").forEach(bt => bt.classList.toggle("act", !toks.length && String(active) === bt.dataset.g));
+        marks();
+      }
+      function marks() {
+        ov.querySelectorAll(".chg-nav button[data-g]").forEach(bt => { if (bt.dataset.g === "picked") return; const n = groups[+bt.dataset.g].items.filter(o => picked.has(o)).length; bt.classList.toggle("has", n > 0); bt.querySelector("i").textContent = n ? n + " ✓" : groups[+bt.dataset.g].items.length; });
+        $(".chg-picked i").textContent = picked.size; $(".chg-picked").classList.toggle("has", picked.size > 0);
       }
       function sum() {
         const n = picked.size; let mo = 0, fine = 0;
@@ -495,8 +529,9 @@ window.Portal = (function () {
         $(".chg-sum").innerHTML = n ? `<b>${n}</b> selected${charges && (mo || fine) ? ` · <b>${mo}</b> months · <b>$${fine.toLocaleString("en-US")}</b>` : ""}` : "Nothing selected";
         const sel = $(".chg-sel"), go = $(".chg-go");
         go.disabled = !n; go.textContent = n ? `Add ${n} ${charges ? (n === 1 ? "charge" : "charges") : (n === 1 ? "item" : "items")}${sel && sel.value ? " to " + sel.value : ""}` : "Add";
-        ov.querySelectorAll(".chg-nav button").forEach(bt => bt.classList.toggle("has", groups[+bt.dataset.g].items.some(o => picked.has(o))));
+        marks();
       }
+      function toggle(o) { if (picked.has(o)) picked.delete(o); else picked.set(o, 1); const sc = list.scrollTop; draw(); list.scrollTop = sc; sum(); }
       function close() { ov.remove(); document.documentElement.classList.remove("chg-lock"); document.removeEventListener("keydown", onKey, true); }
       function onKey(e) { if (e.key === "Escape") { e.preventDefault(); close(); } }
       document.addEventListener("keydown", onKey, true);
@@ -505,31 +540,27 @@ window.Portal = (function () {
       search.addEventListener("input", draw);
       ov.querySelector(".chg-nav").addEventListener("click", e => {
         const bt = e.target.closest("button[data-g]"); if (!bt) return;
-        const sec = list.querySelector(`[data-sec="${bt.dataset.g}"]`); if (sec) list.scrollTo({ top: sec.offsetTop - list.offsetTop, behavior: "smooth" });
+        active = bt.dataset.g === "picked" ? "picked" : +bt.dataset.g; search.value = ""; list.scrollTop = 0; draw();
       });
       list.addEventListener("click", e => {
-        const lab = e.target.closest(".chg-item"); if (!lab) return;
-        const o = lab.dataset.o, cnt = lab.querySelector(".chg-cnt");
-        const d = e.target.closest("button[data-d]");
-        if (d) { e.preventDefault(); const inp = cnt.querySelector("input"); const v = Math.max(1, Math.min(99, (parseInt(inp.value, 10) || 1) + +d.dataset.d)); inp.value = v; picked.set(o, v); sum(); return; }
-        if (e.target.closest(".chg-cnt")) { e.preventDefault(); return; }
-        if (e.target.tagName !== "INPUT") return;           // the label forwards the click to the checkbox
-        const on = e.target.checked;
-        if (on) picked.set(o, parseInt(cnt && cnt.querySelector("input").value, 10) || 1); else picked.delete(o);
-        lab.classList.toggle("on", on); if (cnt) cnt.hidden = !on; sum();
+        const t = e.target.closest(".chg-tile"); if (!t) return;
+        const o = t.dataset.o, d = e.target.closest("button[data-d]");
+        if (d) { const inp = t.querySelector(".chg-cnt input"); const v = Math.max(1, Math.min(99, (parseInt(inp.value, 10) || 1) + +d.dataset.d)); inp.value = v; picked.set(o, v); sum(); return; }
+        if (e.target.closest(".chg-cnt")) return;
+        toggle(o);
       });
-      list.addEventListener("input", e => { const lab = e.target.closest(".chg-item"); if (!lab || !e.target.closest(".chg-cnt")) return; const v = Math.max(1, Math.min(99, parseInt(e.target.value, 10) || 1)); picked.set(lab.dataset.o, v); sum(); });
+      list.addEventListener("keydown", e => { const t = e.target.closest(".chg-tile"); if (t && e.target === t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(t.dataset.o); } });
+      list.addEventListener("input", e => { const t = e.target.closest(".chg-tile"); if (!t || !e.target.closest(".chg-cnt")) return; picked.set(t.dataset.o, Math.max(1, Math.min(99, parseInt(e.target.value, 10) || 1))); sum(); });
       $(".chg-clear").onclick = () => { picked.clear(); draw(); sum(); };
       if ($(".chg-sel")) $(".chg-sel").onchange = sum;
       $(".chg-go").onclick = () => {
         const sel = $(".chg-sel"), suspect = sel ? sel.value : "";
-        // reuse empty rows first, so a blank "+ Add Charge" row doesn't stay behind
         qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => { const el = tr.querySelector(`[data-k="${CSS.escape(c.id)}"]`); if (el && !el.value.trim()) tr.remove(); });
         picked.forEach((cnt, o) => { const v = {}; v[c.id] = o; if (linkC) v[linkC.id] = suspect; if (countC) v[countC.id] = String(cnt); addRow(b, v); });
         fillLinks(b); refresh(); changed(); close();
         const last = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).pop(); if (last && last.scrollIntoView) last.scrollIntoView({ behavior: "smooth", block: "center" });
       };
-      draw(); sum(); setTimeout(() => search.focus(), 30);
+      draw(); sum();
     }
 
     // values from another list in this form, e.g. the names of rows whose Role is "Suspect"
@@ -720,6 +751,7 @@ window.Portal = (function () {
 
     function refresh() {
       renderOfc();
+      drawWhoBars();
       blocks.forEach(b => {
         if (b.type === "longtext" && hasGuide(b)) {
           const box = q(`[data-gchecks="${CSS.escape(b.id)}"]`);
@@ -784,7 +816,7 @@ window.Portal = (function () {
       const tips = t.closest("[data-tips]");
       if (tips) { const ul = q(`[data-gtips="${CSS.escape(tips.dataset.tips)}"]`); ul.hidden = !ul.hidden; tips.classList.toggle("on", !ul.hidden); return; }
       const browse = t.closest("[data-browse]");
-      if (browse) { openBrowser(repeaters.find(b => b.id === browse.dataset.browse)); return; }
+      if (browse) { openBrowser(repeaters.find(b => b.id === browse.dataset.browse), browse.dataset.who || ""); return; }
       const add = t.closest("[data-add]");
       if (add) {
         const tr = addRow(repeaters.find(b => b.id === add.dataset.add));

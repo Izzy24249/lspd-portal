@@ -957,7 +957,7 @@ html.chg-lock{overflow:hidden}
 .chg-cnt[hidden]{display:none}
 .chg-cnt button{width:28px;height:30px;border:0;background:transparent;color:#cfe0ff;font-size:16px;cursor:pointer}
 .chg-cnt button:hover{background:#1a2a48}
-.chg-cnt input{width:34px;height:30px;border:0;background:transparent;color:#fff;text-align:center;font:inherit;font-weight:700;font-size:.9rem;outline:none}
+.chg-cnt input{width:38px;padding:0;height:30px;border:0;background:transparent;color:#fff;text-align:center;font:inherit;font-weight:700;font-size:.9rem;outline:none}
 .chg-empty{padding:40px 10px;text-align:center;color:#8fa0c4}
 .chg-foot{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid #1f2e4d;background:#0c1527}
 .chg-sum{flex:1;font-size:.86rem;color:#b9c6e4}
@@ -977,4 +977,74 @@ html.chg-lock{overflow:hidden}
   .chg-foot{flex-wrap:wrap}
   .chg-sum{flex:1 1 100%}
   .chg-go{flex:1}
+}
+
+/* --- charges: suspect buttons instead of "+ Add Charge" --- */
+.whobar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.whobar .wb-l{font-size:12px;font-weight:700;color:#334D6E;margin-right:4px}
+.whobar .wb-none{font-size:12.5px;font-style:italic;color:#6b7280}
+.wb-who{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px 0 4px;border-radius:999px;border:1px solid #1B2A4A;background:#1B2A4A;color:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.wb-who:hover{background:#2b4170}
+.wb-who .wb-av{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#1B2A4A;font-size:11px;font-weight:800}
+.wb-who i{font-style:normal;font-size:11px;background:rgba(255,255,255,.18);border-radius:999px;padding:1px 8px}
+.hud-whobar{padding:4px 0 0}
+.hud-whobar .wb-l{color:var(--hm,#8fb4ff);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.hud-whobar .wb-none{color:var(--hm,#8fa0c4)}
+.hud-whobar .wb-who{height:38px;border-color:rgba(90,162,255,.45);background:rgba(47,123,255,.12);color:#e8eefc}
+.hud-whobar .wb-who:hover{background:rgba(47,123,255,.25)}
+.hud-whobar .wb-who .wb-av{background:#2f7bff;color:#fff}
+
+/* --- pop-out v2: header holds the suspect, search sits above the categories, one category at a time --- */
+.chg-head{align-items:center}
+.chg-head .chg-who{padding:0;background:none;border:0;gap:10px}
+.chg-head .chg-sel{min-width:200px}
+.chg-nav .chg-search{padding:2px 0 8px}
+.chg-nav .chg-search input{height:38px;font-size:.88rem}
+.chg-nav button.act{background:linear-gradient(90deg,rgba(47,123,255,.22),rgba(47,123,255,.06));color:#fff;box-shadow:inset 3px 0 0 #2f7bff}
+.chg-nav .chg-picked{margin-bottom:6px;border-bottom:1px solid #1f2e4d!important;border-radius:9px 9px 0 0!important}
+.chg-nav button.has i{color:#fff;background:#2f7bff;border-radius:999px;padding:1px 7px}
+.chg-list{padding:4px 18px 18px}
+.chg-list h4{margin:0 -18px 14px;padding:12px 18px;position:sticky;top:-4px}
+.chg-list h4 ~ h4{margin-top:18px}
+.chg-grid{display:grid;gap:10px}
+/* square tiles */
+.chg-grid.tiles{grid-template-columns:repeat(auto-fill,minmax(178px,1fr))}
+.chg-grid.tiles .chg-tile{position:relative;display:flex;flex-direction:column;gap:6px;min-height:112px;padding:12px 12px 12px;border-radius:14px;border:1px solid #22355a;background:linear-gradient(160deg,#14213b,#0f1a2f);cursor:pointer;transition:transform .12s,border-color .12s,background .12s}
+.chg-grid.tiles .chg-tile:hover{transform:translateY(-2px);border-color:#3b5590}
+.chg-grid.tiles .chg-tile b{font-size:.9rem;font-weight:700;line-height:1.3;flex:1}
+.chg-grid.tiles .chg-tile small{font-size:.74rem;color:#8fa0c4;font-variant-numeric:tabular-nums}
+.ct-top{display:flex;align-items:center;justify-content:space-between}
+.chg-grid.tiles .chg-cls{width:auto;height:auto;padding:2px 8px;border-radius:999px;font-size:.62rem;letter-spacing:.06em;text-transform:uppercase}
+.ct-ck{width:20px;height:20px;border-radius:50%;border:1.5px solid #3b5590;display:grid;place-items:center;flex:none}
+.chg-tile.on .ct-ck{background:#2f7bff;border-color:#2f7bff}
+.chg-tile.on .ct-ck::after{content:"";width:9px;height:5px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+.chg-grid.tiles .chg-tile.on{border-color:#2f7bff;background:linear-gradient(160deg,rgba(47,123,255,.25),rgba(47,123,255,.08));box-shadow:0 10px 26px -14px rgba(47,123,255,.9)}
+.chg-grid.tiles .chg-tile.c-F{border-top:3px solid rgba(255,77,94,.7)}
+.chg-grid.tiles .chg-tile.c-M{border-top:3px solid rgba(242,182,50,.7)}
+.chg-grid.tiles .chg-tile.c-I{border-top:3px solid rgba(90,162,255,.7)}
+.chg-tile .chg-cnt{align-self:flex-start;margin-top:2px}
+/* bubbles (pills) */
+.chg-grid.pills{display:flex;flex-wrap:wrap;gap:8px}
+.chg-grid.pills .chg-tile{display:inline-flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border-radius:999px;border:1px solid #2a3f68;background:#111c33;cursor:pointer;transition:background .12s,border-color .12s}
+.chg-grid.pills .chg-tile:hover{border-color:#4a68a8;background:#16243f}
+.chg-grid.pills .chg-tile b{font-size:.86rem;font-weight:600;white-space:nowrap}
+.chg-grid.pills .chg-tile small{font-size:.72rem;color:#8fa0c4;white-space:nowrap}
+.chg-grid.pills .chg-tile.on{background:#2f7bff;border-color:#2f7bff}
+.chg-grid.pills .chg-tile.on small{color:#dbe8ff}
+.chg-grid.pills .chg-tile.on .ct-ck{background:#fff;border-color:#fff}
+.chg-grid.pills .chg-tile.on .ct-ck::after{border-color:#2f7bff}
+.ct-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.ct-dot.c-F{background:#ff4d5e}.ct-dot.c-M{background:#f2b632}.ct-dot.c-I{background:#5aa2ff}
+.chg-grid.pills .chg-tile .chg-cnt{margin:0 0 0 4px;background:rgba(0,0,0,.25);border-color:rgba(255,255,255,.35)}
+.chg-grid.pills .chg-tile .chg-cnt button,.chg-grid.pills .chg-tile .chg-cnt input{height:26px}
+@media(max-width:760px){
+  .chg-head{flex-wrap:wrap}
+  .chg-head .chg-who{order:3;flex:1 1 100%}
+  .chg-head .chg-sel{flex:1;min-width:0}
+  .chg-nav{flex-wrap:nowrap}
+  .chg-nav .chg-search{flex:0 0 170px;padding:0}
+  .chg-nav .chg-picked{margin-bottom:0;border-radius:999px!important;border:1px solid #24365c!important}
+  .chg-nav button.act{box-shadow:none;background:#2f7bff;border-color:#2f7bff}
+  .chg-grid.tiles{grid-template-columns:repeat(2,1fr);gap:8px}
+  .chg-grid.tiles .chg-tile{min-height:104px;padding:10px}
 }
