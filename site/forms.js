@@ -309,6 +309,7 @@ window.Portal = (function () {
         ${tips.length ? `<button type="button" class="ng-btn ghost" data-tips="${esc(b.id)}">Tips</button>` : ""}</div>
       ${steps.length ? `<div class="ng-steps">${steps.map((st, i) => `<button type="button" class="ng-step" data-step="${i}" data-for="${esc(b.id)}" data-help="${esc(st.help || "")}"><b>${i + 1}</b>${esc(st.label)}</button>`).join("")}</div>
       <div class="ng-help" data-ghelp="${esc(b.id)}">Click a step to add it. Steps use what you've already entered (people, evidence, vehicles, charges); type over anything in <b>[brackets]</b>.</div>` : ""}
+      <div class="ng-syncrow"><label class="ng-sync"><input type="checkbox" data-sync="${esc(b.id)}"><span class="sw"></span>🔄 Keep in sync with the report</label><span class="ng-syncst" data-gsync="${esc(b.id)}"></span></div>
       <div class="ng-gaps" data-ggaps="${esc(b.id)}" hidden></div>
       ${tips.length ? `<ul class="ng-tips" data-gtips="${esc(b.id)}" hidden>${tips.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
       <div class="ng-checks" data-gchecks="${esc(b.id)}"></div>
@@ -432,12 +433,13 @@ window.Portal = (function () {
         tr.className = "dyn hud-row"; tr.dataset.rep = b.id;
         tr.style.gridTemplateColumns = hudCols(b);
         tr.innerHTML = cols.map((c, i) => `<div class="cell${c.type === "link" ? " linkcell" : ""}" data-label="${esc(c.label)}">${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</div>`).join("") +
+          (factList(b) ? `<input type="hidden" data-k="_id">` : "") +
           (tagSrc(b) ? `<input type="hidden" data-k="_tags"><div class="tagline"><button type="button" class="tag-add" data-tag>🔗 Link person</button><span class="tag-chips"></span></div>` : "") +
           `<div class="act">${hasCheck ? `<label class="hud-tick" title="${esc(b.check.label)}"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx"></span><em>${esc(b.check.label)}</em></label>` : ""}<button type="button" class="rm" title="Remove row">✕</button></div>`;
       } else {
         tr = document.createElement("tr");
         tr.className = "dyn" + (b.numbered ? " numd" : ""); tr.dataset.rep = b.id;
-        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}"${c.type === "link" ? ' class="linkcell"' : ""}>${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}${i === 0 && tagSrc(b) ? `<input type="hidden" data-k="_tags"><div class="tagline"><button type="button" class="tag-add" data-tag>🔗 Link person</button><span class="tag-chips"></span></div>` : ""}</td>`).join("") +
+        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}"${c.type === "link" ? ' class="linkcell"' : ""}>${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}${i === 0 && factList(b) ? `<input type="hidden" data-k="_id">` : ""}${i === 0 && tagSrc(b) ? `<input type="hidden" data-k="_tags"><div class="tagline"><button type="button" class="tag-add" data-tag>🔗 Link person</button><span class="tag-chips"></span></div>` : ""}</td>`).join("") +
           `<td class="act"><div class="actcell">${hasCheck ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
       }
       // a new row's "pick from list" boxes default to the previous row's choice (same suspect)
@@ -450,6 +452,7 @@ window.Portal = (function () {
         if (el.dataset.link) return;
         if (el.type === "checkbox") el.checked = !!v; else if (v != null) { el.value = v; if (el.list) el.title = v; }
       });
+      const idEl = tr.querySelector('[data-k="_id"]'); if (idEl && !idEl.value) idEl.value = Math.random().toString(36).slice(2, 9);
       if (suspectFirst(b)) tr.classList.add("sf");
       q(`[data-anchor="${CSS.escape(b.id)}"]`).before(tr);
       refresh();
@@ -527,13 +530,13 @@ window.Portal = (function () {
         const g = (r, c) => c ? String(r[c.id] == null ? "" : r[c.id]).trim() : "";
         if (tagSrc(b) === null && col(b, /role/i) && col(b, /\bname\b|^name/i)) {
           const rc = col(b, /role/i), nc = col(b, /\bname\b|^name/i), oc = col(b, /note|detail|info/i);
-          rows.forEach(r => { if (g(r, nc)) F.persons.push({ role: g(r, rc), name: g(r, nc), notes: g(r, oc) }); });
+          rows.forEach(r => { if (g(r, nc)) F.persons.push({ id: r._id || g(r, nc), role: g(r, rc), name: g(r, nc), notes: g(r, oc) }); });
         } else if (/evidence/i.test(t)) {
           const tc = col(b, /type|kind|item/i), dc = col(b, /desc/i), wc = col(b, /serial|where|location|found/i);
-          rows.forEach(r => { if (g(r, tc) || g(r, dc)) F.evidence.push({ type: g(r, tc), desc: g(r, dc), where: g(r, wc), whereLabel: wc ? wc.label : "", logged: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
+          rows.forEach(r => { if (g(r, tc) || g(r, dc)) F.evidence.push({ id: r._id || g(r, dc) || g(r, tc), type: g(r, tc), desc: g(r, dc), where: g(r, wc), whereLabel: wc ? wc.label : "", logged: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
         } else if (/vehicle/i.test(t)) {
           const pc = col(b, /plate|tag/i), cc = col(b, /colou?r/i), mc = col(b, /make|model/i);
-          rows.forEach(r => { if (g(r, pc) || g(r, mc)) F.vehicles.push({ plate: g(r, pc), color: g(r, cc), model: g(r, mc), run: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
+          rows.forEach(r => { if (g(r, pc) || g(r, mc)) F.vehicles.push({ id: r._id || g(r, pc), plate: g(r, pc), color: g(r, cc), model: g(r, mc), run: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
         } else if (suspectFirst(b)) {
           const lc = linkColOf(b), c = browseCol(b), by = {};
           rows.forEach(r => { const who = g(r, lc) || "the suspect", ch = g(r, c); if (!ch) return; const m = CLASS_RE.exec(ch); (by[who] = by[who] || { suspect: who, items: [], warrant: false }).items.push({ name: m ? m[1] : ch, count: Math.max(1, parseInt(r[(b.totals && b.totals.countCol) || "count"], 10) || 1) }); if (b.check && r[b.check.id]) by[who].warrant = true; });
@@ -551,7 +554,7 @@ window.Portal = (function () {
         : `${p.name}${p.notes ? " (" + p.notes + ")" : ""} was identified as ${p.role ? a_n(p.role) + p.role.toLowerCase() : "an involved person"} because [reason].`,
       evidence: e => { const what = (e.type && !/other/i.test(e.type) ? e.type.toLowerCase() : "item") + (e.desc ? " (" + e.desc + ")" : "");
         const where = e.where ? (/serial/i.test(e.whereLabel) && !/\s/.test(e.where) ? `, serial number ${e.where},` : /^(at|in|on|under|behind|inside|outside|near|next|beside|by|from|along|across|between|underneath|beneath)\b/i.test(e.where) ? ` ${e.where}` : ` at ${e.where}`) : " at [where it was found]";
-        return `I located ${a_n(what)}${what}${where}${e.tags.length ? " which is linked to " + nice(e.tags) : ""}. ${e.logged ? "I collected it and logged it into CAD evidence." : "I collected it and [logged it into CAD evidence]."}`.replace(/,\s+which/, ", which").replace(/ +/g, " "); },
+        return `I located ${a_n(what)}${what}${where.replace(/,$/, "")}${e.tags.length ? ", which is linked to " + nice(e.tags) : ""}. ${e.logged ? "I collected it and logged it into CAD evidence." : "I collected it and [logged it into CAD evidence]."}`.replace(/ +/g, " "); },
       vehicle: v => `${v.color || v.model ? "A" : "A vehicle"}${v.color ? " " + v.color.toLowerCase() : ""}${v.model ? " " + v.model : ""}${v.plate ? " bearing plate " + v.plate.toUpperCase() : " [plate]"} was involved${v.tags.length ? " and is linked to " + nice(v.tags) : ""}. ${v.run ? "I ran the plate in CAD, which showed [registered owner / flags]." : "[I ran the plate in CAD, which showed registered owner / flags.]"}`,
       charges: c => `Based on the above, I charged ${c.suspect} with ${nice(c.items.map(i => i.count > 1 ? i.name + " (" + i.count + " counts)" : i.name))}.${c.warrant ? " A warrant was requested." : ""}`
     };
@@ -569,22 +572,130 @@ window.Portal = (function () {
       const k = stepKind(st.label || ""), auto = k ? factSentences(k) : "";
       return auto || fillStarter(st.starter);
     }
+    // ===== narrative <-> report sync =====
+    // Every sentence written from the report is remembered with what it came from. When the report changes, that sentence is rewritten
+    // (or removed) in place; new people/evidence/vehicles/charges are added to the right paragraph. A sentence the officer edits by hand is theirs: it's left alone.
+    const factList = b => !!(tagSrc(b) || ((b.columns || []).some(c => /role/i.test(c.id + " " + (c.label || ""))) && (b.columns || []).some(c => /^name$/i.test(c.id) || /\bname\b/i.test(c.label || ""))));
+    const KINDS = ["call", "arrival", "persons", "investigation", "evidence", "vehicles", "suspects", "outcome"];
+    const KIND_RE = { call: /\b(dispatched|responded to|was called|i was sent)\b/i, arrival: /\b(upon arrival|on scene|arrived)\b/i, persons: /\b(made contact|spoke with|interviewed|witness|victim)\b/i,
+      investigation: /\b(investigation|i ran|i checked|reviewed|canvass)/i, evidence: /\b(located|evidence|casing|collected)\b/i, vehicles: /\b(bearing plate|vehicle|plate)\b/i,
+      suspects: /\b(suspect|charged|probable cause|under arrest|miranda)\b/i, outcome: /\b(transported|booked|case remains|pending)\b/i };
+    function factItems(F) {
+      F = F || reportFacts();
+      const out = [{ key: "call", kind: "call", text: S.call(F) }];
+      F.persons.forEach(p => out.push({ key: "p:" + p.id, kind: /suspect/i.test(p.role) ? "suspects" : "persons", text: S.person(p) }));
+      F.evidence.forEach(e => out.push({ key: "e:" + e.id, kind: "evidence", text: S.evidence(e) }));
+      F.vehicles.forEach(v => out.push({ key: "v:" + v.id, kind: "vehicles", text: S.vehicle(v) }));
+      F.charges.forEach(c => out.push({ key: "c:" + c.suspect, kind: "suspects", text: S.charges(c) }));
+      return out;
+    }
+    const NARR = {};
+    const narrKey = id => "lspd_narr_" + form.id + "_" + id;
+    function narr(id) {
+      if (!NARR[id]) { let v = null; try { v = JSON.parse(localStorage.getItem(narrKey(id)) || "null"); } catch (e) {} NARR[id] = v && Array.isArray(v.items) ? v : { on: false, items: [], own: [] }; }
+      return NARR[id];
+    }
+    function saveNarr(id) { try { const n = narr(id); if (!n.on && !n.items.length) localStorage.removeItem(narrKey(id)); else localStorage.setItem(narrKey(id), JSON.stringify(n)); } catch (e) {} }
+    const paras = t => String(t || "").split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
+    function kindOf(par, tracked) {
+      const hit = tracked.find(it => par.includes(it.text)); if (hit) return hit.kind;
+      for (const k of KINDS) if (KIND_RE[k].test(par)) return k;
+      return "";
+    }
+    // put a sentence at the end of its section's paragraph, or start that section in the right order
+    function placeSentence(text, kind, value, tracked) {
+      const ps = paras(value), kinds = ps.map(p => kindOf(p, tracked));
+      const last = kinds.lastIndexOf(kind);
+      if (last > -1) { ps[last] = ps[last] + " " + text; return ps.join("\n\n"); }
+      const order = KINDS.indexOf(kind); let at = 0;
+      kinds.forEach((k, i) => { if (k && KINDS.indexOf(k) <= order) at = i + 1; });
+      if (!kinds.some(k => k) && ps.length) at = ps.length;              // nothing recognisable yet: add to the end
+      ps.splice(at, 0, text); return ps.join("\n\n");
+    }
+    function setNarrative(ta, value) {
+      if (ta.value === value) return;
+      const focused = document.activeElement === ta, caret = ta.selectionEnd;
+      ta.value = value.slice(0, Number(ta.maxLength) > 0 ? ta.maxLength : 1e6);
+      if (focused) ta.setSelectionRange(Math.min(caret, ta.value.length), Math.min(caret, ta.value.length));
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    function track(id, item) { const n = narr(id); n.items = n.items.filter(x => x.key !== item.key).concat({ key: item.key, kind: item.kind, text: item.text }); saveNarr(id); }
+    function addFact(b, item) {
+      const ta = q(`[data-f="${CSS.escape(b.id)}"]`), n = narr(b.id);
+      setNarrative(ta, placeSentence(item.text, item.kind, ta.value, n.items)); track(b.id, item);
+    }
+    let SYNCING = false, READY = !opts.draft;                // READY: don't touch the narrative until a saved draft has been put back
+    function syncNarrative(b) {
+      const n = narr(b.id), ta = q(`[data-f="${CSS.escape(b.id)}"]`); if (!READY || !ta || (!n.items.length && !n.on) || SYNCING) return;
+      n.own = n.own || [];
+      SYNCING = true;
+      try {
+        const now = factItems(), byKey = {}; now.forEach(it => byKey[it.key] = it);
+        let v = ta.value;
+        n.items = n.items.filter(it => {
+          if (!v.includes(it.text)) { if (!n.own.includes(it.key)) n.own.push(it.key); return false; }   // edited by hand (or deleted): it's the officer's now, never re-added
+          const cur = byKey[it.key];
+          if (!cur) { v = v.replace(it.text, "").replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim(); return false; }   // the thing was removed from the report
+          if (cur.text !== it.text) { v = v.replace(it.text, cur.text); it.text = cur.text; }
+          return true;
+        });
+        if (n.on) {                                                        // new things in the report go into the right paragraph
+          const known = new Set(n.items.map(it => it.key)), low = v.toLowerCase();
+          now.forEach(it => {
+            if (known.has(it.key) || it.key === "call" || n.own.includes(it.key)) return;
+            const m = mentionOf(it); if (m && low.includes(m.toLowerCase())) return;   // already written about by hand
+            v = placeSentence(it.text, it.kind, v, n.items); n.items.push({ key: it.key, kind: it.kind, text: it.text });
+          });
+        }
+        setNarrative(ta, v); saveNarr(b.id);
+      } finally { SYNCING = false; }
+      const st = q(`[data-gsync="${CSS.escape(b.id)}"]`);
+      if (st) st.textContent = n.on ? `Synced · ${n.items.length} sentence${n.items.length === 1 ? "" : "s"} follow your report. Edit one yourself and it stops changing.` : n.items.length ? `${n.items.length} added sentence${n.items.length === 1 ? "" : "s"} follow your report.` : "";
+    }
+    // a word that shows the narrative already covers a fact (used to avoid writing it twice)
+    function mentionOf(it) {
+      const F = reportFacts(), id = it.key.slice(2);
+      if (it.key.startsWith("p:")) { const p = F.persons.find(x => String(x.id) === id); return p && p.name.split(/[·,(]/)[0].trim(); }
+      if (it.key.startsWith("e:")) { const e = F.evidence.find(x => String(x.id) === id); return e && (e.desc || e.where); }
+      if (it.key.startsWith("v:")) { const x = F.vehicles.find(y => String(y.id) === id); return x && (x.plate || x.model); }
+      if (it.key.startsWith("c:")) return "charged " + it.key.slice(2);
+      return "";
+    }
+    // the full first draft: report facts in their sections, plus the guide's starters for what only the officer knows
+    function buildDraft(b) {
+      const F = reportFacts(), items = factItems(F), by = k => items.filter(it => it.kind === k);
+      const starterFor = k => { const st = (b.guide.steps || []).find(x => (stepKind(x.label || "") || labelKind(x.label || "")) === k); return st ? fillStarter(st.starter) : ""; };
+      const out = [], tracked = [];
+      KINDS.forEach(k => {
+        const its = by(k);
+        if (its.length) { out.push(its.map(it => it.text).join(" ")); its.forEach(it => tracked.push(it)); }
+        else if (["arrival", "investigation", "outcome"].includes(k) || (k === "persons" && !F.persons.length) || (k === "evidence" && !F.evidence.length && !F.vehicles.length)) { const t = starterFor(k); if (t) out.push(t); }
+      });
+      return { text: out.join("\n\n"), tracked: tracked };
+    }
+    const labelKind = l => /arriv/i.test(l) ? "arrival" : /investig/i.test(l) ? "investigation" : /outcome|result|transport|close/i.test(l) ? "outcome" : "";
+
     // facts in the report the narrative doesn't mention yet (tap one to add its sentence)
     function narrativeGaps(b) {
-      const F = reportFacts(), low = ((q(`[data-f="${CSS.escape(b.id)}"]`) || {}).value || "").toLowerCase(), out = [];
-      const has = s => s && low.includes(String(s).toLowerCase());
-      F.persons.forEach(p => { if (!has(p.name.split(/[·,(]/)[0].trim())) out.push({ icon: /suspect/i.test(p.role) ? "🎯" : /victim/i.test(p.role) ? "🩹" : "👤", label: p.name.split(/[·(]/)[0].trim() + (p.role ? " · " + p.role : ""), text: S.person(p) }); });
-      F.evidence.forEach(e => { if (!(has(e.desc) || has(e.where))) out.push({ icon: "🧪", label: (e.type || "Evidence") + (e.desc ? ": " + e.desc : ""), text: S.evidence(e) }); });
-      F.vehicles.forEach(v => { if (!(has(v.plate) || has(v.model))) out.push({ icon: "🚗", label: [v.color, v.model, v.plate].filter(Boolean).join(" "), text: S.vehicle(v) }); });
-      F.charges.forEach(c => { if (!c.items.every(i => has(i.name))) out.push({ icon: "⚖️", label: "Charges for " + c.suspect, text: S.charges(c) }); });
-      if (F.location && !has(F.location)) out.unshift({ icon: "📍", label: F.location, text: S.call(F) });
-      return out;
+      const low = ((q(`[data-f="${CSS.escape(b.id)}"]`) || {}).value || "").toLowerCase(), F = reportFacts(), n = narr(b.id), tracked = new Set(n.items.map(it => it.key));
+      const icon = it => it.key === "call" ? "📍" : it.key.startsWith("e:") ? "🧪" : it.key.startsWith("v:") ? "🚗" : it.key.startsWith("c:") ? "⚖️" : it.kind === "suspects" ? "🎯" : /victim/i.test(it.text) ? "🩹" : "👤";
+      const label = it => { const id = it.key.slice(2);
+        if (it.key === "call") return F.location;
+        if (it.key.startsWith("p:")) { const p = F.persons.find(x => String(x.id) === id); return p ? p.name.split(/[·(]/)[0].trim() + (p.role ? " · " + p.role : "") : ""; }
+        if (it.key.startsWith("e:")) { const e = F.evidence.find(x => String(x.id) === id); return e ? (e.type || "Evidence") + (e.desc ? ": " + e.desc : "") : ""; }
+        if (it.key.startsWith("v:")) { const v = F.vehicles.find(x => String(x.id) === id); return v ? [v.color, v.model, v.plate].filter(Boolean).join(" ") : ""; }
+        return "Charges for " + it.key.slice(2); };
+      return factItems(F).filter(it => {
+        if (tracked.has(it.key) || (n.own || []).includes(it.key)) return false;
+        if (it.key === "call") return F.location && !low.includes(F.location.toLowerCase());
+        const m = mentionOf(it); return !(m && low.includes(m.toLowerCase()));
+      }).map(it => ({ icon: icon(it), label: label(it), item: it }));
     }
     function drawGaps() {
       blocks.filter(b => b.type === "longtext" && hasGuide(b)).forEach(b => {
         const box = q(`[data-ggaps="${CSS.escape(b.id)}"]`); if (!box) return;
         const gaps = narrativeGaps(b); box._gaps = gaps;
-        const html = gaps.length ? `<span class="ng-gl">📋 From your report, not in the narrative yet:</span>${gaps.map((g, i) => `<button type="button" class="ng-gap" data-gap="${i}" data-for="${esc(b.id)}" title="Add: ${esc(g.text)}">${g.icon} ${esc(g.label)}<em>＋</em></button>`).join("")}` : "";
+        const html = gaps.length ? `<span class="ng-gl">📋 From your report, not in the narrative yet:</span>${gaps.map((g, i) => `<button type="button" class="ng-gap" data-gap="${i}" data-for="${esc(b.id)}" title="Adds to the right paragraph: ${esc(g.item.text)}">${g.icon} ${esc(g.label)}<em>＋</em></button>`).join("")}` : "";
         if (box.dataset.ck !== html) { box.dataset.ck = html; box.innerHTML = html; box.hidden = !gaps.length; }
       });
     }
@@ -976,6 +1087,7 @@ window.Portal = (function () {
       renderOfc();
       drawWhoBars();
       drawTags();
+      blocks.filter(b => b.type === "longtext" && hasGuide(b)).forEach(b => { const sw = q(`[data-sync="${CSS.escape(b.id)}"]`); if (sw) sw.checked = !!narr(b.id).on; syncNarrative(b); });
       drawGaps();
       blocks.forEach(b => {
         if (b.type === "longtext" && hasGuide(b)) {
@@ -1028,7 +1140,9 @@ window.Portal = (function () {
       const step = t.closest("[data-step]");
       if (step) {
         const b = blocks.find(x => x.id === step.dataset.for), st = b.guide.steps[+step.dataset.step];
-        insertText(q(`[data-f="${CSS.escape(b.id)}"]`), stepText(st));
+        const k = stepKind(st.label || ""), facts = k ? factItems().filter(it => k === "evidence" ? (it.kind === "evidence" || it.kind === "vehicles") : it.kind === k) : [];
+        const n = narr(b.id), fresh = facts.filter(it => !n.items.some(x => x.key === it.key));
+        if (fresh.length) fresh.forEach(it => addFact(b, it)); else insertText(q(`[data-f="${CSS.escape(b.id)}"]`), fillStarter(st.starter));
         step.classList.add("used"); return;
       }
       const tagB = t.closest("[data-tag]");
@@ -1036,15 +1150,21 @@ window.Portal = (function () {
       const untag = t.closest("[data-untag]");
       if (untag) { const hid = untag.closest(".dyn").querySelector('[data-k="_tags"]'); hid.value = tagList(hid.value).filter(x => x !== untag.dataset.untag).join("; "); drawTags(); changed(); return; }
       const gap = t.closest("[data-gap]");
-      if (gap) { const box = gap.closest("[data-ggaps]"), g = box._gaps && box._gaps[+gap.dataset.gap]; if (g) insertText(q(`[data-f="${CSS.escape(gap.dataset.for)}"]`), g.text); return; }
+      if (gap) { const box = gap.closest("[data-ggaps]"), g = box._gaps && box._gaps[+gap.dataset.gap]; if (g) addFact(blocks.find(x => x.id === gap.dataset.for), g.item); return; }
+      const syncT = t.closest("[data-sync]");
+      if (syncT) { const b = blocks.find(x => x.id === syncT.dataset.sync), n = narr(b.id); n.on = syncT.checked; saveNarr(b.id); syncNarrative(b); drawGaps(); return; }
       const draft = t.closest("[data-draft]");
       if (draft) {
-        const b = blocks.find(x => x.id === draft.dataset.draft), ta = q(`[data-f="${CSS.escape(b.id)}"]`);
-        if (ta.value.trim() && !confirm("Add a draft built from your report below what you've already written?")) return;
-        ta.setSelectionRange(ta.value.length, ta.value.length);
-        const F = reportFacts(), used = new Set();
-        const parts = b.guide.steps.map(st => { const k = stepKind(st.label || ""); if (k && used.has(k)) return ""; if (k) used.add(k); const auto = k ? factSentences(k, F) : ""; return auto || fillStarter(st.starter); }).filter(Boolean);
-        insertText(ta, parts.join("\n\n"));
+        const b = blocks.find(x => x.id === draft.dataset.draft), ta = q(`[data-f="${CSS.escape(b.id)}"]`), n = narr(b.id);
+        if (ta.value.trim() && !confirm("Replace what's in the narrative with a fresh draft from your report?\n\nCancel keeps your text and just adds anything from the report that's missing.")) {
+          n.on = true; saveNarr(b.id); syncNarrative(b); drawGaps(); return;
+        }
+        const d = buildDraft(b);
+        n.items = d.tracked.map(it => ({ key: it.key, kind: it.kind, text: it.text })); n.own = []; n.on = true; saveNarr(b.id);
+        setNarrative(ta, d.text); ta.focus();
+        const br = ta.value.indexOf("["), end = br > -1 ? ta.value.indexOf("]", br) : -1; if (br > -1 && end > br) ta.setSelectionRange(br, end + 1);
+        const sw = q(`[data-sync="${CSS.escape(b.id)}"]`); if (sw) sw.checked = true;
+        syncNarrative(b); drawGaps();
         return;
       }
       const outline = t.closest("[data-outline]");
@@ -1135,6 +1255,7 @@ window.Portal = (function () {
       qa("input,select,textarea").forEach(el => { if (el.type === "checkbox") el.checked = false; else el.value = ""; });
       qa(".dyn").forEach(tr => tr.remove());
       qa(".err").forEach(x => x.classList.remove("err"));
+      blocks.filter(b => b.type === "longtext").forEach(b => { NARR[b.id] = { on: false, items: [], own: [] }; saveNarr(b.id); });
       setDefaults(); fillRows(); refresh(); clearDraft();
     }
 
@@ -1186,8 +1307,9 @@ window.Portal = (function () {
         if (!raw) return null;
         const d = JSON.parse(raw);
         load(d);
-        if (!isEmpty(collect())) { status("✓ Draft restored"); return d.t; }
+        if (!isEmpty(collect())) { status("✓ Draft restored"); READY = true; refresh(); return d.t; }
       } catch (e) {}
+      finally { READY = true; }
       return null;
     }
 

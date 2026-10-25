@@ -1208,3 +1208,14 @@ table.xl .tchip{color:#1c2333;background:#eef2f8;border-color:#c9d3e3}
 .paper:not(.hud) .ng-gap{color:#7c4a03;background:#fff6e0;border-color:#f0c36d}
 .paper:not(.hud) .ng-gap em{background:#f0c36d;color:#5a3600}
 .tp-i i.r-suspect{background:#ef4444}.tp-i i.r-victim{background:#f59e0b}.tp-i i.r-witness{background:#3b82f6}.tp-i i.r-person-of-interest{background:#a855f7}.tp-i i.r-complainant{background:#14b8a6}
+
+/* narrative <-> report sync switch */
+.ng-syncrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px}
+.ng-sync{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--hc,#334D6E);cursor:pointer;user-select:none}
+.ng-sync input{position:absolute;opacity:0;pointer-events:none}
+.ng-sync .sw{width:34px;height:19px;border-radius:999px;background:rgba(127,140,170,.35);position:relative;transition:.2s;flex:none}
+.ng-sync .sw::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:.2s}
+.ng-sync input:checked+.sw{background:#22c55e}
+.ng-sync input:checked+.sw::after{left:17px}
+.ng-sync input:focus-visible+.sw{outline:2px solid var(--hc,#2f7bff);outline-offset:2px}
+.ng-syncst{font-size:11.5px;color:var(--hm,#6b7280)}
