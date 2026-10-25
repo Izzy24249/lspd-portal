@@ -364,7 +364,7 @@ window.Portal = (function () {
         const cols = (b.columns || []).slice(0, 3);
         return `<section class="hud-card">
           <header class="hud-chead"><h3>${esc(b.title)}</h3><span class="hud-chip" data-rc="${esc(b.id)}">0 entries</span></header>
-          <div class="hud-rhead" style="grid-template-columns:${hudCols(b)}">${cols.map(c => `<span>${esc(c.label)}</span>`).join("")}<span class="r">${esc(b.check && b.check.id ? b.check.label : "")}</span></div>
+          <div class="hud-rhead${browseCol(b) && (b.columns || []).some(x => x.type === "link") ? " sf-hide" : ""}" style="grid-template-columns:${hudCols(b)}">${cols.map(c => `<span>${esc(c.label)}</span>`).join("")}<span class="r">${esc(b.check && b.check.id ? b.check.label : "")}</span></div>
           <div class="hud-empty" data-empty="${esc(b.id)}">Nothing added yet.</div>
           <div class="anchor" data-anchor="${esc(b.id)}" style="display:none"></div>
           ${b.totals && b.totals.on ? `<div class="hud-sum" data-sum="${esc(b.id)}" style="display:none"><span></span></div>` : ""}
@@ -430,12 +430,12 @@ window.Portal = (function () {
         tr = document.createElement("div");
         tr.className = "dyn hud-row"; tr.dataset.rep = b.id;
         tr.style.gridTemplateColumns = hudCols(b);
-        tr.innerHTML = cols.map((c, i) => `<div class="cell" data-label="${esc(c.label)}">${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</div>`).join("") +
+        tr.innerHTML = cols.map((c, i) => `<div class="cell${c.type === "link" ? " linkcell" : ""}" data-label="${esc(c.label)}">${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</div>`).join("") +
           `<div class="act">${hasCheck ? `<label class="hud-tick" title="${esc(b.check.label)}"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx"></span><em>${esc(b.check.label)}</em></label>` : ""}<button type="button" class="rm" title="Remove row">✕</button></div>`;
       } else {
         tr = document.createElement("tr");
         tr.className = "dyn" + (b.numbered ? " numd" : ""); tr.dataset.rep = b.id;
-        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}">${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</td>`).join("") +
+        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}"${c.type === "link" ? ' class="linkcell"' : ""}>${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}</td>`).join("") +
           `<td class="act"><div class="actcell">${hasCheck ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
       }
       // a new row's "pick from list" boxes default to the previous row's choice (same suspect)
@@ -448,6 +448,7 @@ window.Portal = (function () {
         if (el.dataset.link) return;
         if (el.type === "checkbox") el.checked = !!v; else if (v != null) { el.value = v; if (el.list) el.title = v; }
       });
+      if (suspectFirst(b)) tr.classList.add("sf");
       q(`[data-anchor="${CSS.escape(b.id)}"]`).before(tr);
       refresh();
       return tr;
@@ -467,6 +468,47 @@ window.Portal = (function () {
           ? `<span class="wb-l">${browseCol(b) && isChargeList(browseCol(b)) ? "⚖️ Add charges for" : "Add for"}</span>${who.map(w => `<button type="button" class="wb-who" data-browse="${esc(b.id)}" data-who="${esc(w)}"><span class="wb-av">${esc((w.match(/\b\w/g) || ["?"]).slice(0, 2).join("").toUpperCase())}</span>${esc(w)}${counts[w] ? `<i>${counts[w]}</i>` : ""}</button>`).join("")}`
           : `<span class="wb-none">Add a ${esc(noun)} in ${esc(((blocks.find(x => x.id === lc.source) || {}).title || "the persons list").replace(/\b\w+/g, w => w[0] + w.slice(1).toLowerCase()))} first, then tap their name here to charge them.</span>`;
       });
+    }
+    // one header per suspect with their charges bracketed underneath (rows stay real rows, so saving works as before)
+    let RID = 0;
+    const whoOf = (b, tr) => { const el = tr.querySelector(`[data-k="${CSS.escape(linkColOf(b).id)}"]`); return el ? el.value : ""; };
+    const rowsFor = (b, w) => qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).filter(tr => whoOf(b, tr) === w);
+    function groupRows(b) {
+      const anchor = q(`[data-anchor="${CSS.escape(b.id)}"]`); if (!anchor) return;
+      const lc = linkColOf(b), c = browseCol(b), rows = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`);
+      rows.forEach(tr => { if (!tr.dataset.rid) tr.dataset.rid = String(++RID); tr.classList.add("sf"); });
+      const order = linkChoices(lc), names = [...new Set(order.filter(n => rows.some(r => whoOf(b, r) === n)).concat(rows.map(r => whoOf(b, r))))];
+      const groups = names.map(n => ({ n: n, rows: rows.filter(r => whoOf(b, r) === n) }));
+      const key = JSON.stringify(groups.map(g => [g.n, g.rows.map(r => r.dataset.rid)]));
+      const sheet = anchor.tagName === "TR";
+      if (anchor.dataset.gk !== key) {
+        anchor.dataset.gk = key;
+        qa(`[data-sg="${CSS.escape(b.id)}"]`).forEach(x => x.remove());
+        groups.forEach(g => {
+          const head = document.createElement(sheet ? "tr" : "div");
+          head.className = "sg-head"; head.dataset.sg = b.id; head.dataset.who = g.n;
+          const inner = `<div class="sg-br"><span class="sg-l"></span><button type="button" class="sg-name" data-browse="${esc(b.id)}" data-who="${esc(g.n)}" title="Edit ${esc(g.n || "these")}'s charges"><span class="sg-av">${esc(((g.n || "?").match(/\b\w/g) || ["?"]).slice(0, 2).join("").toUpperCase())}</span><b>${esc(g.n || "No suspect picked")}</b><em>✎ Edit</em></button><span class="sg-l"></span></div><div class="sg-meta"></div>`;
+          head.innerHTML = sheet ? `<td colspan="4">${inner}</td>` : inner;
+          anchor.before(head);
+          g.rows.forEach((r, i) => { r.classList.toggle("sg-first", i === 0); r.classList.toggle("sg-last", i === g.rows.length - 1); anchor.before(r); });
+        });
+      }
+      // live totals in each header
+      groups.forEach(g => {
+        const head = q(`[data-sg="${CSS.escape(b.id)}"][data-who="${CSS.escape(g.n)}"]`); if (!head) return;
+        let mo = 0, fine = 0, n = 0;
+        g.rows.forEach(r => { const cv = (r.querySelector(`[data-k="${CSS.escape(c.id)}"]`) || {}).value || "", cnt = countOf(b, r); if (!cv.trim()) return; n += cnt; const x = sentence(cv, cnt); mo += x.months; fine += x.fine; });
+        const meta = head.querySelector(".sg-meta");
+        const html = `<span><b>${n}</b> charge${n === 1 ? "" : "s"}</span>${mo || fine ? `<span><b>${mo}</b> months</span><span><b>$${fine.toLocaleString("en-US")}</b> fine</span>` : ""}`;
+        if (meta.innerHTML !== html) meta.innerHTML = html;
+      });
+      const sr = b.totals && b.totals.on && q(`[data-sum="${CSS.escape(b.id)}"]`);
+      if (sr && groups.length < 2) sr.style.display = "none";          // one suspect: their header already shows the total
+    }
+    function countOf(b, tr) {
+      const cc = (b.columns || []).find(x => x.id === (b.totals && b.totals.countCol)) || (b.columns || []).find(x => /count|qty|quantity/i.test(x.id + " " + x.label));
+      const el = cc && tr.querySelector(`[data-k="${CSS.escape(cc.id)}"]`);
+      return Math.max(1, parseInt(el && el.value, 10) || 1);
     }
     function openBrowser(b, preWho) {
       const c = browseCol(b); if (!c) return;
@@ -531,7 +573,10 @@ window.Portal = (function () {
         picked.forEach((cnt, o) => { const x = sentence(o, cnt); mo += x.months; fine += x.fine; });
         $(".chg-sum").innerHTML = n ? `<b>${n}</b> selected${charges && (mo || fine) ? ` · <b>${mo}</b> months · <b>$${fine.toLocaleString("en-US")}</b>` : ""}` : "Nothing selected";
         const sel = $(".chg-sel"), go = $(".chg-go");
-        go.disabled = !n; go.textContent = n ? `Add ${n} ${charges ? (n === 1 ? "charge" : "charges") : (n === 1 ? "item" : "items")}${sel && sel.value ? " to " + sel.value : ""}` : "Add";
+        const had = linkC && sel ? rowsFor(b, sel.value).length : 0;
+        go.disabled = !n && !had;
+        go.textContent = had ? (n ? `Save ${n} ${charges ? (n === 1 ? "charge" : "charges") : (n === 1 ? "item" : "items")} for ${sel.value}` : `Remove all charges from ${sel.value}`)
+          : n ? `Add ${n} ${charges ? (n === 1 ? "charge" : "charges") : (n === 1 ? "item" : "items")}${sel && sel.value ? " to " + sel.value : ""}` : "Add";
         marks(); drawSlip();
       }
       // the booking slip: every picked charge with its count, then the running sentence
@@ -579,14 +624,31 @@ window.Portal = (function () {
         });
         $(".chg-modal").classList.add("has-slip");
       }
-      if ($(".chg-sel")) $(".chg-sel").onchange = () => { sum(); drawSlip(); };
       $(".chg-go").onclick = () => {
         const sel = $(".chg-sel"), suspect = sel ? sel.value : "";
         qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => { const el = tr.querySelector(`[data-k="${CSS.escape(c.id)}"]`); if (el && !el.value.trim()) tr.remove(); });
-        picked.forEach((cnt, o) => { const v = {}; v[c.id] = o; if (linkC) v[linkC.id] = suspect; if (countC) v[countC.id] = String(cnt); addRow(b, v); });
+        // this suspect's existing rows: keep (and update counts) what's still ticked, remove what was unticked
+        const left = new Map(picked);
+        (linkC ? rowsFor(b, suspect) : []).forEach(tr => {
+          const v = (tr.querySelector(`[data-k="${CSS.escape(c.id)}"]`) || {}).value || "";
+          if (!left.has(v)) { tr.remove(); return; }
+          if (countC) { const el = tr.querySelector(`[data-k="${CSS.escape(countC.id)}"]`); if (el) el.value = String(left.get(v)); }
+          left.delete(v);
+        });
+        left.forEach((cnt, o) => { const v = {}; v[c.id] = o; if (linkC) v[linkC.id] = suspect; if (countC) v[countC.id] = String(cnt); addRow(b, v); });
         fillLinks(b); refresh(); changed(); close();
-        const last = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).pop(); if (last && last.scrollIntoView) last.scrollIntoView({ behavior: "smooth", block: "center" });
+        const head = suspect && q(`[data-sg="${CSS.escape(b.id)}"][data-who="${CSS.escape(suspect)}"]`);
+        const to = head || qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).pop(); if (to && to.scrollIntoView) to.scrollIntoView({ behavior: "smooth", block: "center" });
       };
+      // editing: a suspect's existing charges start ticked; switching suspect loads theirs
+      const loadWho = w => {
+        picked.clear();
+        if (!linkC) return;
+        rowsFor(b, w).forEach(tr => { const v = (tr.querySelector(`[data-k="${CSS.escape(c.id)}"]`) || {}).value || ""; if (v.trim()) picked.set(v, (picked.get(v) || 0) + countOf(b, tr)); });
+      };
+      const selEl = $(".chg-sel");
+      loadWho(selEl ? selEl.value : preWho || "");
+      if (selEl) selEl.onchange = () => { loadWho(selEl.value); draw(); sum(); };
       draw(); sum();
     }
 
@@ -802,6 +864,7 @@ window.Portal = (function () {
           if (b.numbered) rows.forEach((tr, i) => { const r = tr.querySelector(".rnum"); if (r) r.textContent = String(i + 1).padStart(2, "0"); });
           q(`[data-rc="${CSS.escape(b.id)}"]`).textContent = n + (n === 1 ? " entry" : " entries");
           q(`[data-empty="${CSS.escape(b.id)}"]`).style.display = (b.startRows ? rows.length : n) ? "none" : "";
+          if (suspectFirst(b)) groupRows(b);
         }
         if (b.type === "longtext") {
           const el = q(`[data-f="${CSS.escape(b.id)}"]`), cnt = q(`[data-count="${CSS.escape(b.id)}"]`);
