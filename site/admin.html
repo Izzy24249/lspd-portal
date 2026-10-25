@@ -921,7 +921,7 @@ function blockBody(form, b) {
           c.type === "select" ? h("label", { class: "tog" }, h("input", { type: "checkbox", checked: !!c.blank, onchange: e => { c.blank = e.target.checked; changed(); } }), "Start blank (\u2014 choose \u2014) so a row counts as soon as something is picked") : null,
           c.type === "select" || c.type === "search"
             ? field("Options (one per line)" + ((c.options || []).length ? " · " + c.options.length + " options" : ""), bind(c, "options", { type: "textarea", rows: c.type === "search" ? 8 : 4, get: linesGet, set: linesSet }),
-                c.type === "search" ? "Officers type to filter this list and pick one, or type their own text if it's not listed." : null)
+                c.type === "search" ? "Officers type to filter this list and pick one, or type their own text if it's not listed. Lists of 12+ also get a \"Browse\" pop-out where several can be ticked at once. Charges are grouped by type automatically; to set your own groups, add header lines like  # Drug Offenses  above the charges that belong in them." : null)
             : null,
           c.type !== "select" && c.type !== "link" ? field("Placeholder", bind(c, "placeholder")) : null));
       });

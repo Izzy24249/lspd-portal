@@ -56,7 +56,7 @@ window.Portal = (function () {
   const listId = (b, c) => "dl-" + b.id + "-" + c.id;
   function searchLists(form) {
     return (form.blocks || []).filter(b => b.type === "repeater").map(b => (b.columns || []).filter(c => c.type === "search").map(c =>
-      `<datalist id="${esc(listId(b, c))}">${(c.options || []).map(o => `<option value="${esc(o)}"></option>`).join("")}</datalist>`).join("")).join("");
+      `<datalist id="${esc(listId(b, c))}">${(c.options || []).filter(o => !isHeader(o)).map(o => `<option value="${esc(o)}"></option>`).join("")}</datalist>`).join("")).join("");
   }
 
   // how many of the sheet's 4 columns each item spans
@@ -131,7 +131,7 @@ window.Portal = (function () {
           <tr class="empty" data-empty="${esc(b.id)}"><td colspan="4">None added.</td></tr>
           <tr class="anchor" data-anchor="${esc(b.id)}" style="display:none"><td colspan="4"></td></tr>
           ${b.totals && b.totals.on ? `<tr class="sumrow" data-sum="${esc(b.id)}" style="display:none"><td colspan="4"></td></tr>` : ""}
-          <tr class="addrow"><td colspan="4"><button type="button" class="mini" data-add="${esc(b.id)}">${esc(b.addLabel || "+ Add Row")}</button></td></tr>`;
+          <tr class="addrow"><td colspan="4"><button type="button" class="mini" data-add="${esc(b.id)}">${esc(b.addLabel || "+ Add Row")}</button>${browseCol(b) ? ` <button type="button" class="mini browse" data-browse="${esc(b.id)}">${esc(browseLabel(b))}</button>` : ""}</td></tr>`;
       }
       case "longtext":
         return `<tr class="gap3"><td colspan="4"></td></tr>
@@ -151,6 +151,40 @@ window.Portal = (function () {
   function setRosters(map) { ROSTERS = map && typeof map === "object" ? map : {}; }
   const fieldRoster = f => f && f.rosterTabId != null && f.rosterTabId !== "" ? (ROSTERS[f.rosterTabId] || []) : null;
   const CLASS_RE = /^(.*?)\s*\(((?:Felony|Misdemeanor|Infraction))[^)]*\)\s*$/i;
+  // ---- charge categories for the "Browse charges" pop-out ----
+  // A list can set its own groups with header lines like "# Drug Offenses"; otherwise charges are sorted by keywords.
+  const CHARGE_CATS = [
+    ["Boating & Watercraft", "🚤", /\bboat|vessel|wake zone/i],
+    ["Aviation", "✈️", /aircraft|pilot|\bfaa\b|flight restriction|hijack|aboard|boarding/i],
+    ["Customs, Immigration & Federal", "🛂", /immigra|smuggl|customs|declar|agricultur|importing prohibited|re-entry|improper entry|passport|visa|federal|checkpoint|currency|alien|human traffick|unauthorized location|unlawful transportation/i],
+    ["Commercial Vehicles", "🚛", /commercial|inspection|overweight|logbook|hazardous|permits|hours of service|medical certificate|load securement|defective equipment|proper documentation/i],
+    ["Drug Offenses", "💊", /drug|controlled substance|narcotic|paraphernalia|prescription|intent to distribute/i],
+    ["Weapons & Firearms", "🔫", /firearm|weapon|\bgun|ammunition|explosive|brandish|discharge|open carry|straw purchase|prohibited person/i],
+    ["Wildlife, Animals & Environment", "🦌", /fish|catch limit|hunt|wildlife|animal|species|poach|logging|mining|dumping/i],
+    ["Cyber Crimes", "💻", /phishing|computer|online|cyber/i],
+    ["Fraud & Financial", "💰", /fraud|embezzle|tax evasion|launder|insider|forgery|ponzi|counterfeit|espionage|bribery|marked bills|identity theft/i],
+    ["Serious Vehicle Crimes", "🚨", /\bdui\b|under the influence|hit and run|street racing|fleeing|elude|stolen vehicle|felony speeding|grand theft auto|carjack|vehicular|unauthorized use of a vehicle/i],
+    ["Property & Theft", "🏚️", /theft|burglar|vandal|shoplift|stolen|graffiti|trespass|arson|breaking|squat|destruction|property|piracy|extortion|mischief|grave/i],
+    ["Crimes Against Persons", "🩸", /murder|homicide|manslaughter|assault|battery|kidnap|stalk|robbery|domestic|threat|endanger|harass/i],
+    ["Traffic & Parking", "🚦", /driv|vehicle|park|lane|yield|speed|plate|signal|tint|headlight|helmet|horn|traffic|u-turn|insurance|tow|tailgat|underglow|freeway|crosswalk|intersection|railroad|lighting|motorcycle|bus stop|sidewalk|alley|red light|double yellow|shoulder|move over|meter|roadway|hauling|riding in a|road rage|wrong way|careless|passing/i],
+    ["Public Order & Obstruction", "⚖️", /./]
+  ];
+  // lists with a long "type to search" column get a pop-out to browse and tick several at once
+  const browseCol = b => (b.columns || []).find(c => c.type === "search" && (c.options || []).filter(o => !isHeader(o)).length >= 12);
+  const isChargeList = c => { const o = (c.options || []).filter(x => !isHeader(x)); return o.length && o.filter(x => CLASS_RE.test(x)).length >= o.length / 2; };
+  const browseLabel = b => { const c = browseCol(b); return b.browseLabel || (c && isChargeList(c) ? "⚖️ Browse charges" : "☰ Browse list"); };
+  const isHeader = o => /^#\s*\S/.test(String(o || ""));
+  function chargeGroups(options) {
+    const opts = (options || []).filter(o => String(o || "").trim());
+    if (opts.some(isHeader)) {                                  // the list brings its own groups
+      const out = []; let cur = null;
+      opts.forEach(o => { if (isHeader(o)) { cur = { name: String(o).replace(/^#\s*/, "").trim(), icon: "📁", items: [] }; out.push(cur); } else { if (!cur) { cur = { name: "Other", icon: "📁", items: [] }; out.push(cur); } cur.items.push(o); } });
+      return out.filter(g => g.items.length);
+    }
+    const map = new Map(CHARGE_CATS.map(([n, i]) => [n, { name: n, icon: i, items: [] }]));
+    opts.forEach(o => { const name = CLASS_RE.exec(o) ? CLASS_RE.exec(o)[1] : o; const cat = CHARGE_CATS.find(([, , re]) => re.test(name)); map.get(cat[0]).items.push(o); });
+    return [...map.values()].filter(g => g.items.length);
+  }
   function chargeItem(o) {
     const m = CLASS_RE.exec(o), x = sentence(o, 1);
     if (!m) return { label: o, value: o, search: o.toLowerCase() };
@@ -334,7 +368,7 @@ window.Portal = (function () {
           <div class="hud-empty" data-empty="${esc(b.id)}">Nothing added yet.</div>
           <div class="anchor" data-anchor="${esc(b.id)}" style="display:none"></div>
           ${b.totals && b.totals.on ? `<div class="hud-sum" data-sum="${esc(b.id)}" style="display:none"><span></span></div>` : ""}
-          <button type="button" class="hud-add" data-add="${esc(b.id)}"><span>＋</span>${esc(String(b.addLabel || "Add Row").replace(/^\+\s*/, ""))}</button>
+          <div class="hud-addrow"><button type="button" class="hud-add" data-add="${esc(b.id)}"><span>＋</span>${esc(String(b.addLabel || "Add Row").replace(/^\+\s*/, ""))}</button>${browseCol(b) ? `<button type="button" class="hud-add hud-browse" data-browse="${esc(b.id)}">${esc(browseLabel(b))}</button>` : ""}</div>
         </section>`;
       }
       case "longtext":
@@ -417,6 +451,85 @@ window.Portal = (function () {
       q(`[data-anchor="${CSS.escape(b.id)}"]`).before(tr);
       refresh();
       return tr;
+    }
+
+    // ---- "Browse charges" pop-out: pick a suspect, tick several charges (by category), set counts, add them all ----
+    function openBrowser(b) {
+      const c = browseCol(b); if (!c) return;
+      const linkC = (b.columns || []).find(x => x.type === "link");
+      const countC = (b.columns || []).find(x => x.id === (b.totals && b.totals.countCol)) || (b.columns || []).find(x => x !== c && x !== linkC && /count|qty|quantity/i.test(x.id + " " + x.label));
+      const charges = isChargeList(c), groups = chargeGroups(c.options), picked = new Map();
+      const who = linkC ? linkChoices(linkC) : [];
+      const themeCls = root.closest(".hud") || root.querySelector(".hud") ? "chg-hud" : "";
+      const ov = document.createElement("div");
+      ov.className = "chg-ov " + themeCls;
+      ov.innerHTML = `<div class="chg-modal" role="dialog" aria-modal="true" aria-label="${esc(charges ? "Add charges" : "Add from list")}">
+        <header class="chg-head"><div><b>${charges ? "⚖️ Add charges" : "☰ " + esc(c.label || "Add from list")}</b><small>${charges ? "Tick every charge for this suspect, set counts, then add them all at once." : "Tick everything you need, then add them all at once."}</small></div><button type="button" class="chg-x" aria-label="Close">✕</button></header>
+        ${linkC ? `<div class="chg-who"><label>${esc(linkC.label || "Suspect")}</label>${who.length ? `<select class="chg-sel">${who.map(w => `<option>${esc(w)}</option>`).join("")}</select>` : `<span class="chg-none">No ${esc((linkC.filterValue || linkC.label || "suspect").toLowerCase())}s listed yet. Add them in ${esc(((blocks.find(x => x.id === linkC.source) || {}).title || "the persons list").toLowerCase())} first, or add the charges now and pick later.</span>`}</div>` : ""}
+        <div class="chg-search"><input type="search" placeholder="${charges ? "Search all charges, e.g. robbery" : "Search…"}" autocomplete="off"></div>
+        <div class="chg-body"><nav class="chg-nav">${groups.map((g, i) => `<button type="button" data-g="${i}"><span>${g.icon}</span><em>${esc(g.name)}</em><i>${g.items.length}</i></button>`).join("")}</nav><div class="chg-list"></div></div>
+        <footer class="chg-foot"><div class="chg-sum">Nothing selected</div><button type="button" class="chg-clear">Clear</button><button type="button" class="chg-go" disabled>Add</button></footer></div>`;
+      document.body.appendChild(ov);
+      document.documentElement.classList.add("chg-lock");
+      const $ = sel => ov.querySelector(sel), list = $(".chg-list"), search = $(".chg-search input");
+      const badge = o => { const m = CLASS_RE.exec(o); return m ? m[2][0].toUpperCase() : ""; };
+      const nameOf = o => { const m = CLASS_RE.exec(o); return m ? m[1] : o; };
+      const sub = o => { if (!charges) return ""; const x = sentence(o, 1); return [x.months ? x.months + " mo" : "", x.fine ? "$" + x.fine.toLocaleString("en-US") : ""].filter(Boolean).join(" · "); };
+      const item = o => `<label class="chg-item${picked.has(o) ? " on" : ""}" data-o="${esc(o)}"><input type="checkbox"${picked.has(o) ? " checked" : ""}><span class="chg-box"></span>
+          <span class="chg-t"><b>${esc(nameOf(o))}</b>${sub(o) ? `<small>${esc(sub(o))}</small>` : ""}</span>${badge(o) ? `<span class="chg-cls c-${badge(o)}">${badge(o)}</span>` : ""}
+          ${countC ? `<span class="chg-cnt"${picked.has(o) ? "" : " hidden"}><button type="button" data-d="-1">−</button><input type="text" inputmode="numeric" value="${picked.get(o) || 1}"><button type="button" data-d="1">+</button></span>` : ""}</label>`;
+      function draw() {
+        const qv = search.value.trim().toLowerCase(), toks = qv.split(/\s+/).filter(Boolean);
+        const match = o => toks.every(t => o.toLowerCase().indexOf(t) !== -1);
+        let html = "", n = 0;
+        groups.forEach((g, i) => {
+          const its = g.items.filter(match); if (!its.length) return; n += its.length;
+          html += `<section data-sec="${i}"><h4><span>${g.icon}</span>${esc(g.name)}<i>${its.length}</i></h4>${its.map(item).join("")}</section>`;
+        });
+        list.innerHTML = html || `<div class="chg-empty">No ${charges ? "charges" : "matches"} match “${esc(search.value)}”.</div>`;
+        ov.querySelectorAll(".chg-nav button").forEach(bt => { const g = groups[+bt.dataset.g]; const k = g.items.filter(match).length; bt.hidden = !k; bt.querySelector("i").textContent = k; bt.classList.toggle("has", g.items.some(o => picked.has(o))); });
+      }
+      function sum() {
+        const n = picked.size; let mo = 0, fine = 0;
+        picked.forEach((cnt, o) => { const x = sentence(o, cnt); mo += x.months; fine += x.fine; });
+        $(".chg-sum").innerHTML = n ? `<b>${n}</b> selected${charges && (mo || fine) ? ` · <b>${mo}</b> months · <b>$${fine.toLocaleString("en-US")}</b>` : ""}` : "Nothing selected";
+        const sel = $(".chg-sel"), go = $(".chg-go");
+        go.disabled = !n; go.textContent = n ? `Add ${n} ${charges ? (n === 1 ? "charge" : "charges") : (n === 1 ? "item" : "items")}${sel && sel.value ? " to " + sel.value : ""}` : "Add";
+        ov.querySelectorAll(".chg-nav button").forEach(bt => bt.classList.toggle("has", groups[+bt.dataset.g].items.some(o => picked.has(o))));
+      }
+      function close() { ov.remove(); document.documentElement.classList.remove("chg-lock"); document.removeEventListener("keydown", onKey, true); }
+      function onKey(e) { if (e.key === "Escape") { e.preventDefault(); close(); } }
+      document.addEventListener("keydown", onKey, true);
+      ov.addEventListener("mousedown", e => { if (e.target === ov) close(); });
+      $(".chg-x").onclick = close;
+      search.addEventListener("input", draw);
+      ov.querySelector(".chg-nav").addEventListener("click", e => {
+        const bt = e.target.closest("button[data-g]"); if (!bt) return;
+        const sec = list.querySelector(`[data-sec="${bt.dataset.g}"]`); if (sec) list.scrollTo({ top: sec.offsetTop - list.offsetTop, behavior: "smooth" });
+      });
+      list.addEventListener("click", e => {
+        const lab = e.target.closest(".chg-item"); if (!lab) return;
+        const o = lab.dataset.o, cnt = lab.querySelector(".chg-cnt");
+        const d = e.target.closest("button[data-d]");
+        if (d) { e.preventDefault(); const inp = cnt.querySelector("input"); const v = Math.max(1, Math.min(99, (parseInt(inp.value, 10) || 1) + +d.dataset.d)); inp.value = v; picked.set(o, v); sum(); return; }
+        if (e.target.closest(".chg-cnt")) { e.preventDefault(); return; }
+        if (e.target.tagName !== "INPUT") return;           // the label forwards the click to the checkbox
+        const on = e.target.checked;
+        if (on) picked.set(o, parseInt(cnt && cnt.querySelector("input").value, 10) || 1); else picked.delete(o);
+        lab.classList.toggle("on", on); if (cnt) cnt.hidden = !on; sum();
+      });
+      list.addEventListener("input", e => { const lab = e.target.closest(".chg-item"); if (!lab || !e.target.closest(".chg-cnt")) return; const v = Math.max(1, Math.min(99, parseInt(e.target.value, 10) || 1)); picked.set(lab.dataset.o, v); sum(); });
+      $(".chg-clear").onclick = () => { picked.clear(); draw(); sum(); };
+      if ($(".chg-sel")) $(".chg-sel").onchange = sum;
+      $(".chg-go").onclick = () => {
+        const sel = $(".chg-sel"), suspect = sel ? sel.value : "";
+        // reuse empty rows first, so a blank "+ Add Charge" row doesn't stay behind
+        qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => { const el = tr.querySelector(`[data-k="${CSS.escape(c.id)}"]`); if (el && !el.value.trim()) tr.remove(); });
+        picked.forEach((cnt, o) => { const v = {}; v[c.id] = o; if (linkC) v[linkC.id] = suspect; if (countC) v[countC.id] = String(cnt); addRow(b, v); });
+        fillLinks(b); refresh(); changed(); close();
+        const last = qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).pop(); if (last && last.scrollIntoView) last.scrollIntoView({ behavior: "smooth", block: "center" });
+      };
+      draw(); sum(); setTimeout(() => search.focus(), 30);
     }
 
     // values from another list in this form, e.g. the names of rows whose Role is "Suspect"
@@ -545,7 +658,7 @@ window.Portal = (function () {
           return { items: rosterItems(null, c), noun: "on the roster", emptyText: "Not on the roster. What you typed will be kept.",
             onPick: it => { if (!it) return; el.value = it.label + (it.id ? " (" + it.id + ")" : ""); el.title = el.value; el.dispatchEvent(new Event("input", { bubbles: true })); pkClose(); } };
         }
-        return { items: (c.options || []).map(chargeItem), noun: c.label ? "options" : "options", emptyText: "No match. Your text will be kept as typed.",
+        return { items: (c.options || []).filter(o => !isHeader(o)).map(chargeItem), noun: c.label ? "options" : "options", emptyText: "No match. Your text will be kept as typed.",
           onPick: it => { if (!it) return; el.value = it.value; el.title = it.value; el.dispatchEvent(new Event("input", { bubbles: true })); pkClose();
             const next = row.querySelectorAll("input[type=text],select")[[...row.querySelectorAll("input[type=text],select")].indexOf(el) + 1]; if (next) next.focus(); } };
       }
@@ -670,6 +783,8 @@ window.Portal = (function () {
       }
       const tips = t.closest("[data-tips]");
       if (tips) { const ul = q(`[data-gtips="${CSS.escape(tips.dataset.tips)}"]`); ul.hidden = !ul.hidden; tips.classList.toggle("on", !ul.hidden); return; }
+      const browse = t.closest("[data-browse]");
+      if (browse) { openBrowser(repeaters.find(b => b.id === browse.dataset.browse)); return; }
       const add = t.closest("[data-add]");
       if (add) {
         const tr = addRow(repeaters.find(b => b.id === add.dataset.add));

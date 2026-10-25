@@ -903,3 +903,78 @@ table.xl tr.dyn td:first-child .rnum + input.g{width:calc(100% - 34px);display:i
 /* a report that says Fail / Not complete: kept in the record, not counted */
 .pd-item li.failed{color:var(--muted)}
 .pd-item .fail-tag{color:#f87171;font-weight:700}
+
+/* ===== "Browse charges" pop-out (pick several at once, by category) ===== */
+.mini.browse{margin-left:6px;border-color:#1B2A4A;background:#1B2A4A;color:#fff}
+.mini.browse:hover{background:#2b4170}
+.hud-addrow{display:flex;gap:10px;flex-wrap:wrap}
+.hud-addrow .hud-add{flex:1 1 200px}
+.hud-browse{border-style:solid!important}
+html.chg-lock{overflow:hidden}
+.chg-ov{position:fixed;inset:0;z-index:300;background:rgba(3,6,12,.72);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px;animation:chgIn .15s ease-out}
+@keyframes chgIn{from{opacity:0}}
+.chg-modal{width:min(980px,100%);height:min(720px,100%);display:flex;flex-direction:column;background:linear-gradient(160deg,#121d33,#0b1324);border:1px solid #24365c;border-radius:18px;box-shadow:0 30px 80px -20px rgba(0,0,0,.8);color:#e8eefc;font-family:"Inter",system-ui,sans-serif;overflow:hidden}
+.chg-head{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 12px;border-bottom:1px solid #1f2e4d}
+.chg-head>div{flex:1;display:grid;gap:3px}
+.chg-head b{font-size:1.08rem;letter-spacing:.01em}
+.chg-head small{color:#8fa0c4;font-size:.8rem}
+.chg-x{width:34px;height:34px;border-radius:10px;border:1px solid #24365c;background:transparent;color:#8fa0c4;font-size:15px;cursor:pointer}
+.chg-x:hover{color:#fff;border-color:#3b5590}
+.chg-who{display:flex;align-items:center;gap:12px;padding:12px 20px;background:rgba(47,123,255,.06);border-bottom:1px solid #1f2e4d}
+.chg-who label{font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8fa0c4}
+.chg-sel{flex:1;max-width:360px;height:38px;border-radius:10px;border:1px solid #2a3f68;background:#0a1120;color:#e8eefc;padding:0 10px;font:inherit;font-size:.92rem}
+.chg-none{font-size:.84rem;color:#fcd34d}
+.chg-search{padding:12px 20px}
+.chg-search input{width:100%;height:42px;border-radius:12px;border:1px solid #2a3f68;background:#0a1120;color:#e8eefc;padding:0 14px;font:inherit;font-size:.95rem;outline:none}
+.chg-search input:focus{border-color:#2f7bff;box-shadow:0 0 0 3px rgba(47,123,255,.2)}
+.chg-body{flex:1;min-height:0;display:grid;grid-template-columns:250px 1fr;border-top:1px solid #1f2e4d}
+.chg-nav{overflow:auto;padding:10px;border-right:1px solid #1f2e4d;display:flex;flex-direction:column;gap:2px}
+.chg-nav button{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;border:0;background:transparent;color:#b9c6e4;font:inherit;font-size:.84rem;text-align:left;cursor:pointer}
+.chg-nav button:hover{background:#16233d;color:#fff}
+.chg-nav button em{flex:1;font-style:normal}
+.chg-nav button i{font-style:normal;font-size:.7rem;color:#6f81a8;font-variant-numeric:tabular-nums}
+.chg-nav button.has{color:#fff}
+.chg-nav button.has i{color:#fff;background:#2f7bff;border-radius:999px;padding:1px 7px}
+.chg-list{overflow:auto;padding:6px 16px 18px;position:relative}
+.chg-list section{margin-top:10px}
+.chg-list h4{position:sticky;top:-6px;z-index:1;display:flex;align-items:center;gap:8px;margin:0 -16px 6px;padding:10px 16px;background:#0f1a2e;border-bottom:1px solid #1f2e4d;font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:#9fb3dc}
+.chg-list h4 i{font-style:normal;color:#5f7299;margin-left:auto}
+.chg-item{display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+.chg-item:hover{background:#132038}
+.chg-item.on{background:rgba(47,123,255,.12);border-color:rgba(47,123,255,.4)}
+.chg-item input[type=checkbox]{position:absolute;opacity:0;pointer-events:none}
+.chg-box{flex:none;width:20px;height:20px;border-radius:6px;border:1.5px solid #3b5590;display:grid;place-items:center}
+.chg-item.on .chg-box{background:#2f7bff;border-color:#2f7bff}
+.chg-item.on .chg-box::after{content:"";width:10px;height:6px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+.chg-t{flex:1;min-width:0;display:grid;gap:1px}
+.chg-t b{font-weight:600;font-size:.9rem;line-height:1.3}
+.chg-t small{color:#8fa0c4;font-size:.74rem}
+.chg-cls{flex:none;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font-size:.72rem;font-weight:800}
+.chg-cls.c-F{background:rgba(255,77,94,.16);color:#ff8090;border:1px solid rgba(255,77,94,.35)}
+.chg-cls.c-M{background:rgba(242,182,50,.14);color:#f5c542;border:1px solid rgba(242,182,50,.35)}
+.chg-cls.c-I{background:rgba(90,162,255,.14);color:#8cbcff;border:1px solid rgba(90,162,255,.35)}
+.chg-cnt{flex:none;display:flex;align-items:center;border:1px solid #2a3f68;border-radius:9px;overflow:hidden;background:#0a1120}
+.chg-cnt[hidden]{display:none}
+.chg-cnt button{width:28px;height:30px;border:0;background:transparent;color:#cfe0ff;font-size:16px;cursor:pointer}
+.chg-cnt button:hover{background:#1a2a48}
+.chg-cnt input{width:34px;height:30px;border:0;background:transparent;color:#fff;text-align:center;font:inherit;font-weight:700;font-size:.9rem;outline:none}
+.chg-empty{padding:40px 10px;text-align:center;color:#8fa0c4}
+.chg-foot{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid #1f2e4d;background:#0c1527}
+.chg-sum{flex:1;font-size:.86rem;color:#b9c6e4}
+.chg-sum b{color:#fff}
+.chg-clear{height:40px;padding:0 16px;border-radius:11px;border:1px solid #2a3f68;background:transparent;color:#cfe0ff;font:inherit;font-weight:600;cursor:pointer}
+.chg-go{height:40px;padding:0 20px;border-radius:11px;border:0;background:linear-gradient(135deg,#2f7bff,#1b57d6);color:#fff;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 10px 28px -10px rgba(47,123,255,.9)}
+.chg-go:disabled{opacity:.45;cursor:default;box-shadow:none}
+@media(max-width:760px){
+  .chg-ov{padding:0;align-items:stretch}
+  .chg-modal{height:100%;border-radius:0;border:0}
+  .chg-body{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .chg-nav{flex-direction:row;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid #1f2e4d;padding:8px 10px;gap:6px}
+  .chg-nav button{flex:none;border:1px solid #24365c;border-radius:999px;padding:6px 12px;white-space:nowrap}
+  .chg-who{flex-wrap:wrap}
+  .chg-sel{max-width:none;font-size:16px}
+  .chg-search input{font-size:16px}
+  .chg-foot{flex-wrap:wrap}
+  .chg-sum{flex:1 1 100%}
+  .chg-go{flex:1}
+}
