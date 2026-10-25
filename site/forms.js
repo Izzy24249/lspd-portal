@@ -475,6 +475,7 @@ window.Portal = (function () {
       const charges = isChargeList(c), groups = chargeGroups(c.options), picked = new Map();
       const who = linkC ? linkChoices(linkC) : [];
       if (preWho && who.indexOf(preWho) === -1) who.unshift(preWho);
+      const slip = charges && window.CHG_SLIP !== false && !!window.CHG_SLIP;   // live booking slip beside the bubbles
       const style = (window.CHG_STYLE || "pills");   // "pills" (bubbles, the default) or "tiles" (squares)
       let active = 0;                                   // the category being shown
       const ov = document.createElement("div");
@@ -486,7 +487,9 @@ window.Portal = (function () {
         <div class="chg-body"><nav class="chg-nav"><div class="chg-search"><input type="search" placeholder="${charges ? "Search all charges…" : "Search…"}" autocomplete="off"></div>
           <button type="button" class="chg-picked" data-g="picked"><span>✅</span><em>Selected</em><i>0</i></button>
           ${groups.map((g, i) => `<button type="button" data-g="${i}"><span>${g.icon}</span><em>${esc(g.name)}</em><i>${g.items.length}</i></button>`).join("")}</nav>
-          <div class="chg-list"></div></div>
+          <div class="chg-list"></div>${slip ? `<aside class="chg-slip"><div class="sl-paper"><div class="sl-head"><b>LOS SANTOS POLICE DEPARTMENT</b><span>BOOKING SLIP</span></div>
+            <div class="sl-meta"><div><small>${esc((linkC && linkC.label) || "Suspect").toUpperCase()}</small><b class="sl-who">—</b></div><div><small>DATE</small><b>${esc(new Date().toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" }))}</b></div></div>
+            <div class="sl-lines"></div><div class="sl-tot"></div></div><button type="button" class="sl-toggle"></button></aside>` : ""}</div>
         <footer class="chg-foot"><div class="chg-sum">Nothing selected</div><button type="button" class="chg-clear">Clear</button><button type="button" class="chg-go" disabled>Add</button></footer></div>`;
       document.body.appendChild(ov);
       document.documentElement.classList.add("chg-lock");
@@ -529,7 +532,23 @@ window.Portal = (function () {
         $(".chg-sum").innerHTML = n ? `<b>${n}</b> selected${charges && (mo || fine) ? ` · <b>${mo}</b> months · <b>$${fine.toLocaleString("en-US")}</b>` : ""}` : "Nothing selected";
         const sel = $(".chg-sel"), go = $(".chg-go");
         go.disabled = !n; go.textContent = n ? `Add ${n} ${charges ? (n === 1 ? "charge" : "charges") : (n === 1 ? "item" : "items")}${sel && sel.value ? " to " + sel.value : ""}` : "Add";
-        marks();
+        marks(); drawSlip();
+      }
+      // the booking slip: every picked charge with its count, then the running sentence
+      function drawSlip() {
+        if (!slip) return;
+        const sel = $(".chg-sel"), lines = [...picked.entries()];
+        $(".sl-who").textContent = sel && sel.value ? sel.value : "—";
+        $(".chg-slip").classList.toggle("empty", !lines.length);
+        let mo = 0, fine = 0; const cls = { F: 0, M: 0, I: 0 };
+        $(".sl-lines").innerHTML = lines.length ? lines.map(([o, cnt]) => {
+          const x = sentence(o, cnt), k = badge(o); mo += x.months; fine += x.fine; if (k) cls[k] += cnt;
+          return `<div class="sl-line" data-o="${esc(o)}"><span class="sl-n">${cnt}×</span><span class="sl-c"><b>${esc(nameOf(o))}</b><small>${k ? `<i class="ct-dot c-${k}"></i>${CLS[k]}` : ""}${x.months ? " · " + x.months + " mo" : ""}${x.fine ? " · $" + x.fine.toLocaleString("en-US") : ""}</small></span><button type="button" class="sl-x" title="Remove">✕</button></div>`;
+        }).join("") : `<div class="sl-empty">Tap charges to add them to the slip.</div>`;
+        $(".sl-tot").innerHTML = lines.length ? `<div class="sl-row"><span>Felonies</span><b>${cls.F}</b></div><div class="sl-row"><span>Misdemeanors</span><b>${cls.M}</b></div><div class="sl-row"><span>Infractions</span><b>${cls.I}</b></div>
+          <div class="sl-big"><div><small>TOTAL TIME</small><b>${mo} <em>months</em></b></div><div><small>TOTAL FINE</small><b>$${fine.toLocaleString("en-US")}</b></div></div>` : "";
+        $(".chg-slip").style.setProperty("--slip-bottom", $(".chg-foot").offsetHeight + "px");
+        $(".sl-toggle").innerHTML = lines.length ? `🧾 Booking slip · <b>${lines.length}</b> charge${lines.length === 1 ? "" : "s"} · <b>${mo}</b> mo · <b>$${fine.toLocaleString("en-US")}</b><span>▴</span>` : "🧾 Booking slip · empty";
       }
       function toggle(o) { if (picked.has(o)) picked.delete(o); else picked.set(o, 1); const sc = list.scrollTop; draw(); list.scrollTop = sc; sum(); }
       function close() { ov.remove(); document.documentElement.classList.remove("chg-lock"); document.removeEventListener("keydown", onKey, true); }
@@ -552,7 +571,15 @@ window.Portal = (function () {
       list.addEventListener("keydown", e => { const t = e.target.closest(".chg-tile"); if (t && e.target === t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(t.dataset.o); } });
       list.addEventListener("input", e => { const t = e.target.closest(".chg-tile"); if (!t || !e.target.closest(".chg-cnt")) return; picked.set(t.dataset.o, Math.max(1, Math.min(99, parseInt(e.target.value, 10) || 1))); sum(); });
       $(".chg-clear").onclick = () => { picked.clear(); draw(); sum(); };
-      if ($(".chg-sel")) $(".chg-sel").onchange = sum;
+      if (slip) {
+        $(".chg-slip").addEventListener("click", e => {
+          if (e.target.closest(".sl-toggle")) { $(".chg-slip").classList.toggle("open"); return; }
+          const x = e.target.closest(".sl-x"); if (!x) return;
+          picked.delete(x.closest(".sl-line").dataset.o); const sc = list.scrollTop; draw(); list.scrollTop = sc; sum();
+        });
+        $(".chg-modal").classList.add("has-slip");
+      }
+      if ($(".chg-sel")) $(".chg-sel").onchange = () => { sum(); drawSlip(); };
       $(".chg-go").onclick = () => {
         const sel = $(".chg-sel"), suspect = sel ? sel.value : "";
         qa(`.dyn[data-rep="${CSS.escape(b.id)}"]`).forEach(tr => { const el = tr.querySelector(`[data-k="${CSS.escape(c.id)}"]`); if (el && !el.value.trim()) tr.remove(); });

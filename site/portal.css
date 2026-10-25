@@ -1048,3 +1048,58 @@ html.chg-lock{overflow:hidden}
   .chg-grid.tiles{grid-template-columns:repeat(2,1fr);gap:8px}
   .chg-grid.tiles .chg-tile{min-height:104px;padding:10px}
 }
+
+/* --- live booking slip (beside the bubbles) --- */
+.chg-modal.has-slip{width:min(1240px,100%)}
+.chg-modal.has-slip .chg-body{grid-template-columns:230px 1fr 290px}
+.chg-slip{border-left:1px solid #1f2e4d;background:#0a1222;padding:16px;overflow:auto;display:flex;flex-direction:column}
+.sl-paper{position:relative;background:#f7f3e8;color:#1c2333;border-radius:4px 4px 0 0;padding:16px 14px 18px;margin-bottom:10px;font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;box-shadow:0 18px 40px -18px rgba(0,0,0,.9)}
+.sl-paper::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:8px;background:radial-gradient(circle at 7px 0,#f7f3e8 7px,transparent 7.5px) 0 0/14px 8px repeat-x}
+.sl-head{text-align:center;border-bottom:2px solid #1c2333;padding-bottom:8px;margin-bottom:10px}
+.sl-head b{display:block;font-size:.66rem;letter-spacing:.12em}
+.sl-head span{display:block;margin-top:3px;font-size:1rem;font-weight:800;letter-spacing:.28em}
+.sl-meta{display:flex;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px dashed #9aa1ad;margin-bottom:8px}
+.sl-meta small{display:block;font-size:.58rem;color:#6b7280;letter-spacing:.1em}
+.sl-meta b{font-size:.8rem}
+.sl-meta div:last-child{text-align:right}
+.sl-line{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start;padding:7px 0;border-bottom:1px dotted #c3c7cf;animation:slIn .18s ease-out}
+@keyframes slIn{from{opacity:0;transform:translateY(-4px)}}
+.sl-n{font-weight:800;font-size:.8rem;min-width:24px}
+.sl-c b{display:block;font-size:.76rem;line-height:1.3}
+.sl-c small{display:flex;align-items:center;gap:4px;font-size:.64rem;color:#5b6270;margin-top:2px}
+.sl-c .ct-dot{width:7px;height:7px}
+.sl-x{border:0;background:transparent;color:#9aa1ad;cursor:pointer;font-size:.75rem;padding:2px 4px}
+.sl-x:hover{color:#dc2626}
+.sl-empty{padding:22px 4px;text-align:center;font-size:.72rem;color:#7b8190}
+.sl-tot{margin-top:8px}
+.sl-row{display:flex;justify-content:space-between;font-size:.7rem;padding:2px 0;color:#424a59}
+.sl-big{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;padding-top:10px;border-top:2px solid #1c2333}
+.sl-big small{display:block;font-size:.56rem;letter-spacing:.12em;color:#6b7280}
+.sl-big b{font-size:1.15rem;font-weight:800}
+.sl-big b em{font-style:normal;font-size:.66rem;font-weight:600}
+.sl-big div:last-child{text-align:right}
+.sl-toggle{display:none}
+@media(max-width:760px){
+  .chg-modal.has-slip .chg-body{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .chg-slip{position:absolute;left:0;right:0;bottom:var(--slip-bottom,118px);max-height:62%;border-left:0;border-top:1px solid #24365c;padding:0;background:#0a1222;z-index:5;overflow:hidden;display:block}
+  .chg-modal{position:relative}
+  .sl-toggle{display:flex;align-items:center;gap:6px;width:100%;height:44px;padding:0 16px;border:0;background:#101b31;color:#cfe0ff;font:inherit;font-size:.84rem;cursor:pointer}
+  .sl-toggle b{color:#fff}
+  .sl-toggle span{margin-left:auto;transition:transform .2s}
+  .chg-slip .sl-paper{display:none;margin:12px 14px 16px;max-height:calc(62vh - 70px);overflow:auto}
+  .chg-slip.open .sl-paper{display:block}
+  .chg-slip.open .sl-toggle span{transform:rotate(180deg)}
+  .chg-slip{display:flex;flex-direction:column-reverse}
+  .chg-modal.has-slip .chg-list{padding-bottom:60px}
+}
+@media(max-width:760px){
+  /* phone bubbles: name on top, time/fine under it, so long names never run off the screen */
+  .chg-grid.pills{display:grid;gap:8px}
+  .chg-grid.pills .chg-tile{display:grid;grid-template-columns:auto 1fr auto;column-gap:10px;row-gap:2px;align-items:center;border-radius:20px;padding:9px 14px 9px 9px}
+  .chg-grid.pills .chg-tile .ct-ck{grid-column:1;grid-row:1/span 2}
+  .chg-grid.pills .chg-tile b{grid-column:2;grid-row:1;white-space:normal}
+  .chg-grid.pills .chg-tile small{grid-column:2;grid-row:2}
+  .chg-grid.pills .chg-tile .ct-dot{grid-column:3;grid-row:1/span 2}
+  .chg-grid.pills .chg-tile .chg-cnt{grid-column:2;grid-row:3;justify-self:start;margin:6px 0 0}
+  .chg-modal.has-slip .chg-list{padding-bottom:70px}
+}
