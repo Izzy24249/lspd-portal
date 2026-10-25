@@ -505,7 +505,7 @@ window.Portal = (function () {
       draw();
       pop.addEventListener("click", e => {
         const i = e.target.closest(".tp-i");
-        if (i) { const cur = tagList(hid.value), n = i.dataset.n; hid.value = (cur.includes(n) ? cur.filter(x => x !== n) : cur.concat(n)).join("; "); draw(); drawTags(); changed(); return; }
+        if (i) { const cur = tagList(hid.value), n = i.dataset.n; hid.value = (cur.includes(n) ? cur.filter(x => x !== n) : cur.concat(n)).join("; "); draw(); drawTags(); refresh(); changed(); return; }
         if (e.target.closest(".tp-done")) closeTagPop();
       });
       document.body.appendChild(pop);
@@ -546,16 +546,29 @@ window.Portal = (function () {
       return F;
     }
     const a_n = w => /^[aeiou]/i.test(w) ? "an " : "a ";
+    // evidence type -> how it reads in a sentence ("narcotics", "video footage", not "a narcotics")
+    const EV_NOUNS = { "narcotics": ["narcotics", 1], "bodycam / video": ["video footage", 1], "vehicle / fragment": ["vehicle fragment", 0], "blood sample": ["blood sample", 0], "document": ["document", 0], "photograph": ["photograph", 0], "fingerprint": ["fingerprint", 0], "shell casing": ["shell casing", 0], "firearm": ["firearm", 0] };
+    function evNoun(type) {
+      const t = String(type || "").trim().toLowerCase(), m = EV_NOUNS[t];
+      if (m) return { word: m[0], mass: !!m[1] };
+      if (!t || t === "other") return { word: "item", mass: false };
+      return { word: t.replace(/\s*\/\s*/g, " / "), mass: /s$/.test(t) && !/ss$/.test(t) };
+    }
     const S = {
       call: F => `On ${F.date || "[date]"} at approximately ${F.time || "[time]"} hours, I [was dispatched / responded] to ${F.location || "[location]"} regarding a reported ${F.type ? F.type.toLowerCase() : "[incident]"}.`,
       person: p => /victim|complain/i.test(p.role) ? `I made contact with the ${p.role.toLowerCase()}, ${p.name}${p.notes ? " (" + p.notes + ")" : ""}, who stated "[their words]".`
         : /witness/i.test(p.role) ? `I spoke with a witness, ${p.name}${p.notes ? " (" + p.notes + ")" : ""}, who stated that [what they saw].`
         : /suspect/i.test(p.role) ? `I identified ${p.name}${p.notes ? " (" + p.notes + ")" : ""} as a suspect based on [probable cause].`
         : `${p.name}${p.notes ? " (" + p.notes + ")" : ""} was identified as ${p.role ? a_n(p.role) + p.role.toLowerCase() : "an involved person"} because [reason].`,
-      evidence: e => { const what = (e.type && !/other/i.test(e.type) ? e.type.toLowerCase() : "item") + (e.desc ? " (" + e.desc + ")" : "");
-        const where = e.where ? (/serial/i.test(e.whereLabel) && !/\s/.test(e.where) ? `, serial number ${e.where},` : /^(at|in|on|under|behind|inside|outside|near|next|beside|by|from|along|across|between|underneath|beneath)\b/i.test(e.where) ? ` ${e.where}` : ` at ${e.where}`) : " at [where it was found]";
-        return `I located ${a_n(what)}${what}${where.replace(/,$/, "")}${e.tags.length ? ", which is linked to " + nice(e.tags) : ""}. ${e.logged ? "I collected it and logged it into CAD evidence." : "I collected it and [logged it into CAD evidence]."}`.replace(/ +/g, " "); },
-      vehicle: v => `${v.color || v.model ? "A" : "A vehicle"}${v.color ? " " + v.color.toLowerCase() : ""}${v.model ? " " + v.model : ""}${v.plate ? " bearing plate " + v.plate.toUpperCase() : " [plate]"} was involved${v.tags.length ? " and is linked to " + nice(v.tags) : ""}. ${v.run ? "I ran the plate in CAD, which showed [registered owner / flags]." : "[I ran the plate in CAD, which showed registered owner / flags.]"}`,
+      evPhrase: e => { const noun = evNoun(e.type), what = noun.word + (e.desc ? " (" + e.desc + ")" : "");
+        const where = e.where ? (/serial/i.test(e.whereLabel) && !/\s/.test(e.where) ? `, serial number ${e.where}` : /^(at|in|on|under|behind|inside|outside|near|next|beside|by|from|along|across|between|underneath|beneath)\b/i.test(e.where) ? ` ${e.where}` : ` at ${e.where}`) : " at [where it was found]";
+        return ((noun.mass ? "" : a_n(what)) + what + where).replace(/ +/g, " "); },
+      evidence: e => `I located ${S.evPhrase(e)}${e.tags.length ? ", which is linked to " + nice(e.tags) : ""}. ${e.logged ? "I collected it and logged it into CAD evidence." : "I collected it and [logged it into CAD evidence]."}`,
+      // several items linked to the same person(s): name them once, then list what was found
+      evidenceGroup: (tags, list) => `I located the following evidence linked to ${nice(tags)}: ${list.length > 2 ? list.slice(0, -1).map(S.evPhrase).join("; ") + "; and " + S.evPhrase(list[list.length - 1]) : list.map(S.evPhrase).join(" and ")}. ${list.every(e => e.logged) ? "I collected each item and logged it into CAD evidence." : "I collected each item and [logged it into CAD evidence]."}`,
+      vhPhrase: v => `${v.color || v.model ? "a" : "a vehicle"}${v.color ? " " + v.color.toLowerCase() : ""}${v.model ? " " + v.model : ""}${v.plate ? " bearing plate " + v.plate.toUpperCase() : " [plate]"}`,
+      vehicle: v => { const p = S.vhPhrase(v); return `${p[0].toUpperCase() + p.slice(1)} was involved${v.tags.length ? " and is linked to " + nice(v.tags) : ""}. ${v.run ? "I ran the plate in CAD, which showed [registered owner / flags]." : "[I ran the plate in CAD, which showed registered owner / flags.]"}`; },
+      vehicleGroup: (tags, list) => `The following vehicles are linked to ${nice(tags)}: ${nice(list.map(S.vhPhrase))}. ${list.every(v => v.run) ? "I ran the plates in CAD, which showed [registered owners / flags]." : "[I ran the plates in CAD, which showed registered owners / flags.]"}`,
       charges: c => `Based on the above, I charged ${c.suspect} with ${nice(c.items.map(i => i.count > 1 ? i.name + " (" + i.count + " counts)" : i.name))}.${c.warrant ? " A warrant was requested." : ""}`
     };
     function factSentences(kind, F) {
@@ -563,7 +576,7 @@ window.Portal = (function () {
       if (kind === "call") return S.call(F);
       if (kind === "persons") return F.persons.filter(p => !/suspect/i.test(p.role)).map(S.person).join(" ");
       if (kind === "suspects") return F.persons.filter(p => /suspect/i.test(p.role)).map(S.person).concat(F.charges.map(S.charges)).join(" ");
-      if (kind === "evidence") return [F.evidence.map(S.evidence).join(" "), F.vehicles.map(S.vehicle).join(" ")].filter(Boolean).join("\n\n");
+      if (kind === "evidence") { const its = factItems(F); return [its.filter(i => i.kind === "evidence").map(i => i.text).join(" "), its.filter(i => i.kind === "vehicles").map(i => i.text).join(" ")].filter(Boolean).join("\n\n"); }
       return "";
     }
     // which guide step a sentence group belongs to
@@ -582,11 +595,20 @@ window.Portal = (function () {
       suspects: /\b(suspect|charged|probable cause|under arrest|miranda)\b/i, outcome: /\b(transported|booked|case remains|pending)\b/i };
     function factItems(F) {
       F = F || reportFacts();
-      const out = [{ key: "call", kind: "call", text: S.call(F) }];
-      F.persons.forEach(p => out.push({ key: "p:" + p.id, kind: /suspect/i.test(p.role) ? "suspects" : "persons", text: S.person(p) }));
-      F.evidence.forEach(e => out.push({ key: "e:" + e.id, kind: "evidence", text: S.evidence(e) }));
-      F.vehicles.forEach(v => out.push({ key: "v:" + v.id, kind: "vehicles", text: S.vehicle(v) }));
-      F.charges.forEach(c => out.push({ key: "c:" + c.suspect, kind: "suspects", text: S.charges(c) }));
+      const out = [{ key: "call", kind: "call", text: S.call(F), label: F.location, icon: "📍", mention: F.location }];
+      F.persons.forEach(p => { const nm = p.name.split(/[·,(]/)[0].trim();
+        out.push({ key: "p:" + p.id, kind: /suspect/i.test(p.role) ? "suspects" : "persons", text: S.person(p), label: nm + (p.role ? " · " + p.role : ""), icon: /suspect/i.test(p.role) ? "🎯" : /victim/i.test(p.role) ? "🩹" : "👤", mention: nm }); });
+      const grouped = (list, kind, one, many, keyP, lab, icon, ment) => {
+        const groups = new Map();
+        list.forEach(x => { const k = x.tags.length ? x.tags.slice().sort().join("|") : "~" + x.id; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); });
+        groups.forEach((items, k) => {
+          if (items.length === 1) { const x = items[0]; out.push({ key: keyP + ":" + x.id, kind: kind, text: one(x), label: lab(x), icon: icon, mention: ment(x) }); }
+          else out.push({ key: keyP + "g:" + k, kind: kind, text: many(items[0].tags, items), label: (kind === "evidence" ? "Evidence" : "Vehicles") + " linked to " + nice(items[0].tags) + " (" + items.length + ")", icon: icon, mention: ment(items[0]) });
+        });
+      };
+      grouped(F.evidence, "evidence", S.evidence, S.evidenceGroup, "e", e => (e.type || "Evidence") + (e.desc ? ": " + e.desc : ""), "🧪", e => e.desc || e.where);
+      grouped(F.vehicles, "vehicles", S.vehicle, S.vehicleGroup, "v", v => [v.color, v.model, v.plate].filter(Boolean).join(" "), "🚗", v => v.plate || v.model);
+      F.charges.forEach(c => out.push({ key: "c:" + c.suspect, kind: "suspects", text: S.charges(c), label: "Charges for " + c.suspect, icon: "⚖️", mention: "charged " + c.suspect }));
       return out;
     }
     const NARR = {};
@@ -653,14 +675,7 @@ window.Portal = (function () {
       if (st) st.textContent = n.on ? `Synced · ${n.items.length} sentence${n.items.length === 1 ? "" : "s"} follow your report. Edit one yourself and it stops changing.` : n.items.length ? `${n.items.length} added sentence${n.items.length === 1 ? "" : "s"} follow your report.` : "";
     }
     // a word that shows the narrative already covers a fact (used to avoid writing it twice)
-    function mentionOf(it) {
-      const F = reportFacts(), id = it.key.slice(2);
-      if (it.key.startsWith("p:")) { const p = F.persons.find(x => String(x.id) === id); return p && p.name.split(/[·,(]/)[0].trim(); }
-      if (it.key.startsWith("e:")) { const e = F.evidence.find(x => String(x.id) === id); return e && (e.desc || e.where); }
-      if (it.key.startsWith("v:")) { const x = F.vehicles.find(y => String(y.id) === id); return x && (x.plate || x.model); }
-      if (it.key.startsWith("c:")) return "charged " + it.key.slice(2);
-      return "";
-    }
+    function mentionOf(it) { return it.mention || ""; }
     // the full first draft: report facts in their sections, plus the guide's starters for what only the officer knows
     function buildDraft(b) {
       const F = reportFacts(), items = factItems(F), by = k => items.filter(it => it.kind === k);
@@ -677,19 +692,12 @@ window.Portal = (function () {
 
     // facts in the report the narrative doesn't mention yet (tap one to add its sentence)
     function narrativeGaps(b) {
-      const low = ((q(`[data-f="${CSS.escape(b.id)}"]`) || {}).value || "").toLowerCase(), F = reportFacts(), n = narr(b.id), tracked = new Set(n.items.map(it => it.key));
-      const icon = it => it.key === "call" ? "📍" : it.key.startsWith("e:") ? "🧪" : it.key.startsWith("v:") ? "🚗" : it.key.startsWith("c:") ? "⚖️" : it.kind === "suspects" ? "🎯" : /victim/i.test(it.text) ? "🩹" : "👤";
-      const label = it => { const id = it.key.slice(2);
-        if (it.key === "call") return F.location;
-        if (it.key.startsWith("p:")) { const p = F.persons.find(x => String(x.id) === id); return p ? p.name.split(/[·(]/)[0].trim() + (p.role ? " · " + p.role : "") : ""; }
-        if (it.key.startsWith("e:")) { const e = F.evidence.find(x => String(x.id) === id); return e ? (e.type || "Evidence") + (e.desc ? ": " + e.desc : "") : ""; }
-        if (it.key.startsWith("v:")) { const v = F.vehicles.find(x => String(x.id) === id); return v ? [v.color, v.model, v.plate].filter(Boolean).join(" ") : ""; }
-        return "Charges for " + it.key.slice(2); };
-      return factItems(F).filter(it => {
+      const low = ((q(`[data-f="${CSS.escape(b.id)}"]`) || {}).value || "").toLowerCase(), n = narr(b.id), tracked = new Set(n.items.map(it => it.key));
+      return factItems().filter(it => {
         if (tracked.has(it.key) || (n.own || []).includes(it.key)) return false;
-        if (it.key === "call") return F.location && !low.includes(F.location.toLowerCase());
+        if (it.key === "call") return it.mention && !low.includes(it.mention.toLowerCase());
         const m = mentionOf(it); return !(m && low.includes(m.toLowerCase()));
-      }).map(it => ({ icon: icon(it), label: label(it), item: it }));
+      }).map(it => ({ icon: it.icon, label: it.label, item: it }));
     }
     function drawGaps() {
       blocks.filter(b => b.type === "longtext" && hasGuide(b)).forEach(b => {
@@ -1148,7 +1156,7 @@ window.Portal = (function () {
       const tagB = t.closest("[data-tag]");
       if (tagB) { if (TAGPOP) closeTagPop(); else openTagPop(tagB); return; }
       const untag = t.closest("[data-untag]");
-      if (untag) { const hid = untag.closest(".dyn").querySelector('[data-k="_tags"]'); hid.value = tagList(hid.value).filter(x => x !== untag.dataset.untag).join("; "); drawTags(); changed(); return; }
+      if (untag) { const hid = untag.closest(".dyn").querySelector('[data-k="_tags"]'); hid.value = tagList(hid.value).filter(x => x !== untag.dataset.untag).join("; "); drawTags(); refresh(); changed(); return; }
       const gap = t.closest("[data-gap]");
       if (gap) { const box = gap.closest("[data-ggaps]"), g = box._gaps && box._gaps[+gap.dataset.gap]; if (g) addFact(blocks.find(x => x.id === gap.dataset.for), g.item); return; }
       const syncT = t.closest("[data-sync]");
