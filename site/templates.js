@@ -23,6 +23,37 @@ window.PORTAL_TEMPLATES = [
   "section": "Reports",
   "icon": "🗂️",
   "title": "CID Case File",
+  "cidApp": true,
+  "forumTagOptions": [
+   {
+    "id": "1294796677873401949",
+    "label": "Active"
+   },
+   {
+    "id": "1294796761721999360",
+    "label": "Closed"
+   },
+   {
+    "id": "1294797024109269022",
+    "label": "Narcotics & Homicide"
+   },
+   {
+    "id": "1468876080680009738",
+    "label": "Gang Task Force"
+   },
+   {
+    "id": "1331732924818522213",
+    "label": "Warrant"
+   },
+   {
+    "id": "1470006447801630790",
+    "label": "DOA Suspect"
+   },
+   {
+    "id": "1470006695651577957",
+    "label": "Suspect Arrested"
+   }
+  ],
   "description": "Criminal Investigations Division case file: suspects, victims, witnesses, evidence, timeline, charges and the investigator's narrative.",
   "submitLabel": "File Case to Discord",
   "color": "#d9822b",

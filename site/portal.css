@@ -1271,3 +1271,4 @@ table.xl .tchip{color:#1c2333;background:#eef2f8;border-color:#c9d3e3}
 table.xl td .xcol{margin-top:6px}
 table.xl td .xcol small{display:block;font-size:11px;color:#4A607A;margin-bottom:2px}
 @media (max-width:640px){.div-ciu .div-deco{display:none}}
+a.card{color:inherit;text-decoration:none;display:block}

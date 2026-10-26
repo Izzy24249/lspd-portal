@@ -623,7 +623,7 @@ window.Portal = (function () {
       return out;
     }
     const NARR = {};
-    const narrKey = id => "lspd_narr_" + form.id + "_" + id;
+    const narrKey = id => "lspd_narr_" + form.id + "_" + id + (opts.caseKey ? "_" + opts.caseKey : "");
     function narr(id) {
       if (!NARR[id]) { let v = null; try { v = JSON.parse(localStorage.getItem(narrKey(id)) || "null"); } catch (e) {} NARR[id] = v && Array.isArray(v.items) ? v : { on: false, items: [], own: [] }; }
       return NARR[id];
@@ -657,7 +657,7 @@ window.Portal = (function () {
       const ta = q(`[data-f="${CSS.escape(b.id)}"]`), n = narr(b.id);
       setNarrative(ta, placeSentence(item.text, item.kind, ta.value, n.items)); track(b.id, item);
     }
-    let SYNCING = false, READY = !opts.draft;                // READY: don't touch the narrative until a saved draft has been put back
+    let SYNCING = false, READY = !opts.draft && !opts.manualLoad;   // manualLoad: the page puts a saved case back with ctrl.load()                // READY: don't touch the narrative until a saved draft has been put back
     function syncNarrative(b) {
       const n = narr(b.id), ta = q(`[data-f="${CSS.escape(b.id)}"]`); if (!READY || !ta || (!n.items.length && !n.on) || SYNCING) return;
       n.own = n.own || [];
@@ -1377,6 +1377,7 @@ window.Portal = (function () {
     }
     function clearDraft() { try { localStorage.removeItem(KEY); } catch (e) {} status(""); }
     function changed() {
+      if (opts.onChange) { try { opts.onChange(); } catch (e) {} }
       if (!opts.draft) return;
       clearTimeout(timer); status("Saving…"); timer = setTimeout(saveDraft, 400);
     }
@@ -1397,7 +1398,11 @@ window.Portal = (function () {
     fillRows();
     setupTagBars();
     refresh();
-    return { collect, validate, clear, toText, restoreDraft, saveDraft: () => { clearTimeout(timer); saveDraft(); } };
+    return { collect, validate, clear, toText, restoreDraft, saveDraft: () => { clearTimeout(timer); saveDraft(); },
+      load: d => { load(d || {}); READY = true; refresh(); },
+      setValue: (id, v) => { const el = q(`[data-f="${CSS.escape(id)}"]`); if (el && el.value !== v) { el.value = v; el.classList.remove("err"); refresh(); } },
+      getValue: id => { const el = q(`[data-f="${CSS.escape(id)}"]`); return el ? el.value : ""; },
+      root: root, form: form };
   }
 
   async function post(body) {

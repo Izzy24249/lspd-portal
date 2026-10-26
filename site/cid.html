@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CID Case File Builder · LSPD</title>
+<meta name="description" content="LSPD Criminal Investigations Division case file builder.">
+<link rel="icon" href="img/lspd-seal.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&family=Courier+Prime:wght@400;700&family=Saira+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="portal.css?v=202610200937">
+<link rel="stylesheet" href="cid.css?v=202610200937">
+</head>
+<body class="cidapp">
+
+<!-- ===== intro: loading terminal, then officer sign-in ===== -->
+<div id="intro" class="ci-intro">
+  <div class="ci-intro-in">
+    <img class="ci-badge-lg" data-badge src="img/lspd-seal.png" alt="LSPD CID badge">
+    <div class="ci-kick">LOS SANTOS POLICE DEPARTMENT</div>
+    <h1 class="ci-title">CRIMINAL INVESTIGATIONS DIVISION</h1>
+    <div id="introTerm" class="ci-term" aria-live="polite">
+      <div class="ci-term-top"><span>MDT TERMINAL</span><span id="introPct">0%</span></div>
+      <div class="ci-bar"><i id="introBar"></i></div>
+      <div id="introLines" class="ci-lines"></div>
+      <button type="button" class="ci-skip" id="introSkip">Skip</button>
+    </div>
+    <div id="introSign" class="ci-sign" hidden></div>
+    <p class="ci-beatnote">A background beat plays inside — turn it down or off from the header.</p>
+  </div>
+</div>
+
+<!-- ===== locked after 5 minutes away ===== -->
+<div id="lock" class="ci-lock" hidden>
+  <div class="ci-lock-card">
+    <img class="ci-badge-md" data-badge src="img/lspd-seal.png" alt="">
+    <h2>Builder locked</h2>
+    <p>Locked after 5 minutes away from the keyboard. Your cases are saved.</p>
+    <div class="ci-lock-who" id="lockWho"></div>
+    <button type="button" class="ci-btn gold" id="unlockBtn">Unlock builder</button>
+  </div>
+</div>
+
+<header class="ci-head" id="head" hidden>
+  <div class="ci-head-in">
+    <a class="ci-brand" href="index.html" title="Back to the LSPD portal">
+      <img data-badge src="img/lspd-seal.png" alt="">
+      <span><b>CID CASE FILE BUILDER</b><small>Criminal Investigations Division · Fill in the boxes, get a finished case file</small></span>
+    </a>
+    <div class="ci-tools">
+      <div class="ci-beat" title="Background beat">
+        <button type="button" id="beatBtn" class="ci-ico" aria-label="Turn the background beat on or off">🔇</button>
+        <input type="range" id="beatVol" min="0" max="100" value="35" aria-label="Background beat volume">
+      </div>
+      <button type="button" class="ci-chip" id="profileBtn" title="Your officer details"></button>
+      <div class="ci-meter" title="How complete this case file is"><small>FILE COMPLETENESS</small><div><i id="meterBar"></i></div><b id="meterPct">0%</b></div>
+      <button type="button" class="ci-nav" id="casesBtn">🗂️ My cases <i id="caseCount">0</i></button>
+      <button type="button" class="ci-nav" id="dashBtn">📊 Dashboard</button>
+      <button type="button" class="ci-nav" id="exportBtn">⤓ Export</button>
+      <button type="button" class="ci-nav gold" id="newBtn">＋ New case</button>
+      <a class="ci-nav" href="cid-command.html">🛡️ Command</a>
+    </div>
+  </div>
+</header>
+
+<main class="ci-main" id="main" hidden>
+  <div class="ci-left">
+    <div id="review" class="ci-review" hidden></div>
+    <div id="mount"><div class="loading">Loading the case builder…</div></div>
+  </div>
+  <aside class="ci-right">
+    <div class="ci-out-top">
+      <div class="ci-tabs" role="tablist">
+        <button type="button" role="tab" data-fmt="text" class="on">Plain Text</button>
+        <button type="button" role="tab" data-fmt="discord">Discord</button>
+        <button type="button" role="tab" data-fmt="bbcode">BBCode</button>
+      </div>
+      <div class="ci-out-btns">
+        <button type="button" class="ci-ico" id="printBtn" title="Print">🖨️</button>
+        <button type="button" class="ci-ico" id="dlBtn" title="Download">⤓</button>
+        <button type="button" class="ci-btn" id="saveDiscordBtn" hidden title="Update the case's Discord post with your edits">💾 Save to Discord</button>
+        <button type="button" class="ci-btn" id="postBtn">📨 Post to Discord</button>
+        <button type="button" class="ci-btn gold" id="copyBtn">⧉ Copy</button>
+      </div>
+    </div>
+    <p class="ci-fmtnote" id="fmtNote">Plain text — works in any MDT, notes app or Google Doc.</p>
+    <div class="ci-paper" id="paper">
+      <div class="ci-paper-head"><img data-badge src="img/lspd-seal.png" alt=""><div><b>LSPD CRIMINAL INVESTIGATIONS DIVISION</b><small id="paperSub">OFFICIAL CASE FILE</small></div><span class="ci-stamp" id="stamp">CONFIDENTIAL</span></div>
+      <pre id="preview"></pre>
+    </div>
+  </aside>
+</main>
+
+<div id="modal" class="ci-modal" hidden><div class="ci-modal-card" id="modalCard" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="forms.js?v=202610200937"></script>
+<script src="cid.js?v=202610200937"></script>
+</body>
+</html>

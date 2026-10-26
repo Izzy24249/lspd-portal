@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CID Command Review · LSPD</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/lspd-seal.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&family=Courier+Prime:wght@400;700&family=Saira+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="portal.css?v=202610200937">
+<link rel="stylesheet" href="cid.css?v=202610200937">
+<style>
+.cc-wrap{max-width:1500px;margin:0 auto;padding:18px}
+.cc-gate{min-height:calc(100vh - 80px);display:grid;place-items:center;padding:20px}
+.cc-gate .ci-pform{width:min(420px,100%)}
+.cc-gate .ci-pform img{width:80px;height:80px;object-fit:contain;justify-self:center}
+.cc-gate h1{text-align:center;font:800 28px "Saira Condensed",sans-serif;letter-spacing:.08em;color:var(--gold2);text-transform:uppercase}
+.cc-top{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.cc-top input{flex:1 1 260px;height:40px;border-radius:9px;border:1px solid rgba(232,181,74,.3);background:#1a0d0a;color:var(--text);padding:0 12px;font:14px "Inter",sans-serif}
+.cc-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.cc-kpis button{text-align:left;border:1px solid rgba(232,181,74,.2);border-radius:12px;padding:12px 14px;background:rgba(74,23,20,.3);color:var(--text);cursor:pointer}
+.cc-kpis button.on{border-color:var(--gold);background:rgba(109,34,29,.55)}
+.cc-kpis small{display:block;color:var(--muted);font-size:11.5px}
+.cc-kpis b{display:block;margin-top:4px;font:800 28px/1 "Saira Condensed",sans-serif;color:var(--gold2)}
+.cc-grid{display:grid;grid-template-columns:minmax(280px,.8fr) minmax(0,1.4fr);gap:16px;align-items:start}
+.cc-list{display:grid;gap:8px;max-height:calc(100vh - 260px);overflow:auto;padding-right:4px}
+.cc-item{text-align:left;border:1px solid rgba(232,181,74,.18);border-radius:11px;padding:11px 13px;background:rgba(74,23,20,.25);color:var(--text);cursor:pointer;display:grid;gap:3px}
+.cc-item.on{border-color:var(--gold);background:rgba(109,34,29,.45)}
+.cc-item b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-item small{color:var(--muted);font-size:12px}
+.cc-pill{justify-self:start;font:700 10.5px/1 "Inter",sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:4px 8px;border-radius:999px;margin-top:4px}
+.cc-pill.pending{background:rgba(251,191,36,.15);color:#fcd34d}.cc-pill.accepted{background:rgba(74,222,128,.15);color:#86efac}.cc-pill.denied{background:rgba(239,68,68,.15);color:#fca5a5}
+.cc-detail{border:1px solid rgba(232,181,74,.2);border-radius:14px;background:rgba(20,10,8,.75);padding:16px;min-width:0}
+.cc-detail h2{font:800 24px "Saira Condensed",sans-serif;letter-spacing:.05em;color:var(--gold2)}
+.cc-meta{color:var(--muted);font-size:13px;margin:4px 0 12px;line-height:1.6}
+.cc-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0;padding:14px;border-radius:12px;border:1px solid rgba(232,181,74,.25);background:rgba(74,23,20,.2)}
+.cc-form label{display:grid;gap:5px;font:600 12px "Inter",sans-serif;color:var(--muted)}
+.cc-form .full{grid-column:1/-1}
+.cc-form input,.cc-form select,.cc-form textarea{border-radius:8px;border:1px solid rgba(232,181,74,.25);background:#1a0d0a;color:var(--text);padding:9px 11px;font:14px "Inter",sans-serif}
+.cc-form textarea{min-height:90px;resize:vertical}
+.cc-dec{display:flex;gap:8px;flex-wrap:wrap}
+.cc-dec button{flex:1;height:40px;border-radius:9px;border:1px solid rgba(232,181,74,.3);background:transparent;color:var(--text);font:700 13px "Inter",sans-serif;cursor:pointer}
+.cc-dec button.on[data-r=accepted]{background:rgba(74,222,128,.2);border-color:#4ade80;color:#bbf7d0}
+.cc-dec button.on[data-r=denied]{background:rgba(239,68,68,.2);border-color:#ef4444;color:#fecaca}
+.cc-dec button.on[data-r=pending]{background:rgba(251,191,36,.15);border-color:#fbbf24;color:#fde68a}
+.cc-grades{display:flex;gap:6px}
+.cc-grades button{width:42px;height:40px;border-radius:9px;border:1px solid rgba(232,181,74,.3);background:transparent;color:var(--text);font:800 16px "Saira Condensed",sans-serif;cursor:pointer}
+.cc-grades button.on{background:linear-gradient(180deg,#f2c766,#d99a2b);color:#2a1206;border-color:#f2c766}
+.cc-detail .ci-paper{max-height:60vh}
+.cc-empty{color:var(--muted);text-align:center;padding:40px 10px}
+@media (max-width:900px){.cc-grid{grid-template-columns:1fr}.cc-list{max-height:none}.cc-kpis{grid-template-columns:1fr 1fr}.cc-form{grid-template-columns:1fr}}
+</style>
+</head>
+<body class="cidapp">
+<header class="ci-head" id="head">
+  <div class="ci-head-in">
+    <a class="ci-brand" href="cid.html" title="Back to the case builder">
+      <img src="img/lspd-seal.png" data-badge alt="">
+      <span><b>CID COMMAND REVIEW</b><small>Grade and accept or deny submitted case files</small></span>
+    </a>
+    <div class="ci-tools">
+      <a class="ci-nav" href="cid.html">🗂️ Case builder</a>
+      <button type="button" class="ci-nav" id="refreshBtn" hidden>↻ Refresh</button>
+      <button type="button" class="ci-nav" id="outBtn" hidden>Lock</button>
+    </div>
+  </div>
+</header>
+
+<div class="cc-gate" id="gate">
+  <form class="ci-pform" id="gateForm">
+    <img src="img/lspd-seal.png" data-badge alt="">
+    <h1>Command access</h1>
+    <label><span>Command password</span><input type="password" id="pw" autocomplete="current-password" required></label>
+    <div class="ci-pform-err" id="gateErr"></div>
+    <button type="submit" class="ci-btn gold big" id="gateBtn">Unlock review</button>
+    <p class="ci-sub" style="text-align:center;margin:0">The password is set by a portal owner in the admin panel. Signed-in admins get in automatically.</p>
+  </form>
+</div>
+
+<main class="cc-wrap" id="app" hidden>
+  <div class="cc-kpis" id="kpis"></div>
+  <div class="cc-top"><input type="search" id="q" placeholder="Search case #, title, detective, callsign or report text…"></div>
+  <div class="cc-grid">
+    <div class="cc-list" id="list"><div class="cc-empty">Loading…</div></div>
+    <section class="cc-detail" id="detail"><div class="cc-empty">Pick a case on the left to review it.</div></section>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="forms.js?v=202610200937"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = id => document.getElementById(id), esc = s => Portal.esc(s);
+  const SK = "cid-command:pw";
+  let PW = "", TOKEN = "", FILTER = "pending", CASES = [], SEL = null, qT = null;
+  try { PW = sessionStorage.getItem(SK) || ""; TOKEN = localStorage.getItem("lspd_admin_token") || sessionStorage.getItem("lspd_admin_token") || ""; } catch (e) {}
+  try { const p = JSON.parse(localStorage.getItem("cid-builder:profile") || "null"); if (p && p.name) $("gate").dataset.me = (p.rank ? p.rank + " " : "") + p.name; } catch (e) {}
+
+  function toast(m, t) { const x = $("toast"); x.textContent = m; x.className = "toast show " + (t || ""); clearTimeout(toast.t); toast.t = setTimeout(() => x.className = "toast", 4200); }
+  function auth() { return TOKEN && !PW ? { token: TOKEN } : { password: PW }; }
+
+  async function load(first) {
+    const res = await Portal.post(Object.assign({ action: "cidList", q: $("q").value.trim(), filter: FILTER }, auth()));
+    if (!res.ok) {
+      if (first) { $("gateErr").textContent = TOKEN && !PW ? "" : (res.error || "Wrong password."); if (!PW) TOKEN = ""; showGate(); return false; }
+      toast(res.error || "Could not load the cases.", "bad"); return false;
+    }
+    CASES = res.cases || []; drawKpis(res.counts || {}); drawList();
+    if (SEL) { const s = CASES.find(c => c.id === SEL.id); if (s) { SEL = s; drawDetail(); } }
+    return true;
+  }
+  function showGate() { $("gate").hidden = false; $("app").hidden = true; $("refreshBtn").hidden = $("outBtn").hidden = true; setTimeout(() => $("pw").focus(), 30); }
+  function showApp() { $("gate").hidden = true; $("app").hidden = false; $("refreshBtn").hidden = $("outBtn").hidden = false; }
+
+  $("gateForm").onsubmit = async e => {
+    e.preventDefault(); PW = $("pw").value; $("gateBtn").disabled = true; $("gateErr").textContent = "";
+    try { if (await load(true)) { try { sessionStorage.setItem(SK, PW); } catch (x) {} showApp(); } }
+    catch (x) { $("gateErr").textContent = x.message; }
+    finally { $("gateBtn").disabled = false; }
+  };
+  $("outBtn").onclick = () => { PW = ""; TOKEN = ""; try { sessionStorage.removeItem(SK); } catch (e) {} $("pw").value = ""; showGate(); };
+  $("refreshBtn").onclick = () => load().then(ok => ok && toast("Cases refreshed", "ok"));
+  $("q").oninput = () => { clearTimeout(qT); qT = setTimeout(load, 350); };
+
+  function drawKpis(c) {
+    const K = [["all", "Submitted", c.submitted], ["pending", "Pending review", c.pending], ["accepted", "Accepted", c.accepted], ["denied", "Denied", c.denied]];
+    $("kpis").innerHTML = K.map(([f, l, n]) => `<button type="button" data-f="${f}" class="${FILTER === f ? "on" : ""}"><small>${l}</small><b>${n || 0}</b></button>`).join("");
+  }
+  $("kpis").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return; FILTER = b.dataset.f; load(); };
+  const when = s => { const d = new Date(s); return isNaN(d) ? "" : d.toLocaleString(); };
+  const LBL = { pending: "Pending review", accepted: "Accepted", denied: "Denied" };
+  function drawList() {
+    $("list").innerHTML = CASES.length ? CASES.map(c => `<button type="button" class="cc-item${SEL && SEL.id === c.id ? " on" : ""}" data-id="${esc(c.id)}">
+      <b>${esc(c.caseNo || "—")} · ${esc(c.title || "Untitled")}</b>
+      <small>${esc([c.rank, c.detective].filter(Boolean).join(" "))}${c.badge ? " #" + esc(c.badge) : ""}${c.callsign ? " · " + esc(c.callsign) : ""} · ${esc(when(c.updated))}</small>
+      <small>${esc(c.classification || "No classification")} · ${esc(c.status || "")}${c.priority ? " · " + esc(c.priority) : ""}</small>
+      <span class="cc-pill ${esc(c.review)}">${LBL[c.review] || "Pending review"}${c.grade ? " · " + esc(c.grade) : ""}</span></button>`).join("")
+      : '<div class="cc-empty">No case files here yet.</div>';
+  }
+  $("list").onclick = e => { const b = e.target.closest("[data-id]"); if (!b) return; SEL = CASES.find(c => c.id === b.dataset.id); drawList(); drawDetail(); if (innerWidth < 900) $("detail").scrollIntoView({ behavior: "smooth" }); };
+
+  let DRAFT = null;
+  function drawDetail() {
+    const c = SEL; if (!c) return;
+    let me = $("gate").dataset.me || "";
+    DRAFT = { review: c.review === "pending" ? "" : c.review, grade: c.grade, gradedBy: c.gradedBy || me, comments: c.comments };
+    $("detail").innerHTML = `<h2>${esc(c.caseNo || "—")} · ${esc(c.title || "Untitled")}</h2>
+      <div class="cc-meta">Filed by <b>${esc([c.rank, c.detective].filter(Boolean).join(" "))}</b>${c.badge ? " #" + esc(c.badge) : ""}${c.callsign ? " · " + esc(c.callsign) : ""} · submitted ${esc(when(c.created))}${c.updated !== c.created ? " · edited " + esc(when(c.updated)) : ""}<br>
+        ${esc(c.classification || "No classification")} · ${esc(c.status || "")} · ${esc(c.priority || "")}${c.gradedAt ? `<br>Last review: ${esc(LBL[c.review])}${c.grade ? " · Grade " + esc(c.grade) : ""} by ${esc(c.gradedBy)} · ${esc(when(c.gradedAt))}` : ""}</div>
+      <div class="cc-form">
+        <label class="full">Decision<div class="cc-dec">${["accepted", "denied", "pending"].map(r => `<button type="button" data-r="${r}">${r === "accepted" ? "✅ Accept" : r === "denied" ? "❌ Deny" : "⏳ Back to pending"}</button>`).join("")}</div></label>
+        <label>Grade<div class="cc-grades">${["A", "B", "C", "D", "F"].map(g => `<button type="button" data-g="${g}">${g}</button>`).join("")}</div></label>
+        <label>Graded by<input id="by" maxlength="60" placeholder="Rank Name" value="${esc(DRAFT.gradedBy)}"></label>
+        <label class="full">Comments for the detective<textarea id="cm" maxlength="1500" placeholder="What was good, what needs fixing…">${esc(DRAFT.comments)}</textarea></label>
+        <div class="full" style="display:flex;justify-content:flex-end"><button type="button" class="ci-btn gold" id="saveRev">Save review &amp; notify detective</button></div>
+      </div>
+      <div class="ci-paper"><div class="ci-paper-head"><img src="${esc(document.querySelector("[data-badge]").src)}" alt=""><div><b>LSPD CRIMINAL INVESTIGATIONS DIVISION</b><small>OFFICIAL CASE FILE · ${esc(c.caseNo || "")}</small></div></div><pre>${esc(c.report || "(no report text)")}</pre></div>`;
+    paint();
+    const d = $("detail");
+    d.querySelector(".cc-dec").onclick = e => { const b = e.target.closest("[data-r]"); if (b) { DRAFT.review = b.dataset.r; paint(); } };
+    d.querySelector(".cc-grades").onclick = e => { const b = e.target.closest("[data-g]"); if (b) { DRAFT.grade = DRAFT.grade === b.dataset.g ? "" : b.dataset.g; paint(); } };
+    $("saveRev").onclick = save;
+  }
+  function paint() {
+    document.querySelectorAll(".cc-dec [data-r]").forEach(b => b.classList.toggle("on", b.dataset.r === DRAFT.review));
+    document.querySelectorAll(".cc-grades [data-g]").forEach(b => b.classList.toggle("on", b.dataset.g === DRAFT.grade));
+  }
+  async function save() {
+    if (!DRAFT.review) { toast("Pick Accept or Deny first.", "bad"); return; }
+    const by = $("by").value.trim(), cm = $("cm").value.trim();
+    if (DRAFT.review !== "pending" && !by) { toast("Add who graded it.", "bad"); $("by").focus(); return; }
+    const b = $("saveRev"); b.disabled = true; b.textContent = "Saving…";
+    try {
+      const res = await Portal.post(Object.assign({ action: "cidReview", id: SEL.id, review: DRAFT.review, grade: DRAFT.grade, gradedBy: by, comments: cm }, auth()));
+      if (!res.ok) throw new Error(res.error || "Could not save the review.");
+      toast(res.warning ? "Review saved (" + res.warning + ")" : "Review saved, Discord post updated and the detective tagged", res.warning ? "bad" : "ok");
+      await load();
+    } catch (e) { toast(e.message, "bad"); }
+    finally { b.disabled = false; b.textContent = "Save review & notify detective"; }
+  }
+
+  // the division's badge, if the CID form has one
+  fetch("data/portal.json?t=" + Date.now(), { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(s => {
+    const f = s && s.config && (s.config.forms || []).find(x => x.cidApp); if (!f || !f.logoUrl) return;
+    document.querySelectorAll("[data-badge]").forEach(i => { i.onerror = () => { i.onerror = null; i.src = "img/lspd-seal.png"; }; i.src = f.logoUrl; });
+  }).catch(() => {});
+
+  if (PW || TOKEN) load(true).then(ok => ok && showApp()).catch(e => { $("gateErr").textContent = e.message; showGate(); });
+  else showGate();
+})();
+</script>
+</body>
+</html>

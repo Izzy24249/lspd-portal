@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 45;
+const BACKEND_VERSION = 46;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -48,7 +48,7 @@ function doGet(e) {
 }
 
 // Only actions that change saved data wait in line; reading, logging in and Discord posting run side by side.
-const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1, hoursRefresh: 1, promoCredit: 1, promoRemove: 1, promoExcuse: 1, promoSince: 1 };
+const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1, hoursRefresh: 1, promoCredit: 1, promoRemove: 1, promoExcuse: 1, promoSince: 1, cidSetPassword: 1 };
 
 function doPost(e) {
   let d;
@@ -750,6 +750,9 @@ function handleSubmit_(d) {
     if (!r.tag) return;
     if (ruleMatches_(r, values, repeaters)) tags.push(r.tag);
   });
+  const cidX = d.cid && form.cidApp ? cidPrep_(form, d.cid) : null;            // the stand-alone CID case builder page
+  if (cidX && cidX.error) return { ok: false, error: cidX.error };
+  if (cidX) tags = tags.concat(cidX.tags);
   tags = tags.map(str_).filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 5);
 
   // ---- "Classic" Discord layout (per form): people + date across the top, then each section as a ticked list ----
@@ -871,7 +874,12 @@ function handleSubmit_(d) {
     first.thread_name = clip_(fillTemplate_(tt, values) || form.title, 100);
     if (tags.length) first.applied_tags = tags;
   }
-  const r1 = discordPost_(webhook.url, first, null);
+  if (cidX) {
+    first.content = cidX.content; first.allowed_mentions = { parse: [], users: cidX.mentions };
+    if (cidX.file) messages[0][0].image = { url: "attachment://case-file.png" };
+    if (cidX.rec) return cidUpdate_(form, webhook, cidX, first, d);                // "Save to Discord": edit the earlier post
+  }
+  const r1 = discordPost_(webhook.url, first, null, cidX ? cidX.file : null);
   if (!r1.ok) return { ok: false, error: r1.error };
   const threadId = isForum && r1.body ? r1.body.channel_id : null;
   let warning = "";
@@ -900,6 +908,11 @@ function handleSubmit_(d) {
     return { ok: true };
   });
   if (!saved.ok) warning = warning || "posted to Discord, but the sheet was busy and the record wasn't logged";
+  if (cidX) {
+    let id = "";
+    try { id = cidRecord_(form, webhook, cidX, first, threadId, r1.body && r1.body.id, values); } catch (e) { warning = warning || "posted, but Command review couldn't save it: " + errMsg_(e); }
+    return warning ? { ok: true, id: id, warning: warning } : { ok: true, id: id };
+  }
   return warning ? { ok: true, warning: warning } : { ok: true };
 }
 
@@ -1695,6 +1708,136 @@ function discordTime_(date, time) {
 }
 
 // =====================================================================
+// CID CASE BUILDER (cid.html): officer profile, forum tags, media links, case-file image,
+// "Save to Discord" edits, and Command review (password or admin sign-in)
+// =====================================================================
+const CID_SHEET_ = "CID Submissions";
+const CID_HEAD_ = ["ID", "Created", "Updated", "Case #", "Title", "Classification", "Case Status", "Priority", "Detective", "Rank", "Badge", "Callsign", "Discord ID", "Thread ID", "Message ID", "Webhook ID", "Content", "Report", "Case Data", "Review", "Grade", "Graded By", "Comments", "Graded At", "Form"];
+const CID_MEDIA_HOSTS_ = ["imgur.com", "i.imgur.com", "m.imgur.com", "cdn.discordapp.com", "media.discordapp.net", "medal.tv", "www.medal.tv"];
+function cidSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(CID_SHEET_);
+  if (!sh) { sh = ss.insertSheet(CID_SHEET_); sh.appendRow(CID_HEAD_); sh.setFrozenRows(1); }
+  return sh;
+}
+function cidMediaOk_(u) { const m = /^https:\/\/([^\/?#]+)(\/[^\s]*)?$/i.exec(str_(u)); return !!(m && CID_MEDIA_HOSTS_.indexOf(m[1].toLowerCase()) !== -1 && (m[2] || "").length > 1); }
+function cidPrep_(form, c) {
+  const p = c.profile || {}, did = /^\d{17,20}$/.test(str_(p.discordId)) ? str_(p.discordId) : "";
+  if (!did) return { error: "Add your Discord ID to your officer profile (top of the page) before posting." };
+  const allowed = (form.forumTagOptions || []).map(t => str_(t.id));
+  const tags = (Array.isArray(c.forumTags) ? c.forumTags : []).map(str_).filter(t => allowed.indexOf(t) !== -1);
+  const media = (Array.isArray(c.media) ? c.media : []).filter(m => m && cidMediaOk_(m.url)).slice(0, 10).map(m => ({ tag: clip_(str_(m.tag) || "Evidence", 40), url: str_(m.url) }));
+  const who = [p.rank, p.name].map(str_).filter(Boolean).join(" ") + (str_(p.badge) ? " #" + str_(p.badge) : "") + (str_(p.callsign) ? " (" + str_(p.callsign) + ")" : "");
+  const content = clip_("<@" + did + "> filed this case file" + (who ? " — " + who : "") + (media.length ? "\n📎 **Evidence media**\n" + media.map(m => "• " + m.tag + ": " + m.url).join("\n") : ""), 1900);
+  let file = null;
+  const b64 = str_(c.image).replace(/^data:image\/png;base64,/, "");
+  if (b64 && b64.length < 11e6) { try { file = Utilities.newBlob(Utilities.base64Decode(b64), "image/png", "case-file.png"); } catch (e) {} }
+  let rec = null;
+  if (str_(c.update)) {
+    rec = cidFind_(str_(c.update));
+    if (!rec) return { error: "That case isn't in Command's records any more. Post it again instead." };
+    if (rec.discordId !== did) return { error: "Only the detective who posted this case can update it." };
+  }
+  return { tags: tags, media: media, content: content, mentions: [did], file: file, profile: { name: clip_(str_(p.name), 60), rank: clip_(str_(p.rank), 40), badge: clip_(str_(p.badge), 20), callsign: clip_(str_(p.callsign), 30), discordId: did },
+    report: clip_(str_(c.report), 45000), data: clip_(JSON.stringify(c.caseData || {}), 45000), rec: rec };
+}
+function cidRowObj_(r, i) {
+  const g = k => r[CID_HEAD_.indexOf(k)];
+  const iso = v => isDate_(v) ? v.toISOString() : str_(v);
+  return { row: i + 1, id: str_(g("ID")), created: iso(g("Created")), updated: iso(g("Updated")), caseNo: str_(g("Case #")), title: str_(g("Title")), classification: str_(g("Classification")), status: str_(g("Case Status")), priority: str_(g("Priority")),
+    detective: str_(g("Detective")), rank: str_(g("Rank")), badge: str_(g("Badge")).replace(/^'/, ""), callsign: str_(g("Callsign")), discordId: str_(g("Discord ID")).replace(/^'/, ""),
+    threadId: str_(g("Thread ID")).replace(/^'/, ""), messageId: str_(g("Message ID")).replace(/^'/, ""), webhookId: str_(g("Webhook ID")), content: str_(g("Content")), report: str_(g("Report")),
+    review: str_(g("Review")) || "pending", grade: str_(g("Grade")), gradedBy: str_(g("Graded By")), comments: str_(g("Comments")), gradedAt: iso(g("Graded At")) };
+}
+function cidAll_() { const v = cidSheet_().getDataRange().getValues(); const out = []; for (let i = 1; i < v.length; i++) if (str_(v[i][0])) out.push(cidRowObj_(v[i], i)); return out; }
+function cidFind_(id) { return cidAll_().find(r => r.id === id) || null; }
+function cidRecord_(form, webhook, x, first, threadId, messageId, values) {
+  const id = Utilities.getUuid().replace(/-/g, "").slice(0, 16), now = new Date(), p = x.profile;
+  const v = k => { const f = allFields_(form).find(ff => new RegExp(k, "i").test(ff.id + " " + (ff.label || ""))); return f ? str_(values[f.id]) : ""; };
+  const row = [id, now, now, cellSafe_(v("case ?number|caseno")), cellSafe_(v("title")), cellSafe_(v("classification")), cellSafe_(v("case status|ccstatus")), cellSafe_(v("priority")),
+    cellSafe_(p.name), p.rank, "'" + p.badge, cellSafe_(p.callsign), "'" + p.discordId, "'" + (threadId || ""), "'" + (messageId || ""), webhook.id, cellSafe_(first.content || ""), cellSafe_(x.report), cellSafe_(x.data), "pending", "", "", "", "", form.id];
+  withLock_(() => { cidSheet_().appendRow(row); return { ok: true }; });
+  return id;
+}
+function cidUpdate_(form, webhook, x, first, d) {
+  const rec = x.rec, wh = webhookById_(rec.webhookId) || webhook;
+  if (!rec.messageId) return { ok: false, error: "The original Discord post wasn't recorded, so it can't be edited. Post it again instead." };
+  let url = wh.url.split("?")[0] + "/messages/" + rec.messageId + (rec.threadId ? "?thread_id=" + rec.threadId : "");
+  const body = { content: first.content + (rec.review && rec.review !== "pending" ? "\n" + cidReviewLine_(rec) : ""), embeds: first.embeds, allowed_mentions: first.allowed_mentions, attachments: [] };
+  const opts = { method: "patch", muteHttpExceptions: true };
+  if (x.file) opts.payload = { payload_json: JSON.stringify(body), "files[0]": x.file }; else { opts.contentType = "application/json"; opts.payload = JSON.stringify(body); }
+  const res = UrlFetchApp.fetch(url, opts), code = res.getResponseCode();
+  if (code !== 200) return { ok: false, error: "Discord wouldn't update the post (" + code + "). " + clip_(res.getContentText(), 200) };
+  withLock_(() => {
+    const sh = cidSheet_(), c = n => CID_HEAD_.indexOf(n) + 1;
+    sh.getRange(rec.row, c("Updated")).setValue(new Date());
+    sh.getRange(rec.row, c("Content")).setValue(cellSafe_(first.content));
+    sh.getRange(rec.row, c("Report")).setValue(cellSafe_(x.report));
+    sh.getRange(rec.row, c("Case Data")).setValue(cellSafe_(x.data));
+    return { ok: true };
+  });
+  return { ok: true, id: rec.id, updated: true };
+}
+function cidReviewLine_(r) {
+  const word = { accepted: "✅ Accepted", denied: "❌ Denied", pending: "⏳ Pending review" }[r.review] || r.review;
+  return "🛡️ **Command review:** " + word + (r.grade ? " · Grade **" + r.grade + "**" : "") + (r.gradedBy ? " · by " + r.gradedBy : "");
+}
+// Command access: the CID Command password (set by an owner in admin), or a signed-in portal admin
+function cidCommandOk_(d) {
+  if (str_(d.token) && sessionAdmin_(d.token)) return true;
+  const cache = CacheService.getScriptCache(), fails = Number(cache.get("cid_fails") || 0);
+  if (fails >= 20) throw new Error("Too many wrong passwords. Try again in 15 minutes.");
+  const salt = PROPS_.getProperty("CID_CMD_SALT"), hash = PROPS_.getProperty("CID_CMD_HASH");
+  if (!salt || !hash) throw new Error("Command access isn't set up yet. An owner sets the CID Command password in the admin panel (Portal Settings).");
+  if (hashPw_(String(d.password || ""), salt) === hash) return true;
+  cache.put("cid_fails", String(fails + 1), 900);
+  return false;
+}
+function cidHandle_(d) {
+  const a = d.action;
+  if (a === "cidMine") {                              // a detective's own cases: review status by the ids their browser kept
+    const ids = (Array.isArray(d.ids) ? d.ids : []).map(str_).filter(Boolean).slice(0, 200);
+    const list = cidAll_().filter(r => ids.indexOf(r.id) !== -1).map(r => ({ id: r.id, review: r.review, grade: r.grade, gradedBy: r.gradedBy, comments: r.comments, gradedAt: r.gradedAt }));
+    return { ok: true, reviews: list };
+  }
+  if (!cidCommandOk_(d)) return { ok: false, error: "Wrong password." };
+  if (a === "cidList") {
+    const q = str_(d.q).toLowerCase(), f = str_(d.filter);
+    let list = cidAll_().reverse();
+    const counts = { submitted: list.length, pending: list.filter(r => r.review === "pending").length, accepted: list.filter(r => r.review === "accepted").length, denied: list.filter(r => r.review === "denied").length };
+    if (f && f !== "all") list = list.filter(r => r.review === f);
+    if (q) list = list.filter(r => [r.caseNo, r.title, r.detective, r.callsign, r.badge, r.report].join(" ").toLowerCase().indexOf(q) !== -1);
+    return { ok: true, counts: counts, cases: list.slice(0, 300).map(r => { const o = Object.assign({}, r); delete o.row; delete o.webhookId; delete o.content; return o; }) };
+  }
+  if (a === "cidReview") {
+    const rec = cidFind_(str_(d.id)); if (!rec) return { ok: false, error: "Case not found." };
+    const review = ["accepted", "denied", "pending"].indexOf(str_(d.review)) === -1 ? "pending" : str_(d.review);
+    const grade = ["A", "B", "C", "D", "F"].indexOf(str_(d.grade)) === -1 ? "" : str_(d.grade);
+    const by = clip_(str_(d.gradedBy), 60), comments = clip_(str_(d.comments), 1500);
+    if (review !== "pending" && !by) return { ok: false, error: "Add who graded it." };
+    Object.assign(rec, { review: review, grade: grade, gradedBy: by, comments: comments });
+    withLock_(() => {
+      const sh = cidSheet_(), c = n => CID_HEAD_.indexOf(n) + 1;
+      sh.getRange(rec.row, c("Review"), 1, 5).setValues([[review, grade, cellSafe_(by), cellSafe_(comments), new Date()]]);
+      return { ok: true };
+    });
+    let warning = "";
+    const wh = webhookById_(rec.webhookId);
+    if (wh && rec.messageId) {
+      // the case's own post shows the decision, and the detective is tagged in the thread
+      try {
+        const base = wh.url.split("?")[0], tq = rec.threadId ? "?thread_id=" + rec.threadId : "";
+        UrlFetchApp.fetch(base + "/messages/" + rec.messageId + tq, { method: "patch", contentType: "application/json", muteHttpExceptions: true,
+          payload: JSON.stringify({ content: clip_(rec.content + "\n" + cidReviewLine_(rec), 1990), allowed_mentions: { parse: [] } }) });
+        const r = discordPost_(wh.url, { content: clip_("<@" + rec.discordId + "> " + cidReviewLine_(rec) + (comments ? "\n> " + comments.split("\n").join("\n> ") : ""), 1990), allowed_mentions: { parse: [], users: rec.discordId ? [rec.discordId] : [] } }, rec.threadId || null);
+        if (!r.ok) warning = "saved, but Discord said: " + r.error;
+      } catch (e) { warning = "saved, but Discord couldn't be updated: " + errMsg_(e); }
+    } else warning = "saved; the Discord post wasn't recorded so it wasn't updated";
+    return warning ? { ok: true, warning: warning } : { ok: true };
+  }
+  return { ok: false, error: "Unknown action." };
+}
+
+// =====================================================================
 // DISCORD HELPERS
 // =====================================================================
 function addListFields_(fields, name, lines) {
@@ -1915,7 +2058,8 @@ function allPayload_(me) {
       return { username: x.username, role: x.role, created: x.created ? new Date(x.created).toISOString() : "", lastLogin: p ? p.when : x.lastLogin ? new Date(x.lastLogin).toISOString() : "" };
     }),
     log: readLog_(200),
-    snapshot: snapshotStatus_()
+    snapshot: snapshotStatus_(),
+    cidCommand: !!PROPS_.getProperty("CID_CMD_HASH")
   };
 }
 function handleAdmin_(d) {
@@ -1936,6 +2080,8 @@ function handleAdmin_(d) {
     admin.lastLogin = new Date().toISOString();
     return Object.assign(allPayload_(admin), { ok: true, token: newSession_(admin, d.remember !== false) });   // one trip: sign in + load the portal
   }
+
+  if (/^cid(Mine|List|Review)$/.test(a)) return cidHandle_(d);
 
   const me = sessionAdmin_(d.token);
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
@@ -1961,6 +2107,15 @@ function handleAdmin_(d) {
       logAdmin_(me.username, "fast loading", d.off ? "turned off" : "set up for " + repo);
       const r = d.off ? { ok: true } : publishSnapshot_(true);
       return { ok: r.ok, error: r.error, snapshot: snapshotStatus_() };
+    }
+    case "cidSetPassword": {    // the CID Command review page password
+      ownerOnly();
+      const pw = String(d.password || "");
+      if (pw.length < 6) throw new Error("Use at least 6 characters.");
+      const salt = Utilities.getUuid();
+      PROPS_.setProperty("CID_CMD_SALT", salt); PROPS_.setProperty("CID_CMD_HASH", hashPw_(pw, salt));
+      logAdmin_(me.username, "CID command password", "changed");
+      return { ok: true };
     }
     case "snapshotPublish": {
       const r = publishSnapshot_(true);
@@ -2288,6 +2443,8 @@ function validateConfig_(c) {
     f.section = clip_(str_(f.section), 40);
     f.discordStyle = f.discordStyle === "classic" || f.discordStyle === "record" ? f.discordStyle : "";
     f.discordEmoji = !!f.discordEmoji;
+    f.cidApp = !!f.cidApp;
+    f.forumTagOptions = (Array.isArray(f.forumTagOptions) ? f.forumTagOptions : []).filter(t => t && /^\d{15,21}$/.test(str_(t.id)) && str_(t.label)).slice(0, 25).map(t => ({ id: str_(t.id), label: clip_(str_(t.label), 40) }));
     f.theme = /^[a-z][a-z0-9-]{1,20}$/.test(str_(f.theme)) ? str_(f.theme) : "sheet"; // any look the website offers
     f.watermark = ["cid", "custom"].indexOf(f.watermark) === -1 ? "" : f.watermark;
     if (f.watermark === "custom" && !IMG_RE.test(str_(f.watermarkUrl))) throw new Error(f.title + ": the watermark image must be a file like img/logo.png or an https:// link (no spaces or quotes).");

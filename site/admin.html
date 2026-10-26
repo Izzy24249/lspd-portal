@@ -377,7 +377,7 @@ function saveToken(t, remember) {
 }
 const SNAP_KEY = "lspd_admin_snap";      // last loaded portal, so the admin opens instantly next time and refreshes behind the scenes
 function saveSnap(res) { try { localStorage.setItem(SNAP_KEY, JSON.stringify({ me: res.me, config: res.config, webhooks: res.webhooks, backend: res.backend, admins: res.admins, log: (res.log || []).slice(0, 60), snapshot: res.snapshot || SNAP || null, at: Date.now() })); } catch (e) {} }
-let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [], SNAP = null, BACKEND_HAVE = 0;
+let ME = null, CFG = null, BASE = "", VERSION = 0, HOOKS = [], ADMINS = [], LOG = [], SNAP = null, BACKEND_HAVE = 0, CIDCMD = null;
 let TAB = "forms", EDIT = null;           // EDIT = id of form being edited
 let PV = "side";                          // preview layout: side | below | off
 try { PV = localStorage.getItem("lspd_admin_preview") || "side"; } catch (e) {}
@@ -509,7 +509,7 @@ async function loadAll(keepEdits) {
 function applyAll(res, keepEdits) {
   saveSnap(res);
   $("syncing").classList.remove("on");
-  ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log; if (res.snapshot) SNAP = res.snapshot;   // the quick-open copy may not carry it: keep what we know
+  ME = res.me; HOOKS = res.webhooks; ADMINS = res.admins; LOG = res.log; if (res.snapshot) SNAP = res.snapshot; if (res.cidCommand != null) CIDCMD = res.cidCommand;   // the quick-open copy may not carry it: keep what we know
   if (Portal.setRoster) Portal.setRoster(res.roster || []);
   if (Portal.setRosters) { Portal.setRosters(res.rosters || {}); window.__rosters = res.rosters || {}; }
   showBackendWarning(res.backend || 0); BACKEND_HAVE = res.backend || BACKEND_HAVE;
@@ -1472,6 +1472,7 @@ function pageSettingsInner(page) {
       e.target.disabled = false;
     } }, "Post / refresh board now")) : null));
   page.append(fastLoadingSec());
+  page.append(cidCommandSec());
   page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
     h("h3", { text: "Maintenance mode" }),
     h("p", { class: "help", text: "Shows a red notice and blocks all submissions until turned off. Officers' drafts are kept in their browser." }),
@@ -1509,6 +1510,24 @@ function fastLoadingSec() {
         st.on ? h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Turn off fast loading? The site will load from Google again.")) run({ off: true, repo: repo.value.trim() }, "Fast loading turned off."); } }, "Turn off") : null));
   };
   draw();
+  return box;
+}
+
+/* the password for the CID Command review page (cid-command.html) */
+function cidCommandSec() {
+  const box = h("div", { class: "sec", style: "display:grid;gap:12px" });
+  box.append(h("h3", { text: "CID Command review" }),
+    h("p", { class: "help", text: "Command uses cid-command.html to grade CID case files (Accept / Deny, A–F) and the detective is tagged in Discord. Give this password to CID Command only. Signed-in admins get in without it." }),
+    h("div", { class: "help", text: CIDCMD ? "Status: password is set." : CIDCMD === false ? "Status: no password yet, so Command can't sign in." : BACKEND_HAVE >= 46 ? "" : "Paste the new WebApp.gs (version 46 or newer) and deploy a new version to use this." }));
+  if (ME.role !== "owner") return box;
+  const pw = h("input", { type: "password", autocomplete: "new-password", placeholder: "At least 6 characters" });
+  box.append(h("div", { class: "g2" }, field(CIDCMD ? "New Command password" : "Command password", pw)),
+    h("div", {}, h("button", { class: "btn primary sm", onclick: async e => {
+      if (pw.value.length < 6) return toast("Use at least 6 characters.", "bad");
+      e.target.disabled = true;
+      try { await api("cidSetPassword", { password: pw.value }); CIDCMD = true; pw.value = ""; toast("CID Command password saved.", "ok"); box.replaceWith(cidCommandSec()); }
+      catch (err) { toast(err.message, "bad"); e.target.disabled = false; }
+    } }, CIDCMD ? "Change password" : "Set password")));
   return box;
 }
 
