@@ -122,7 +122,7 @@
   }
   function enterBuilder() {
     introDone = true;
-    $("intro").classList.add("gone"); setTimeout(() => $("intro").hidden = true, 450);
+    $("intro").classList.add("gone"); setTimeout(() => { $("intro").hidden = true; $("introSign").innerHTML = ""; }, 450);
     Beat.userStart();
     if (READY) startBuilder(); else $("main").hidden = false, $("head").hidden = false;
   }
@@ -237,11 +237,17 @@
     return out;
   }
 
-  // ---------------- completeness meter ----------------
+  // ---------------- completeness meter (only counts the parts this form still has) ----------------
   function completeness(d) {
     const v = d.values || {}, R = d.repeaters || {}, has = (l, k) => (R[l] || []).some(r => String(r[k] || "").trim());
-    const parts = [v.ccTitle, v.ccLocation, v.ccLead, v.ccBadge, v.ccSummary, v.ccNarrative, v.ccConclusion, has("ccSuspects", "name") ? "y" : "", has("ccEvidence", "desc") ? "y" : "", has("ccCharges", "charge") ? "y" : ""];
-    return Math.round(parts.filter(x => String(x || "").trim()).length / parts.length * 100);
+    const ids = new Set(); (FORM.blocks || []).forEach(b => { if (b.id) ids.add(b.id); (b.fields || []).forEach(f => ids.add(f.id)); });
+    const parts = [["ccTitle", v.ccTitle], ["ccLocation", v.ccLocation], ["ccLead", v.ccLead], ["ccBadge", v.ccBadge], ["ccSummary", v.ccSummary], ["ccNarrative", v.ccNarrative], ["ccConclusion", v.ccConclusion],
+      ["ccSuspects", has("ccSuspects", "name")], ["ccEvidence", has("ccEvidence", "desc")], ["ccCharges", has("ccCharges", "charge")]].filter(([id]) => ids.has(id));
+    // anything an admin marked required counts too
+    (FORM.blocks || []).forEach(b => { (b.fields || []).forEach(f => { if (f.required && !parts.some(p => p[0] === f.id)) parts.push([f.id, v[f.id]]); });
+      if (b.type === "longtext" && b.required && !parts.some(p => p[0] === b.id)) parts.push([b.id, v[b.id]]); });
+    if (!parts.length) return 0;
+    return Math.round(parts.filter(([, x]) => x === true || (typeof x === "string" && x.trim())).length / parts.length * 100);
   }
   function drawMeter() { const p = completeness(CUR.data); $("meterBar").style.width = p + "%"; $("meterPct").textContent = p + "%"; $("meterBar").className = p >= 100 ? "full" : ""; }
   function drawCount() { $("caseCount").textContent = CASES.length; }
@@ -249,7 +255,7 @@
     const b = $("profileBtn");
     b.innerHTML = PROFILE ? `<span class="ci-dot${isDiscordId(PROFILE.discordId) ? "" : " warn"}"></span>${esc(PROFILE.rank + " " + PROFILE.name)}${PROFILE.callsign ? ` · ${esc(PROFILE.callsign)}` : ""}` : "Sign in";
     b.title = PROFILE && !isDiscordId(PROFILE.discordId) ? "Add your Discord ID to post cases" : "Your officer details";
-    $("lockWho").textContent = PROFILE ? "Signed in: " + PROFILE.rank + " " + PROFILE.name : "";
+    $("lockWho").innerHTML = PROFILE ? `Signed in: <b>${esc(PROFILE.rank + " " + PROFILE.name)}</b>${PROFILE.callsign ? ` · Callsign <em>${esc(PROFILE.callsign)}</em>` : ""}` : "Not signed in";
   }
 
   // ---------------- the case file in three formats ----------------
@@ -257,42 +263,80 @@
   const N = (s, d) => T(s) || (d == null ? "N/A" : d);
   const noIds = s => T(s).split(";").map(x => x.replace(/\s*\(\d{15,21}\)\s*$/, "").trim()).filter(Boolean).join(", ");
   const CLASS_RE = /\((Felony|Misdemeanor|Infraction)[^)]*\)\s*$/i;
+  // Built from the form itself, in the form's order, so anything an admin adds, renames or removes in the
+  // form editor shows up here. The original sections keep the division's case-file layout.
+  const titleCase = t => T(t).replace(/:\s*$/, "").toLowerCase().replace(/(^|[\s/(&-])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+  const lbl = x => T(x && x.label).replace(/:\s*$/, "") || (x && x.id) || "";
+  const one = b => { const m = /^\s*\+?\s*add\s+(.+)$/i.exec(b.addLabel || ""); return m ? titleCase(m[1]) : titleCase(b.title || "Entry").replace(/s$/, ""); };
+  const linked = s => T(s).split(";").map(x => x.trim()).filter(Boolean).join(", ");
+  function cell(c, val) {
+    if (c.type === "check" || c.type === "checkbox") return val ? "Yes" : "No";
+    if (c.type === "officer" || c.type === "officers" || c.type === "discord_id") return noIds(val);
+    return T(val);
+  }
+  const PEOPLE = new Set(["ccSuspects", "ccVictims", "ccWitnesses"]);
   function sectionsOf(d) {
     const v = d.values || {}, R = d.repeaters || {}, S = [];
-    S.push({ h: "Case Information", b: [{ k: "fields", rows: [["Case Number", N(v.ccCaseNo)], ["Case Title", N(v.ccTitle, "Untitled")], ["Classification", N(v.ccClass)], ["Status", N(v.ccStatus)], ["Priority", N(v.ccPriority)], ["Date Opened", N(v.ccDate)], ["Location", N(v.ccLocation)]] }] });
-    const lead = [v.ccRank, v.ccLead].map(T).filter(Boolean).join(" ");
-    S.push({ h: "Investigating Personnel", b: [{ k: "fields", rows: [["Lead Investigator", N(lead) + (T(v.ccBadge) ? " #" + T(v.ccBadge) : "")], ["Division", N(v.ccDivision, "LSPD Criminal Investigations Division")], ["Certifications", N(v.ccCerts, "None")], ["Assisting", N(noIds(v.ccAssist), "None")]] }] });
-    if (T(v.ccSummary)) S.push({ h: "Incident Summary", b: [{ k: "p", text: T(v.ccSummary) }] });
-    [["ccSuspects", "Suspects", "Suspect"], ["ccVictims", "Victims", "Victim"], ["ccWitnesses", "Witnesses", "Witness"]].forEach(([id, h, one]) => {
-      const rows = (R[id] || []).filter(r => T(r.name) || T(r.details)); if (!rows.length) return;
-      const b = [];
-      rows.forEach((r, i) => { b.push({ k: "sub", text: one + " " + (i + 1) + ": " + N(r.name, "Unidentified") });
-        const f = [["Status", N(r.status, "Unknown")]]; if (T(r.dob)) f.push(["DOB", T(r.dob)]); if (T(r.phone)) f.push(["Phone", T(r.phone)]); if (T(r.details)) f.push(["Details", T(r.details)]);
-        b.push({ k: "fields", rows: f }); });
-      S.push({ h: h, b: b });
+    let cur = null;
+    const sec = h => { cur = { h: h, b: [] }; S.push(cur); return cur; };
+    const fieldsBlock = rows => { if (!rows.length) return; if (!cur) sec("Case Information"); const last = cur.b[cur.b.length - 1]; if (last && last.k === "fields") last.rows.push(...rows); else cur.b.push({ k: "fields", rows: rows }); };
+    const hasLead = (FORM.blocks || []).some(b => (b.fields || []).some(f => f.id === "ccLead"));
+    (FORM.blocks || []).forEach(b => {
+      if (b.type === "text" && b.style === "heading") { sec(titleCase(b.text)); return; }
+      if (b.type === "fields" || b.type === "strip") {
+        fieldsBlock((b.fields || []).filter(f => f.type !== "static").flatMap(f => {
+          if (hasLead && (f.id === "ccRank" || f.id === "ccBadge")) return [];
+          if (f.id === "ccLead") { const lead = [v.ccRank, v.ccLead].map(T).filter(Boolean).join(" "); return [["Lead Investigator", N(lead) + (T(v.ccBadge) ? " #" + T(v.ccBadge) : "")]]; }
+          const val = cell(f, v[f.id]);
+          return [[f.id === "ccTitle" ? "Case Title" : lbl(f), val || (f.type === "officers" ? "None" : f.id === "ccTitle" ? "Untitled" : "N/A")]];
+        }));
+        return;
+      }
+      if (b.type === "longtext") { const t = T(v[b.id]); if (t) sec(titleCase(b.title || b.id)).b.push(...t.split(/\n\s*\n/).map(p => ({ k: "p", text: p.trim() }))); cur = null; return; }
+      if (b.type === "checklist") {
+        const st = (d.checklists || {})[b.id] || {};
+        if (Object.values(st).some(Boolean)) sec(titleCase(b.title || "Checklist")).b.push({ k: "list", items: (b.items || []).map(it => (st[it.topic] ? "✓ " : "✗ ") + it.topic) });
+        cur = null; return;
+      }
+      if (b.type !== "repeater") return;
+      const cols = (b.columns || []).concat(b.check ? [Object.assign({ type: "check" }, b.check)] : []), byId = id => cols.find(c => c.id === id);
+      const rows = (R[b.id] || []).filter(r => cols.some(c => c.type !== "check" && T(r[c.id])));
+      cur = null;
+      if (!rows.length) return;
+      const s = sec(titleCase(b.title || b.id));
+      const rest = (r, skip) => cols.filter(c => !skip.includes(c.id)).map(c => [lbl(c), cell(c, r[c.id])]).filter(([, x], i) => x || cols.filter(c => !skip.includes(c.id))[i].type === "check");
+      if (b.id === "ccCharges" && byId("charge")) {
+        s.b.push({ k: "list", items: rows.filter(r => T(r.charge)).map(r => {
+          const cnt = Math.max(1, parseInt(r.count, 10) || 1), x = Portal.sentence(r.charge, cnt), m = CLASS_RE.exec(r.charge), name = T(r.charge).replace(CLASS_RE, "").trim();
+          const extra = [m ? m[1] : "", x.months ? x.months + " months" : "", x.fine ? "$" + x.fine.toLocaleString("en-US") : ""].filter(Boolean).join(" · ");
+          const more = cols.filter(c => !["suspect", "charge", "count"].includes(c.id) && c.type !== "check").map(c => T(r[c.id])).filter(Boolean);
+          return N(r.suspect, "Unassigned") + ": " + name + " (x" + cnt + ")" + (extra ? " - " + extra : "") + (more.length ? " · " + more.join(" · ") : "") + (b.check && r[b.check.id] ? " · " + lbl(b.check).toLowerCase() : "");
+        }) });
+      } else if (b.id === "ccTimeline" && byId("event") && cols.length <= 3) {
+        s.b.push({ k: "list", items: rows.map(r => N(r.time, "--:--") + " — " + T(r.event)) });
+      } else if (b.id === "ccVehicles" && byId("plate")) {
+        s.b.push({ k: "list", items: rows.map(r => {
+          const more = cols.filter(c => !["plate", "color", "makeModel"].includes(c.id) && c.type !== "check").map(c => lbl(c) + ": " + cell(c, r[c.id])).filter(x => !/:\s*$/.test(x));
+          return [T(r.color), T(r.makeModel)].filter(Boolean).join(" ") + (T(r.plate) ? " — plate " + T(r.plate).toUpperCase() : "") + (more.length ? " · " + more.join(" · ") : "") + (T(r._tags) ? " (linked to " + linked(r._tags) + ")" : "") + (b.check && r[b.check.id] ? " · " + lbl(b.check).toLowerCase() : "");
+        }) });
+      } else if (cols.length <= 2 && !T(rows[0]._tags) && b.id !== "ccEvidence" && !PEOPLE.has(b.id)) {
+        s.b.push({ k: "list", items: rows.map(r => cols.map(c => cell(c, r[c.id])).filter(Boolean).join(" — ")) });
+      } else {
+        // people, evidence and any list an admin adds: one entry per row
+        const ev = b.id === "ccEvidence", first = ev ? null : cols.find(c => c.type !== "check");
+        rows.forEach((r, i) => {
+          if (ev) s.b.push({ k: "sub", text: "[" + N(r.etag, "—") + "] " + N(r.type, "Evidence") });
+          else s.b.push({ k: "sub", text: one(b) + " " + (i + 1) + ": " + N(cell(first, r[first.id]), PEOPLE.has(b.id) ? "Unidentified" : "—") });
+          const f = rest(r, ev ? ["etag", "type"] : [first.id]);
+          if (PEOPLE.has(b.id)) { const st = f.find(x => x[0] === lbl(byId("status"))); if (byId("status") && !st) f.unshift([lbl(byId("status")), "Unknown"]); }
+          if (T(r._tags)) f.push(["Linked To", linked(r._tags)]);
+          if (f.length) s.b.push({ k: "fields", rows: f });
+          const media = ((CUR.media || {})[r._id] || []).filter(mediaOk);
+          if (media.length) s.b.push({ k: "list", items: media.map(u => (/medal\.tv/i.test(u) ? "Medal clip" : "Media") + ": " + u) });
+        });
+      }
     });
-    const ev = (R.ccEvidence || []).filter(r => T(r.desc));
-    if (ev.length) S.push({ h: "Evidence Log", b: ev.flatMap(r => {
-      const media = (CUR.media[r._id] || []).filter(mediaOk), f = [["Description", T(r.desc)], ["Recovered At", N(r.where)], ["Collected By", N(r.by)]];
-      if (T(r._tags)) f.push(["Linked To", T(r._tags).split(";").map(x => x.trim()).filter(Boolean).join(", ")]);
-      f.push(["Logged in CAD", r.logged ? "Yes" : "No"]);
-      return [{ k: "sub", text: "[" + N(r.etag, "—") + "] " + N(r.type, "Evidence") }, { k: "fields", rows: f }].concat(media.length ? [{ k: "list", items: media.map(u => (/medal\.tv/i.test(u) ? "Medal clip" : "Media") + ": " + u) }] : []);
-    }) });
-    const veh = (R.ccVehicles || []).filter(r => T(r.plate) || T(r.makeModel));
-    if (veh.length) S.push({ h: "Vehicles Involved", b: [{ k: "list", items: veh.map(r => [T(r.color), T(r.makeModel)].filter(Boolean).join(" ") + (T(r.plate) ? " — plate " + T(r.plate).toUpperCase() : "") + (T(r._tags) ? " (linked to " + T(r._tags).replace(/\s*;\s*/g, ", ") + ")" : "") + (r.plateRun ? " · plate run" : "")) }] });
-    const tl = (R.ccTimeline || []).filter(r => T(r.event));
-    if (tl.length) S.push({ h: "Timeline of Events", b: [{ k: "list", items: tl.map(r => N(r.time, "--:--") + " — " + T(r.event)) }] });
-    if (T(v.ccNarrative)) S.push({ h: "Investigator Narrative", b: T(v.ccNarrative).split(/\n\s*\n/).map(p => ({ k: "p", text: p.trim() })) });
-    const ch = (R.ccCharges || []).filter(r => T(r.charge));
-    if (ch.length) S.push({ h: "Recommended Charges", b: [{ k: "list", items: ch.map(r => {
-      const cnt = Math.max(1, parseInt(r.count, 10) || 1), x = Portal.sentence(r.charge, cnt), m = CLASS_RE.exec(r.charge), name = T(r.charge).replace(CLASS_RE, "").trim();
-      const extra = [m ? m[1] : "", x.months ? x.months + " months" : "", x.fine ? "$" + x.fine.toLocaleString("en-US") : ""].filter(Boolean).join(" · ");
-      return N(r.suspect, "Unassigned") + ": " + name + " (x" + cnt + ")" + (extra ? " - " + extra : "") + (r.warrant ? " · warrant requested" : "");
-    }) }] });
-    const ck = (FORM.blocks || []).find(b => b.type === "checklist");
-    if (ck) { const st = (d.checklists || {})[ck.id] || {}; const items = (ck.items || []).map(it => (st[it.topic] ? "✓ " : "✗ ") + it.topic); if (Object.values(st).some(Boolean)) S.push({ h: "Investigative Checklist", b: [{ k: "list", items: items }] }); }
-    if (T(v.ccConclusion)) S.push({ h: "Conclusion & Recommendations", b: [{ k: "p", text: T(v.ccConclusion) }] });
-    return S;
+    return S.filter(x => x.b.length);
   }
   const EQ = "=".repeat(56), DASH = "-".repeat(56);
   const center = s => " ".repeat(Math.max(0, Math.floor((EQ.length - s.length) / 2))) + s;
@@ -528,10 +572,17 @@
     t: null, ms: 5 * 60 * 1000,
     start() { ["pointerdown", "pointermove", "keydown", "wheel", "scroll", "touchstart"].forEach(ev => addEventListener(ev, () => Idle.poke(), { passive: true })); this.poke(); },
     poke() { if (!$("lock").hidden) return; clearTimeout(this.t); this.t = setTimeout(() => this.lock(), this.ms); },
-    lock() { afterChange(false); drawProfileChip(); $("lock").hidden = false; Beat.duck(true); },
-    unlock() { $("lock").hidden = true; Beat.duck(false); this.poke(); }
+    clock: null,
+    tickClock() {   // the computer's own clock and date
+      const d = new Date();
+      $("lockTime").textContent = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+      $("lockDate").textContent = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    },
+    lock() { afterChange(false); drawProfileChip(); this.tickClock(); clearInterval(this.clock); this.clock = setInterval(() => this.tickClock(), 1000); $("lock").hidden = false; Beat.duck(true); },
+    unlock() { clearInterval(this.clock); $("lock").hidden = true; Beat.duck(false); this.poke(); }
   };
   $("unlockBtn").onclick = () => Idle.unlock();
+  $("lockChange").onclick = () => { Idle.unlock(); openProfile(); };
 
   // ---------------- background beat (made live in the browser, no audio files) ----------------
   const Beat = (() => {

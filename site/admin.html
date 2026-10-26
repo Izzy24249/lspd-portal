@@ -806,6 +806,23 @@ function pageEditor(page) {
   tagBody.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { form.tags.rules.push({ field: "", op: "contains", value: "", tag: "" }); changed(true); } }, "+ Add tag rule")));
   left.append(sec("Forum tags (" + ((form.tags.base || []).length + form.tags.rules.length) + ")", false, tagBody));
 
+  // ---- the stand-alone CID Case File Builder page (cid.html) ----
+  form.forumTagOptions = form.forumTagOptions || [];
+  const cidBody = [toggle(form, "cidApp", "Use this form on the CID Case File Builder page (cid.html)", true)];
+  if (form.cidApp) {
+    const others = CFG.forms.filter(f => f !== form && f.cidApp && f.status === "live");
+    cidBody.push(h("p", { class: "help", text: "Detectives fill this form on cid.html: saved cases, dashboard, case-file preview (plain text / Discord / BBCode), print, case-file picture, Post / Save to Discord and Command review. Every field, list, checklist and section you add here shows up there, in the same order, and in the case file. Keep the Case Number, Case Title, Lead Investigator, Rank, Badge, Narrative, Suspects, Evidence and Charges boxes so the officer details fill themselves in and evidence media links work." }));
+    if (others.length) cidBody.push(h("div", { class: "msg bad", style: "display:block", text: "Another live form (" + others.map(f => f.title).join(", ") + ") is also set for the CID page. The page uses the first one, so turn this off on the other." }));
+    cidBody.push(h("p", { class: "help", text: "Forum tags the detective can pick on the case (up to 5 per case). Get a tag ID with Discord Developer Mode: right-click the tag in the forum's settings → Copy ID." }));
+    form.forumTagOptions.forEach((t, i) => {
+      cidBody.push(h("div", { class: "sub" },
+        h("div", { class: "subhead" }, h("b", { text: t.label || "Tag " + (i + 1) }), ctrls(form.forumTagOptions, i)),
+        h("div", { class: "g2" }, field("Name shown to detectives", bind(t, "label", { placeholder: "Active", max: 40 })), field("Discord tag ID", bind(t, "id", { placeholder: "1294796677873401949", set: v => v.replace(/\D/g, ""), reflect: true })))));
+    });
+    cidBody.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { if (form.forumTagOptions.length >= 25) return toast("25 tags is the most.", "bad"); form.forumTagOptions.push({ label: "", id: "" }); changed(true); } }, "+ Add forum tag")));
+  }
+  left.append(sec("CID case builder page" + (form.cidApp ? " (on)" : ""), !!form.cidApp, cidBody));
+
   // ---- leaderboard ----
   const lb = form.leaderboard;
   const lbBody = [toggle(lb, "enabled", "Keep a monthly leaderboard for this form", true)];

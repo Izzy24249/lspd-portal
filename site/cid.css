@@ -62,13 +62,23 @@ body.cidapp{
 .ci-pform-err{color:#fca5a5;font-size:13px;min-height:1px}
 .ci-pform-btns{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 
-/* lock */
-.ci-lock{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:20px;background:rgba(8,4,3,.88);backdrop-filter:blur(12px)}
-.ci-lock-card{text-align:center;max-width:380px;border:1px solid rgba(232,181,74,.3);border-radius:16px;background:rgba(26,13,10,.95);padding:28px 24px}
-.ci-badge-md{width:76px;height:76px;object-fit:contain}
-.ci-lock-card h2{font:800 26px "Saira Condensed",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--gold2);margin:10px 0 6px}
-.ci-lock-card p{color:var(--muted);font-size:14px;line-height:1.5}
-.ci-lock-who{margin:12px 0 18px;color:var(--text);font-weight:600}
+/* lock: the builder stays visible behind a blur */
+.ci-lock{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:20px;overflow:auto;
+  background:radial-gradient(700px 520px at 50% 30%,rgba(109,34,29,.35),transparent 70%),rgba(12,5,4,.55);
+  -webkit-backdrop-filter:blur(14px) saturate(.8);backdrop-filter:blur(14px) saturate(.8)}
+.ci-lock-in{width:min(460px,100%);text-align:center;display:grid;justify-items:center}
+.ci-lock-badge{width:180px;height:180px;object-fit:contain;filter:drop-shadow(0 0 28px rgba(232,181,74,.45));animation:ci-pulse 3s ease-in-out infinite}
+.ci-lock-h{display:flex;align-items:center;gap:12px;margin:26px 0 6px;font:700 34px/1 "Oswald",sans-serif;letter-spacing:.12em;color:#f2b632;text-shadow:0 2px 0 rgba(155,43,34,.6)}
+.ci-lock-h svg{width:28px;height:28px;fill:none;stroke:#f2b632;stroke-width:2;stroke-linecap:round}
+.ci-lock-time{font:700 clamp(46px,13vw,72px)/1 "Oswald",sans-serif;letter-spacing:.03em;color:#f4eadb;font-variant-numeric:tabular-nums;text-shadow:0 4px 24px rgba(0,0,0,.6)}
+.ci-lock-date{margin-top:4px;font:15px "Courier Prime",monospace;color:#d9cfc0}
+.ci-lock-who{width:100%;margin:28px 0 16px;padding:14px 16px 10px;border:2px solid rgba(232,181,74,.45);border-radius:10px;background:rgba(5,2,2,.55);font:15px "Courier Prime",monospace;color:#d9cfc0}
+.ci-lock-who b{color:#fff} .ci-lock-who em{font-style:normal;color:#f2b632;font-weight:700}
+.ci-lock-who .ci-link{margin-top:6px;font-size:12.5px;text-decoration:none;color:#d9cfc0}
+.ci-lock-who .ci-link:hover{color:var(--gold2);text-decoration:underline}
+.ci-lock-note{color:#d9cfc0;font-size:13px;margin-bottom:20px}
+.ci-lock .ci-btn.gold{height:42px;padding:0 26px;font-size:14px}
+@media (max-width:640px){.ci-lock-badge{width:140px;height:140px}.ci-lock-h{font-size:28px}}
 
 /* header */
 .ci-head{position:sticky;top:0;z-index:30;background:rgba(12,6,5,.86);backdrop-filter:blur(14px);border-bottom:1px solid rgba(232,181,74,.18)}
