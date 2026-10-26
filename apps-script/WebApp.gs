@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 46;
+const BACKEND_VERSION = 47;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1399,6 +1399,28 @@ function promoTask_(id, pid) {
   if (!t) throw new Error("Unknown requirement.");
   return t;
 }
+// Same person? "A. Ramirez" = "Alex Ramirez" = "a ramirez" (same last name and first initial)
+function sameName_(a, b) {
+  const x = nameKey_(a), y = nameKey_(b);
+  if (!x || !y) return true;
+  if (x === y) return true;
+  const xs = x.split(" "), ys = y.split(" ");
+  return xs[xs.length - 1] === ys[ys.length - 1] && xs[0][0] === ys[0][0];
+}
+// Whose record is this Promotion Log row? A spot (callsign) can change hands: when someone leaves the roster
+// and a new person takes their callsign, the old person's check marks must NOT carry over to the new person.
+//  - a row saved under a Discord ID belongs to whoever has that ID now
+//  - a row saved under a callsign / name (no Discord ID on the roster) belongs to that spot only if the name matches
+//  - an old row whose Discord ID is gone moves to a callsign only when it's the same person (their ID was added/changed)
+// Returns the candidate's key, or "" when the row belongs to someone no longer on the roster.
+function promoOwner_(r, list) {
+  const k = str_(r[3]).replace(/^'/, ""), nm = str_(r[5]), byId = !/^(CS|NM):/.test(k);
+  const exact = list.find(c => c.key === k);
+  if (exact && (byId || sameName_(nm, exact.name))) return k;
+  const ck = callKey_(str_(r[4]));
+  const c = ck && nameKey_(nm) && list.find(x => x.callsign && callKey_(x.callsign) === ck && nameKey_(x.name) && sameName_(nm, x.name));
+  return c ? c.key : "";
+}
 // remember the first day each person showed up (used for time in grade when no date is set)
 function promoSync_() {
   const data = promoSheet_().getDataRange().getValues(), add = [];
@@ -1406,7 +1428,7 @@ function promoSync_() {
     if (!pc.on || !pc.tigDays) return;
     const cands = promoCandidates_(false, pc.id).list;
     const have = {}, tS = metaType_(pc.id, "since"), tN = metaType_(pc.id, "seen");
-    for (let i = 1; i < data.length; i++) if (data[i][2] === tS || data[i][2] === tN) have[str_(data[i][3]).replace(/^'/, "")] = 1;
+    for (let i = 1; i < data.length; i++) if (data[i][2] === tS || data[i][2] === tN) { const k = promoOwner_(data[i], cands); if (k) have[k] = 1; }
     cands.filter(c => !have[c.key]).forEach(c => add.push({ type: tN, c: c, task: "", date: ymd_(new Date()), by: "system" }));
   });
   if (add.length) withLock_(() => { promoAppend_(add); return { ok: true }; });
@@ -1490,12 +1512,7 @@ function promoView_(admin, pid) {
   const byKey = {}, since = {}, seen = {}, excused = {};
   const tS = metaType_(pid, "since"), tN = metaType_(pid, "seen");
   const mine = {}; (pc.tasks || []).forEach(t => mine[taskKey_(pid, t.id)] = t.id);
-  const keyFor = r => {
-    const k = str_(r[3]).replace(/^'/, "");
-    if (cr.list.some(c => c.key === k)) return k;
-    const ck = callKey_(str_(r[4])), c = ck && cr.list.find(x => x.callsign && callKey_(x.callsign) === ck);
-    return c ? c.key : k;
-  };
+  const keyFor = r => promoOwner_(r, cr.list) || "gone:" + str_(r[3]);   // someone who left: their records stay in the sheet but go to nobody
   for (let i = 1; i < data.length; i++) {
     const r = data[i], type = str_(r[2]);
     if (type === tS) since[keyFor(r)] = str_(r[10]).replace(/^'/, "");
