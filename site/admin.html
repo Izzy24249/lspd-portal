@@ -766,7 +766,7 @@ function pageEditor(page) {
   left.append(sec("Look", false,
     field("Header logo (shown above the title)", bind(form, "logoUrl", { placeholder: "img/cid-logo.png" }), "Leave blank for none. Use a file in the site's img folder (img/cid-logo.png is the CID seal) or an https:// link."),
     h("div", { class: "g2" },
-      field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"], ["hud", "Futuristic HUD (glass, neon)"], ["k9", "K9 Unit (field green, paw prints)"], ["asu", "Air Support (flight deck, radar)"], ["cru", "Crisis Response (hi-vis rescue)"]] })),
+      field("Style", bind(form, "theme", { type: "select", options: [["sheet", "Classic sheet (white, like Excel)"], ["dossier", "CID Dossier (dark case file)"], ["hud", "Futuristic HUD (glass, neon)"], ["k9", "K9 Unit (field green, paw prints)"], ["asu", "Air Support (flight deck, radar)"], ["cru", "Crisis Response (hi-vis rescue)"], ["ciu", "CID Case File (dark maroon & gold)"]] })),
       field("Watermark logo", bind(form, "watermark", { type: "select", structural: true, options: [["", "None"], ["cid", "LSPD CID seal (built in)"], ["custom", "My own image…"]] }))),
     form.watermark === "custom" ? field("Watermark image", bind(form, "watermarkUrl", { placeholder: "img/cid-logo.png" }), "A file on your site (like img/cid-logo.png) or an https:// link. Transparent PNGs look best.") : null,
     form.watermark ? field("Watermark layout", bind(form, "watermarkMode", { type: "select", options: [["", "One big logo behind the form"], ["repeat", "Repeating down the page"]] })) : null,
@@ -925,7 +925,7 @@ function blockBody(form, b) {
             : null,
           c.type !== "select" && c.type !== "link" ? field("Placeholder", bind(c, "placeholder")) : null));
       });
-      if (b.columns.length < 3) out.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { b.columns.push({ id: "col" + (b.columns.length + 1), label: "Column", type: "text" }); changed(true); } }, "+ Add column")));
+      if (b.columns.length < 5) out.push(h("div", {}, h("button", { class: "btn ghost sm", onclick: () => { b.columns.push({ id: "col" + (b.columns.length + 1), label: "Column", type: "text" }); changed(true); } }, "+ Add column"), b.columns.length >= 3 ? h("span", { class: "help", style: "margin-left:10px", text: "Up to 5. The dark looks show every column side by side; the white sheet puts columns 4-5 under column 3." }) : null));
       out.push(h("div", { class: "g2" },
         h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(b, "numbered", "Number the rows (01, 02, 03 …)")),
         field("Blank rows ready to fill in", bind(b, "startRows", { type: "number", placeholder: "0", set: v => Math.max(0, Math.min(50, Number(v) || 0)) }), "Like a paper sheet, e.g. 15. Empty rows aren't sent.")));

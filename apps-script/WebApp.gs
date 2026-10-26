@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 44;
+const BACKEND_VERSION = 45;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2265,7 +2265,7 @@ function validateConfig_(c) {
       if (b.type === "checklist") { b.id = key(b.id, b.title || "checklist"); b.items = (b.items || []).filter(it => str_(it.topic)); }
       if (b.type === "repeater") {
         b.id = key(b.id, b.title || "list");
-        if (!(b.columns || []).length || b.columns.length > 3) throw new Error(f.title + ": list \"" + b.title + "\" needs 1-3 columns.");
+        if (!(b.columns || []).length || b.columns.length > 5) throw new Error(f.title + ": list \"" + b.title + "\" needs 1-5 columns.");
         const ck = {};
         b.columns.concat(b.check && b.check.id ? [b.check] : []).forEach(col => {
           if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(str_(col.id)) || ck[col.id]) throw new Error(f.title + ": list \"" + b.title + "\" has a missing or repeated column ID.");

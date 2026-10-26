@@ -1242,3 +1242,32 @@ table.xl .tchip{color:#1c2333;background:#eef2f8;border-color:#c9d3e3}
 }
 .hud-add[hidden],.mini[hidden]{display:none!important}
 .dyn.tg .tag-chips{display:none}
+
+/* ===== CID Case File look ("ciu"): dark maroon & gold, case-file stamps ===== */
+.paper-wrap.div-ciu,.pk-ciu{--hc:#f0b94a;--hv:#d9822b;--hcr:240,185,74;--hvr:217,130,43;--hlr:214,170,120;--hsr:22,12,10;--hs2r:44,24,18;--ht:#f7ecd8;--hm:#bfa58a;--hr:#ef4444}
+.paper-wrap.div-ciu{box-shadow:0 0 0 1px rgba(240,185,74,.3),0 40px 90px -40px rgba(0,0,0,.95),0 0 80px -34px rgba(217,130,43,.45)}
+.div-ciu .paper.hud{background:radial-gradient(900px 480px at -10% -10%,rgba(217,130,43,.16),transparent 60%),radial-gradient(800px 480px at 110% 0,rgba(240,185,74,.08),transparent 60%),linear-gradient(180deg,#1d0f0c,#140a08 55%,#0e0706)}
+.div-ciu .hud-grid-bg{background-image:repeating-linear-gradient(0deg,rgba(214,170,120,.035) 0 1px,transparent 1px 34px);background-size:auto}
+.div-ciu .div-deco i:nth-child(1){right:34px;top:40px;width:150px;height:44px;border:3px solid rgba(239,68,68,.35);border-radius:6px;transform:rotate(-12deg);background:none}
+.div-ciu .div-deco i:nth-child(1)::after{content:"CONFIDENTIAL";position:absolute;inset:0;display:grid;place-items:center;font:800 15px/1 "Saira Condensed","Inter",sans-serif;letter-spacing:.18em;color:rgba(239,68,68,.4)}
+.div-ciu .div-deco i:nth-child(2),.div-ciu .div-deco i:nth-child(3){display:none}
+.div-ciu .div-deco i{position:absolute}
+.div-ciu .hud-scan{background:linear-gradient(180deg,transparent,rgba(240,185,74,.04),transparent)}
+.div-ciu .hud-htext h2,.div-ciu .hud-chead h3,.div-ciu .hud-heading{font-family:"Saira Condensed","Orbitron",sans-serif;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.div-ciu .hud-htext h2{font-size:clamp(22px,2.8vw,34px);background:linear-gradient(180deg,#ffd98a,#d9822b);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.div-ciu .hud-kicker{color:var(--hc);letter-spacing:.22em}
+.div-ciu .hud-status{color:#fecaca;border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.1)}
+.div-ciu .hud-status .pulse{background:#ef4444}
+.div-ciu .hud-card{border-radius:10px;border:1px solid rgba(214,170,120,.2);background:linear-gradient(180deg,rgba(44,24,18,.62),rgba(22,12,10,.55))}
+.div-ciu .hud-card::before{background:linear-gradient(90deg,#f0b94a,transparent);height:2px;opacity:.8}
+.div-ciu .hud-chead h3::before{content:counter(sec,decimal-leading-zero);display:inline-grid;place-items:center;min-width:28px;height:22px;padding:0 4px;margin-right:10px;border-radius:4px;border:1px solid rgba(240,185,74,.6);color:var(--hc);font-size:12px}
+.div-ciu .hud-emblem .ring{border-color:rgba(240,185,74,.55)}
+.div-ciu .paper.hud input.g,.div-ciu .paper.hud select.g,.div-ciu .paper.hud textarea.g,.div-ciu .hud-row{border-radius:8px}
+.div-ciu .paper.hud input.g::placeholder,.div-ciu .paper.hud textarea.g::placeholder,.div-ciu .paper.hud .ofc-in::placeholder{color:#7d6352}
+.div-ciu .hud-empty{color:#9b8270}
+.div-ciu .paper.hud select.g option{background:#1d0f0c}
+.pk-ciu{background:rgba(29,15,12,.97);border-color:rgba(214,170,120,.3);color:#f7ecd8}
+/* white sheet: columns 4-5 tucked under column 3 */
+table.xl td .xcol{margin-top:6px}
+table.xl td .xcol small{display:block;font-size:11px;color:#4A607A;margin-bottom:2px}
+@media (max-width:640px){.div-ciu .div-deco{display:none}}

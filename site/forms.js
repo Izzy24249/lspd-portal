@@ -319,7 +319,7 @@ window.Portal = (function () {
   // ===================== FUTURISTIC HUD LAYOUT (form Look = "hud") =====================
   // column widths: "narrow" | "normal" | "wide" (searchable lists default to wide)
   const colW = c => ({ narrow: ".45fr", wide: "2.1fr" }[c.width || (c.type === "search" || c.type === "officer" ? "wide" : "normal")] || "1fr");
-  const hudCols = b => (b.columns || []).slice(0, 3).map(c => "minmax(0," + colW(c) + ")").join(" ") + " " + (b.check && b.check.id ? "minmax(118px,auto)" : "44px");
+  const hudCols = b => (b.columns || []).slice(0, 5).map(c => "minmax(0," + colW(c) + ")").join(" ") + " " + (b.check && b.check.id ? "minmax(118px,auto)" : "44px");
   function hudField(f) {
     if (f.type === "static") return `<div class="hud-field"><span class="hud-lbl">${esc(f.label)}</span><div class="hud-static">${esc(f.text || "")}</div></div>`;
     return `<div class="hud-field"><span class="hud-lbl">${esc(String(f.label || "").replace(/:\s*$/, ""))}${req(f)}</span><div class="hud-ctl">${inputHTML(f)}</div></div>`;
@@ -330,6 +330,8 @@ window.Portal = (function () {
       svg: '<svg viewBox="0 0 64 64" fill="currentColor"><ellipse cx="17" cy="26" rx="6" ry="8" transform="rotate(-18 17 26)"/><ellipse cx="27" cy="15" rx="6" ry="8.5" transform="rotate(-6 27 15)"/><ellipse cx="39" cy="15" rx="6" ry="8.5" transform="rotate(6 39 15)"/><ellipse cx="49" cy="26" rx="6" ry="8" transform="rotate(18 49 26)"/><path d="M33 31c-8 0-15 9-15 16 0 6 5 8 9 7 3-1 4-2 6-2s3 1 6 2c4 1 9-1 9-7 0-7-7-16-15-16z"/></svg>' },
     asu: { kicker: "LSPD · AIR SUPPORT UNIT · FLIGHT DECK", status: "AIRBORNE",
       svg: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17h48M32 17v7"/><path d="M20 34c0-6 5-10 12-10h4c7 0 11 5 11 11v1c0 3-2 5-5 5H25c-3 0-5-3-5-7z" fill="currentColor" fill-opacity=".18"/><path d="M47 33h9l3-5M37 25v7h9M27 41l-3 7M40 41l3 7M19 48h30"/></svg>' },
+    ciu: { kicker: "LOS SANTOS POLICE DEPARTMENT · CASE FILE", status: "CASE FILE OPEN",
+      svg: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M32 5 54 13v16c0 15-9.5 25-22 30C19.5 54 10 44 10 29V13z" fill="currentColor" fill-opacity=".12"/><circle cx="29" cy="28" r="9"/><path d="m36 35 9 9"/></svg>' },
     cru: { kicker: "LSPD · CRISIS RESPONSE UNIT · TECHNICAL RESCUE", status: "RESCUE READY",
       svg: '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="21" fill="none" stroke="currentColor" stroke-width="10"/><g stroke="#fff" stroke-width="10" fill="none" stroke-dasharray="11 22" stroke-dashoffset="5.5"><circle cx="32" cy="32" r="21"/></g><circle cx="32" cy="32" r="26.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"/></svg>' }
   };
@@ -363,7 +365,7 @@ window.Portal = (function () {
               <span class="t"><b>${esc(it.topic)}</b>${it.standard ? `<small>${esc(it.standard)}</small>` : ""}</span></label>`).join("")}
           </div></section>`;
       case "repeater": {
-        const cols = (b.columns || []).slice(0, 3);
+        const cols = (b.columns || []).slice(0, 5);
         return `<section class="hud-card">
           <header class="hud-chead"><h3>${esc(b.title)}</h3><span class="hud-chip" data-rc="${esc(b.id)}">0 entries</span></header>
           <div class="hud-rhead${browseCol(b) && (b.columns || []).some(x => x.type === "link") ? " sf-hide" : ""}" style="grid-template-columns:${hudCols(b)}">${cols.map(c => `<span>${esc(c.label)}</span>`).join("")}<span class="r">${esc(b.check && b.check.id ? b.check.label : "")}</span></div>
@@ -420,7 +422,7 @@ window.Portal = (function () {
     }
 
     function addRow(b, vals) {
-      const cols = (b.columns || []).slice(0, 3), sp = cols.length === 3 ? [1, 1, 1] : cols.length === 2 ? [1, 2] : [3];
+      const all = (b.columns || []).slice(0, 5), cols = hud ? all : all.slice(0, 3), extra = hud ? [] : all.slice(3), sp = cols.length === 3 ? [1, 1, 1] : cols.length === 2 ? [1, 2] : [3];
       const ctl = c => c.type === "link"
           ? `<select class="g c" data-k="${esc(c.id)}" data-link="1"></select>`
           : c.type === "select"
@@ -439,7 +441,7 @@ window.Portal = (function () {
       } else {
         tr = document.createElement("tr");
         tr.className = "dyn" + (b.numbered ? " numd" : ""); tr.dataset.rep = b.id;
-        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}"${c.type === "link" ? ' class="linkcell"' : ""}>${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}${i === 0 && factList(b) ? `<input type="hidden" data-k="_id">` : ""}${i === 0 && tagSrc(b) ? `<input type="hidden" data-k="_tags"><div class="tagline"><button type="button" class="tag-add" data-tag>🔗 Link person</button><span class="tag-chips"></span></div>` : ""}</td>`).join("") +
+        tr.innerHTML = cols.map((c, i) => `<td colspan="${sp[i]}" data-label="${esc(c.label)}"${c.type === "link" ? ' class="linkcell"' : ""}>${i === 0 && b.numbered ? '<span class="rnum"></span>' : ""}${ctl(c)}${i === cols.length - 1 ? extra.map(x => `<div class="xcol"><small>${esc(x.label)}</small>${ctl(Object.assign({}, x, { placeholder: x.placeholder || x.label }))}</div>`).join("") : ""}${i === 0 && factList(b) ? `<input type="hidden" data-k="_id">` : ""}${i === 0 && tagSrc(b) ? `<input type="hidden" data-k="_tags"><div class="tagline"><button type="button" class="tag-add" data-tag>🔗 Link person</button><span class="tag-chips"></span></div>` : ""}</td>`).join("") +
           `<td class="act"><div class="actcell">${hasCheck ? `<label class="xck"><input type="checkbox" data-k="${esc(b.check.id)}"><span class="bx">${CHECK_SVG}</span></label>` : "<span></span>"}<button type="button" class="rm" title="Remove row">✕</button></div></td>`;
       }
       // a new row's "pick from list" boxes default to the previous row's choice (same suspect)
@@ -462,19 +464,23 @@ window.Portal = (function () {
     // ---- "Browse charges" pop-out: suspect first, then tap charges (one category at a time), set counts, add them all ----
     // ---- tag evidence / vehicles to people from Involved Persons ----
     // automatic for lists titled Evidence / Vehicles when the form has a persons list (Role + Name); a list can set  tag: false  to opt out
+    const nameColOf = x => (x.columns || []).find(c => /^name$/i.test(c.id)) || (x.columns || []).find(c => /\bname\b/i.test(c.label || ""));
+    const roleColOf = x => (x.columns || []).find(c => /role/i.test(c.id + " " + (c.label || "")));
+    const listRole = x => { const m = /person of interest|suspect|victim|witness|complainant/i.exec((x.title || "") + " " + x.id); return m ? m[0].toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) : ""; };
+    const peopleLists = () => repeaters.filter(x => nameColOf(x) && (roleColOf(x) || listRole(x)));
     function tagSrc(b) {
       if (!b || b.tag === false) return null;
-      const src = repeaters.find(x => x !== b && (x.columns || []).some(c => /^name$/i.test(c.id) || /\bname\b/i.test(c.label || "")) && (x.columns || []).some(c => /role/i.test(c.id + " " + (c.label || ""))));
-      if (!src) return null;
+      const lists = peopleLists().filter(x => x !== b);
+      if (!lists.length || peopleLists().includes(b)) return null;
       if (!(b.tag && b.tag.source) && !/evidence|vehicle|propert|item|weapon/i.test(b.title || "")) return null;
-      const nc = src.columns.find(c => /^name$/i.test(c.id)) || src.columns.find(c => /\bname\b/i.test(c.label || "")), rc = src.columns.find(c => /role/i.test(c.id + " " + (c.label || "")));
-      return { source: (b.tag && b.tag.source) || src.id, col: nc.id, roleCol: rc && rc.id };
+      return { lists: lists.map(x => x.id), source: lists[0].id, title: lists.length > 1 ? lists.map(x => listRole(x) || x.title).join(", ") : (lists[0].title || "Involved Persons") };
     }
     const tagList = v => String(v || "").split(";").map(x => x.trim()).filter(Boolean);
     function tagPeople(b) {
       const t = tagSrc(b); if (!t) return [];
       const seen = new Set(), out = [];
-      rowsOf(t.source).forEach(r => { const n = String(r[t.col] || "").trim(); if (n && !seen.has(n)) { seen.add(n); out.push({ name: n, role: t.roleCol ? r[t.roleCol] || "" : "" }); } });
+      t.lists.forEach(id => { const L = repeaters.find(x => x.id === id), nc = nameColOf(L), rc = roleColOf(L);
+        rowsOf(id).forEach(r => { const n = String(r[nc.id] || "").trim(); if (n && !seen.has(n)) { seen.add(n); out.push({ name: n, role: rc ? r[rc.id] || "" : listRole(L) }); } }); });
       return out;
     }
     const roleCls = r => "r-" + String(r || "other").toLowerCase().replace(/[^a-z]+/g, "-");
@@ -496,7 +502,7 @@ window.Portal = (function () {
     function openTagPop(btn) {
       closeTagPop();
       const tr = btn.closest(".dyn"), b = repeaters.find(x => x.id === tr.dataset.rep), hid = tr.querySelector('[data-k="_tags"]');
-      const people = tagPeople(b), src = blocks.find(x => x.id === tagSrc(b).source);
+      const people = tagPeople(b), src = { title: tagSrc(b).title };
       const pop = document.createElement("div"); pop.className = "tag-pop"; TAGPOP = pop;
       const draw = () => { const cur = tagList(hid.value);
         pop.innerHTML = `<div class="tp-h">Link to someone in ${esc(titleWords((src && src.title) || "Involved Persons"))}</div>` + (people.length
@@ -523,20 +529,23 @@ window.Portal = (function () {
       const fv = re => { const f = fieldDefs.find(x => re.test(x.id + " " + (x.label || "")) && x.type !== "static"); const el = f && q(`[data-f="${CSS.escape(f.id)}"]`); return el ? el.value.trim() : ""; };
       const df = fieldDefs.find(x => x.type === "date"); if (df) { const v = (q(`[data-f="${CSS.escape(df.id)}"]`) || {}).value || ""; if (v) F.date = new Date(v + "T00:00").toLocaleDateString("en-US"); }
       const tf = fieldDefs.find(x => x.type === "time"); if (tf) { const v = (q(`[data-f="${CSS.escape(tf.id)}"]`) || {}).value || ""; if (v) F.time = v.replace(":", ""); }
-      F.location = fv(/location|postal|address|where/i); F.type = fv(/case type|incident type|call type|\btype\b/i);
+      F.location = fv(/location|postal|address|where/i); F.type = fv(/case type|incident type|call type|classification|\btype\b/i);
       const col = (b, re) => (b.columns || []).find(c => re.test(c.id + " " + (c.label || "")));
       repeaters.forEach(b => {
         const rows = rowsOf(b.id), t = (b.title || "") + " " + b.id;
         const g = (r, c) => c ? String(r[c.id] == null ? "" : r[c.id]).trim() : "";
-        if (tagSrc(b) === null && col(b, /role/i) && col(b, /\bname\b|^name/i)) {
-          const rc = col(b, /role/i), nc = col(b, /\bname\b|^name/i), oc = col(b, /note|detail|info/i);
-          rows.forEach(r => { if (g(r, nc)) F.persons.push({ id: r._id || g(r, nc), role: g(r, rc), name: g(r, nc), notes: g(r, oc) }); });
+        if (peopleLists().includes(b)) {
+          const rc = roleColOf(b), nc = nameColOf(b), oc = col(b, /note|detail|info/i), sc = col(b, /status/i);
+          rows.forEach(r => { if (g(r, nc)) F.persons.push({ id: r._id || g(r, nc), role: rc ? g(r, rc) : listRole(b), name: g(r, nc), notes: [g(r, sc) && !/unknown/i.test(g(r, sc)) ? g(r, sc) : "", g(r, oc)].filter(Boolean).join(", ") }); });
         } else if (/evidence/i.test(t)) {
-          const tc = col(b, /type|kind|item/i), dc = col(b, /desc/i), wc = col(b, /serial|where|location|found/i);
-          rows.forEach(r => { if (g(r, tc) || g(r, dc)) F.evidence.push({ id: r._id || g(r, dc) || g(r, tc), type: g(r, tc), desc: g(r, dc), where: g(r, wc), whereLabel: wc ? wc.label : "", logged: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
+          const tc = col(b, /type|kind|item/i), dc = col(b, /desc/i), wc = col(b, /serial|where|location|found|recovered/i), gc = col(b, /(^|\s)e?tag(\s|$)|tag ?#|evidence ?#|exhibit/i), bc = col(b, /collected|by$/i);
+          rows.forEach(r => { if (g(r, tc) || g(r, dc)) F.evidence.push({ id: r._id || g(r, dc) || g(r, tc), etag: g(r, gc), by: g(r, bc), type: g(r, tc), desc: g(r, dc), where: g(r, wc), whereLabel: wc ? wc.label : "", logged: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
         } else if (/vehicle/i.test(t)) {
           const pc = col(b, /plate|tag/i), cc = col(b, /colou?r/i), mc = col(b, /make|model/i);
           rows.forEach(r => { if (g(r, pc) || g(r, mc)) F.vehicles.push({ id: r._id || g(r, pc), plate: g(r, pc), color: g(r, cc), model: g(r, mc), run: !!(b.check && r[b.check.id]), tags: tagList(r._tags) }); });
+        } else if (/timeline/i.test(t) && col(b, /time/i)) {
+          const tm = (b.columns || []).find(c => /^time$|\btime\b/i.test(c.id + " " + c.label) && !/line/i.test(c.label)), ev = col(b, /event|what|desc/i);
+          rows.forEach(r => { if (g(r, ev)) (F.timeline = F.timeline || []).push({ id: r._id || g(r, ev), time: g(r, tm), event: g(r, ev) }); });
         } else if (suspectFirst(b)) {
           const lc = linkColOf(b), c = browseCol(b), by = {};
           rows.forEach(r => { const who = g(r, lc) || "the suspect", ch = g(r, c); if (!ch) return; const m = CLASS_RE.exec(ch); (by[who] = by[who] || { suspect: who, items: [], warrant: false }).items.push({ name: m ? m[1] : ch, count: Math.max(1, parseInt(r[(b.totals && b.totals.countCol) || "count"], 10) || 1) }); if (b.check && r[b.check.id]) by[who].warrant = true; });
@@ -560,10 +569,11 @@ window.Portal = (function () {
         : /witness/i.test(p.role) ? `I spoke with a witness, ${p.name}${p.notes ? " (" + p.notes + ")" : ""}, who stated that [what they saw].`
         : /suspect/i.test(p.role) ? `I identified ${p.name}${p.notes ? " (" + p.notes + ")" : ""} as a suspect based on [probable cause].`
         : `${p.name}${p.notes ? " (" + p.notes + ")" : ""} was identified as ${p.role ? a_n(p.role) + p.role.toLowerCase() : "an involved person"} because [reason].`,
-      evPhrase: e => { const noun = evNoun(e.type), what = noun.word + (e.desc ? " (" + e.desc + ")" : "");
+      evPhrase: e => { const noun = evNoun(e.type), inner = [e.desc, e.etag ? "evidence tag " + String(e.etag).replace(/^#/, "#") : ""].filter(Boolean).join(", "), what = noun.word + (inner ? " (" + inner + ")" : "");
         const where = e.where ? (/serial/i.test(e.whereLabel) && !/\s/.test(e.where) ? `, serial number ${e.where}` : /^(at|in|on|under|behind|inside|outside|near|next|beside|by|from|along|across|between|underneath|beneath)\b/i.test(e.where) ? ` ${e.where}` : ` at ${e.where}`) : " at [where it was found]";
         return ((noun.mass ? "" : a_n(what)) + what + where).replace(/ +/g, " "); },
-      evidence: e => `I located ${S.evPhrase(e)}${e.tags.length ? ", which is linked to " + nice(e.tags) : ""}. ${e.logged ? "I collected it and logged it into CAD evidence." : "I collected it and [logged it into CAD evidence]."}`,
+      evidence: e => `I located ${S.evPhrase(e)}${e.tags.length ? ", which is linked to " + nice(e.tags) : ""}. ${e.by ? "It was collected by " + e.by + (e.logged ? " and logged into CAD evidence." : " and [logged into CAD evidence].") : e.logged ? "I collected it and logged it into CAD evidence." : "I collected it and [logged it into CAD evidence]."}`,
+      timeline: x => `At ${x.time ? (/^\d{1,2}:\d{2}$/.test(x.time) ? x.time.replace(":", "").padStart(4, "0") + " hours" : x.time) : "[time]"}, ${x.event.charAt(0).toLowerCase() + x.event.slice(1)}${/[.!?]$/.test(x.event) ? "" : "."}`,
       // several items linked to the same person(s): name them once, then list what was found
       evidenceGroup: (tags, list) => `I located the following evidence linked to ${nice(tags)}: ${list.length > 2 ? list.slice(0, -1).map(S.evPhrase).join("; ") + "; and " + S.evPhrase(list[list.length - 1]) : list.map(S.evPhrase).join(" and ")}. ${list.every(e => e.logged) ? "I collected each item and logged it into CAD evidence." : "I collected each item and [logged it into CAD evidence]."}`,
       vhPhrase: v => `${v.color || v.model ? "a" : "a vehicle"}${v.color ? " " + v.color.toLowerCase() : ""}${v.model ? " " + v.model : ""}${v.plate ? " bearing plate " + v.plate.toUpperCase() : " [plate]"}`,
@@ -588,9 +598,9 @@ window.Portal = (function () {
     // ===== narrative <-> report sync =====
     // Every sentence written from the report is remembered with what it came from. When the report changes, that sentence is rewritten
     // (or removed) in place; new people/evidence/vehicles/charges are added to the right paragraph. A sentence the officer edits by hand is theirs: it's left alone.
-    const factList = b => !!(tagSrc(b) || ((b.columns || []).some(c => /role/i.test(c.id + " " + (c.label || ""))) && (b.columns || []).some(c => /^name$/i.test(c.id) || /\bname\b/i.test(c.label || ""))));
-    const KINDS = ["call", "arrival", "persons", "investigation", "evidence", "vehicles", "suspects", "outcome"];
-    const KIND_RE = { call: /\b(dispatched|responded to|was called|i was sent)\b/i, arrival: /\b(upon arrival|on scene|arrived)\b/i, persons: /\b(made contact|spoke with|interviewed|witness|victim)\b/i,
+    const factList = b => !!(tagSrc(b) || peopleLists().includes(b) || /timeline/i.test(b.title || ""));
+    const KINDS = ["call", "arrival", "timeline", "persons", "investigation", "evidence", "vehicles", "suspects", "outcome"];
+    const KIND_RE = { timeline: /^at (\d{3,4} hours|\[time\])/i, call: /\b(dispatched|responded to|was called|i was sent)\b/i, arrival: /\b(upon arrival|on scene|arrived)\b/i, persons: /\b(made contact|spoke with|interviewed|witness|victim)\b/i,
       investigation: /\b(investigation|i ran|i checked|reviewed|canvass)/i, evidence: /\b(located|evidence|casing|collected)\b/i, vehicles: /\b(bearing plate|vehicle|plate)\b/i,
       suspects: /\b(suspect|charged|probable cause|under arrest|miranda)\b/i, outcome: /\b(transported|booked|case remains|pending)\b/i };
     function factItems(F) {
@@ -608,6 +618,7 @@ window.Portal = (function () {
       };
       grouped(F.evidence, "evidence", S.evidence, S.evidenceGroup, "e", e => (e.type || "Evidence") + (e.desc ? ": " + e.desc : ""), "🧪", e => e.desc || e.where);
       grouped(F.vehicles, "vehicles", S.vehicle, S.vehicleGroup, "v", v => [v.color, v.model, v.plate].filter(Boolean).join(" "), "🚗", v => v.plate || v.model);
+      (F.timeline || []).forEach(x => out.push({ key: "t:" + x.id, kind: "timeline", text: S.timeline(x), label: (x.time ? x.time + " · " : "") + x.event.slice(0, 40), icon: "🕒", mention: x.event.slice(0, 24) }));
       F.charges.forEach(c => out.push({ key: "c:" + c.suspect, kind: "suspects", text: S.charges(c), label: "Charges for " + c.suspect, icon: "⚖️", mention: "charged " + c.suspect }));
       return out;
     }

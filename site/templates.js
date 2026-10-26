@@ -2,6 +2,818 @@
    Generated: edit freely, or change the forms in the builder after adding them. */
 window.PORTAL_TEMPLATES = [
  {
+  "theme": "ciu",
+  "status": "hidden",
+  "copyText": true,
+  "webhookId": "",
+  "watermarkMode": "single",
+  "tags": {
+   "base": [],
+   "rules": []
+  },
+  "leaderboard": {
+   "enabled": false,
+   "countField": "",
+   "webhookId": "",
+   "messageId": "",
+   "title": "",
+   "heading": ""
+  },
+  "id": "cidcase",
+  "section": "Reports",
+  "icon": "🗂️",
+  "title": "CID Case File",
+  "description": "Criminal Investigations Division case file: suspects, victims, witnesses, evidence, timeline, charges and the investigator's narrative.",
+  "submitLabel": "File Case to Discord",
+  "color": "#d9822b",
+  "discordEmoji": true,
+  "logoUrl": "https://cid-case-file.netlify.app/images/lspd-ciu-badge.png",
+  "discordThumb": "https://cid-case-file.netlify.app/images/lspd-ciu-badge.png",
+  "embedTitle": "🗂️ LSPD CID Case File — {ccCaseNo}",
+  "threadTitle": "{ccCaseNo} | {ccTitle}",
+  "archiveSheet": "CID Case Files",
+  "blocks": [
+   {
+    "type": "banner",
+    "title": "CRIMINAL INVESTIGATIONS DIVISION",
+    "subtitle": "Case File Report Builder · Complete each section below"
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "CASE INFORMATION"
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "ccCaseNo",
+      "label": "Case Number",
+      "type": "case_number",
+      "prefix": "CID",
+      "required": true
+     },
+     {
+      "id": "ccDate",
+      "label": "Date Opened",
+      "type": "date",
+      "defaultToday": true
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "ccTitle",
+      "label": "Case Title",
+      "type": "text",
+      "placeholder": "e.g. Pacific Standard Bank Robbery",
+      "required": true
+     },
+     {
+      "id": "ccClass",
+      "label": "Classification",
+      "type": "select",
+      "required": true,
+      "options": [
+       "Homicide",
+       "Attempted Homicide",
+       "Armed Robbery",
+       "Bank Robbery",
+       "Burglary",
+       "Grand Theft Auto",
+       "Narcotics",
+       "Organized Crime / Gang",
+       "Kidnapping",
+       "Assault",
+       "Fraud",
+       "Weapons Trafficking",
+       "Corruption",
+       "Other"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "ccLocation",
+      "label": "Location of Incident",
+      "type": "text",
+      "placeholder": "e.g. Legion Square"
+     },
+     {
+      "id": "ccStatus",
+      "label": "Case Status",
+      "type": "select",
+      "default": "Open",
+      "options": [
+       "Open",
+       "Active Investigation",
+       "Pending Warrant",
+       "Pending DA Review",
+       "Closed — Arrest Made",
+       "Closed — Unfounded",
+       "Cold Case"
+      ]
+     },
+     {
+      "id": "ccPriority",
+      "label": "Priority",
+      "type": "select",
+      "default": "Medium",
+      "options": [
+       "Low",
+       "Medium",
+       "High",
+       "Critical"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "INVESTIGATING PERSONNEL"
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "ccRank",
+      "label": "Rank",
+      "type": "select",
+      "default": "Detective",
+      "options": [
+       "Honorary Detective",
+       "Probationary Detective",
+       "Detective",
+       "Lead Detective",
+       "Command"
+      ]
+     },
+     {
+      "id": "ccLead",
+      "label": "Lead Investigator",
+      "type": "text",
+      "roster": true,
+      "required": true,
+      "placeholder": "Last name / callsign"
+     },
+     {
+      "id": "ccBadge",
+      "label": "Badge #",
+      "type": "text",
+      "placeholder": "417"
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "ccDivision",
+      "label": "Division / Department",
+      "type": "text",
+      "placeholder": "LSPD Criminal Investigations Division"
+     },
+     {
+      "id": "ccCerts",
+      "label": "Certifications",
+      "type": "select",
+      "default": "None",
+      "options": [
+       "None",
+       "Undercover Ops",
+       "Gang Task Force",
+       "Undercover Ops / Gang Task Force"
+      ]
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "ccAssist",
+      "label": "Assisting Officers",
+      "type": "officers"
+     }
+    ]
+   },
+   {
+    "type": "longtext",
+    "id": "ccSummary",
+    "title": "INCIDENT SUMMARY",
+    "hint": "Briefly describe what happened, when and where.",
+    "maxLength": 2000
+   },
+   {
+    "type": "repeater",
+    "id": "ccSuspects",
+    "title": "SUSPECTS",
+    "addLabel": "+ Add Suspect",
+    "columns": [
+     {
+      "id": "name",
+      "label": "Full Name",
+      "type": "text",
+      "placeholder": "First Last"
+     },
+     {
+      "id": "status",
+      "label": "Status",
+      "type": "select",
+      "options": [
+       "Unknown",
+       "At Large",
+       "In Custody",
+       "Released",
+       "Cooperating",
+       "Hospitalized",
+       "Deceased"
+      ]
+     },
+     {
+      "id": "dob",
+      "label": "Date of Birth",
+      "type": "text",
+      "placeholder": "YYYY-MM-DD"
+     },
+     {
+      "id": "phone",
+      "label": "Phone",
+      "type": "text",
+      "placeholder": "555-0100"
+     },
+     {
+      "id": "details",
+      "label": "Details",
+      "type": "text",
+      "placeholder": "Description, tattoos, vehicle, known associates, gang affiliation…",
+      "width": "wide"
+     }
+    ]
+   },
+   {
+    "type": "repeater",
+    "id": "ccVictims",
+    "title": "VICTIMS",
+    "addLabel": "+ Add Victim",
+    "columns": [
+     {
+      "id": "name",
+      "label": "Full Name",
+      "type": "text",
+      "placeholder": "First Last"
+     },
+     {
+      "id": "status",
+      "label": "Status",
+      "type": "select",
+      "options": [
+       "Unknown",
+       "At Large",
+       "In Custody",
+       "Released",
+       "Cooperating",
+       "Hospitalized",
+       "Deceased"
+      ]
+     },
+     {
+      "id": "dob",
+      "label": "Date of Birth",
+      "type": "text",
+      "placeholder": "YYYY-MM-DD"
+     },
+     {
+      "id": "phone",
+      "label": "Phone",
+      "type": "text",
+      "placeholder": "555-0100"
+     },
+     {
+      "id": "details",
+      "label": "Details",
+      "type": "text",
+      "placeholder": "Injuries, relation to suspect, statement…",
+      "width": "wide"
+     }
+    ]
+   },
+   {
+    "type": "repeater",
+    "id": "ccWitnesses",
+    "title": "WITNESSES",
+    "addLabel": "+ Add Witness",
+    "columns": [
+     {
+      "id": "name",
+      "label": "Full Name",
+      "type": "text",
+      "placeholder": "First Last"
+     },
+     {
+      "id": "status",
+      "label": "Status",
+      "type": "select",
+      "options": [
+       "Unknown",
+       "At Large",
+       "In Custody",
+       "Released",
+       "Cooperating",
+       "Hospitalized",
+       "Deceased"
+      ]
+     },
+     {
+      "id": "dob",
+      "label": "Date of Birth",
+      "type": "text",
+      "placeholder": "YYYY-MM-DD"
+     },
+     {
+      "id": "phone",
+      "label": "Phone",
+      "type": "text",
+      "placeholder": "555-0100"
+     },
+     {
+      "id": "details",
+      "label": "Details",
+      "type": "text",
+      "placeholder": "What did they see or hear?",
+      "width": "wide"
+     }
+    ]
+   },
+   {
+    "type": "repeater",
+    "id": "ccEvidence",
+    "title": "EVIDENCE LOG",
+    "addLabel": "+ Add Evidence",
+    "columns": [
+     {
+      "id": "etag",
+      "label": "Tag",
+      "type": "text",
+      "placeholder": "#12",
+      "width": "narrow"
+     },
+     {
+      "id": "type",
+      "label": "Type",
+      "type": "select",
+      "options": [
+       "Physical",
+       "Firearm",
+       "Ballistic",
+       "DNA",
+       "Biological",
+       "Fingerprint",
+       "Photo",
+       "Video",
+       "Digital",
+       "Document",
+       "Narcotics",
+       "Currency",
+       "Vehicle",
+       "Other"
+      ]
+     },
+     {
+      "id": "desc",
+      "label": "Description",
+      "type": "text",
+      "placeholder": "9mm pistol, serial filed off",
+      "width": "wide"
+     },
+     {
+      "id": "where",
+      "label": "Recovered At",
+      "type": "text"
+     },
+     {
+      "id": "by",
+      "label": "Collected By",
+      "type": "text"
+     }
+    ],
+    "check": {
+     "id": "logged",
+     "label": "Logged in CAD"
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "ccVehicles",
+    "title": "VEHICLES INVOLVED",
+    "addLabel": "+ Add Vehicle",
+    "columns": [
+     {
+      "id": "plate",
+      "label": "Plate / Tag",
+      "type": "text",
+      "placeholder": "46EEK572"
+     },
+     {
+      "id": "color",
+      "label": "Color",
+      "type": "select",
+      "options": [
+       "White",
+       "Black",
+       "Silver",
+       "Gray",
+       "Red",
+       "Blue",
+       "Green",
+       "Yellow",
+       "Orange",
+       "Brown",
+       "Beige",
+       "Gold",
+       "Purple",
+       "Maroon"
+      ]
+     },
+     {
+      "id": "makeModel",
+      "label": "Make / Model",
+      "type": "text",
+      "placeholder": "Bravado Buffalo"
+     }
+    ],
+    "check": {
+     "id": "plateRun",
+     "label": "Plate Run"
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "ccTimeline",
+    "title": "TIMELINE OF EVENTS",
+    "addLabel": "+ Add Entry",
+    "columns": [
+     {
+      "id": "time",
+      "label": "Time",
+      "type": "text",
+      "placeholder": "14:05",
+      "width": "narrow"
+     },
+     {
+      "id": "event",
+      "label": "Event",
+      "type": "text",
+      "placeholder": "What happened",
+      "width": "wide"
+     }
+    ]
+   },
+   {
+    "type": "repeater",
+    "id": "ccCharges",
+    "title": "RECOMMENDED CHARGES",
+    "addLabel": "+ Add Charge",
+    "groupBy": "suspect",
+    "totals": {
+     "on": true,
+     "col": "charge",
+     "countCol": "count"
+    },
+    "columns": [
+     {
+      "id": "suspect",
+      "label": "Suspect",
+      "type": "link",
+      "source": "ccSuspects",
+      "sourceCol": "name"
+     },
+     {
+      "id": "charge",
+      "label": "Charge / penal code",
+      "type": "search",
+      "options": [
+       "Driving a boat under the influence of alcohol or drugs (Misdemeanor, 6 Months - $1,250 Fine)",
+       "Violating boating safety regulations (Misdemeanor, 6 Months - $1,250 Fine)",
+       "No Wake Zone(s) (Misdemeanor, $2,250 Fine)",
+       "Operating a vessel without the proper registration (Infraction, $250 Fine)",
+       "Speed Limits and Reckless Operation for a vessel (Infraction, $250 Fine)",
+       "Driving without a commercial drivers license (Misdemeanor, 6 Months - $1,250 Fine)",
+       "Overweight vehicle (Infraction, $250 Fine)",
+       "Deflective equipment (Infraction, $250 Fine)",
+       "Inadequate safety inspections (Infraction, $250 Fine)",
+       "Failure to maintain logbooks (Infraction, $250 Fine)",
+       "Improper transport of hazardous material (Infraction, $250 Fine)",
+       "Failure to carry proper documentation (Infraction, $250 Fine)",
+       "Driving without proper permits (Infraction, $250 Fine)",
+       "Hours of service violation (Infraction, $250 Fine)",
+       "Medical certificate violation (Infraction, $250 Fine)",
+       "Improper load securement (Infraction, $250 Fine)",
+       "Speeding (Infraction, $100 Fine)",
+       "Running a Red Light (Infraction, $200 Fine)",
+       "Driving Under the Influence (DUI) (Felony, 12 Months - $1,000 Fine)",
+       "Reckless Driving (Misdemeanor, 6 Months - $500 Fine)",
+       "Driving Without a License (Misdemeanor, $250 Fine)",
+       "Hit and Run (Felony, 24 Months)",
+       "Driving Without Insurance (Infraction, $500 Fine)",
+       "Failure to Yield (Infraction, $150 Fine)",
+       "Illegal U-Turn (Infraction, $100 Fine)",
+       "Driving Without Headlights (Infraction, $50 Fine)",
+       "Street Racing (Felony, 24 Months - $1,500 Fine)",
+       "Driving in the Wrong Direction (Infraction, $200 Fine)",
+       "Illegal Parking in Handicap Zones (Infraction, $200 Fine)",
+       "Road Rage Incident (Misdemeanor, 6 Months - $750 Fine)",
+       "Unregistered Vehicle (Infraction, $150 Fine)",
+       "Excessive Window Tinting (Infraction, $100 Fine)",
+       "Possession of a controlled substance (Misdemeanor, 6 Months - $1,250 Fine)",
+       "Possession of a controlled substance for sale (Infraction, $250 Fine)",
+       "Sale or transportation of a controlled substance (Felony, 25 Months - $7,500 Fine)",
+       "Public Drug Use (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Drug Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Cultivation of Illegal Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Drug Manufacturing (Felony, 7 Months - $3,000 Fine)",
+       "Prescription Fraud (Felony, 7 Months - $3,000 Fine)",
+       "Possession with Intent to Distribute (Felony, 7 Months - $3,000 Fine)",
+       "Operating a Drug House (Felony, 7 Months - $3,000 Fine)",
+       "Driving Under Drug Influence (Felony, 12 Months - $37,750 Fine)",
+       "Possession of Drug Paraphernalia (Infraction, $200 Fine)",
+       "Public Sale of Drugs (Felony, 36 Months - $2,000 Fine)",
+       "Carrying a Concealed Weapon Without Permit (Felony, 36 Months)",
+       "Illegal Sale of Firearms (Felony, 60 Months - $5,000 Fine)",
+       "Unlawful Discharge of a Firearm (Felony, 36 Months - $4,000 Fine)",
+       "Possession of a Prohibited Weapon (Felony, 48 Months - $5,000 Fine)",
+       "Brandishing a Weapon (Misdemeanor, 12 Months - $750 Fine)",
+       "Using a Weapon While Intoxicated (Misdemeanor, 12 Months - $1,000 Fine)",
+       "Possession of a Weapon in a Restricted Area (Felony, 24 Months - $3,000 Fine)",
+       "Trafficking Illegal Firearms (Felony, 72 Months - $7,000 Fine)",
+       "Failure to Secure a Firearm (Misdemeanor, $500 Fine)",
+       "Modifying a Firearm Illegally (Felony, 48 Months - $6,000 Fine)",
+       "Possession of a Firearm Without a Serial Number (Felony, 36 Months - $4,000 Fine)",
+       "Carrying a Loaded Firearm in Public (Misdemeanor, 24 Months - $2,000 Fine)",
+       "Negligent Use of a Weapon (Misdemeanor, 12 Months - $1,500 Fine)",
+       "Possession of a Stolen Firearm (Felony, 36 Months - $5,000 Fine)",
+       "Vandalism (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Shoplifting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Petty Theft (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Possession of Stolen Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Graffiti (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Piracy (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Unauthorized Use of a Vehicle (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Illegal Squatting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Destruction of Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Burglary (Felony, 24 Months)",
+       "Arson (Felony, 48 Months - $2,000 Fine)",
+       "Trespassing (Infraction, $200 Fine)",
+       "Grand Theft (Felony, 36 Months)",
+       "Breaking and Entering (Felony, 36 Months)",
+       "Theft of Public Property (Felony, 36 Months)",
+       "Credit Card Fraud (Felony, 24 Months - $2,000 Fine)",
+       "Identity Theft (Felony, 48 Months - $2,000 Fine)",
+       "Embezzlement (Felony, 10 Months)",
+       "Fraud (Felony, 10 Months)",
+       "Tax Evasion (Felony, 60 Months - $5,000 Fine)",
+       "Money Laundering (Felony, 48 Months)",
+       "Insider Trading (Felony, 36 Months)",
+       "Forgery (Felony, 24 Months)",
+       "Cybercrime (Felony, 60 Months)",
+       "Healthcare Fraud (Felony, 48 Months)",
+       "Ponzi Scheme (Felony, 120 Months)",
+       "Counterfeiting (Felony, 48 Months - $2,000 Fine)",
+       "Corporate Espionage (Felony, 72 Months)",
+       "Assault (Misdemeanor, 12 Months)",
+       "Battery (Misdemeanor, 12 Months)",
+       "Aggravated Assault (Felony, 60 Months)",
+       "Robbery (Felony, 36 Months)",
+       "Homicide (Felony, 120 Months)",
+       "Domestic Violence (Felony, 36 Months)",
+       "Kidnapping (Felony, 120 Months)",
+       "Terroristic Threats (Felony, 48 Months)",
+       "Vehicular Manslaughter (Felony, 60 Months)",
+       "Reckless Endangerment (Misdemeanor, 12 Months)",
+       "Stalking (Misdemeanor, 12 Months)",
+       "Online harassment (Misdemeanor, 6 Months - $1,250 Fine)",
+       "Hacking (Felony, 12 Months - $37,750 Fine)",
+       "Phishing (Felony, 12 Months - $37,750 Fine)",
+       "Unauthorized access to computer systems (Felony, 12 Months - $37,750 Fine)",
+       "Illegal dumping (Misdemeanor, 6 Months - $1,250 Fine)",
+       "Overfishing (Infraction, $250 Fine)",
+       "Illegal logging (Felony, 12 Months - $37,750 Fine)",
+       "Endangered Species Trafficking (Felony, 12 Months - $37,750 Fine)",
+       "Illegal mining (Felony, 12 Months - $37,750 Fine)",
+       "Poaching (Felony, 12 Months - $37,750 Fine)",
+       "Filing a False Police Report (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Report a Crime (Misdemeanor, 4 Months - $1,000 Fine)",
+       "False 911 Call (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Comply (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Threats (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Littering (Infraction, 4 Months - $1,000 Fine)",
+       "Impersonating a Police Officer (Felony, 7 Months - $3,000 Fine)",
+       "Resisting (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Providing False Identification (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Without Violence (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Obstruction (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sightseeing at the Scene of an Emergency (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Escaping Custody (Felony, 7 Months - $3,000 Fine)",
+       "Failure to Appear in Court (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violation of Probation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Trespassing on Government Property (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Unlawful Assembly (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Perjury (Felony, 7 Months - $3,000 Fine)",
+       "Aiding and Abetting (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Involuntary Manslaughter (Felony, 15 Months - $6,000 Fine)",
+       "Marked Bills (Felony, 9 Months - $300 Fine)",
+       "Vehicle Burglary (Felony, 7 Months - $3,000 Fine)",
+       "Grave Robbery (Felony, 15 Months - $3,000 Fine)",
+       "Bigamy (Felony, 12 Months)",
+       "Disorderly Conduct (Misdemeanor, $300 Fine)",
+       "Public Intoxication (Infraction, $150 Fine)",
+       "Loitering (Infraction, $50 Fine)",
+       "Disturbing the Peace (Infraction, $100 Fine)",
+       "Illegal Protests (Infraction, $100 Fine)",
+       "Indecent Exposure (Misdemeanor, $500 Fine)",
+       "Rioting (Felony, 36 Months)",
+       "Inciting a Riot (Felony, 48 Months)",
+       "Criminal Mischief (Misdemeanor, 10 Months - $1,000 Fine)",
+       "Harassment (Misdemeanor, 5 Months - $500 Fine)",
+       "Obstructing Justice (Felony, 24 Months)",
+       "Bribery (Felony, 36 Months - $5,000 Fine)",
+       "Failure to Identify (Misdemeanor, 15 Months - $2,000 Fine)",
+       "Fleeing/Attempting to Elude (Felony, 30 Months)",
+       "Extortion (Felony, 30 Months - $5,000 Fine)",
+       "Illegal Immigration (Felony, 100 Months)",
+       "Felon in Possession of a Firearm (Felony, 30 Months)",
+       "Possession of a Firearm Without a License (Misdemeanor, 30 Months)",
+       "Open Carry (Felony, 5 Months - $1,500 Fine)",
+       "Murder of a Government Official (Felony, 40 Months)",
+       "Attempted Murder of a Government Official (Felony, 30 Months)",
+       "Grand Theft Auto (Felony, 35 Months)",
+       "Attempted Grand Theft Auto (Misdemeanor, 25 Months)",
+       "Possession of a Stolen Vehicle (Felony, 25 Months)",
+       "Felony Speeding (Felony, 30 Months)",
+       "Leaving the Scene of a Vehicle Accident (Misdemeanor, 15 Months - $1,000 Fine)",
+       "Failure to Maintain Lanes (Infraction, $500 Fine)",
+       "Unsafe Passing (Infraction, $1,000 Fine)",
+       "Failure to Yield to an Emergency Vehicle (Infraction, $1,500 Fine)",
+       "Obstructed License Plate (Infraction, $500 Fine)",
+       "Unsafe Hauling (Infraction, $1,500 Fine)",
+       "Parking in a Fire Zone (Infraction, $500 Fine)"
+      ],
+      "placeholder": "Start typing, e.g. robbery"
+     },
+     {
+      "id": "count",
+      "label": "Counts",
+      "type": "text",
+      "placeholder": "1",
+      "width": "narrow"
+     }
+    ],
+    "check": {
+     "id": "warrant",
+     "label": "Warrant Req."
+    }
+   },
+   {
+    "type": "checklist",
+    "id": "ccChecklist",
+    "title": "INVESTIGATIVE CHECKLIST",
+    "colTopic": "Task",
+    "colStandard": "Standard",
+    "colCheck": "Done",
+    "items": [
+     {
+      "topic": "Scene Secured & Documented",
+      "standard": "Perimeter set, scene photographed, bodycam running from arrival."
+     },
+     {
+      "topic": "Evidence Collected & Logged",
+      "standard": "Casings, blood, prints and fragments collected and entered into CAD evidence."
+     },
+     {
+      "topic": "Prints & Serials Run",
+      "standard": "Fingerprints run through CAD; weapon and vehicle serial numbers checked."
+     },
+     {
+      "topic": "Statements Taken",
+      "standard": "Victim and witness statements obtained and summarised in the narrative."
+     },
+     {
+      "topic": "Suspect Profiles Checked",
+      "standard": "All suspects run in CAD for priors, open warrants and the 5-day felon rule."
+     },
+     {
+      "topic": "Footage Reviewed",
+      "standard": "Own and assisting units' bodycam / recordings reviewed and referenced."
+     },
+     {
+      "topic": "Warrant / Arrest Action",
+      "standard": "Warrant requested or arrest made where probable cause exists."
+     },
+     {
+      "topic": "Supervisor Notified",
+      "standard": "CID supervisor briefed on case status and next steps."
+     }
+    ]
+   },
+   {
+    "type": "longtext",
+    "id": "ccNarrative",
+    "title": "INVESTIGATOR NARRATIVE",
+    "required": true,
+    "followUp": true,
+    "maxLength": 8000,
+    "hint": "Write your full account of the investigation in first person, in the order it happened.",
+    "guide": {
+     "on": true,
+     "steps": [
+      {
+       "label": "Call / Dispatch",
+       "help": "How did you get involved? When, where, and who sent you?",
+       "starter": "On {ccDate} at approximately [time] hours, I [was dispatched / responded] to {ccLocation} regarding a reported {ccClass}."
+      },
+      {
+       "label": "Arrival",
+       "help": "What did you see, hear and smell when you arrived? Who was there?",
+       "starter": "Upon arrival, I observed [describe the scene, the people present and anything out of place]."
+      },
+      {
+       "label": "Contacts & statements",
+       "help": "Who did you speak to and what did they tell you? Quote key words exactly.",
+       "starter": "I made contact with {ccVictims.name}, who stated \"[their words]\"."
+      },
+      {
+       "label": "Investigation",
+       "help": "What did you do to find out what happened? CAD checks, prints, serials, footage, canvassing.",
+       "starter": "During my investigation, I [ran / checked / reviewed] [what you did], which showed [what you found]."
+      },
+      {
+       "label": "Evidence",
+       "help": "What did you collect, where exactly was it found, and was it logged in CAD?",
+       "starter": "I located [evidence] at [where it was found]. I collected it and logged it into CAD evidence."
+      },
+      {
+       "label": "Suspect & arrest",
+       "help": "How was the suspect identified? What was your probable cause? When was Miranda read?",
+       "starter": "I identified {ccSuspects.name} as the suspect(s) based on [probable cause]."
+      },
+      {
+       "label": "Outcome",
+       "help": "How did it end? Transport, booking, and what is still open.",
+       "starter": "{ccSuspects.name} was transported to [location] and booked. This case remains [open / closed] pending [next steps]."
+      }
+     ],
+     "tips": [
+      "Write in first person and past tense: \"I observed\", not \"Officer observed\" or \"I observe\".",
+      "Tell it in the order it happened, with times (e.g. 2315 hours).",
+      "Stick to facts you saw, heard, or were told.",
+      "Quote important statements word for word in \"quotation marks\".",
+      "Explain your probable cause for every stop, search and arrest.",
+      "Note when Miranda rights were read if anyone was questioned in custody."
+     ],
+     "mention": [
+      {
+       "label": "Names every suspect",
+       "ref": "{ccSuspects.name}"
+      },
+      {
+       "label": "Mentions the location",
+       "ref": "{ccLocation}"
+      }
+     ],
+     "keywords": [
+      {
+       "label": "Probable cause explained",
+       "words": [
+        "probable cause",
+        "based on",
+        "because"
+       ]
+      },
+      {
+       "label": "Miranda noted",
+       "words": [
+        "miranda"
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "type": "longtext",
+    "id": "ccConclusion",
+    "title": "CONCLUSION & RECOMMENDATIONS",
+    "hint": "Findings, warrant requests, next steps…",
+    "maxLength": 3000
+   }
+  ]
+ },
+ {
   "theme": "sheet",
   "status": "hidden",
   "copyText": true,
