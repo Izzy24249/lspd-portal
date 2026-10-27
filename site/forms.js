@@ -1419,6 +1419,7 @@ window.Portal = (function () {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "Could not load forms");
     if (!data.config) throw new Error("The Apps Script backend is out of date: paste the new WebApp.gs and deploy a new version.");
+    if (window.LSPDGate) window.LSPDGate.update(data.config.signon || null);
     return data.config;
   }
 

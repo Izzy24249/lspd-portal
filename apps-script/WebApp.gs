@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 60;
+const BACKEND_VERSION = 61;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -39,6 +39,7 @@ function doGet(e) {
   try {
     const action = (e && e.parameter && e.parameter.action) || "";
     if (action === "config") return json_({ ok: true, config: publicConfig_() });
+    if (action === "signon") return json_({ ok: true, signon: signonCfg_() });   // tiny: is the sign-on screen the front door?
     if (action === "promo") return json_({ ok: true, promo: promoView_(false, e.parameter.p) });
     if (action === "wake") { try { getAdmins_(); getConfig_(); readLog_(1); } catch (x) {} return json_({ ok: true }); }   // admin sign-in page: get Google ready while they type
     return json_({ ok: true, service: "LSPD Forms Portal" });
@@ -213,8 +214,14 @@ function publicConfig_() {
     settings: Object.assign({}, cfg.settings, { promo: promoCfg_(cfg, "cpl"), programs: programs_(cfg).slice(1) }),   // progression on by default, even before its setup is first saved
     rosters: rostersFor_(cfg.forms.filter(f => f.status !== "hidden")),
     roster: (() => { try { return usesOldRoster_(cfg.forms) ? rosterForPickers_().map(p => ({ name: p.name, id: p.id, extra: p.extra, division: p.division })) : []; } catch (e) { return []; } })(),
-    forms: cfg.forms.filter(f => f.status !== "hidden")
+    forms: cfg.forms.filter(f => f.status !== "hidden"),
+    signon: signonCfg_()
   };
+}
+// officers see the MDT sign-on screen before the portal (only once Discord sign-in is set up)
+function signonCfg_() {
+  const d = discordStatus_(), ready = !!(d.clientId && d.hasSecret && d.redirect);
+  return { required: ready && PROPS_.getProperty("SIGNON_REQUIRED") === "1", pinEvery: PROPS_.getProperty("SIGNON_PIN_EVERY") === "1", ready: ready };
 }
 
 // =====================================================================
@@ -2660,7 +2667,14 @@ function handleAdmin_(d) {
       logAdmin_(me.username, "division logs", "imported " + r.added + " past reports");
       return Object.assign({ ok: true }, r);
     }
-    case "acctList": return { ok: true, accounts: acctList_(), discord: discordStatus_(), voice: voiceStatus_() };
+    case "acctList": return { ok: true, accounts: acctList_(), discord: discordStatus_(), voice: voiceStatus_(), signon: signonCfg_() };
+    case "signonSetup": {        // owner/admin: make the sign-on screen the front door
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");
+      if (d.required && !signonCfg_().ready) throw new Error("Set up Sign in with Discord first, otherwise nobody could get in.");
+      PROPS_.setProperty("SIGNON_REQUIRED", d.required ? "1" : ""); PROPS_.setProperty("SIGNON_PIN_EVERY", d.pinEvery ? "1" : "");
+      logAdmin_(me.username, "sign-on screen", (d.required ? "required" : "off") + (d.pinEvery ? ", PIN every visit" : ""));
+      return { ok: true, signon: signonCfg_() };
+    }
     case "acctSayAs": case "voiceRedo": {      // how the voice says an officer's name / record their clip again
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change the sign-in voice.");
       const acct = acctFind_(d.discordId); if (!acct) throw new Error("Account not found.");

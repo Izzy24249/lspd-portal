@@ -1656,15 +1656,15 @@ function pageDivisions(page) {
 }
 
 /* ---------------- OFFICER ACCOUNTS (sign in with Discord + 4-digit PIN) ---------------- */
-let ACCTS = null, DISC = null, VOICE = null;
+let ACCTS = null, DISC = null, VOICE = null, SIGNON = null;
 const LEVELS = [["", "Automatic (from the roster)"], ["trainee", "Trainee"], ["officer", "Officer"], ["fto", "FTO / Trainer"], ["leader", "Division leader"], ["command", "Command"], ["admin", "Admin"], ["owner", "Owner"]];
 function pageAccounts(page) {
   page.append(head("Officer Accounts", "Officers sign in with Discord once per device, then a 4-digit PIN. Certified officers come from LSPD Personnel Roster, trainees from LSPD Onboarding Roster. Reset a forgotten PIN, sign someone out everywhere, lock an account or change its level here.",
     h("button", { class: "btn ghost sm", onclick: () => { ACCTS = null; renderPage(true); } }, "Refresh")));
   const box = h("div", {}, h("div", { class: "sec empty-note", text: "Loading accounts…" }));
   page.append(box);
-  const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; VOICE = r.voice || null; });
-  load.then(() => { box.innerHTML = ""; drawAccounts(box); if (ME.role === "owner") box.append(discordSec(), voiceSec()); })
+  const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; VOICE = r.voice || null; SIGNON = r.signon || null; });
+  load.then(() => { box.innerHTML = ""; if (["owner", "admin"].includes(ME.role)) box.append(signonSec()); drawAccounts(box); if (ME.role === "owner") box.append(discordSec(), voiceSec()); })
     .catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 55 ? "Paste the new WebApp.gs (version 55 or newer) and deploy a new version to use officer accounts." : e.message })); });
 }
 function drawAccounts(box) {
@@ -1703,6 +1703,22 @@ function drawAccounts(box) {
     h("div", { class: "kpi" }, h("small", { text: "Signed in this week" }), h("b", { text: String((ACCTS || []).filter(a => a.last && Date.now() - new Date(a.last) < 7 * 864e5).length) }))),
     h("div", { class: "sec flush" }, h("div", { style: "padding:14px 16px 4px" }, q), list));
   draw();
+}
+function signonSec() {
+  const g = SIGNON || {}, sec = h("div", { class: "sec", style: "display:grid;gap:10px" });
+  const req = h("input", { type: "checkbox" }), pin = h("input", { type: "checkbox" }); req.checked = !!g.required; pin.checked = !!g.pinEvery;
+  sec.append(h("h3", { text: "Sign-on screen (front door)" }),
+    h("p", { class: "help", text: "When on, officers see the MDT sign-on screen before the portal (home, My Reports, CID case builder) and land where they were going afterwards. A sign-on lasts for 2 hours of activity on that device, so new tabs don't boot the terminal again. Admin and Division Command keep their own logins." }),
+    g.ready ? null : h("div", { class: "help", style: "color:#f0b43c", text: "Set up Sign in with Discord below first. Until then this can't be switched on, so nobody gets locked out." }),
+    h("label", { style: "display:flex;gap:8px;align-items:center" }, req, h("span", { text: "Officers must sign on before using the portal" })),
+    h("label", { style: "display:flex;gap:8px;align-items:center" }, pin, h("span", { text: "Ask for the PIN on every visit (otherwise a sign-in is remembered for 30 days and the screen just greets them)" })),
+    h("div", {}, h("button", { class: "btn primary sm", onclick: async e => {
+      e.target.disabled = true;
+      try { const r = await api("signonSetup", { required: req.checked, pinEvery: pin.checked }); SIGNON = r.signon; toast(r.signon.required ? "Sign-on screen is now the front door." : "Sign-on screen is optional.", "ok"); }
+      catch (err) { toast(err.message, "bad"); }
+      e.target.disabled = false;
+    } }, "Save")));
+  return sec;
 }
 function discordSec() {
   const d = DISC || {}, sec = h("div", { class: "sec", style: "display:grid;gap:12px" });
