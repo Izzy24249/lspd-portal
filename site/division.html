@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Division Command · LSPD</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/lspd-seal.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Saira+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="portal.css?v=202610200937">
+<link rel="stylesheet" href="division.css?v=202610200937">
+</head>
+<body class="dc">
+<div class="dc-grid" aria-hidden="true"></div>
+
+<!-- sign in -->
+<section class="dc-login" id="login" hidden>
+  <form class="dc-lcard" id="loginForm" autocomplete="on">
+    <div class="dc-emblem"><img src="img/lspd-seal.png" alt=""><i></i></div>
+    <div class="dc-kick">LOS SANTOS POLICE DEPARTMENT</div>
+    <h1>DIVISION COMMAND</h1>
+    <p>Sign in with your portal account.</p>
+    <label><span>Username</span><input id="lgUser" autocomplete="username" required></label>
+    <label><span>Password</span><input id="lgPass" type="password" autocomplete="current-password" required></label>
+    <label class="dc-chk"><input type="checkbox" id="lgKeep" checked> Keep me signed in on this device</label>
+    <div class="dc-err" id="lgErr"></div>
+    <button class="dc-btn ac big" id="lgBtn">Enter command</button>
+  </form>
+</section>
+
+<!-- app -->
+<div id="app" hidden>
+  <header class="dc-top">
+    <div class="dc-top-in">
+      <div class="dc-brand"><img src="img/lspd-seal.png" alt=""><div><b>DIVISION COMMAND</b><small id="topDiv">—</small></div></div>
+      <div class="dc-clock"><b id="clock">--:--:--</b><small id="clockDate"></small></div>
+      <div class="dc-live" id="live" title="Refreshes every minute"><i></i><span id="liveTxt">LIVE</span></div>
+      <div class="dc-tright">
+        <button class="dc-ibtn" id="refreshBtn" title="Refresh now">↻</button>
+        <a class="dc-ibtn wide" id="adminLink" href="admin.html" hidden>Admin</a>
+        <span class="dc-me" id="me"></span>
+        <button class="dc-ibtn wide" id="outBtn">Sign out</button>
+      </div>
+    </div>
+    <nav class="dc-divs" id="divs"></nav>
+  </header>
+
+  <main class="dc-main">
+    <section class="dc-hero" id="hero"></section>
+    <div class="dc-bar">
+      <div class="dc-seg" id="period">
+        <button data-p="week" class="on">This week</button><button data-p="month">This month</button><button data-p="30">Last 30 days</button><button data-p="all">All time</button>
+      </div>
+      <div class="dc-tabs" id="tabs">
+        <button data-t="overview" class="on">Overview</button><button data-t="officers">Officers</button><button data-t="board">Leaderboard</button><button data-t="reports">Reports</button>
+      </div>
+    </div>
+    <section class="dc-kpis" id="kpis"></section>
+    <section id="view"></section>
+  </main>
+</div>
+
+<div class="dc-boot" id="boot"><div class="dc-emblem"><img src="img/lspd-seal.png" alt=""><i></i></div><span>Connecting to Division Command…</span></div>
+
+<aside class="dc-drawer" id="drawer" hidden><div class="dc-dscrim" data-close></div><div class="dc-dpanel" id="dpanel" role="dialog" aria-modal="true"></div></aside>
+<div class="dc-modal" id="modal" hidden><div class="dc-mcard" id="mcard" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="forms.js?v=202610200937"></script>
+<script src="division.js?v=202610200937"></script>
+</body>
+</html>

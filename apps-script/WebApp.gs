@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 47;
+const BACKEND_VERSION = 48;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -892,6 +892,7 @@ function handleSubmit_(d) {
   // ---- archive + leaderboard (after Discord so a failed post isn't logged as filed; only this part waits in line) ----
   const saved = withLock_(() => {
     archiveRow_(form, archiveCols);
+    try { actLog_(form, values, repeaters, archiveCols, { webhookId: webhook.id, threadId: threadId, messageId: r1.body && r1.body.id, content: first.content || "", title: first.thread_name || fillTemplate_(form.embedTitle || form.title, values) || form.title }); } catch (e) {}
     const lb = form.leaderboard;
     if (lb && lb.enabled && lb.countField && str_(values[lb.countField])) {
       lbSheet_().appendRow([new Date(), form.id, "'" + str_(values[lb.countField])]);
@@ -1855,6 +1856,191 @@ function cidHandle_(d) {
 }
 
 // =====================================================================
+// DIVISION COMMAND (division.html): every report, who filed it, who was tagged, grades
+// =====================================================================
+const ACT_SHEET_ = "Division Activity";
+const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source"];
+const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divGrade: 1, changePassword: 1 };
+const GRADES_ = ["A", "B", "C", "D", "F"];
+function actSheet_() {
+  const ss = ss_();
+  let sh = ss.getSheetByName(ACT_SHEET_);
+  if (!sh) {
+    sh = ss.insertSheet(ACT_SHEET_);
+    sh.appendRow(ACT_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, ACT_HEAD_.length).setFontWeight("bold");
+    sh.getRange("H:J").setNumberFormat("@");
+  }
+  return sh;
+}
+function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view_" + x.id)); } catch (e) {} }
+// Boxes that hold people: officer / officers / Discord ID fields, roster-picker text boxes, and the same inside lists.
+function personSlots_(form) {
+  const out = [], isP = f => ["officer", "officers", "discord_id"].indexOf(f.type) !== -1 || (f.type === "text" && (f.roster || f.rosterTabId != null && f.rosterTabId !== ""));
+  (form.blocks || []).forEach(b => {
+    if (b.type === "fields" || b.type === "strip") (b.fields || []).forEach(f => { if (isP(f)) out.push({ key: f.id, label: str_(f.label).replace(/[:(].*$/, "").trim() || f.id, single: f.type !== "officers" }); });
+    if (b.type === "repeater") (b.columns || []).forEach(c => { if (isP(c)) out.push({ key: b.id + "." + c.id, label: titleWord_(str_(b.title)) + " · " + (str_(c.label) || c.id), single: false }); });
+  });
+  return out;
+}
+// Who "filed" the report when the division leader hasn't picked: the lead / reporting / instructor box
+function autoAuthor_(form) {
+  const slots = personSlots_(form);
+  const good = /report|filing|filed|lead|primary|submit|author|your|instructor|investigator|detective|fto|trainer|evaluat|pilot|handler|officer/i, bad = /assist|witness|trainee|student|cadet|suspect|victim|backup|supervis|tagged|other|partner|passenger|recruit/i;
+  const pick = slots.find(x => x.single && good.test(x.label) && !bad.test(x.label)) || slots.find(x => x.single && !bad.test(x.label)) || slots.find(x => x.single) || slots[0];
+  return pick ? pick.key : "";
+}
+function actPeople_(form, values, repeaters) {
+  const out = [], seen = {};
+  personSlots_(form).forEach(sl => {
+    const vals = sl.key.indexOf(".") === -1 ? [values[sl.key]] : ((repeaters || {})[sl.key.split(".")[0]] || []).map(r => r[sl.key.split(".")[1]]);
+    vals.forEach(v => peopleIn_(v).forEach(p => {
+      const k = sl.key + "|" + (p.id || nameKey_(p.name) || p.name); if (seen[k]) return; seen[k] = 1;
+      out.push({ f: sl.key, n: clip_(p.name, 60), i: p.id });
+    }));
+  });
+  return out;
+}
+function actSummary_(cols, people) {
+  const skip = {}; people.forEach(p => skip[p.f] = 1);
+  let txt = "";
+  cols.forEach(c => { if (skip[c.id] || !str_(c.value)) return; const line = c.label.replace(/[:(].*$/, "").trim() + ": " + clip_(str_(c.value).replace(/\s+/g, " "), 400); if (txt.length + line.length < 3500) txt += (txt ? "\n" : "") + line; });
+  return txt;
+}
+function actLog_(form, values, repeaters, cols, x) {
+  const people = actPeople_(form, values, repeaters);
+  const caseF = allFields_(form).find(f => f.type === "case_number");
+  const id = Utilities.getUuid().replace(/-/g, "").slice(0, 14);
+  actSheet_().appendRow([id, new Date(), form.id, cellSafe_(caseF ? str_(values[caseF.id]) : ""), cellSafe_(clip_(x.title, 200)), JSON.stringify(people), cellSafe_(actSummary_(cols, people)),
+    "'" + (x.threadId || ""), "'" + (x.messageId || ""), x.webhookId || "", cellSafe_(clip_(x.content || "", 1900)), "", "", "", "", x.source || "report"]);
+  divClearCache_();
+  return id;
+}
+function cleanDivisions_(list, forms) {
+  const ids = {};
+  return (Array.isArray(list) ? list : []).slice(0, 20).map((d, i) => {
+    let id = str_(d.id).toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 24) || "div" + (i + 1);
+    while (ids[id]) id += "x"; ids[id] = 1;
+    const name = clip_(str_(d.name), 40); if (!name) throw new Error("Division Command: every division needs a name.");
+    const logo = str_(d.logoUrl); if (logo && !/^(img\/[\w.\-\/]+|https:\/\/\S+)$/.test(logo)) throw new Error("Division " + name + ": the logo must be a file like img/logo.png or an https:// link.");
+    const fl = (Array.isArray(d.forms) ? d.forms : []).filter(f => f && forms.some(x => x.id === f.id)).map(f => ({ id: str_(f.id), author: clip_(str_(f.author), 80) }));
+    const n = v => Math.max(0, Math.min(365, parseInt(v, 10) || 0));
+    return { id: id, name: name, tagline: clip_(str_(d.tagline), 80), color: /^#[0-9a-f]{6}$/i.test(str_(d.color)) ? str_(d.color) : "#2f7bff", logoUrl: logo,
+      rosterTabId: d.rosterTabId === "" || d.rosterTabId == null ? null : Number(d.rosterTabId), rosterTabName: clip_(str_(d.rosterTabName), 100),
+      forms: fl, quota: Math.max(0, Math.min(50, parseInt(d.quota, 10) || 0)), quotaPer: d.quotaPer === "month" ? "month" : "week", quotaAssists: d.quotaAssists !== false,
+      warnDays: n(d.warnDays), inactiveDays: n(d.inactiveDays), pingTagged: !!d.pingTagged };
+  });
+}
+function divList_() { return ((getConfig_().settings || {}).divisions || []).map(x => ({ id: x.id, name: x.name, color: x.color, logoUrl: x.logoUrl, tagline: x.tagline })); }
+function actRows_() {
+  const v = actSheet_().getDataRange().getValues(), out = [];
+  for (let i = 1; i < v.length; i++) { const r = v[i]; if (!str_(r[0])) continue;
+    let people = []; try { people = JSON.parse(str_(r[5]) || "[]"); } catch (e) {}
+    out.push({ row: i + 1, id: str_(r[0]), at: isDate_(r[1]) ? r[1].getTime() : new Date(r[1]).getTime() || 0, form: str_(r[2]), no: str_(r[3]), title: str_(r[4]), people: people, summary: str_(r[6]),
+      threadId: str_(r[7]).replace(/^'/, ""), messageId: str_(r[8]).replace(/^'/, ""), webhookId: str_(r[9]), content: str_(r[10]),
+      grade: str_(r[11]), gradedBy: str_(r[12]), comments: str_(r[13]), gradedAt: isDate_(r[14]) ? r[14].getTime() : 0, source: str_(r[15]) }); }
+  return out;
+}
+// Everything the Division Command page shows for one division: its officers + every report from its forms.
+// Stats, leaderboard, quotas and alerts are worked out in the browser from this.
+function divView_(d, me) {
+  const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [];
+  const dv = divs.find(x => x.id === str_(d.division)) || divs[0];
+  if (!dv) return { ok: true, divisions: [], me: { username: me.username, role: me.role } };
+  const cache = CacheService.getScriptCache(), ck = "div_view_" + dv.id;
+  if (!d.fresh) { const hit = cache.get(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
+  // officers from the division's roster tab
+  let officers = [], rosterError = "";
+  if (dv.rosterTabId != null) {
+    try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [], false, false); rosterError = t.error || "";
+      officers = (t.people || []).map(p => { const cs = p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : (callKey_(p.name) ? (/\b[A-Za-z]{1,4}\s*-?\s*\d{1,5}\b/.exec(p.name) || [""])[0] : "");
+        const nm = p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name.replace(cs, "").trim() || p.name;
+        return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: cs, id: p.id || "" }; });
+    } catch (e) { rosterError = errMsg_(e); }
+  } else rosterError = "No roster tab picked for this division yet (admin → Division Command).";
+  const find = p => (p.i && officers.find(o => o.id === p.i)) || (callKey_(p.n) && officers.find(o => o.callsign && callKey_(o.callsign) === callKey_(p.n))) || (nameKey_(p.n) && officers.find(o => nameKey_(o.name) === nameKey_(p.n))) || null;
+  const formsById = {}; cfg.forms.forEach(f => formsById[f.id] = f);
+  const fset = {}; dv.forms.forEach(f => { const form = formsById[f.id]; if (!form) return; const slots = personSlots_(form); fset[f.id] = { author: f.author && slots.some(x => x.key === f.author) ? f.author : autoAuthor_(form), labels: slots.reduce((m, x) => (m[x.key] = x.label, m), {}) }; });
+  const since = Date.now() - 400 * 864e5;
+  const reports = actRows_().filter(r => fset[r.form] && r.at >= since).sort((a, b) => b.at - a.at).slice(0, 2500).map(r => {
+    const fs = fset[r.form], person = p => { const o = find(p); return { key: o ? o.key : "", name: o ? o.name : (p.n.indexOf("|") !== -1 ? p.n.split("|").slice(1).join("|").trim() : p.n) || "ID " + p.i, callsign: o ? o.callsign : (callKey_(p.n) ? (/\b[A-Za-z]{1,4}\s*-?\s*\d{1,5}\b/.exec(p.n) || [""])[0] : ""), id: p.i || (o && o.id) || "", role: fs.labels[p.f] || p.f }; };
+    const authorP = r.people.find(p => p.f === fs.author);
+    const author = authorP ? person(authorP) : null;
+    const tagged = [], tk = {};
+    r.people.filter(p => p !== authorP).forEach(p => { const x = person(p); const k = x.key || x.id || nameKey_(x.name); if (!k || tk[k] || (author && (author.key ? author.key === x.key : author.name === x.name))) return; tk[k] = 1; tagged.push(x); });
+    return { id: r.id, at: r.at, form: r.form, formTitle: formsById[r.form].title, icon: formsById[r.form].icon || "📄", no: r.no, title: r.title, summary: r.summary, author: author, tagged: tagged,
+      grade: r.grade, gradedBy: r.gradedBy, comments: r.comments, gradedAt: r.gradedAt, canPost: !!(r.webhookId && webhookById_(r.webhookId) && (r.messageId || r.threadId)), imported: r.source !== "report" };
+  });
+  const out = { ok: true, division: dv, divisions: divList_(), officers: officers, rosterError: rosterError, reports: reports,
+    forms: dv.forms.filter(f => formsById[f.id]).map(f => ({ id: f.id, title: formsById[f.id].title, icon: formsById[f.id].icon || "📄" })),
+    weekStart: (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1, at: Date.now() };
+  try { const js = JSON.stringify(out); if (js.length < 95000) cache.put(ck, js, 120); } catch (e) {}
+  out.me = { username: me.username, role: me.role };
+  return out;
+}
+function divGrade_(d, me) {
+  const rows = actRows_(), rec = rows.find(r => r.id === str_(d.id));
+  if (!rec) return { ok: false, error: "That report isn't in the log." };
+  const clear = !!d.clear, grade = clear ? "" : str_(d.grade).toUpperCase();
+  if (!clear && GRADES_.indexOf(grade) === -1) return { ok: false, error: "Pick a grade A to F." };
+  const by = clip_(str_(d.gradedBy) || me.username, 60), comments = clear ? "" : clip_(str_(d.comments), 1500);
+  actSheet_().getRange(rec.row, 12, 1, 4).setValues([[grade, clear ? "" : cellSafe_(by), cellSafe_(comments), clear ? "" : new Date()]]);
+  divClearCache_();
+  logAdmin_(me.username, "division grade", (rec.no || rec.title) + " -> " + (grade || "cleared"));
+  if (clear || !d.post) return { ok: true };
+  // Discord: the report's own post gets a grade line, and a reply tags whoever filed it (and the tagged officers if asked)
+  const wh = webhookById_(rec.webhookId);
+  if (!wh || !(rec.messageId || rec.threadId)) return { ok: true, warning: "grade saved; this report's Discord post wasn't recorded, so nothing was posted" };
+  const form = getConfig_().forms.find(f => f.id === rec.form) || { blocks: [] };
+  const dv = ((getConfig_().settings || {}).divisions || []).find(x => x.id === str_(d.division));
+  const author = rec.people.find(p => p.f === ((dv && (dv.forms.find(f => f.id === rec.form) || {}).author) || autoAuthor_(form)));
+  const ids = [], add = id => { if (/^\d{15,21}$/.test(id || "") && ids.indexOf(id) === -1) ids.push(id); };
+  if (author) add(author.i);
+  if (d.pingTagged) rec.people.forEach(p => add(p.i));
+  const medal = { A: "🟢", B: "🟢", C: "🟡", D: "🟠", F: "🔴" }[grade];
+  const line = "🏅 **Division review:** " + medal + " Grade **" + grade + "** · by " + by;
+  let warning = "";
+  try {
+    const base = wh.url.split("?")[0];
+    if (rec.messageId) {
+      const tq = rec.threadId ? "?thread_id=" + rec.threadId : "";
+      const res = UrlFetchApp.fetch(base + "/messages/" + rec.messageId + tq, { method: "patch", contentType: "application/json", muteHttpExceptions: true,
+        payload: JSON.stringify({ content: clip_((rec.content ? rec.content.replace(/\n🏅 \*\*Division review:\*\*.*$/m, "") + "\n" : "") + line, 1990), allowed_mentions: { parse: [] } }) });
+      if (res.getResponseCode() !== 200) warning = "the post's grade line couldn't be added (" + res.getResponseCode() + ")";
+      else actSheet_().getRange(rec.row, 11).setValue(cellSafe_(clip_((rec.content ? rec.content.replace(/\n🏅 \*\*Division review:\*\*.*$/m, "") + "\n" : "") + line, 1900)));
+    }
+    const msg = (ids.length ? ids.map(x => "<@" + x + ">").join(" ") + " " : "") + line + (rec.threadId ? "" : " — " + (rec.no ? rec.no + " · " : "") + clip_(rec.title, 120)) + (comments ? "\n> " + comments.split("\n").join("\n> ") : "");
+    const r = discordPost_(wh.url, { content: clip_(msg, 1990), allowed_mentions: { parse: [], users: ids } }, rec.threadId || null);
+    if (!r.ok) warning = "grade saved, but Discord said: " + r.error;
+  } catch (e) { warning = "grade saved, but Discord couldn't be reached: " + errMsg_(e); }
+  return warning ? { ok: true, warning: warning } : { ok: true };
+}
+// Reports filed before Division Command existed: read back from each form's sheet tab (no Discord post to reply to)
+function divImport_() {
+  const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [], want = {};
+  divs.forEach(dv => dv.forms.forEach(f => want[f.id] = 1));
+  const have = {}, live = actRows_(); live.forEach(r => { if (r.source.indexOf("import:") === 0) have[r.source] = 1; });
+  const already = (formId, ts, no, ppl) => live.some(r => r.form === formId && r.source === "report" && r.no === no && (Math.abs(r.at - ts) < 180000 || (no && JSON.stringify(r.people) === ppl)));   // logged live already
+  const rows = [];
+  cfg.forms.filter(f => want[f.id]).forEach(form => {
+    const sh = ss_().getSheetByName(clip_(str_(form.archiveSheet) || form.title || form.id, 90)); if (!sh || sh.getLastRow() < 2) return;
+    const lastCol = sh.getLastColumn(), notes = sh.getRange(1, 1, 1, lastCol).getNotes()[0], heads = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+    const data = sh.getRange(2, 1, sh.getLastRow() - 1, lastCol).getValues();
+    const caseF = allFields_(form).find(f => f.type === "case_number");
+    data.forEach((r, i) => {
+      const ts = isDate_(r[0]) ? r[0] : new Date(r[0]); if (isNaN(ts)) return;
+      const src = "import:" + form.id + ":" + ts.getTime(); if (have[src]) return; have[src] = 1;
+      const values = {}, cols = []; notes.forEach((n, j) => { if (j && n) { values[n] = str_(r[j]); cols.push({ id: n, label: str_(heads[j]), value: str_(r[j]) }); } });
+      const people = actPeople_(form, values, {});
+      if (!people.length || already(form.id, ts.getTime(), caseF ? str_(values[caseF.id]) : "", JSON.stringify(people))) return;
+      rows.push([Utilities.getUuid().replace(/-/g, "").slice(0, 14), ts, form.id, cellSafe_(caseF ? values[caseF.id] || "" : ""), cellSafe_(clip_(fillTemplate_(form.embedTitle || form.title, values) || form.title, 200)), JSON.stringify(people), cellSafe_(actSummary_(cols, people)), "", "", "", "", "", "", "", "", src]);
+    });
+  });
+  if (rows.length) withLock_(() => { const sh = actSheet_(); sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); return { ok: true }; });
+  divClearCache_();
+  return { added: rows.length };
+}
+
+// =====================================================================
 // DISCORD HELPERS
 // =====================================================================
 function addListFields_(fields, name, lines) {
@@ -1969,7 +2155,7 @@ function setAdmin_(username, password, role) {
   username = str_(username);
   if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) throw new Error("Username: 3-32 letters, numbers, dot, dash or underscore.");
   checkPwRules_(password);
-  if (role !== "owner" && role !== "admin") role = "admin";
+  if (role !== "owner" && role !== "admin" && role !== "leader") role = "admin";
   const salt = Utilities.getUuid();
   const hash = hashPw_(password, salt);
   const sh = adminsSheet_(), existing = findAdmin_(username);
@@ -2059,6 +2245,7 @@ function flushDeferred_() {
 // ADMIN API
 // =====================================================================
 function allPayload_(me) {
+  if (me.role === "leader") return { ok: true, me: { username: me.username, role: me.role }, backend: BACKEND_VERSION, leader: true, divisions: divList_() };
   const cfg = getConfig_(), missing = [], isOwner = me.role === "owner";
   try { ensureWarmTrigger_(); } catch (e) {}
   const rosters = rostersFor_(cfg.forms, { cacheOnly: true, missing: missing });   // instant; anything not cached loads after sign-in
@@ -2104,6 +2291,10 @@ function handleAdmin_(d) {
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
   const isOwner = me.role === "owner";
   const ownerOnly = () => { if (!isOwner) throw new Error("Only an owner can manage admin accounts."); };
+  // division leaders: the Division Command page only (no forms, settings, webhooks or accounts)
+  if (me.role === "leader" && !LEADER_ACTIONS_[a]) throw new Error("Division leader accounts can only use the Division Command page.");
+  if (a === "divView") return divView_(d, me);
+  if (a === "divGrade") return withLock_(() => divGrade_(d, me));
 
   switch (a) {
     case "logout":
@@ -2124,6 +2315,11 @@ function handleAdmin_(d) {
       logAdmin_(me.username, "fast loading", d.off ? "turned off" : "set up for " + repo);
       const r = d.off ? { ok: true } : publishSnapshot_(true);
       return { ok: r.ok, error: r.error, snapshot: snapshotStatus_() };
+    }
+    case "divImport": {         // put reports filed before Division Command existed into its log
+      const r = divImport_();
+      logAdmin_(me.username, "division logs", "imported " + r.added + " past reports");
+      return Object.assign({ ok: true }, r);
     }
     case "cidSetPassword": {    // the CID Command review page password
       ownerOnly();
@@ -2334,7 +2530,7 @@ function handleAdmin_(d) {
       const t = findAdmin_(d.username);
       if (!t) throw new Error("Admin not found.");
       if (t.role === "owner" && d.role !== "owner" && getAdmins_().filter(x => x.role === "owner").length < 2) throw new Error("There must always be at least one owner.");
-      adminsSheet_().getRange(t.row, 2).setValue(d.role === "owner" ? "owner" : "admin"); adminsDirty_();
+      adminsSheet_().getRange(t.row, 2).setValue(["owner", "leader"].indexOf(d.role) !== -1 ? d.role : "admin"); adminsDirty_();
       logAdmin_(me.username, "change role", t.username + " -> " + d.role);
       return { ok: true };
     }
@@ -2393,6 +2589,7 @@ function validateConfig_(c) {
   };
   out.settings.promo = cleanPromo_(s.promo);
   out.settings.programs = cleanPrograms_(s.programs);
+  out.settings.divisions = cleanDivisions_(s.divisions, Array.isArray(c.forms) ? c.forms : []);
   if (out.settings.hours.board && !out.settings.hours.webhookId) throw new Error("Weekly hours board: pick which webhook it posts to (or turn it off).");
   if (out.settings.roster.verify.on && !out.settings.roster.verify.tab.trim() && out.settings.roster.verify.tabId == null) throw new Error("Roster: pick which tab is the main personnel roster (or turn the two-way check off).");
   if (out.settings.roster.verify.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.verify.url)) throw new Error("Main roster link must be a Google Sheets link.");
