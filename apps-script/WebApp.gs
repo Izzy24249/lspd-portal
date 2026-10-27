@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 71;
+const BACKEND_VERSION = 72;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -39,7 +39,8 @@ function doGet(e) {
   try {
     const action = (e && e.parameter && e.parameter.action) || "";
     if (action === "config") return json_({ ok: true, config: publicConfig_() });
-    if (action === "signon") return json_({ ok: true, signon: signonCfg_() });   // tiny: is the sign-on screen the front door?
+    if (action === "signon") return json_({ ok: true, signon: signonCfg_() });
+    if (action === "builderRoster") return json_(PROPS_.getProperty("BUILDER_ON") === "1" ? { ok: true, people: builderPeople_().map(p => ({ n: p.n, cs: p.cs })) } : { ok: false });   // tiny: is the sign-on screen the front door?
     if (action === "promo") return json_({ ok: true, promo: promoView_(false, e.parameter.p) });
     if (action === "wake") { try { getAdmins_(); getConfig_(); readLog_(1); } catch (x) {} return json_({ ok: true }); }   // admin sign-in page: get Google ready while they type
     return json_({ ok: true, service: "LSPD Forms Portal" });
@@ -2122,6 +2123,69 @@ function divImport_() {
 }
 
 // =====================================================================
+// CHIEF'S REPORT BUILDER SYNC (the Netlify builder adds one line: <script src="https://lspdisthebest.net/sync.js"></script>)
+//   · when an officer copies a finished report, it's logged to Division Command (Patrol division) and credited
+//     to every roster officer named in it (by callsign like L-104, or by name)
+//   · the builder's name boxes get roster autocomplete
+// =====================================================================
+const BUILDER_FORM_ = "patrolbuilder";
+function builderPeople_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get("builder_people"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const out = [], seen = {};
+  [PERSONNEL_TAB_, ONBOARD_TAB_].forEach(t => { const tid = rosterTabByName_(t); if (tid == null) return;
+    try { (getRosterTab_(tid, false, [], false, true).people || []).forEach(p => { const cs = p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : "", nm = cleanName_(cs ? p.name.split("|").slice(1).join("|").trim() : p.name);
+      if (!nm || seen[p.id || nm]) return; seen[p.id || nm] = 1; out.push({ n: nm, cs: cs, i: p.id || "" }); }); } catch (e) {} });
+  cache.put("builder_people", JSON.stringify(out), 600);
+  return out;
+}
+function builderLog_(d) {
+  if (PROPS_.getProperty("BUILDER_ON") !== "1") return { ok: false, error: "Builder sync is off." };
+  const text = str_(d.text).replace(/\r/g, "").trim();
+  if (text.length < 60) return { ok: false, error: "Too short to be a report." };
+  const cache = CacheService.getScriptCache(), key = "bld_" + voiceHash_(text.slice(0, 4000));
+  if (cache.get(key)) return { ok: true, dup: true };
+  const day = "bld_day_" + ymd_(new Date()), n = Number(cache.get(day) || 0); if (n > 600) return { ok: false, error: "Daily limit reached." };
+  cache.put(key, "1", 1800); cache.put(day, String(n + 1), 21600);
+  // who is in it: callsigns first, then full names; in the order they appear
+  const lower = text.toLowerCase(), found = [];
+  builderPeople_().forEach(p => {
+    let at = -1;
+    if (p.cs) { const m = new RegExp("(^|[^A-Za-z0-9])" + p.cs.replace(/[-]/g, "\\-") + "(?![0-9])", "i").exec(text); if (m) at = m.index; }
+    if (at < 0 && p.n.length > 4) at = lower.indexOf(p.n.toLowerCase());
+    if (at >= 0) found.push({ at: at, p: p });
+  });
+  found.sort((a, b) => a.at - b.at);
+  if (!found.length) return { ok: true, logged: false, reason: "No roster officer named in the report." };
+  const people = found.slice(0, 12).map((x, i) => ({ f: i === 0 ? "author" : "assist", n: clip_((x.p.cs ? x.p.cs + " | " : "") + x.p.n, 60), i: x.p.i }));
+  const lines = text.split("\n").map(x => x.trim()).filter(Boolean), title = clip_((lines[0] || "Patrol report").replace(/^[#*\s]+/, ""), 120);
+  const no = (/(?:report|case|incident|cad)\s*(?:#|no\.?|number)\s*[:\-]?\s*([A-Z0-9][A-Z0-9-]{2,})/i.exec(text) || [])[1] || "";
+  withLock_(() => { const sh = actSheet_();
+    sh.appendRow([Utilities.getUuid().replace(/-/g, "").slice(0, 14), new Date(), BUILDER_FORM_, cellSafe_(no), cellSafe_(title), JSON.stringify(people), cellSafe_(clip_(lines.slice(1, 8).join("\n"), 1500)), "", "", "", "", "", "", "", "", "builder:" + clip_(str_(d.page), 200), cellSafe_(clip_(text, 45000)), ""]);
+    return { ok: true }; });
+  divClearCache_(); try { cache.remove("mdt_dept"); } catch (e) {}
+  return { ok: true, logged: true, credited: people.map(p => p.n) };
+}
+// owner/admin: make sure the hidden "Patrol Report (Builder)" form and a Patrol division exist
+function builderSetup_(me, on) {
+  return withLock_(() => {
+    const cfg = getConfig_(); cfg.settings = cfg.settings || {};
+    if (!cfg.forms.some(f => f.id === BUILDER_FORM_)) cfg.forms.push({ id: BUILDER_FORM_, title: "Patrol Report (Builder)", icon: "🚓", status: "hidden", section: "", blocks: [], desc: "Logged automatically from the chief's report builder." });
+    const divs = cfg.settings.divisions = cfg.settings.divisions || [];
+    let dv = divs.find(x => x.forms && x.forms.some(f => f.id === BUILDER_FORM_)) || divs.find(x => /patrol/i.test(x.name));
+    if (!dv) { const tid = rosterTabByName_(PERSONNEL_TAB_); dv = { id: "patrol", name: "Patrol", tagline: "Reports from the report builder", color: "#2f7bff", logoUrl: "img/lspd-badge.png", rosterTabId: tid, rosterTabName: tid != null ? PERSONNEL_TAB_ : "", forms: [], quota: 0, quotaPer: "week", quotaAssists: true, warnDays: 0, inactiveDays: 0, pingTagged: false, exempt: "" }; divs.push(dv); }
+    dv.forms = dv.forms || []; if (!dv.forms.some(f => f.id === BUILDER_FORM_)) dv.forms.push({ id: BUILDER_FORM_, author: "author" });
+    cfg.version = (Number(cfg.version) || 0) + 1; writeConfig_(cfg, me.username);
+    if (on != null) PROPS_.setProperty("BUILDER_ON", on ? "1" : "");
+    logAdmin_(me.username, "builder sync", (on ? "on" : "off") + " · Patrol division ready");
+    return { ok: true, config: cfg, builder: builderStatus_() };
+  });
+}
+function builderStatus_() {
+  const rows = actRows_().filter(r => r.form === BUILDER_FORM_), wk = rows.filter(r => Date.now() - r.at < 7 * 864e5);
+  return { on: PROPS_.getProperty("BUILDER_ON") === "1", week: wk.length, total: rows.length, last: rows.length ? rows[rows.length - 1].at : 0 };
+}
+
+// =====================================================================
 // OFFICER ACCOUNTS: sign in with Discord once per device, then a 4-digit PIN
 // =====================================================================
 const ACCT_SHEET_ = "Officer Accounts";
@@ -2959,6 +3023,7 @@ function handleAdmin_(d) {
   if (/^acct(DiscordUrl|Discord|SetPin|Pin|Me|Out)$/.test(a)) return acctHandle_(d);
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
+  if (a === "builderLog") return builderLog_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
   if (a === "recordsSearch") return recordsSearch_(d);
   if (a === "quickRef") return quickRef_(d);
@@ -3053,6 +3118,11 @@ function handleAdmin_(d) {
         logAdmin_(me.username, a === "sopSet" ? "SOP link" : "fleet photo", a === "sopSet" ? str_(d.url) : str_(d.key));
         return { ok: true, photos: cfg.settings.fleetPhotos || {}, sop: str_(cfg.settings.sopUrl) || SOP_URL_DEFAULT_ };
       });
+    }
+    case "builderStatus": return { ok: true, builder: builderStatus_() };
+    case "builderSetup": {
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");
+      return builderSetup_(me, d.on == null ? null : !!d.on);
     }
     case "formAccess": {         // owner/admin: who can file a form (Permissions page)
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change permissions.");

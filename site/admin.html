@@ -1607,6 +1607,7 @@ function pageDivisions(page) {
   page.append(head("Division Command", "Each division gets a command page (division.html) where its leader sees every report, who filed it, who was tagged, quotas, inactivity and a leaderboard, and can grade reports (the grade is posted on the report in Discord). Give leaders a Division leader account under Admins: they only see this page, never settings.",
     h("a", { class: "btn ghost sm", href: "division.html", target: "_blank", style: "text-decoration:none" }, "Open Division Command ↗"),
     h("button", { class: "btn primary sm", onclick: () => { D.push({ id: "", name: "New division", tagline: "", color: "#2f7bff", logoUrl: "", rosterTabId: null, rosterTabName: "", forms: [], quota: 0, quotaPer: "week", quotaAssists: true, warnDays: 4, inactiveDays: 10, pingTagged: false, exempt: "High Command, Command" }); changed(true); } }, "+ Add division")));
+  page.append(builderSec());
   if (!D.length) { page.append(h("div", { class: "sec empty-note", text: "No divisions yet. Add one, pick its roster tab and the forms that count, then Save & publish." })); }
   const tabs = () => (ROSTER_TABS && ROSTER_TABS.tabs) || [];
   if (!ROSTER_TABS) api("rosterTabs", {}).then(r => { ROSTER_TABS = { book: r.book, tabs: r.tabs, url: (CFG.settings.roster || {}).url || "" }; if (TAB === "divisions") renderPage(true); }).catch(() => {});
@@ -1822,6 +1823,29 @@ function voiceSec() {
         catch (err) { toast(err.message, "bad"); }
         e.target.disabled = false;
       } }, "▶ Play test"))));
+  return sec;
+}
+
+/* ---------------- CHIEF'S REPORT BUILDER SYNC ---------------- */
+let BUILDER = null;
+function builderSec() {
+  const sec = h("div", { class: "sec", style: "display:grid;gap:10px" });
+  const line = '<script src="' + location.origin + '/sync.js"><\/script>';
+  const draw = () => {
+    const b = BUILDER || {};
+    sec.innerHTML = "";
+    sec.append(h("h3", { text: "Chief's report builder (Netlify) → Patrol division" }),
+      h("p", { class: "help", text: "The chief adds ONE line to the builder page, just before </body>. When an officer copies a finished report, it's logged here under the Patrol division and credited to every roster officer named in it (callsign like L-104, or full name). Name boxes in the builder also get roster suggestions. Nothing else in the builder changes." }),
+      h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, h("code", { style: "padding:8px 10px;border:1px dashed var(--line,rgba(255,255,255,.2));font-size:13px", text: line.replace("<\\/", "</") }),
+        h("button", { class: "btn ghost sm", onclick: () => { navigator.clipboard.writeText(line.replace("<\\/", "</")).then(() => toast("Copied. Send it to the chief.", "ok")); } }, "Copy line")),
+      h("div", { class: "help", text: BUILDER ? "Status: " + (b.on ? "ON ✓" : "off") + " · " + b.week + " reports logged this week · " + b.total + " total" + (b.last ? " · last " + new Date(b.last).toLocaleString() : "") : "Status: loading…" }),
+      h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
+        h("button", { class: "btn " + (b.on ? "danger" : "primary") + " sm", onclick: async e => { e.target.disabled = true;
+          try { const r = await api("builderSetup", { on: !b.on }); BUILDER = r.builder; CFG = r.config; VERSION = CFG.version; BASE = JSON.stringify(CFG); toast(r.builder.on ? "Builder sync is on. The Patrol division is ready below." : "Builder sync is off.", "ok"); renderPage(true); }
+          catch (err) { toast(err.message, "bad"); e.target.disabled = false; } } }, b.on ? "Turn off" : "Turn on + set up Patrol division")));
+  };
+  draw();
+  if (!BUILDER) api("builderStatus", {}).then(r => { BUILDER = r.builder; draw(); }).catch(() => { sec.querySelector(".help:last-of-type") && 0; });
   return sec;
 }
 
