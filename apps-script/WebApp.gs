@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 52;
+const BACKEND_VERSION = 53;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -894,9 +894,10 @@ function handleSubmit_(d) {
   }
 
   // ---- archive + leaderboard (after Discord so a failed post isn't logged as filed; only this part waits in line) ----
+  let logId = "";
   const saved = withLock_(() => {
     archiveRow_(form, archiveCols);
-    try { actLog_(form, values, repeaters, archiveCols, { webhookId: webhook.id, threadId: threadId, messageId: r1.body && r1.body.id, content: first.content || "", title: first.thread_name || fillTemplate_(form.embedTitle || form.title, values) || form.title }); } catch (e) {}
+    try { logId = actLog_(form, values, repeaters, archiveCols, { webhookId: webhook.id, threadId: threadId, messageId: r1.body && r1.body.id, content: first.content || "", title: first.thread_name || fillTemplate_(form.embedTitle || form.title, values) || form.title, report: cidX ? cidX.report : "" }); } catch (e) {}
     const lb = form.leaderboard;
     if (lb && lb.enabled && lb.countField && str_(values[lb.countField])) {
       lbSheet_().appendRow([new Date(), form.id, "'" + str_(values[lb.countField])]);
@@ -916,9 +917,9 @@ function handleSubmit_(d) {
   if (cidX) {
     let id = "";
     try { id = cidRecord_(form, webhook, cidX, first, threadId, r1.body && r1.body.id, values); } catch (e) { warning = warning || "posted, but Command review couldn't save it: " + errMsg_(e); }
-    return warning ? { ok: true, id: id, warning: warning } : { ok: true, id: id };
+    return warning ? { ok: true, id: id, logId: logId, warning: warning } : { ok: true, id: id, logId: logId };
   }
-  return warning ? { ok: true, warning: warning } : { ok: true };
+  return warning ? { ok: true, logId: logId, warning: warning } : { ok: true, logId: logId };
 }
 
 // Reads "(Felony, 18 Months - $9,000 Fine)" style charges; count multiplies it.
@@ -1795,6 +1796,7 @@ function cidUpdate_(form, webhook, x, first, d) {
     sh.getRange(rec.row, c("Content")).setValue(cellSafe_(first.content));
     sh.getRange(rec.row, c("Report")).setValue(cellSafe_(x.report));
     sh.getRange(rec.row, c("Case Data")).setValue(cellSafe_(x.data));
+    try { const a = actRows_().find(r => r.messageId && r.messageId === rec.messageId); if (a) actSheet_().getRange(a.row, 17).setValue(cellSafe_(clip_(x.report, 45000))); divClearCache_(); } catch (e) {}
     return { ok: true };
   });
   return { ok: true, id: rec.id, updated: true };
@@ -1863,8 +1865,8 @@ function cidHandle_(d) {
 // DIVISION COMMAND (division.html): every report, who filed it, who was tagged, grades
 // =====================================================================
 const ACT_SHEET_ = "Division Activity";
-const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source"];
-const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divGrade: 1, changePassword: 1 };
+const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source", "Report"];
+const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divGrade: 1, divReport: 1, changePassword: 1 };
 const GRADES_ = ["A", "B", "C", "D", "F"];
 function actSheet_() {
   const ss = ss_();
@@ -1873,7 +1875,7 @@ function actSheet_() {
     sh = ss.insertSheet(ACT_SHEET_);
     sh.appendRow(ACT_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, ACT_HEAD_.length).setFontWeight("bold");
     sh.getRange("H:J").setNumberFormat("@");
-  }
+  } else if (sh.getLastColumn() < ACT_HEAD_.length) sh.getRange(1, 1, 1, ACT_HEAD_.length).setValues([ACT_HEAD_]).setFontWeight("bold");   // sheets made before the Report column
   return sh;
 }
 function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view_" + x.id + "_n")); } catch (e) {} }
@@ -1923,12 +1925,17 @@ function actSummary_(cols, people) {
   cols.forEach(c => { if (skip[c.id] || !str_(c.value)) return; const line = c.label.replace(/[:(].*$/, "").trim() + ": " + clip_(str_(c.value).replace(/\s+/g, " "), 400); if (txt.length + line.length < 3500) txt += (txt ? "\n" : "") + line; });
   return txt;
 }
+// The whole report as readable text (for reading it while grading): every box, lists one row per line, long text kept as written
+function actFull_(cols) {
+  return cols.filter(c => str_(c.value)).map(c => { const lab = str_(c.label).replace(/[:(].*$/, "").trim() || c.id, v = str_(c.value).replace(/\s*\(\d{15,21}\)/g, "");
+    return v.length > 80 || v.indexOf("\n") !== -1 || v.indexOf("; ") !== -1 ? lab.toUpperCase() + "\n" + v.split(/;\s(?=\S)/).join("\n") + "\n" : lab + ": " + v; }).join("\n");
+}
 function actLog_(form, values, repeaters, cols, x) {
   const people = actPeople_(form, values, repeaters);
   const caseF = allFields_(form).find(f => f.type === "case_number");
   const id = Utilities.getUuid().replace(/-/g, "").slice(0, 14);
   actSheet_().appendRow([id, new Date(), form.id, cellSafe_(caseF ? str_(values[caseF.id]) : ""), cellSafe_(clip_(x.title, 200)), JSON.stringify(people), cellSafe_(actSummary_(cols, people)),
-    "'" + (x.threadId || ""), "'" + (x.messageId || ""), x.webhookId || "", cellSafe_(clip_(x.content || "", 1900)), "", "", "", "", x.source || "report"]);
+    "'" + (x.threadId || ""), "'" + (x.messageId || ""), x.webhookId || "", cellSafe_(clip_(x.content || "", 1900)), "", "", "", "", x.source || "report", cellSafe_(clip_(x.report || actFull_(cols), 45000))]);
   divClearCache_();
   return id;
 }
@@ -1964,7 +1971,7 @@ function actRows_() {
     let people = []; try { people = JSON.parse(str_(r[5]) || "[]"); } catch (e) {}
     out.push({ row: i + 1, id: str_(r[0]), at: isDate_(r[1]) ? r[1].getTime() : new Date(r[1]).getTime() || 0, form: str_(r[2]), no: str_(r[3]), title: str_(r[4]), people: people, summary: str_(r[6]),
       threadId: str_(r[7]).replace(/^'/, ""), messageId: str_(r[8]).replace(/^'/, ""), webhookId: str_(r[9]), content: str_(r[10]),
-      grade: str_(r[11]), gradedBy: str_(r[12]), comments: str_(r[13]), gradedAt: isDate_(r[14]) ? r[14].getTime() : 0, source: str_(r[15]) }); }
+      grade: str_(r[11]), gradedBy: str_(r[12]), comments: str_(r[13]), gradedAt: isDate_(r[14]) ? r[14].getTime() : 0, source: str_(r[15]), report: str_(r[16]) }); }
   return out;
 }
 // Everything the Division Command page shows for one division: its officers + every report from its forms.
@@ -2043,6 +2050,17 @@ function divGrade_(d, me) {
   } catch (e) { warning = "grade saved, but Discord couldn't be reached: " + errMsg_(e); }
   return warning ? { ok: true, warning: warning } : { ok: true };
 }
+// An officer's own reports, by the log IDs their browser kept when they filed them (or a CID case's ID): grades and comments
+function divMine_(d) {
+  const ids = (Array.isArray(d.ids) ? d.ids : []).map(str_).filter(Boolean).slice(0, 300);
+  const cids = (Array.isArray(d.cidIds) ? d.cidIds : []).map(str_).filter(Boolean).slice(0, 300);
+  const rows = actRows_(), forms = {}; getConfig_().forms.forEach(f => forms[f.id] = f);
+  const pick = r => ({ id: r.id, at: r.at, form: r.form, formTitle: forms[r.form] ? forms[r.form].title : r.form, icon: forms[r.form] ? forms[r.form].icon || "📄" : "📄", no: r.no, title: r.title,
+    grade: r.grade, gradedBy: r.gradedBy, comments: r.comments, gradedAt: r.gradedAt });
+  const out = rows.filter(r => ids.indexOf(r.id) !== -1).map(pick), cid = {};
+  if (cids.length) { try { cidAll_().filter(c => cids.indexOf(c.id) !== -1 && c.messageId).forEach(c => { const r = rows.find(x => x.messageId === c.messageId); if (r) cid[c.id] = pick(r); }); } catch (e) {} }
+  return { ok: true, reports: out, cid: cid };
+}
 // Reports filed before Division Command existed: read back from each form's sheet tab (no Discord post to reply to)
 function divImport_() {
   const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [], want = {};
@@ -2061,7 +2079,7 @@ function divImport_() {
       const values = {}, cols = []; notes.forEach((n, j) => { if (j && n) { values[n] = str_(r[j]); cols.push({ id: n, label: str_(heads[j]), value: str_(r[j]) }); } });
       const people = actPeople_(form, values, {});
       if (!people.length || already(form.id, ts.getTime(), caseF ? str_(values[caseF.id]) : "", JSON.stringify(people))) return;
-      rows.push([Utilities.getUuid().replace(/-/g, "").slice(0, 14), ts, form.id, cellSafe_(caseF ? values[caseF.id] || "" : ""), cellSafe_(clip_(fillTemplate_(form.embedTitle || form.title, values) || form.title, 200)), JSON.stringify(people), cellSafe_(actSummary_(cols, people)), "", "", "", "", "", "", "", "", src]);
+      rows.push([Utilities.getUuid().replace(/-/g, "").slice(0, 14), ts, form.id, cellSafe_(caseF ? values[caseF.id] || "" : ""), cellSafe_(clip_(fillTemplate_(form.embedTitle || form.title, values) || form.title, 200)), JSON.stringify(people), cellSafe_(actSummary_(cols, people)), "", "", "", "", "", "", "", "", src, cellSafe_(clip_(actFull_(cols), 45000))]);
     });
   });
   if (rows.length) withLock_(() => { const sh = actSheet_(); sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); return { ok: true }; });
@@ -2315,6 +2333,7 @@ function handleAdmin_(d) {
   }
 
   if (/^cid(Mine|List|Review)$/.test(a)) return cidHandle_(d);
+  if (a === "divMine") return divMine_(d);
 
   const me = sessionAdmin_(d.token);
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
@@ -2323,6 +2342,7 @@ function handleAdmin_(d) {
   // division leaders: the Division Command page only (no forms, settings, webhooks or accounts)
   if (me.role === "leader" && !LEADER_ACTIONS_[a]) throw new Error("Division leader accounts can only use the Division Command page.");
   if (a === "divView") return divView_(d, me);
+  if (a === "divReport") { const r = actRows_().find(x => x.id === str_(d.id)); return r ? { ok: true, report: r.report || r.summary } : { ok: false, error: "That report isn't in the log." }; }
   if (a === "divGrade") return withLock_(() => divGrade_(d, me));
 
   switch (a) {

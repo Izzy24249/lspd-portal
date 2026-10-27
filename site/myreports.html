@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Reports · LSPD</title>
+<link rel="icon" href="img/lspd-seal.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="portal.css?v=202610200937">
+<style>
+.mr-wrap{max-width:900px;margin:0 auto;padding:30px 20px 80px}
+.mr-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.mr-head h1{font:700 34px/1 Oswald,sans-serif;letter-spacing:.04em}
+.mr-head p{color:var(--muted);font-size:14px;margin-top:8px;max-width:560px;line-height:1.5}
+.mr-k{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.mr-k div{padding:13px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.mr-k small{display:block;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em}
+.mr-k b{display:block;margin-top:5px;font:700 28px/1 Oswald,sans-serif}
+.mr-list{display:grid;gap:10px}
+.mr-r{display:grid;grid-template-columns:44px 1fr auto;gap:13px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--panel);position:relative}
+.mr-r.new{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.mr-r.new::after{content:"NEW";position:absolute;top:-8px;right:14px;font:800 9.5px/1 Inter,sans-serif;letter-spacing:.14em;padding:4px 7px;border-radius:6px;background:var(--gold);color:#2a1800}
+.mr-ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:21px;background:rgba(47,123,255,.12);border:1px solid rgba(47,123,255,.3)}
+.mr-r b{font-size:14.5px}
+.mr-m{font-size:12px;color:var(--muted);margin-top:3px}
+.mr-c{margin-top:10px;padding:10px 12px;border-left:3px solid var(--blue2);border-radius:0 9px 9px 0;background:rgba(255,255,255,.04);font-size:13.5px;line-height:1.55;white-space:pre-wrap}
+.mr-c span{display:block;margin-top:6px;color:var(--muted);font-size:12px}
+.mr-g{display:grid;justify-items:center;align-content:start;gap:4px}
+.mr-g em{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font:700 24px Oswald,sans-serif;font-style:normal;border:2px solid}
+.mr-g small{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.mr-g .wait{border-style:dashed;border-color:rgba(255,255,255,.2);color:var(--muted);font-size:15px}
+.g-a{color:#6ee7b7;border-color:#34d399}.g-b{color:#a7f3d0;border-color:#4ade80}.g-c{color:#fde68a;border-color:#fbbf24}.g-d{color:#fed7aa;border-color:#fb923c}.g-f{color:#fecaca;border-color:#f87171}
+.mr-empty{padding:60px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:16px;line-height:1.6}
+.mr-note{margin-top:18px;color:var(--muted);font-size:12.5px;line-height:1.5}
+@media(max-width:600px){.mr-k{grid-template-columns:1fr 1fr}.mr-r{grid-template-columns:38px 1fr auto;padding:12px}.mr-ic{width:38px;height:38px;font-size:18px}}
+</style>
+</head>
+<body>
+<div class="lightbar"></div>
+<header class="top"><div class="top-in">
+  <a class="brand" href="index.html"><img class="brand-logo" src="img/lspd-patch.png" alt="LSPD"><div><b>LSPD</b><small>LOS SANTOS POLICE DEPT.</small></div></a>
+  <div class="spacer"></div>
+  <a class="pill myrep" href="index.html">← Back to forms</a>
+</div></header>
+<main class="mr-wrap">
+  <div class="mr-head"><div><h1>MY REPORTS</h1><p>Reports filed from this device and the grade your division leadership gave each one, with their comments.</p></div>
+    <button class="btn ghost sm" id="refresh">↻ Refresh</button></div>
+  <div class="mr-k" id="kpis"></div>
+  <div class="mr-list" id="list"><div class="loading">Loading your reports…</div></div>
+  <p class="mr-note">Only reports you filed on this device and browser are listed (the list is kept in this browser). Grades also appear on the report's Discord post, where you're tagged.</p>
+</main>
+<div class="toast" id="toast"></div>
+<script src="forms.js?v=202610200937"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id), esc = s => Portal.esc(s);
+  const get = (k, d) => { try{ return JSON.parse(localStorage.getItem(k) || "null") || d; }catch(e){ return d; } }, set = (k, v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+  const GP = { A: 4, B: 3, C: 2, D: 1, F: 0 }, GL = ["F", "D", "C", "B", "A"];
+  const when = t => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  async function load(){
+    const mine = get("lspd_my_reports", []);
+    // CID case files posted from the case builder count too
+    get("cid-builder:cases", []).forEach(c => { if (c && c.logId && !mine.some(x => x.id === c.logId)) mine.push({ id: c.logId, form: "cid", title: (c.data && c.data.values && c.data.values.ccTitle) || "CID case file", at: c.posted || c.updated }); });
+    const cidIds = get("cid-builder:cases", []).filter(c => c && c.submissionId && !c.logId).map(c => c.submissionId);
+    if(!mine.length && !cidIds.length){ $("kpis").innerHTML = ""; $("list").innerHTML = '<div class="mr-empty"><b>No reports yet.</b><br>Reports you file from this device will show up here, with their grade once leadership reviews them.</div>'; return; }
+    let res;
+    try{ res = await Portal.post({ action: "divMine", ids: mine.map(x => x.id), cidIds: cidIds }); if(!res.ok) throw new Error(res.error || "Couldn't load your reports."); }
+    catch(e){ $("list").innerHTML = '<div class="mr-empty">' + esc(e.message) + '<br><button class="btn ghost sm" onclick="location.reload()">Try again</button></div>'; return; }
+    const byId = {}; (res.reports || []).forEach(r => byId[r.id] = r); Object.keys(res.cid || {}).forEach(k => { const r = res.cid[k]; byId[r.id] = r; if (!mine.some(x => x.id === r.id)) mine.push({ id: r.id, title: r.title, at: r.at }); });
+    const rows = mine.map(m => Object.assign({ formTitle: "", icon: m.icon || "📄", title: m.title, at: m.at }, byId[m.id] || {}, { id: m.id, known: !!byId[m.id] })).sort((a, b) => b.at - a.at);
+    const seen = get("lspd_my_seen", {}), graded = rows.filter(r => r.grade);
+    const avg = graded.length ? GL[Math.round(graded.reduce((n, r) => n + GP[r.grade], 0) / graded.length)] : "—";
+    $("kpis").innerHTML = `<div><small>Reports filed</small><b>${rows.length}</b></div><div><small>Graded</small><b>${graded.length}</b></div><div><small>Waiting</small><b>${rows.length - graded.length}</b></div><div><small>Average grade</small><b>${avg}</b></div>`;
+    $("list").innerHTML = rows.map(r => `<article class="mr-r${r.grade && seen[r.id] !== r.grade + r.gradedAt ? " new" : ""}">
+      <div class="mr-ic">${esc(r.icon || "📄")}</div>
+      <div><b>${esc(r.title || r.formTitle || "Report")}</b>
+        <div class="mr-m">${r.formTitle ? esc(r.formTitle) + " · " : ""}filed ${esc(when(r.at))}${r.no && !(r.title || "").includes(r.no) ? " · " + esc(r.no) : ""}</div>
+        ${r.grade ? (r.comments ? `<div class="mr-c">${esc(r.comments)}<span>— ${esc(r.gradedBy || "Leadership")}${r.gradedAt ? " · " + esc(when(r.gradedAt)) : ""}</span></div>` : `<div class="mr-m">Graded by ${esc(r.gradedBy || "leadership")}${r.gradedAt ? " · " + esc(when(r.gradedAt)) : ""}</div>`) : !r.known ? '<div class="mr-m">Not in a division log (this form isn\'t tracked by Division Command).</div>' : ""}
+      </div>
+      <div class="mr-g">${r.grade ? `<em class="g-${r.grade.toLowerCase()}">${esc(r.grade)}</em><small>Grade</small>` : '<em class="wait">…</em><small>Waiting</small>'}</div></article>`).join("");
+    graded.forEach(r => seen[r.id] = r.grade + r.gradedAt); set("lspd_my_seen", seen);
+  }
+  $("refresh").onclick = load;
+  load();
+})();
+</script>
+</body>
+</html>

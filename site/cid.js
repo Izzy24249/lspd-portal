@@ -3,7 +3,7 @@
    so it keeps every portal feature (charges pop-out, linking, narrative sync…). This file adds the
    division's builder around it: officer profile, several saved cases, dashboard, live case-file preview
    (plain text / Discord / BBCode), print & download, case-file image, Post / Save to Discord,
-   Command review status, idle lock and the background beat. */
+   division review (grades from Division Command), idle lock and the background beat. */
 (function () {
   "use strict";
   const $ = id => document.getElementById(id), esc = s => Portal.esc(s);
@@ -67,7 +67,7 @@
 
   // ---------------- intro: loading terminal, then officer sign-in ----------------
   let introDone = false;
-  const LINES = ["Establishing secure link to MDT terminal", "Verifying officer credentials", "Loading penal code registry", "Syncing division case index", "Preparing evidence locker", "Applying Command review channel", "Case file builder ready"];
+  const LINES = ["Establishing secure link to MDT terminal", "Verifying officer credentials", "Loading penal code registry", "Syncing division case index", "Preparing evidence locker", "Linking division review channel", "Case file builder ready"];
   function runIntro() {
     let i = 0, pct = 0, done = false;
     const lines = $("introLines"), bar = $("introBar"), pc = $("introPct");
@@ -420,7 +420,7 @@
     const d = ctrl.collect(), media = mediaList(), v = d.values;
     if (!T(v.ccNarrative)) { toast("Missing info: Investigator Narrative is required.", "bad"); return; }
     const msg = update ? `Save your edits to the Discord post for ${v.ccCaseNo || "this case"}?` :
-      `Post ${v.ccCaseNo || "this case file"} to the division Discord?\n\nYou will be tagged, and the case goes to Command for review.` + (CUR.submissionId ? "\n\nThis case was already posted. To update that post instead, use Save to Discord." : "") + (media.length ? `\n\n${media.length} evidence media link${media.length === 1 ? "" : "s"} will be posted with it.` : "");
+      `Post ${v.ccCaseNo || "this case file"} to the division Discord?\n\nYou will be tagged, and leadership can grade it in Division Command.` + (CUR.submissionId ? "\n\nThis case was already posted. To update that post instead, use Save to Discord." : "") + (media.length ? `\n\n${media.length} evidence media link${media.length === 1 ? "" : "s"} will be posted with it.` : "");
     if (!confirm(msg)) return;
     const btn = update ? $("saveDiscordBtn") : $("postBtn"), label = btn.textContent;
     btn.disabled = true; btn.textContent = update ? "Saving…" : "Posting…";
@@ -429,23 +429,28 @@
       const res = await Portal.post(Object.assign({}, d, { form: FORM.id, cid: { profile: PROFILE, forumTags: CUR.forumTags, media: media, image: image, report: format(d, "text"), caseData: Object.assign({}, d, { forumTags: CUR.forumTags, media: CUR.media }), update: update ? CUR.submissionId : "" } }));
       if (!res.ok) throw new Error(res.error || "Posting to Discord failed.");
       if (res.id) CUR.submissionId = res.id;
+      if (res.logId) { CUR.logId = res.logId; CUR.review = null; }
       CUR.posted = Date.now(); saveCases(); drawPostBtns(); drawReview();
-      toast(update ? "Edits saved and the Discord post updated" + (res.warning ? " (" + res.warning + ")" : "") : "Case file posted to Discord and sent to Command" + (res.warning ? " (" + res.warning + ")" : ""), res.warning ? "bad" : "ok");
+      toast(update ? "Edits saved and the Discord post updated" + (res.warning ? " (" + res.warning + ")" : "") : "Case file posted to Discord" + (res.warning ? " (" + res.warning + ")" : ""), res.warning ? "bad" : "ok");
     } catch (e) { toast(e.message || "Posting to Discord failed.", "bad"); }
     finally { btn.disabled = false; btn.textContent = label; drawPostBtns(); }
   }
 
-  // ---------------- Command review status ----------------
+  // ---------------- division review (grades given in Division Command) ----------------
   async function pollReviews() {
-    const ids = CASES.map(c => c.submissionId).filter(Boolean); if (!ids.length) return;
+    const ids = CASES.map(c => c.logId).filter(Boolean), cidIds = CASES.filter(c => c.submissionId && !c.logId).map(c => c.submissionId);
+    if (!ids.length && !cidIds.length) return;
     try {
-      const res = await Portal.post({ action: "cidMine", ids: ids }); if (!res.ok) return;
-      (res.reviews || []).forEach(r => {
-        const c = CASES.find(x => x.submissionId === r.id); if (!c) return;
-        const before = c.review ? c.review.review + c.review.gradedAt : "";
-        c.review = r;
-        if (r.review !== "pending" && before && before !== r.review + r.gradedAt) toast(`Command reviewed ${(c.data.values || {}).ccCaseNo || "your case"}: ${r.review === "accepted" ? "Accepted" : "Denied"}${r.grade ? " · Grade " + r.grade : ""}`, r.review === "accepted" ? "ok" : "bad");
-      });
+      const res = await Portal.post({ action: "divMine", ids: ids, cidIds: cidIds }); if (!res.ok) return;
+      const apply = (c, r) => {
+        if (!c || !r) return;
+        if (!c.logId) c.logId = r.id;                      // cases posted before Division Command: linked by their Discord post
+        const before = c.review ? (c.review.grade || "") + (c.review.gradedAt || "") : null;
+        c.review = { grade: r.grade || "", gradedBy: r.gradedBy || "", comments: r.comments || "", gradedAt: r.gradedAt || 0 };
+        if (r.grade && before !== null && before !== r.grade + r.gradedAt) toast(`Division review: ${(c.data.values || {}).ccCaseNo || "your case"} graded ${r.grade}${r.gradedBy ? " by " + r.gradedBy : ""}`, /[ABC]/.test(r.grade) ? "ok" : "bad");
+      };
+      (res.reports || []).forEach(r => apply(CASES.find(x => x.logId === r.id), r));
+      Object.keys(res.cid || {}).forEach(k => apply(CASES.find(x => x.submissionId === k), res.cid[k]));
       saveCases(); drawReview();
     } catch (e) {}
   }
@@ -453,9 +458,9 @@
     const box = $("review"), r = CUR && CUR.review;
     if (!CUR || !CUR.submissionId) { box.hidden = true; return; }
     box.hidden = false;
-    if (!r || r.review === "pending") { box.className = "ci-review pending"; box.innerHTML = `<b>🛡️ Command review</b><span>Posted${CUR.posted ? " " + new Date(CUR.posted).toLocaleString() : ""} · waiting for Command to review it.</span>`; return; }
-    box.className = "ci-review " + r.review;
-    box.innerHTML = `<b>🛡️ Command review: ${r.review === "accepted" ? "✅ Accepted" : "❌ Denied"}${r.grade ? ` · Grade <em>${esc(r.grade)}</em>` : ""}</b><span>${r.gradedBy ? "by " + esc(r.gradedBy) : ""}${r.gradedAt ? " · " + esc(new Date(r.gradedAt).toLocaleString()) : ""}</span>${r.comments ? `<p>${esc(r.comments)}</p>` : ""}`;
+    if (!r || !r.grade) { box.className = "ci-review pending"; box.innerHTML = `<b>🏅 Division review</b><span>Posted${CUR.posted ? " " + new Date(CUR.posted).toLocaleString() : ""} · waiting for leadership to grade it.</span>`; return; }
+    box.className = "ci-review " + (/[ABC]/.test(r.grade) ? "accepted" : "denied");
+    box.innerHTML = `<b>🏅 Division review · Grade <em>${esc(r.grade)}</em></b><span>${r.gradedBy ? "by " + esc(r.gradedBy) : ""}${r.gradedAt ? " · " + esc(new Date(r.gradedAt).toLocaleString()) : ""}</span>${r.comments ? `<p>${esc(r.comments)}</p>` : ""}`;
   }
 
   // ---------------- modals: profile, my cases, dashboard ----------------
@@ -478,7 +483,7 @@
       <div class="ci-mbar"><label class="ci-btn"><input type="file" id="impFile" accept=".json,application/json" multiple hidden>⤒ Import case files</label><button type="button" class="ci-btn" id="expAll">⤓ Export all</button><button type="button" class="ci-btn" id="example">📁 Load example case</button><button type="button" class="ci-btn gold" id="mNew">＋ New case</button></div>
       <div class="ci-clist">${list.map(x => { const v = (x.data && x.data.values) || {}, p = completeness(x.data || {}), r = x.review;
         return `<div class="ci-crow${x.id === CUR.id ? " cur" : ""}" data-cid="${esc(x.id)}">
-          <div class="ci-cmain"><b>${esc(caseTitle(x))}</b><small>${esc(v.ccCaseNo || "")} · ${esc(v.ccClass || "No classification")} · <span class="st st-${esc(stampOf(v.ccStatus).toLowerCase())}">${esc(v.ccStatus || "Open")}</span>${x.submissionId ? ` · ${r && r.review !== "pending" ? (r.review === "accepted" ? "✅ Accepted" : "❌ Denied") + (r.grade ? " " + esc(r.grade) : "") : "⏳ With Command"}` : ""}</small>
+          <div class="ci-cmain"><b>${esc(caseTitle(x))}</b><small>${esc(v.ccCaseNo || "")} · ${esc(v.ccClass || "No classification")} · <span class="st st-${esc(stampOf(v.ccStatus).toLowerCase())}">${esc(v.ccStatus || "Open")}</span>${x.submissionId ? ` · ${r && r.grade ? "🏅 Grade " + esc(r.grade) : "⏳ Awaiting grade"}` : ""}</small>
             <div class="ci-cmeter"><i style="width:${p}%"></i></div></div>
           <span class="ci-cwhen">${x.id === CUR.id ? "Editing" : esc(ago(x.updated))}</span>
           <div class="ci-cacts"><button type="button" class="ci-btn sm" data-act="open">Open</button><button type="button" class="ci-btn sm" data-act="rename">Rename</button><button type="button" class="ci-btn sm" data-act="dup">Duplicate</button><button type="button" class="ci-btn sm" data-act="exp">Export</button><button type="button" class="ci-btn sm danger" data-act="del">Delete</button></div></div>`; }).join("")}</div>`, "wide");
@@ -497,10 +502,10 @@
         const save = () => { x.data.values = x.data.values || {}; x.data.values.ccTitle = inp.value.trim(); x.updated = Date.now(); saveCases(); if (x.id === CUR.id && ctrl) ctrl.setValue("ccTitle", inp.value.trim()); openCases(); };
         cm.querySelector('[data-ren="save"]').onclick = save; cm.querySelector('[data-ren="cancel"]').onclick = openCases; inp.onkeydown = ev => { if (ev.key === "Enter") save(); if (ev.key === "Escape") { ev.stopPropagation(); openCases(); } };
       }
-      else if (act === "dup") { const y = JSON.parse(JSON.stringify(x)); y.id = ID(); y.created = y.updated = Date.now(); y.submissionId = ""; y.review = null; y.posted = 0; y.data.values.ccTitle = caseTitle(x) + " (copy)"; y.data.values.ccCaseNo = genCaseNo(); CASES.unshift(y); saveCases(); openCases(); toast("Case duplicated", "ok"); }
+      else if (act === "dup") { const y = JSON.parse(JSON.stringify(x)); y.id = ID(); y.created = y.updated = Date.now(); y.submissionId = ""; y.logId = ""; y.review = null; y.posted = 0; y.data.values.ccTitle = caseTitle(x) + " (copy)"; y.data.values.ccCaseNo = genCaseNo(); CASES.unshift(y); saveCases(); openCases(); toast("Case duplicated", "ok"); }
       else if (act === "exp") download(((x.data.values || {}).ccCaseNo || "case-file") + ".json", JSON.stringify({ kind: "cid-case-files", version: 1, cases: [x] }, null, 1), "application/json");
       else if (act === "del") {
-        if (!confirm(`Delete "${caseTitle(x)}" from this browser?` + (x.submissionId ? "\n\nIts Discord post and Command's copy stay." : "") + "\n\nExport it first if you want a backup.")) return;
+        if (!confirm(`Delete "${caseTitle(x)}" from this browser?` + (x.submissionId ? "\n\nIts Discord post and its grade stay." : "") + "\n\nExport it first if you want a backup.")) return;
         CASES = CASES.filter(y => y !== x); saveCases();
         if (x.id === CUR.id) { CUR = CASES[0] || newCase(true); mountCase(); }
         openCases();

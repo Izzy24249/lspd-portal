@@ -328,3 +328,9 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
 .oc-h small{font-family:Inter,sans-serif!important;font-weight:600}
 .dc-live.upd{border-color:rgba(var(--acr),.5);background:rgba(var(--acr),.1);color:#fff}
 .dc-live.upd i{background:rgba(var(--acr),1);animation:dcspin 1s linear infinite;border-radius:2px}
+.gm-full{border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.35);overflow:hidden}
+.gm-fh{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);background:rgba(var(--acr),.08)}
+.gm-fh b{font:700 12px Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+.gm-fh small{color:var(--muted);font-size:11px}
+.gm-full pre{margin:0;padding:12px 14px;max-height:42vh;overflow:auto;font:12.5px/1.6 "JetBrains Mono",monospace;color:#d6deeb;white-space:pre-wrap;word-break:break-word}
+.dc-mcard{width:min(760px,100%)}

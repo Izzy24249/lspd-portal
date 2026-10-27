@@ -828,7 +828,7 @@ function pageEditor(page) {
   const cidBody = [toggle(form, "cidApp", "Use this form on the CID Case File Builder page (cid.html)", true)];
   if (form.cidApp) {
     const others = CFG.forms.filter(f => f !== form && f.cidApp && f.status === "live");
-    cidBody.push(h("p", { class: "help", text: "Detectives fill this form on cid.html: saved cases, dashboard, case-file preview (plain text / Discord / BBCode), print, case-file picture, Post / Save to Discord and Command review. Every field, list, checklist and section you add here shows up there, in the same order, and in the case file. Keep the Case Number, Case Title, Lead Investigator, Rank, Badge, Narrative, Suspects, Evidence and Charges boxes so the officer details fill themselves in and evidence media links work." }));
+    cidBody.push(h("p", { class: "help", text: "Detectives fill this form on cid.html: saved cases, dashboard, case-file preview (plain text / Discord / BBCode), print, case-file picture, Post / Save to Discord, and grades from Division Command (add this form to a division there so leaders can grade it). Every field, list, checklist and section you add here shows up there, in the same order, and in the case file. Keep the Case Number, Case Title, Lead Investigator, Rank, Badge, Narrative, Suspects, Evidence and Charges boxes so the officer details fill themselves in and evidence media links work." }));
     if (others.length) cidBody.push(h("div", { class: "msg bad", style: "display:block", text: "Another live form (" + others.map(f => f.title).join(", ") + ") is also set for the CID page. The page uses the first one, so turn this off on the other." }));
     cidBody.push(h("p", { class: "help", text: "Forum tags the detective can pick on the case (up to 5 per case). Get a tag ID with Discord Developer Mode: right-click the tag in the forum's settings → Copy ID." }));
     form.forumTagOptions.forEach((t, i) => {
@@ -1506,7 +1506,6 @@ function pageSettingsInner(page) {
       e.target.disabled = false;
     } }, "Post / refresh board now")) : null));
   page.append(fastLoadingSec());
-  page.append(cidCommandSec());
   page.append(h("div", { class: "sec", style: "display:grid;gap:14px" },
     h("h3", { text: "Maintenance mode" }),
     h("p", { class: "help", text: "Shows a red notice and blocks all submissions until turned off. Officers' drafts are kept in their browser." }),
@@ -1544,24 +1543,6 @@ function fastLoadingSec() {
         st.on ? h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Turn off fast loading? The site will load from Google again.")) run({ off: true, repo: repo.value.trim() }, "Fast loading turned off."); } }, "Turn off") : null));
   };
   draw();
-  return box;
-}
-
-/* the password for the CID Command review page (cid-command.html) */
-function cidCommandSec() {
-  const box = h("div", { class: "sec", style: "display:grid;gap:12px" });
-  box.append(h("h3", { text: "CID Command review" }),
-    h("p", { class: "help", text: "Command uses cid-command.html to grade CID case files (Accept / Deny, A–F) and the detective is tagged in Discord. Give this password to CID Command only. Signed-in admins get in without it." }),
-    h("div", { class: "help", text: CIDCMD ? "Status: password is set." : CIDCMD === false ? "Status: no password yet, so Command can't sign in." : BACKEND_HAVE >= 46 ? "" : "Paste the new WebApp.gs (version 46 or newer) and deploy a new version to use this." }));
-  if (ME.role !== "owner") return box;
-  const pw = h("input", { type: "password", autocomplete: "new-password", placeholder: "At least 6 characters" });
-  box.append(h("div", { class: "g2" }, field(CIDCMD ? "New Command password" : "Command password", pw)),
-    h("div", {}, h("button", { class: "btn primary sm", onclick: async e => {
-      if (pw.value.length < 6) return toast("Use at least 6 characters.", "bad");
-      e.target.disabled = true;
-      try { await api("cidSetPassword", { password: pw.value }); CIDCMD = true; pw.value = ""; toast("CID Command password saved.", "ok"); box.replaceWith(cidCommandSec()); }
-      catch (err) { toast(err.message, "bad"); e.target.disabled = false; }
-    } }, CIDCMD ? "Change password" : "Set password")));
   return box;
 }
 

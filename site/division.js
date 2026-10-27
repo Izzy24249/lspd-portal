@@ -201,14 +201,21 @@
         <div class="rc-t"><b>${esc(r.title || r.formTitle)}</b>${r.no && !String(r.title || "").includes(r.no) ? `<code>${esc(r.no)}</code>` : ""}${r._new ? '<em class="nw">NEW</em>' : ""}${r.imported ? '<em class="imp">IMPORTED</em>' : ""}</div>
         <div class="rc-m">${esc(r.formTitle)} · <span title="${esc(fullTime(r.at))}">${esc(ago(r.at))}</span></div>
         <div class="rc-p">${r.author ? personChip(r.author, "author") : '<span class="pc none">No officer recorded</span>'}${r.tagged.map(t => personChip(t, "assist")).join("")}</div>
-        ${opts.open ? `<pre class="rc-sum">${esc(r.summary || "No details recorded.")}</pre>` : ""}
+        ${opts.open ? `<pre class="rc-sum" data-full="${esc(r.id)}">${esc(FULL[r.id] != null ? FULL[r.id] : r.summary || "Loading…")}</pre>` : ""}
         ${r.grade && r.comments ? `<div class="rc-cm">“${esc(r.comments)}” <span>— ${esc(r.gradedBy)}</span></div>` : ""}
       </div>
       <div class="rc-g">${r.grade ? `<button type="button" class="gb ${GCLS(r.grade)}" data-grade="${esc(r.id)}" title="Graded by ${esc(r.gradedBy)}${r.gradedAt ? " · " + esc(fullTime(r.gradedAt)) : ""}">${esc(r.grade)}</button><small>${esc(r.gradedBy)}</small>` : `<button type="button" class="dc-btn ac sm" data-grade="${esc(r.id)}">⚖ Grade</button>`}
-        <button type="button" class="rc-more" data-more="${esc(r.id)}">${opts.open ? "Hide details" : "Details"}</button></div>
+        <button type="button" class="rc-more" data-more="${esc(r.id)}">${opts.open ? "Hide report" : "Read report"}</button></div>
     </article>`;
   }
-  const OPEN = new Set();
+  const OPEN = new Set(), FULL = {};
+  function fullReport(id, box) {
+    const put = t => { if (box && box.isConnected) box.textContent = t; };
+    if (FULL[id] != null) { put(FULL[id]); return; }
+    put("Loading the full report…");
+    api("divReport", { id: id }).then(r => { FULL[id] = r.report || "No details recorded."; put(FULL[id]); document.querySelectorAll(`[data-full="${CSS.escape(id)}"]`).forEach(b => b.textContent = FULL[id]); })
+      .catch(e => put("Couldn't load the full report: " + e.message));
+  }
   const cards = list => list.map(r => reportCard(r, { open: OPEN.has(r.id) })).join("");
 
   function statusPill(o) {
@@ -329,7 +336,7 @@
       <div class="dc-kick">GRADE REPORT</div><h2>${esc(r.title || r.formTitle)}</h2>
       <div class="gm-m">${esc(r.formTitle)}${r.no ? " · " + esc(r.no) : ""} · ${esc(fullTime(r.at))}</div>
       <div class="rc-p">${r.author ? personChip(r.author, "author") : ""}${r.tagged.map(t => personChip(t, "assist")).join("")}</div>
-      <details class="gm-sum"><summary>Report details</summary><pre>${esc(r.summary || "No details recorded.")}</pre></details>
+      <div class="gm-full"><div class="gm-fh"><b>📄 Full report</b><small>${r.imported ? "rebuilt from the sheet" : "as filed"}</small></div><pre id="gmFull" data-full="${esc(r.id)}"></pre></div>
       <div class="gm-letters">${["A", "B", "C", "D", "F"].map(g => `<button type="button" data-g="${g}" class="${GCLS(g)}${pick === g ? " on" : ""}"><b>${g}</b><small>${{ A: "Excellent", B: "Good", C: "Acceptable", D: "Needs work", F: "Unacceptable" }[g]}</small></button>`).join("")}</div>
       <label class="gm-f"><span>Comments for the officer</span><textarea id="gmCm" maxlength="1500" placeholder="What was done well, what to fix next time…">${esc(r.comments || "")}</textarea></label>
       <label class="gm-f"><span>Graded by</span><input id="gmBy" maxlength="60" value="${esc(r.gradedBy || by)}"></label>
@@ -337,6 +344,7 @@
       ${r.tagged.length ? `<label class="gm-c${r.canPost ? "" : " dis"}"><input type="checkbox" id="gmPing" ${DATA.division.pingTagged ? "checked" : ""} ${r.canPost ? "" : "disabled"}> Also tag the ${r.tagged.length} assisting officer${r.tagged.length === 1 ? "" : "s"}</label>` : ""}
       <div class="gm-b">${r.grade ? '<button type="button" class="dc-btn danger" id="gmClear">Remove grade</button>' : ""}<span></span><button type="button" class="dc-btn" data-mclose>Cancel</button><button type="button" class="dc-btn ac" id="gmSave">Save grade</button></div>`;
     $("modal").hidden = false;
+    fullReport(r.id, $("gmFull"));
     const card = $("mcard");
     card.querySelector(".gm-letters").onclick = e => { const b = e.target.closest("[data-g]"); if (!b) return; pick = b.dataset.g; card.querySelectorAll("[data-g]").forEach(x => x.classList.toggle("on", x === b)); };
     card.querySelectorAll("[data-mclose]").forEach(b => b.onclick = closeModal);
@@ -365,7 +373,7 @@
     const pb = t.closest("#period [data-p]"); if (pb) { PERIOD = pb.dataset.p; store("dc:period", PERIOD); drawAll(); return; }
     const tb = t.closest("[data-tab],[data-t]"); if (tb && !t.closest("#dpanel")) { TAB = tb.dataset.tab || tb.dataset.t; drawAll(); window.scrollTo({ top: $("kpis").offsetTop - 120, behavior: "smooth" }); return; }
     const g = t.closest("[data-grade]"); if (g) { e.stopPropagation(); openGrade(g.dataset.grade); return; }
-    const m = t.closest("[data-more]"); if (m) { const id = m.dataset.more; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); const card = m.closest(".rc"), r = DATA.reports.find(x => x.id === id); if (card && r) card.outerHTML = reportCard(r, { open: OPEN.has(id) }); return; }
+    const m = t.closest("[data-more]"); if (m) { const id = m.dataset.more; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); const card = m.closest(".rc"), r = DATA.reports.find(x => x.id === id); if (card && r) { card.outerHTML = reportCard(r, { open: OPEN.has(id) }); if (OPEN.has(id)) fullReport(id, document.querySelector(`[data-full="${CSS.escape(id)}"]`)); } return; }
     const o = t.closest("[data-off]"); if (o) { openOfficer(o.dataset.off); $("dpanel").dataset.key = o.dataset.off; return; }
     if (t.closest("[data-close]")) { closeDrawer(); return; }
   });
