@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 64;
+const BACKEND_VERSION = 65;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2150,7 +2150,7 @@ function offRead_(token, kind) {
 }
 // who is this Discord ID on the rosters? main roster first, then the progression (onboarding) and division tabs
 // Certified officers are on "LSPD Personnel Roster"; onboarding officers (trainees) on "LSPD Onboarding Roster".
-const PERSONNEL_TAB_ = "LSPD Personnel Roster", ONBOARD_TAB_ = "LSPD Onboarding Roster";
+const PERSONNEL_TAB_ = "LSPD Personnel Roster", ONBOARD_TAB_ = "LSPD Onboarding Roster", RANK_COL_ = "B";   // ranks live in column B of both tabs
 function rosterTabByName_(name) {
   try { const want = name.toLowerCase(), sh = rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want); return sh ? sh.getSheetId() : null; } catch (e) { return null; }
 }
@@ -2160,7 +2160,7 @@ function rosterPerson_(id) {
   const split = n => { const cs = n.indexOf("|") !== -1 ? n.split("|")[0].trim() : ""; return { callsign: cs, name: cleanName_(cs ? n.split("|").slice(1).join("|").trim() : n) }; };
   let hit = null, trainee = false;
   const fromTab = (name, isTrainee) => { if (hit) return; const tid = rosterTabByName_(name); if (tid == null) return;
-    try { const p = (getRosterTab_(tid, false, [], false, true).people || []).find(x => x.id === id); if (p) { hit = Object.assign(split(p.name), { rank: p.extra || "", section: p.sec || "" }); trainee = isTrainee; } } catch (e) {} };
+    try { const p = (getRosterTab_(tid, false, [RANK_COL_], false, true).people || []).find(x => x.id === id); if (p) { hit = Object.assign(split(p.name), { rank: str_(p.more && p.more[RANK_COL_]) || p.extra || "", section: p.sec || "" }); trainee = isTrainee; } } catch (e) {} };
   fromTab(PERSONNEL_TAB_, false);
   fromTab(ONBOARD_TAB_, true);
   if (hit) return Object.assign(hit, { trainee: trainee });
