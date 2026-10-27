@@ -304,7 +304,8 @@
       cur = null;
       if (!rows.length) return;
       const s = sec(titleCase(b.title || b.id));
-      const rest = (r, skip) => cols.filter(c => !skip.includes(c.id)).map(c => [lbl(c), cell(c, r[c.id])]).filter(([, x], i) => x || cols.filter(c => !skip.includes(c.id))[i].type === "check");
+      // a tick box only shows when it has a label (an unnamed box would print as ":  No")
+      const rest = (r, skip) => cols.filter(c => !skip.includes(c.id) && (c.type !== "check" || T(c.label))).map(c => [lbl(c), cell(c, r[c.id]), c.type]).filter(([, x, t]) => x || t === "check").map(([a, b]) => [a, b]);
       if (b.id === "ccCharges" && byId("charge")) {
         s.b.push({ k: "list", items: rows.filter(r => T(r.charge)).map(r => {
           const cnt = Math.max(1, parseInt(r.count, 10) || 1), x = Portal.sentence(r.charge, cnt), m = CLASS_RE.exec(r.charge), name = T(r.charge).replace(CLASS_RE, "").trim();
