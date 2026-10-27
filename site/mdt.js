@@ -76,7 +76,7 @@
 
   // ---------- router ----------
   const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop"];
-  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code & 10-codes"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"] };
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
   function go(v) { VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
@@ -165,7 +165,7 @@
     h += '<div class="grid"><section class="pane"><div class="ph"><span class="lbl">Shift briefing</span>' + (B.canBrief ? '<a data-brief>Post briefing</a>' : (B.past || []).length ? '<a data-past>Past briefings</a>' : "") + "</div>" + memoHTML(B.briefing, B) + "</section>";
     if ((DATA.paths || []).length) h += pathHTML(DATA.paths[0]);
     else h += '<section class="pane"><div class="ph"><span class="lbl">Standard Operating Procedures</span></div><div class="sop"><svg viewBox="0 0 24 24"><use href="#i-book"/></svg><div><b>LSPD SOP</b><small>Policy, radio, pursuits, use of force. Keep it handy.</small></div><a class="btn" data-go="sop" href="#sop">OPEN</a></div>' +
-      '<div class="tiles" style="grid-template-columns:1fr 1fr">' + tile("fleet", "i-car", "Fleet", (f.vehicles || []).filter(v => v.allowed).length + " approved") + tile("uniforms", "i-shirt", "Uniforms", ((f.uniforms || {})[SEX] || []).filter(u => u.yours).length + " for your rank") + "</div></section>";
+      '<div class="tiles" style="grid-template-columns:1fr 1fr">' + tile("reference", "i-gavel", "Penal code", "Charges, sentences and fines") + tile("training", "i-cal", "Training", "Sessions and knowledge checks") + "</div></section>";
     h += "</div>";
     (DATA.paths || []).slice(1).forEach(pa => { h += '<div style="margin-top:18px">' + pathHTML(pa) + "</div>"; });
     // reports | department | needs you / tiles
@@ -177,7 +177,7 @@
     const mx = Math.max(1, ...(D.days || []).map(x => x.n));
     h += '<div class="spark">' + (D.days || []).map((x, i, a) => '<i class="' + (i === a.length - 1 ? "t" : "") + '" style="height:' + Math.max(4, Math.round(x.n / mx * 100)) + '%" title="' + x.n + ' reports"></i>').join("") + '</div><div class="days">' + (D.days || []).map(x => "<span>" + esc(x.d) + "</span>").join("") + "</div></section>";
     if (B.needs) h += '<section class="pane"><div class="ph"><span class="lbl">Needs you · FTO</span></div>' + (B.needs.length ? B.needs.map(n => '<div class="need"><span class="cs">' + esc(n.callsign || "—") + "</span><div><b>" + esc(n.name) + '</b><small class="' + (n.hot ? "hot" : "") + '">' + esc(n.why) + '</small></div><a href="forms.html">' + esc(n.act) + "</a></div>").join("") : '<p style="color:var(--mute)">All trainees are on track.</p>') + "</section>";
-    else h += '<section class="pane"><div class="ph"><span class="lbl">Quick access</span></div><div class="tiles" style="grid-template-columns:1fr;margin-top:0">' + tile("fleet", "i-car", "Fleet", (f.vehicles || []).filter(v => v.allowed).length + " vehicles approved for you") + tile("uniforms", "i-shirt", "Uniforms", ((f.uniforms || {})[SEX] || []).filter(u => u.yours).length + " outfits for your rank") + "</div></section>";
+    else h += '<section class="pane"><div class="ph"><span class="lbl">Your gear</span></div><div class="tiles" style="grid-template-columns:1fr;margin-top:0">' + tile("fleet", "i-car", "Fleet", (f.vehicles || []).filter(v => v.allowed).length + " vehicles approved for you") + tile("uniforms", "i-shirt", "Uniforms", ((f.uniforms || {})[SEX] || []).filter(u => u.yours).length + " outfits for your rank") + "</div></section>";
     h += "</div>";
     if ((p.divisions || []).length) h += '<div class="tiles"><a class="tile" href="division.html"><svg><use href="#i-shield"/></svg><b>Division Command</b><small>Your divisions: activity, grading and officers</small></a></div>';
     return h;
@@ -247,27 +247,42 @@
   }
   // ---------- quick reference ----------
   async function loadRef() { const r = await Portal.post({ action: "quickRef", session: SESSION }).catch(() => null); REF = r && r.ok ? r : { penal: [], tenCodes: [], error: true }; if (VIEW === "reference") draw(); }
-  let REF_CAT = "";
+  let REF_CAT = "", REF_CLS = "", REF_TAB = "charges";
+  const CLS_NAME = { felony: "Felony", misdemeanor: "Misdemeanor", infraction: "Infraction", citation: "Citation" };
   function refHTML() {
-    let h = '<div class="h2"><div><h1>PENAL CODE <span>&amp; 10-codes</span></h1><p>Grouped the same way as the charge lists in your reports. Tap a charge to copy it.</p></div></div>';
+    let h = '<div class="pen-top"><div><h1>Penal Code</h1><p>Tap any charge to copy it into your report.</p></div></div>';
     if (!REF) return h + '<div class="boot"><i></i>LOADING PENAL CODE…</div>';
     const opts = REF.charges ? REF.charges.options : REF.penal.map(x => x.raw);
-    const groups = (window.Portal && Portal.chargeGroups ? Portal.chargeGroups(opts) : [{ name: "Charges", icon: "⚖️", items: opts }]);
-    const q = REF_Q.toLowerCase().trim(), match = o => !q || String(o).toLowerCase().indexOf(q) !== -1;
+    const groups = (window.Portal && Portal.chargeGroups ? Portal.chargeGroups(opts) : [{ name: "Charges", icon: "⚖️", items: opts }])
+      .map(g => ({ name: g.name, icon: g.icon, items: g.items.map(o => Portal.chargeItem ? Portal.chargeItem(o) : { label: o, value: o, search: String(o).toLowerCase() }) }));
+    const q = REF_Q.toLowerCase().trim();
+    const match = it => (!q || (it.search || it.label.toLowerCase()).indexOf(q) !== -1) && (!REF_CLS || it.cls === REF_CLS);
     const total = groups.reduce((n, g) => n + g.items.length, 0);
-    h += '<div class="pen-head"><input class="refq" id="refQ" placeholder="Search ' + total + ' charges and 10-codes…" value="' + esc(REF_Q) + '" autocomplete="off"></div>';
-    h += '<div class="pen-cats"><button data-pcat="" class="' + (REF_CAT ? "" : "on") + '">All <em>' + total + "</em></button>" + groups.map(g => '<button data-pcat="' + esc(g.name) + '" class="' + (REF_CAT === g.name ? "on" : "") + '">' + esc(g.icon) + " " + esc(g.name) + " <em>" + g.items.filter(match).length + "</em></button>").join("") + "</div>";
-    let any = 0;
-    groups.filter(g => !REF_CAT || g.name === REF_CAT).forEach(g => {
-      const items = g.items.filter(match); if (!items.length) return; any += items.length;
-      h += '<details class="pen-grp"' + (q || REF_CAT || groups.length < 4 ? " open" : "") + '><summary><span class="ico">' + esc(g.icon) + "</span>" + esc(g.name) + "<em>" + items.length + '</em></summary><div class="pen-list">' +
-        items.map(o => { const it = Portal.chargeItem ? Portal.chargeItem(o) : { label: o, value: o };
-          return '<button class="chg" data-copy="' + esc(it.label) + '" data-what="Charge"><span class="b ' + esc(it.cls || "x") + '">' + esc(it.badge || "•") + "</span><div><b>" + (q ? hl(it.label, REF_Q) : esc(it.label)) + "</b>" + (it.cls ? "<small>" + esc(it.cls[0].toUpperCase() + it.cls.slice(1)) + "</small>" : "") + '</div><span class="t">' + esc(it.sub || "") + "</span></button>"; }).join("") + "</div></details>";
-    });
-    if (!any) h += '<div class="empty">' + (opts.length ? "No charge matches “" + esc(REF_Q) + "”." : "No charge list found in the report forms yet.") + "</div>";
     const C = REF.tenCodes.filter(x => !q || (x[0] + " " + x[1]).toLowerCase().indexOf(q) !== -1);
-    if (C.length) h += '<div class="sect"><span class="lbl">Radio codes · ' + C.length + '</span></div><div class="codes">' + C.map(x => "<div><b>" + esc(x[0]) + "</b><span>" + esc(x[1]) + "</span></div>").join("") + "</div>";
-    return h;
+    const classes = Object.keys(CLS_NAME).filter(c => groups.some(g => g.items.some(i => i.cls === c)));
+    // toolbar: search · charges / radio codes · class filter
+    h += '<div class="pen-bar"><label class="pen-search"><svg><use href="#i-search"/></svg><input id="refQ" placeholder="Search ' + total + ' charges and ' + REF.tenCodes.length + ' radio codes…" value="' + esc(REF_Q) + '" autocomplete="off">' + (REF_Q ? '<button data-refclear title="Clear">✕</button>' : "") + "</label>" +
+      '<div class="seg"><button data-rtab="charges" class="' + (REF_TAB === "charges" ? "on" : "") + '">Charges</button><button data-rtab="codes" class="' + (REF_TAB === "codes" ? "on" : "") + '">Radio codes' + (q ? " <em>" + C.length + "</em>" : "") + "</button></div></div>";
+    if (REF_TAB === "codes") {
+      return h + '<section class="pen-panel"><div class="codes">' + (C.length ? C.map(x => '<button data-copy="' + esc(x[0]) + '" data-what="Code"><b>' + esc(x[0]) + "</b><span>" + (q ? hl(x[1], REF_Q) : esc(x[1])) + "</span></button>").join("") : '<div class="empty">No radio code matches “' + esc(REF_Q) + "”.</div>") + "</div></section>";
+    }
+    if (classes.length) h += '<div class="pen-cls"><button data-pcls="" class="' + (REF_CLS ? "" : "on") + '">All classes</button>' + classes.map(c => '<button data-pcls="' + c + '" class="k-' + c + (REF_CLS === c ? " on" : "") + '"><i></i>' + CLS_NAME[c] + "</button>").join("") + "</div>";
+    // left: categories · right: the list
+    const counts = groups.map(g => g.items.filter(match).length), all = counts.reduce((a, b) => a + b, 0);
+    h += '<div class="pen-wrap"><nav class="pen-rail"><button data-pcat="" class="' + (REF_CAT ? "" : "on") + '"><span class="ic">⚖️</span><span class="nm">All charges</span><em>' + all + "</em></button>" +
+      groups.map((g, i) => '<button data-pcat="' + esc(g.name) + '" class="' + (REF_CAT === g.name ? "on" : "") + (counts[i] ? "" : " none") + '"><span class="ic">' + esc(g.icon) + '</span><span class="nm">' + esc(g.name) + "</span><em>" + counts[i] + "</em></button>").join("") + "</nav>";
+    let body = "", any = 0;
+    groups.forEach((g, i) => {
+      if (REF_CAT && g.name !== REF_CAT) return;
+      const items = g.items.filter(match); if (!items.length) return; any += items.length;
+      body += '<div class="pen-sec"><div class="pen-sh"><span>' + esc(g.icon) + "</span>" + esc(g.name) + "<em>" + items.length + "</em></div>" +
+        items.map(it => '<button class="pen-row" data-copy="' + esc(it.label) + '" data-what="Charge"><span class="nm">' + (q ? hl(it.label, REF_Q) : esc(it.label)) + "</span>" +
+          (it.cls ? '<span class="cls k-' + esc(it.cls) + '">' + esc(CLS_NAME[it.cls] || it.cls) + "</span>" : '<span class="cls"></span>') +
+          '<span class="tm">' + esc(((it.sub || "").split(" · ").find(x => /month/.test(x))) || "—") + '</span><span class="fn">' + esc((((it.sub || "").split(" · ").find(x => /fine/.test(x))) || "—").replace(" fine", "")) + "</span></button>").join("") + "</div>";
+    });
+    if (!any) body = '<div class="empty">' + (opts.length ? "No charge matches" + (REF_Q ? " “" + esc(REF_Q) + "”" : "") + (REF_CLS ? " in " + CLS_NAME[REF_CLS] + "s" : "") + "." + (q && C.length ? ' <a href="#" data-rtab="codes">' + C.length + " radio code" + (C.length > 1 ? "s" : "") + " match.</a>" : "") : "No charge list found in the report forms yet.") + "</div>";
+    else body = '<div class="pen-th"><span>Charge</span><span>Class</span><span>Time</span><span>Fine</span></div>' + body;
+    return h + '<section class="pen-panel pen-main">' + body + "</section></div>";
   }
 
 
@@ -408,7 +423,10 @@
     const sc = e.target.closest("[data-sclose]"); if (sc) { unit("unitSessionClose", { id: sc.getAttribute("data-sclose") }, "Session closed."); return; }
     const tk = e.target.closest("[data-take]"); if (tk) { takeCheck(UNIT.checks.find(c => c.id === tk.getAttribute("data-take"))); return; }
     const cc = e.target.closest("[data-cclose]"); if (cc) { unit("unitCheckClose", { id: cc.getAttribute("data-cclose") }, "Check closed."); return; }
-    const pc = e.target.closest("[data-pcat]"); if (pc) { REF_CAT = pc.getAttribute("data-pcat"); draw(); return; }
+    const pc = e.target.closest("[data-pcat]"); if (pc) { REF_CAT = pc.getAttribute("data-pcat"); draw(); const mm = document.querySelector(".pen-main"); if (mm) mm.scrollTop = 0; return; }
+    const pk = e.target.closest("[data-pcls]"); if (pk) { REF_CLS = pk.getAttribute("data-pcls"); draw(); return; }
+    const rt = e.target.closest("[data-rtab]"); if (rt) { e.preventDefault(); REF_TAB = rt.getAttribute("data-rtab"); draw(); return; }
+    if (e.target.closest("[data-refclear]")) { REF_Q = ""; draw(); const n = $("refQ"); if (n) n.focus(); return; }
     if (e.target.closest("#palHero")) { openPal(); return; }
     const ak = e.target.closest("[data-ack]"); if (ak) { ak.disabled = true; Portal.post({ action: "mdtBriefAck", session: SESSION, id: ak.getAttribute("data-ack") }).then(r => { if (r.ok) { DATA.board.briefing.acked = true; if (DATA.board.briefing.ackCount != null) DATA.board.briefing.ackCount++; draw(); toast("Acknowledged. Have a safe shift."); } else { ak.disabled = false; toast(r.error || "Couldn't acknowledge."); } }); return; }
     if (e.target.closest("[data-past]")) { const P = (DATA.board.past || []); modal('<h3>Past briefings</h3>' + (P.length ? P.map(b => '<div class="pb"><b>' + esc(b.re) + "</b><small>" + esc(new Date(b.at).toLocaleDateString()) + " · " + esc(b.from) + "</small><p>" + esc(b.body).replace(/\n/g, "<br>") + "</p></div>").join("") : "<p>None yet.</p>") + '<div class="md-act"><button class="btn ghost" data-close>Close</button></div>'); return; }
