@@ -204,7 +204,7 @@
         ${r.grade && r.comments ? `<div class="rc-cm">“${esc(r.comments)}” <span>— ${esc(r.gradedBy)}</span></div>` : ""}
       </div>
       <div class="rc-g">${r.grade ? `<button type="button" class="gb ${GCLS(r.grade)}" data-grade="${esc(r.id)}" title="Graded by ${esc(r.gradedBy)}${r.gradedAt ? " · " + esc(fullTime(r.gradedAt)) : ""}">${esc(r.grade)}</button><small>${esc(r.gradedBy)}</small>` : `<button type="button" class="dc-btn ac sm" data-grade="${esc(r.id)}">⚖ Grade</button>`}
-        <button type="button" class="rc-more" data-more="${esc(r.id)}">${opts.open ? "Hide report" : "Read report"}</button></div>
+        <button type="button" class="rc-more" data-more="${esc(r.id)}">📄 Read report</button></div>
       ${opts.open ? `<div class="rc-paper">${paperHTML(r, FULL[r.id] != null ? paperText(FULL[r.id]) : "Loading the full report…")}</div>` : ""}
     </article>`;
   }
@@ -354,24 +354,30 @@
     const r = DATA.reports.find(x => x.id === id); if (!r) return;
     let pick = r.grade || "";
     const by = (() => { try { return localStorage.getItem("dc:gradedBy") || ""; } catch (e) { return ""; } })() || ME.username;
-    $("mcard").innerHTML = `<button class="dc-x" data-mclose aria-label="Close">✕</button>
-      <div class="dc-kick">GRADE REPORT</div><h2>${esc(r.title || r.formTitle)}</h2>
-      <div class="gm-m">${esc(r.formTitle)}${r.no ? " · " + esc(r.no) : ""} · ${esc(fullTime(r.at))}</div>
-      <div class="rc-p">${r.author ? personChip(r.author, "author") : ""}${r.tagged.map(t => personChip(t, "assist")).join("")}</div>
-      <div class="gm-full">${paperHTML(r, "Loading the full report…")}</div>
-      <div class="gm-letters">${["A", "B", "C", "D", "F"].map(g => `<button type="button" data-g="${g}" class="${GCLS(g)}${pick === g ? " on" : ""}"><b>${g}</b><small>${{ A: "Excellent", B: "Good", C: "Acceptable", D: "Needs work", F: "Unacceptable" }[g]}</small></button>`).join("")}</div>
-      <label class="gm-f"><span>Comments for the officer</span><textarea id="gmCm" maxlength="1500" placeholder="What was done well, what to fix next time…">${esc(r.comments || "")}</textarea></label>
-      <label class="gm-f"><span>Graded by</span><input id="gmBy" maxlength="60" value="${esc(r.gradedBy || by)}"></label>
-      <label class="gm-c${r.canPost ? "" : " dis"}"><input type="checkbox" id="gmPost" ${r.canPost ? "checked" : "disabled"}> Post to Discord: grade line on the report + a reply tagging ${esc(r.author ? r.author.name : "the officer")}${r.canPost ? "" : " <small>(this report's Discord post wasn't recorded" + (r.imported ? ": imported from the sheet" : "") + ")</small>"}</label>
-      ${r.tagged.length ? `<label class="gm-c${r.canPost ? "" : " dis"}"><input type="checkbox" id="gmPing" ${DATA.division.pingTagged ? "checked" : ""} ${r.canPost ? "" : "disabled"}> Also tag the ${r.tagged.length} assisting officer${r.tagged.length === 1 ? "" : "s"}</label>` : ""}
-      <div class="gm-b">${r.grade ? '<button type="button" class="dc-btn danger" id="gmClear">Remove grade</button>' : ""}<span></span><button type="button" class="dc-btn" data-mclose>Cancel</button><button type="button" class="dc-btn ac" id="gmSave">Save grade</button></div>`;
+    const nav = navList(), at = nav.findIndex(x => x.id === r.id), prev = nav[at - 1], next = nav[at + 1], nextUn = nav.slice(at + 1).find(x => !x.grade) || nav.slice(0, Math.max(0, at)).find(x => !x.grade);
+    $("mcard").className = "dc-mcard review";
+    $("mcard").innerHTML = `<div class="gm-split">
+      <div class="gm-left">${paperHTML(r, "Loading the full report…")}</div>
+      <div class="gm-right">
+        <div class="gm-top"><div class="gm-nav"><button type="button" class="dc-ibtn" id="gmPrev" ${prev ? "" : "disabled"} title="Previous report (←)">‹</button><span>${at + 1} / ${nav.length}</span><button type="button" class="dc-ibtn" id="gmNext" ${next ? "" : "disabled"} title="Next report (→)">›</button></div><button class="dc-x" data-mclose aria-label="Close">✕</button></div>
+        <div class="dc-kick">GRADE REPORT</div><h2>${esc(r.title || r.formTitle)}</h2>
+        <div class="gm-m">${esc(r.formTitle)}${r.no ? " · " + esc(r.no) : ""} · ${esc(fullTime(r.at))}</div>
+        <div class="rc-p">${r.author ? personChip(r.author, "author") : ""}${r.tagged.map(t => personChip(t, "assist")).join("")}</div>
+        <div class="gm-letters">${["A", "B", "C", "D", "F"].map(g => `<button type="button" data-g="${g}" class="${GCLS(g)}${pick === g ? " on" : ""}" title="Press ${g}"><b>${g}</b><small>${{ A: "Excellent", B: "Good", C: "Acceptable", D: "Needs work", F: "Unacceptable" }[g]}</small></button>`).join("")}</div>
+        <label class="gm-f"><span>Comments for the officer</span><textarea id="gmCm" maxlength="1500" placeholder="What was done well, what to fix next time…">${esc(r.comments || "")}</textarea></label>
+        <label class="gm-f"><span>Graded by</span><input id="gmBy" maxlength="60" value="${esc(r.gradedBy || by)}"></label>
+        <label class="gm-c${r.canPost ? "" : " dis"}"><input type="checkbox" id="gmPost" ${r.canPost ? "checked" : "disabled"}> Post to Discord: grade line on the report + a reply tagging ${esc(r.author ? r.author.name : "the officer")}${r.canPost ? "" : " <small>(this report's Discord post wasn't recorded" + (r.imported ? ": imported from the sheet" : "") + ")</small>"}</label>
+        ${r.tagged.length ? `<label class="gm-c${r.canPost ? "" : " dis"}"><input type="checkbox" id="gmPing" ${DATA.division.pingTagged ? "checked" : ""} ${r.canPost ? "" : "disabled"}> Also tag the ${r.tagged.length} assisting officer${r.tagged.length === 1 ? "" : "s"}</label>` : ""}
+        <div class="gm-b">${r.grade ? '<button type="button" class="dc-btn danger" id="gmClear">Remove grade</button>' : ""}<span></span><button type="button" class="dc-btn" data-mclose>Close</button>${nextUn ? '<button type="button" class="dc-btn" id="gmSaveNext" title="Save, then open the next report that needs a grade">Save &amp; next ›</button>' : ""}<button type="button" class="dc-btn ac" id="gmSave">Save grade</button></div>
+        <p class="gm-keys">Keys: <b>A–F</b> pick a grade · <b>← →</b> previous / next report · <b>Esc</b> close</p>
+      </div></div>`;
     $("modal").hidden = false;
     const card0 = () => $("mcard").querySelector(".pp-body");
     fullReport(r.id, card0());
     const card = $("mcard");
     card.querySelector(".gm-letters").onclick = e => { const b = e.target.closest("[data-g]"); if (!b) return; pick = b.dataset.g; card.querySelectorAll("[data-g]").forEach(x => x.classList.toggle("on", x === b)); };
     card.querySelectorAll("[data-mclose]").forEach(b => b.onclick = closeModal);
-    const send = async clear => {
+    const send = async (clear, then) => {
       if (!clear && !pick) { toast("Pick a grade first.", "bad"); return; }
       const btn = clear ? $("gmClear") : $("gmSave"), lab = btn.textContent; btn.disabled = true; btn.textContent = clear ? "Removing…" : "Saving…";
       const gby = $("gmBy").value.trim(); store("dc:gradedBy", gby);
@@ -380,13 +386,37 @@
         const res = await api("divGrade", { id: r.id, division: DATA.division.id, grade: pick, comments: $("gmCm").value.trim(), gradedBy: gby, clear: !!clear, post: posted, pingTagged: !!($("gmPing") && $("gmPing").checked) });
         Object.assign(r, clear ? { grade: "", gradedBy: "", comments: "", gradedAt: 0 } : { grade: pick, gradedBy: gby || ME.username, comments: $("gmCm").value.trim(), gradedAt: Date.now() });
         keep(DATA.division.id, DATA); closeModal(); drawAll(); if (!$("drawer").hidden) { const k = $("dpanel").dataset.key; if (k) openOfficer(k); }
+        if (then) openGrade(then.id);
         toast(res.warning ? "Grade saved (" + res.warning + ")" : clear ? "Grade removed" : "Grade " + pick + " saved" + (posted ? " and posted to Discord" : ""), res.warning ? "bad" : "ok");
       } catch (e) { toast(e.message, "bad"); btn.disabled = false; btn.textContent = lab; }
     };
     $("gmSave").onclick = () => send(false);
+    if ($("gmSaveNext")) $("gmSaveNext").onclick = () => send(false, nextUn);
+    $("gmPrev").onclick = () => prev && openGrade(prev.id);
+    $("gmNext").onclick = () => next && openGrade(next.id);
+    GKEYS = e => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "");
+      if (typing) return;
+      const k = e.key.toUpperCase();
+      if (["A", "B", "C", "D", "F"].includes(k)) { const b = card.querySelector(`[data-g="${k}"]`); if (b) b.click(); e.preventDefault(); }
+      else if (e.key === "ArrowLeft" && prev) openGrade(prev.id);
+      else if (e.key === "ArrowRight" && next) openGrade(next.id);
+    };
     if ($("gmClear")) $("gmClear").onclick = () => { if (confirm("Remove this grade? (Anything already posted in Discord stays.)")) send(true); };
   }
-  function closeModal() { $("modal").hidden = true; $("mcard").innerHTML = ""; }
+  function closeModal() { $("modal").hidden = true; $("mcard").innerHTML = ""; $("mcard").className = "dc-mcard"; GKEYS = null; }
+  let GKEYS = null;
+  document.addEventListener("keydown", e => { if (GKEYS && !$("modal").hidden) GKEYS(e); });
+  // the reports the leader is looking at, in the same order (for previous / next)
+  function navList() {
+    const from = periodStart(PERIOD);
+    let list = DATA.reports.filter(r => r.at >= from);
+    if (TAB === "reports") {
+      if (REP_F.state === "ungraded") list = list.filter(r => !r.grade); else if (REP_F.state === "graded") list = list.filter(r => r.grade);
+      if (REP_F.form) list = list.filter(r => r.form === REP_F.form);
+    }
+    return list;
+  }
   $("modal").addEventListener("mousedown", e => { if (e.target === $("modal")) closeModal(); });
 
   // ---------------- clicks ----------------
@@ -396,7 +426,8 @@
     const pb = t.closest("#period [data-p]"); if (pb) { PERIOD = pb.dataset.p; store("dc:period", PERIOD); drawAll(); return; }
     const tb = t.closest("[data-tab],[data-t]"); if (tb && !t.closest("#dpanel")) { TAB = tb.dataset.tab || tb.dataset.t; drawAll(); window.scrollTo({ top: $("kpis").offsetTop - 120, behavior: "smooth" }); return; }
     const g = t.closest("[data-grade]"); if (g) { e.stopPropagation(); openGrade(g.dataset.grade); return; }
-    const m = t.closest("[data-more]"); if (m) { const id = m.dataset.more; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); const card = m.closest(".rc"), r = DATA.reports.find(x => x.id === id); if (card && r) { card.outerHTML = reportCard(r, { open: OPEN.has(id) }); if (OPEN.has(id)) fullReport(id, document.querySelector(`.rc-paper [data-full="${CSS.escape(id)}"]`)); } return; }
+    const m = t.closest("[data-more]"); if (m) { openGrade(m.dataset.more); return; }
+    if (false) { const id = m.dataset.more; OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); const card = m.closest(".rc"), r = DATA.reports.find(x => x.id === id); if (card && r) { card.outerHTML = reportCard(r, { open: OPEN.has(id) }); if (OPEN.has(id)) fullReport(id, document.querySelector(`.rc-paper [data-full="${CSS.escape(id)}"]`)); } return; }
     const o = t.closest("[data-off]"); if (o) { openOfficer(o.dataset.off); $("dpanel").dataset.key = o.dataset.off; return; }
     if (t.closest("[data-close]")) { closeDrawer(); return; }
   });

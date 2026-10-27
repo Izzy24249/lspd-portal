@@ -354,3 +354,31 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
 .pp-head{flex-wrap:wrap;row-gap:6px}
 .pp-head>div{min-width:0;flex:1 1 160px}
 @media(max-width:600px){.gm-full .pp-body{padding:12px 10px 20px 36px;font-size:12px}.rc{overflow:hidden}}
+
+/* review pop-out: report on the left, grading on the right */
+.dc-mcard.review{width:min(1400px,96vw);height:min(920px,94vh);max-height:94vh;padding:0;display:block;overflow:hidden}
+.gm-split{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(340px,1fr);height:100%}
+.gm-left{min-height:0;padding:16px;background:rgba(0,0,0,.25);border-right:1px solid var(--line);display:flex}
+.gm-left .pp{flex:1;display:flex;flex-direction:column;min-height:0}
+.gm-left .pp-body{flex:1;max-height:none!important;overflow:auto;white-space:pre-wrap;font-size:13.5px;tab-size:4}
+.gm-right{min-height:0;overflow:auto;padding:18px 20px 20px;display:flex;flex-direction:column;gap:13px}
+.gm-right h2{font:700 22px/1.15 Oswald,sans-serif;letter-spacing:.03em;padding-right:0}
+.gm-top{display:flex;justify-content:space-between;align-items:center}
+.gm-top .dc-x{position:static}
+.gm-nav{display:flex;align-items:center;gap:8px;font:600 12px "JetBrains Mono",monospace;color:var(--muted)}
+.gm-nav .dc-ibtn{font-size:18px;height:32px;min-width:32px}
+.gm-nav .dc-ibtn:disabled{opacity:.35;cursor:default}
+.gm-right .gm-letters button{padding:10px 2px}
+.gm-right .gm-letters button b{font-size:26px}
+.gm-keys{margin-top:auto;color:var(--muted);font-size:11.5px}
+.gm-keys b{color:var(--text);font-weight:600}
+@media(max-width:900px){
+  .dc-mcard.review{width:100vw;height:100vh;max-height:100vh;border-radius:0}
+  .dc-modal{padding:0}
+  .gm-split{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;overflow:auto}
+  .gm-split{display:flex;flex-direction:column}
+  .gm-left{border-right:0;border-bottom:1px solid var(--line);padding:10px;flex:none}
+  .gm-left .pp-body{max-height:55vh!important;overflow:auto;white-space:pre;font-size:12px}
+  .gm-right{overflow:visible;padding:14px}
+  .gm-keys{display:none}
+}
