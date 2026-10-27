@@ -34,6 +34,9 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(640px 
 .prog{display:flex;align-items:center;gap:12px;margin-top:12px}
 .prog div{flex:1;height:3px;background:rgba(255,255,255,.08)}
 .prog i{display:block;height:100%;width:0;background:var(--blue);box-shadow:0 0 12px var(--blue);transition:width .35s}
+.prog .link{width:auto;text-align:left;font:700 11px "Barlow Condensed",sans-serif;letter-spacing:.18em;color:var(--red);white-space:nowrap}
+.prog .link.amber{color:var(--amber)} .prog .link.green{color:var(--green);text-shadow:0 0 8px rgba(58,209,138,.5)}
+.term .k{color:#9fe3c4} .term .sig{color:var(--amber);letter-spacing:1px}
 .prog span{font:600 11.5px "JetBrains Mono",monospace;color:var(--mute);width:38px;text-align:right}
 .card{margin-top:16px;border:1px solid var(--hair2);background:linear-gradient(180deg,var(--steel2),var(--steel));padding:20px 22px 22px;animation:rise .35s ease-out}
 .card[hidden]{display:none}
@@ -92,7 +95,7 @@ body.is-demo{padding-top:52px}
 <div class="boot">
   <div class="top"><img src="img/lspd-badge.png" alt=""><div><b>LSPD <i>::</i> MDT</b><small>MOBILE DATA TERMINAL</small></div></div>
   <div class="term clip" id="term" aria-live="polite"></div>
-  <div class="prog"><div><i id="bar"></i></div><span id="pct">0%</span></div>
+  <div class="prog"><span class="link" id="link">● UNSECURED</span><div><i id="bar"></i></div><span id="pct">0%</span></div>
   <div class="card clip" id="card" hidden></div>
   <div class="foot"><span>MISSION ROW · LOS SANTOS</span><span id="watch"></span></div>
 </div>
@@ -154,8 +157,20 @@ body.is-demo{padding-top:52px}
       key() { tone(1050, 0.035, "triangle", 0.07); noise(0.02, 0.02, 0, 3500); },
       bad() { tone(190, 0.13, "sawtooth", 0.05); tone(150, 0.2, "sawtooth", 0.05, 0.15); },
       good() { noise(0.12, 0.05, 0, 1600); tone(660, 0.12, "sine", 0.06, 0.1); tone(990, 0.22, "sine", 0.06, 0.2); },
-      data() { tone(900 + Math.random() * 1600, 0.018, "square", 0.012); },
-      whir() { const c = ac(); if (!c) return; noise(0.5, 0.025, 0, 600); tone(120, 0.45, "sawtooth", 0.012, 0, 240); },
+      data() { const n = [2093, 2349, 2637, 3136, 3520, 4186]; tone(n[Math.floor(Math.random() * n.length)] * (Math.random() < .5 ? .5 : 1), 0.022, "sine", 0.03); },
+      cipher() { for (let i = 0; i < 6; i++) tone(1800 + Math.random() * 2600, 0.014, "square", 0.009, i * 0.016); },
+      lock() { tone(1760, 0.04, "square", 0.022); tone(880, 0.06, "square", 0.022, 0.045); tone(196, 0.12, "sine", 0.07, 0.05); },
+      sweep(dur) {                                       // modem-style warble while a link negotiates
+        const c = ac(); if (!c) return; const t = c.currentTime; dur = dur || 1;
+        const o = c.createOscillator(), lfo = c.createOscillator(), lg = c.createGain(), g = c.createGain();
+        o.type = "sine"; o.frequency.setValueAtTime(700, t); o.frequency.exponentialRampToValueAtTime(1900, t + dur * .7); o.frequency.exponentialRampToValueAtTime(1500, t + dur);
+        lfo.frequency.setValueAtTime(22, t); lfo.frequency.linearRampToValueAtTime(4, t + dur); lg.gain.setValueAtTime(260, t); lg.gain.linearRampToValueAtTime(10, t + dur);
+        lfo.connect(lg).connect(o.frequency);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.03, t + .05); g.gain.setValueAtTime(0.03, t + dur - .08); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g).connect(c.destination); o.start(t); lfo.start(t); o.stop(t + dur + .02); lfo.stop(t + dur + .02);
+      },
+      secure() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.5, "sine", 0.035, i * 0.06)); },
+      whir() { noise(0.35, 0.018, 0, 700); },
       squelch() { noise(0.18, 0.06, 0, 1400); tone(1400, 0.05, "square", 0.02, 0.17); }
     };
   })();
@@ -212,6 +227,28 @@ body.is-demo{padding-top:52px}
   function hexRow(addr) { let b = ""; for (let i = 0; i < 8; i++) b += (i === 4 ? " " : "") + " " + pad2(hex(256)).replace(/^(.)$/, "0$1"); return "<b>0x" + addr.toString(16).toUpperCase().padStart(6, "0") + "</b>" + b + "  " + Array.from({ length: 8 }, () => ".:#=+-*@LSPD"[Math.floor(Math.random() * 12)]).join(""); }
   async function stream(rows, ms) { let a = 0x7f3a00 + Math.floor(Math.random() * 0x400) * 16; for (let i = 0; i < rows && !skipping; i++) { raw(hexRow(a)); a += 16; SFX.data(); await sleep(ms); } }
   async function count(label, to, unit, steps, ms) { const l = line(label + ' <span class="n">0</span>' + unit); for (let i = 1; i <= steps && !skipping; i++) { l.el.querySelector(".n").textContent = Math.round(to * i / steps).toLocaleString("en-US"); if (i % 2) SFX.tick(); await sleep(ms); } l.el.querySelector(".n").textContent = to.toLocaleString("en-US"); return l; }
+  const GL = "ABCDEF0123456789#$%&*+=<>/\\|";
+  async function scramble(label, target, frames) {     // cipher text that settles into the real value, left to right
+    const l = line(label + ' <span class="k"></span>'), k = l.el.querySelector(".k");
+    for (let f = 0; f <= frames && !skipping; f++) {
+      const fixed = Math.floor(target.length * f / frames);
+      k.textContent = target.slice(0, fixed) + Array.from(target.slice(fixed), ch => ch === ":" || ch === " " ? ch : GL[Math.floor(Math.random() * GL.length)]).join("");
+      SFX.cipher(); await sleep(38);
+    }
+    k.textContent = target; return l;
+  }
+  async function signal(label, ms) {                  // link quality bars wobble, then hold steady
+    const B = "▁▂▃▄▅▆▇█", l = line(label + ' <span class="sig"></span> <span class="n">0</span>%'), sg = l.el.querySelector(".sig"), n = l.el.querySelector(".n");
+    const steps = 22; SFX.sweep(steps * ms / 1000);
+    for (let i = 1; i <= steps && !skipping; i++) {
+      const q = i / steps, jitter = (1 - q) * 4;
+      sg.textContent = Array.from({ length: 8 }, (_, j) => B[Math.max(0, Math.min(7, Math.round(j * q + (Math.random() * 2 - 1) * jitter)))]).join("");
+      n.textContent = Math.round(q * 100); await sleep(ms);
+    }
+    sg.textContent = B; n.textContent = "100"; return l;
+  }
+  const keyId = () => Array.from({ length: 8 }, () => pad2(hex(256)).padStart(2, "0")).join(":");
+  function linkState(t, cls) { const el = $("link"); el.textContent = "● " + t; el.className = "link" + (cls ? " " + cls : ""); }
   const hr = new Date().getHours();
   const WATCH = hr >= 6 && hr < 14 ? "DAY WATCH" : hr >= 14 && hr < 22 ? "SWING WATCH" : "NIGHT WATCH";
   $("watch").textContent = WATCH;
@@ -231,17 +268,28 @@ body.is-demo{padding-top:52px}
     else await powerGate();
     let l;
     if (!seen) {                                         // the full cold boot, once per browser session
-      l = line("LSPD-MDT BIOS v4.2 · power-on self test ......"); await sleep(420); l.done("PASS"); progress(4);
-      l = await count("Memory check", 16384, "K OK", 16, 45); l.done("OK"); progress(9);
-      l = line("Mounting encrypted volume /mdt/secure ........"); SFX.whir(); await sleep(620); l.done("OK"); progress(14);
-      await stream(5, 55);
-      for (const [db, pc] of [["penal_code.db", 20], ["reports.db", 25], ["roster.db", 30], ["bolo_wanted.db", 35]]) {
-        l = line("Loading " + db + " ".padEnd(26 - db.length, ".") ); SFX.whir(); await stream(2, 45); await sleep(160); l.done("OK"); progress(pc);
+      // 1 · secure network
+      l = line("Network interface mdt0 ......................."); await sleep(380); l.done("UP"); progress(4);
+      l = line("Scanning for LSPD relay nodes ................"); await stream(3, 50); l.done("3 FOUND", "w"); progress(8);
+      for (const [nd, ms] of [["MR-01 Mission Row", 12], ["VB-02 Vespucci", 19], ["PB-03 Paleto Bay", 41]]) {
+        l = line("  relay " + nd + " ".padEnd(24 - nd.length, ".")); await sleep(170); l.done(ms + "ms"); SFX.data();
       }
-      l = line("AES-256 handshake ............................"); await stream(3, 40); l.done("OK"); progress(40);
+      progress(14); linkState("SECURING", "amber");
+      l = await scramble("Generating session key RSA-4096", keyId(), 18); SFX.lock(); l.done("OK"); progress(20);
+      l = await scramble("Exchanging keys with MR-01  ", keyId(), 14); SFX.lock(); l.done("OK"); progress(26);
+      l = await signal("Stabilizing AES-256 tunnel", 55); SFX.lock(); l.done("LOCKED"); progress(34);
+      l = line("Packet loss 0.0% · jitter 2ms ................"); await sleep(260); l.done("STABLE"); progress(38);
+      linkState("SECURE · AES-256", "green"); SFX.secure(); await sleep(300);
+      // 2 · records database
+      l = line("Opening encrypted records database ..........."); SFX.whir(); await stream(3, 45); l.done("OK"); progress(42);
+      for (const [db, pc] of [["penal_code", 45], ["reports", 48], ["roster", 51], ["bolo_wanted", 54]]) {
+        l = line("  sync " + db + " ".padEnd(20 - db.length, ".") + " sha256"); await stream(2, 40); l.done("VERIFIED"); progress(pc);
+      }
+      l = line("Integrity check: all tables match ............"); await sleep(280); l.done("PASS"); progress(57);
     }
-    l = line("Establishing secure uplink to Mission Row ...."); await sleep(seen ? 0 : 520); l.done("OK"); progress(seen ? 25 : 46);
-    l = line("Verifying terminal certificate ..............."); await sleep(seen ? 0 : 380); l.done("OK"); progress(seen ? 45 : 52);
+    l = line("Secure uplink to Mission Row ................."); await sleep(seen ? 0 : 420); l.done("ONLINE"); progress(seen ? 30 : 62);
+    if (seen) linkState("SECURE · AES-256", "green");
+    l = line("Verifying terminal certificate ..............."); await sleep(seen ? 0 : 320); l.done("OK"); progress(seen ? 45 : 66);
     sess.set("lspd_booted", "1");
   }
 
