@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 54;
+const BACKEND_VERSION = 55;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2110,6 +2110,142 @@ function divImport_() {
 }
 
 // =====================================================================
+// OFFICER ACCOUNTS: sign in with Discord once per device, then a 6-digit PIN
+// =====================================================================
+const ACCT_SHEET_ = "Officer Accounts";
+const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices"];
+const LEVELS_ = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
+const OFFICER_DAYS_ = 30;              // a PIN sign-in lasts 30 days on that device
+function acctSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(ACCT_SHEET_);
+  if (!sh) { sh = ss.insertSheet(ACCT_SHEET_); sh.appendRow(ACCT_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, ACCT_HEAD_.length).setFontWeight("bold"); sh.getRange("A:A").setNumberFormat("@"); }
+  return sh;
+}
+function acctAll_() {
+  const v = acctSheet_().getDataRange().getValues(), out = [];
+  for (let i = 1; i < v.length; i++) { const r = v[i], id = str_(r[0]).replace(/^'/, ""); if (!id) continue;
+    out.push({ row: i + 1, id: id, username: str_(r[1]), callsign: str_(r[2]), name: str_(r[3]), override: str_(r[4]), salt: str_(r[5]), hash: str_(r[6]),
+      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0 }); }
+  return out;
+}
+function acctFind_(id) { return acctAll_().find(a => a.id === str_(id)) || null; }
+function discordStatus_() {
+  return { clientId: PROPS_.getProperty("DISCORD_CLIENT_ID") || "", hasSecret: !!PROPS_.getProperty("DISCORD_CLIENT_SECRET"), redirect: PROPS_.getProperty("DISCORD_REDIRECT") || "", guildId: PROPS_.getProperty("DISCORD_GUILD") || "" };
+}
+// signed tokens: "kind|discordId|expires|issued" + HMAC (same secret as admin sessions, but a different kind, so they never mix)
+function offToken_(kind, id, ms) { const now = Date.now(); const p = Utilities.base64EncodeWebSafe(kind + "|" + id + "|" + (now + ms) + "|" + now, Utilities.Charset.UTF_8).replace(/=+$/, ""); return p + "." + sessSign_(p); }
+function offRead_(token, kind) {
+  const t = str_(token); if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(t)) return null;
+  const [p, sig] = t.split("."); if (sessSign_(p) !== sig) return null;
+  let raw; try { raw = Utilities.newBlob(Utilities.base64DecodeWebSafe(p + "===".slice((p.length + 3) % 4))).getDataAsString(); } catch (e) { return null; }
+  const b = raw.split("|"); if (b[0] !== kind || !(Number(b[2]) > Date.now())) return null;
+  return { id: b[1], issued: Number(b[3]) };
+}
+// who is this Discord ID on the rosters? main roster first, then the progression (onboarding) and division tabs
+function rosterPerson_(id) {
+  const split = n => { const cs = n.indexOf("|") !== -1 ? n.split("|")[0].trim() : ""; return { callsign: cs, name: cs ? n.split("|").slice(1).join("|").trim() : n }; };
+  let hit = null, trainee = false;
+  try { const p = (getRoster_(false).people || []).find(x => x.id === id); if (p) hit = Object.assign(split(p.name), { rank: p.extra || "" }); } catch (e) {}
+  try { programs_().forEach(pc => { if (!pc.on) return; const c = promoCandidates_(false, pc.id).list.find(x => x.id === id); if (c) { if (!hit) hit = { callsign: c.callsign, name: c.name, rank: "" }; if (/onboard|recruit|cadet|trainee|probation/i.test(pc.id + " " + pc.title + " " + (pc.rosterTabName || ""))) trainee = true; } }); } catch (e) {}
+  return hit ? Object.assign(hit, { trainee: trainee }) : null;
+}
+function acctLevel_(acct, person) {
+  if (acct && LEVELS_.indexOf(acct.override) !== -1) return acct.override;
+  return person && person.trainee ? "trainee" : "officer";
+}
+function acctProfile_(acct) {
+  const person = rosterPerson_(acct.id) || {};
+  const level = acctLevel_(acct, person);
+  return { discordId: acct.id, username: acct.username, callsign: person.callsign || acct.callsign, name: person.name || acct.name, rank: person.rank || "", level: level, rank_i: LEVELS_.indexOf(level) };
+}
+function officerSession_(token) {
+  const t = offRead_(token, "OFF"); if (!t) return null;
+  const a = acctFind_(t.id); if (!a || a.locked || !a.hash || (a.signedOut && t.issued < a.signedOut)) return null;
+  return a;
+}
+function acctHandle_(d) {
+  const a = d.action, st = discordStatus_();
+  if (a === "acctDiscordUrl") {
+    if (!st.clientId || !st.hasSecret || !st.redirect) return { ok: false, error: "Sign in with Discord isn't set up yet. An owner adds the Discord app in Admin → Accounts." };
+    const state = offToken_("STATE", "x", 10 * 60000);
+    const q = { client_id: st.clientId, redirect_uri: st.redirect, response_type: "code", scope: st.guildId ? "identify guilds" : "identify", state: state, prompt: "none" };
+    return { ok: true, url: "https://discord.com/oauth2/authorize?" + Object.keys(q).map(k => k + "=" + encodeURIComponent(q[k])).join("&") };
+  }
+  if (a === "acctDiscord") {
+    if (!offRead_(d.state, "STATE")) return { ok: false, error: "That sign-in link expired. Try again." };
+    const tok = UrlFetchApp.fetch("https://discord.com/api/oauth2/token", { method: "post", muteHttpExceptions: true,
+      payload: { client_id: st.clientId, client_secret: PROPS_.getProperty("DISCORD_CLIENT_SECRET"), grant_type: "authorization_code", code: str_(d.code), redirect_uri: st.redirect } });
+    if (tok.getResponseCode() !== 200) return { ok: false, error: "Discord didn't accept the sign-in. Try again." };
+    const access = JSON.parse(tok.getContentText()).access_token, H = { headers: { Authorization: "Bearer " + access }, muteHttpExceptions: true };
+    const meR = UrlFetchApp.fetch("https://discord.com/api/users/@me", H); if (meR.getResponseCode() !== 200) return { ok: false, error: "Couldn't read your Discord account." };
+    const du = JSON.parse(meR.getContentText()), id = str_(du.id);
+    if (st.guildId) { const gR = UrlFetchApp.fetch("https://discord.com/api/users/@me/guilds", H); const gs = gR.getResponseCode() === 200 ? JSON.parse(gR.getContentText()) : [];
+      if (!gs.some(g => str_(g.id) === st.guildId)) return { ok: false, error: "This Discord account isn't in the LSPD Discord server." }; }
+    const person = rosterPerson_(id);
+    let acct = acctFind_(id);
+    if (!person && !acct) return { ok: false, error: "Your Discord account (" + (du.username || id) + ") isn't on the LSPD roster. Ask a supervisor to add your Discord ID to the roster." };
+    if (acct && acct.locked) return { ok: false, error: "This account is locked. Contact command staff." };
+    withLock_(() => {
+      const sh = acctSheet_(); acct = acctFind_(id);
+      if (!acct) sh.appendRow(["'" + id, cellSafe_(du.username || ""), cellSafe_(person ? person.callsign : ""), cellSafe_(person ? person.name : ""), "", "", "", new Date(), "", false, 0, 1]);
+      else sh.getRange(acct.row, 2).setValue(cellSafe_(du.username || acct.username)), sh.getRange(acct.row, 12).setValue((acct.devices || 0) + 1);
+      return { ok: true };
+    });
+    acct = acctFind_(id);
+    return { ok: true, device: offToken_("DEV", id, 400 * 864e5), hasPin: !!acct.hash, profile: acctProfile_(acct) };
+  }
+  // device token → set the first PIN (or a new one after an admin reset)
+  if (a === "acctSetPin") {
+    const dv = offRead_(d.device, "DEV"); if (!dv) return { ok: false, error: "Sign in with Discord again on this device." };
+    const pin = str_(d.pin); if (!/^\d{6}$/.test(pin)) return { ok: false, error: "Your PIN must be 6 digits." };
+    if (/^(\d)\1{5}$/.test(pin) || "0123456789012".indexOf(pin) !== -1 || "9876543210987".indexOf(pin) !== -1) return { ok: false, error: "Pick a less obvious PIN (not 111111 or 123456)." };
+    let acct = acctFind_(dv.id); if (!acct) return { ok: false, error: "Sign in with Discord again on this device." };
+    if (acct.hash) return { ok: false, error: "You already have a PIN. Enter it to sign in (an admin can reset it)." };
+    const salt = Utilities.getUuid();
+    withLock_(() => { acctSheet_().getRange(acct.row, 6, 1, 4).setValues([[salt, hashPw_(pin, salt), acct.created || new Date(), new Date()]]); return { ok: true }; });
+    acct = acctFind_(dv.id);
+    return { ok: true, session: offToken_("OFF", acct.id, OFFICER_DAYS_ * 864e5), profile: acctProfile_(acct) };
+  }
+  if (a === "acctPin") {
+    const dv = offRead_(d.device, "DEV"); if (!dv) return { ok: false, error: "Sign in with Discord again on this device." };
+    const cache = CacheService.getScriptCache(), fk = "pinfail_" + dv.id, fails = Number(cache.get(fk) || 0);
+    if (fails >= 5) return { ok: false, error: "Too many wrong PINs. Try again in 15 minutes, or ask an admin to reset it." };
+    const acct = acctFind_(dv.id);
+    if (!acct) return { ok: false, error: "Sign in with Discord again on this device." };
+    if (acct.locked) return { ok: false, error: "This account is locked. Contact command staff." };
+    if (!acct.hash) return { ok: false, needPin: true, error: "Create your PIN first." };
+    if (acct.signedOut && dv.issued < acct.signedOut) return { ok: false, error: "This device was signed out. Sign in with Discord again." };
+    if (hashPw_(str_(d.pin), acct.salt) !== acct.hash) { cache.put(fk, String(fails + 1), 900); return { ok: false, error: "Wrong PIN" + (fails >= 3 ? " — " + (4 - fails) + " tr" + (4 - fails === 1 ? "y" : "ies") + " left." : ".") }; }
+    cache.remove(fk);
+    try { acctSheet_().getRange(acct.row, 9).setValue(new Date()); } catch (e) {}
+    return { ok: true, session: offToken_("OFF", acct.id, OFFICER_DAYS_ * 864e5), profile: acctProfile_(acct) };
+  }
+  if (a === "acctMe") { const acct = officerSession_(d.session); return acct ? { ok: true, profile: acctProfile_(acct) } : { ok: false, error: "AUTH" }; }
+  if (a === "acctOut") return { ok: true };       // the browser forgets its tokens
+  return { ok: false, error: "Unknown action." };
+}
+function acctList_() {
+  return acctAll_().map(a => { const p = rosterPerson_(a.id); return { discordId: a.id, username: a.username, callsign: (p && p.callsign) || a.callsign, name: (p && p.name) || a.name, rank: p ? p.rank : "", onRoster: !!p,
+    level: acctLevel_(a, p), override: a.override, hasPin: !!a.hash, locked: a.locked, created: a.created, last: a.last, devices: a.devices }; });
+}
+function acctAdmin_(a, d, me) {
+  const acct = acctFind_(d.discordId); if (!acct) throw new Error("Account not found.");
+  const sh = acctSheet_();
+  return withLock_(() => {
+    if (a === "acctReset") sh.getRange(acct.row, 6, 1, 2).setValues([["", ""]]), sh.getRange(acct.row, 11).setValue(Date.now());          // new PIN + every device signs in again
+    if (a === "acctSignOut") sh.getRange(acct.row, 11).setValue(Date.now());
+    if (a === "acctLock") { sh.getRange(acct.row, 10).setValue(!!d.locked); if (d.locked) sh.getRange(acct.row, 11).setValue(Date.now()); }
+    if (a === "acctLevel") {
+      const lv = str_(d.level);
+      if (lv && LEVELS_.indexOf(lv) === -1) throw new Error("Unknown level.");
+      if ((lv === "owner" || lv === "admin") && me.role !== "owner") throw new Error("Only an owner can give Admin or Owner level.");
+      sh.getRange(acct.row, 5).setValue(lv);
+    }
+    return { ok: true, accounts: acctList_() };
+  });
+}
+
+// =====================================================================
 // DISCORD HELPERS
 // =====================================================================
 function addListFields_(fields, name, lines) {
@@ -2356,6 +2492,7 @@ function handleAdmin_(d) {
 
   if (/^cid(Mine|List|Review)$/.test(a)) return cidHandle_(d);
   if (a === "divMine") return divMine_(d);
+  if (/^acct(DiscordUrl|Discord|SetPin|Pin|Me|Out)$/.test(a)) return acctHandle_(d);
 
   const me = sessionAdmin_(d.token);
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
@@ -2391,6 +2528,22 @@ function handleAdmin_(d) {
       const r = divImport_();
       logAdmin_(me.username, "division logs", "imported " + r.added + " past reports");
       return Object.assign({ ok: true }, r);
+    }
+    case "acctList": return { ok: true, accounts: acctList_(), discord: discordStatus_() };
+    case "acctReset": case "acctLock": case "acctSignOut": case "acctLevel": {
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can manage officer accounts.");
+      const r = acctAdmin_(a, d, me); logAdmin_(me.username, "officer account", a.replace("acct", "") + " " + str_(d.discordId) + (d.level ? " -> " + d.level : "") + (d.locked != null ? " -> " + (d.locked ? "locked" : "unlocked") : ""));
+      return r;
+    }
+    case "discordSetup": {       // owner pastes the Discord app's Client ID + Secret (sign in with Discord)
+      ownerOnly();
+      if (str_(d.clientId) && !/^\d{15,21}$/.test(str_(d.clientId))) throw new Error("The Client ID is the long number on the app's OAuth2 page.");
+      if (str_(d.clientId)) PROPS_.setProperty("DISCORD_CLIENT_ID", str_(d.clientId));
+      if (str_(d.clientSecret)) PROPS_.setProperty("DISCORD_CLIENT_SECRET", str_(d.clientSecret));
+      PROPS_.setProperty("DISCORD_REDIRECT", str_(d.redirect));
+      PROPS_.setProperty("DISCORD_GUILD", /^\d{15,21}$/.test(str_(d.guildId)) ? str_(d.guildId) : "");
+      logAdmin_(me.username, "Discord sign-in", "settings saved");
+      return { ok: true, discord: discordStatus_() };
     }
     case "cidSetPassword": {    // the CID Command review page password
       ownerOnly();
