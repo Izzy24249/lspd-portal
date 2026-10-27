@@ -90,6 +90,9 @@
   .fullprev .in{max-width:1100px;margin:0 auto}
   .fullprev .bar{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:var(--muted);font-size:.85rem}
   .preview .ptitle{font-size:.75rem;letter-spacing:.18em;color:var(--muted);margin:0 0 10px;text-transform:uppercase;display:flex;gap:10px;align-items:center}
+  .urow.locked{opacity:.6}
+  .acct-q{width:100%;max-width:380px;height:38px;border-radius:9px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--text);padding:0 12px;font:14px Inter,sans-serif}
+  .ulist .role-sel{height:auto;min-height:36px;padding:6px 10px;max-width:250px}
   .div-card>summary{text-transform:none!important;letter-spacing:.02em!important;font-size:.95rem!important;color:var(--text)!important}
   .div-card>summary small{color:var(--muted);font-weight:500}
   .div-card{border-left:4px solid var(--dc)!important}
@@ -358,6 +361,7 @@
 <button data-tab="divisions"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Division Command</span></button>
         <div class="ng">Administration</div>
 <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Portal Settings</span></button>
+<button data-tab="accounts"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg><span>Officer Accounts</span></button>
 <button data-tab="admins"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a6 6 0 0 1 3 6"/></svg><span>Admins</span></button>
 <button data-tab="activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Activity Log</span></button>
         <div class="ng sp"></div>
@@ -609,7 +613,7 @@ function renderPage(keepScroll) {
   const y = window.scrollY;
   document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
   const page = $("page"); page.innerHTML = ""; page.className = "pg pg-" + TAB;
-  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
+  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
   if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
 }
 const TAB_GROUP = { hours: "Operations", promo: "Operations", settings: "Administration", admins: "Administration", activity: "Administration", account: "Account" };
@@ -1609,6 +1613,70 @@ function pageDivisions(page) {
       try { const r = await api("divImport", {}); toast(r.added ? "Imported " + r.added + " past report" + (r.added === 1 ? "" : "s") + "." : "Nothing new to import.", "ok"); } catch (err) { toast(err.message, "bad"); }
       e.target.disabled = false;
     } }, "Import past reports"))));
+}
+
+/* ---------------- OFFICER ACCOUNTS (sign in with Discord + 4-digit PIN) ---------------- */
+let ACCTS = null, DISC = null;
+const LEVELS = [["", "Automatic (from the roster)"], ["trainee", "Trainee"], ["officer", "Officer"], ["fto", "FTO / Trainer"], ["leader", "Division leader"], ["command", "Command"], ["admin", "Admin"], ["owner", "Owner"]];
+function pageAccounts(page) {
+  page.append(head("Officer Accounts", "Officers sign in with Discord once per device, then a 4-digit PIN. Certified officers come from LSPD Personnel Roster, trainees from LSPD Onboarding Roster. Reset a forgotten PIN, sign someone out everywhere, lock an account or change its level here.",
+    h("button", { class: "btn ghost sm", onclick: () => { ACCTS = null; renderPage(true); } }, "Refresh")));
+  const box = h("div", {}, h("div", { class: "sec empty-note", text: "Loading accounts…" }));
+  page.append(box);
+  const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; });
+  load.then(() => { box.innerHTML = ""; drawAccounts(box); if (ME.role === "owner") box.append(discordSec()); })
+    .catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 55 ? "Paste the new WebApp.gs (version 55 or newer) and deploy a new version to use officer accounts." : e.message })); });
+}
+function drawAccounts(box) {
+  const q = h("input", { type: "search", class: "acct-q", placeholder: "Search name, callsign or Discord ID…" });
+  const list = h("div", { class: "ulist" });
+  const draw = () => {
+    list.innerHTML = "";
+    const t = q.value.trim().toLowerCase();
+    const rows = (ACCTS || []).filter(a => !t || [a.name, a.callsign, a.discordId, a.username].join(" ").toLowerCase().includes(t));
+    if (!rows.length) { list.append(h("div", { class: "empty-note", style: "padding:20px", text: (ACCTS || []).length ? "No match." : "No officer accounts yet. They appear here after an officer signs in with Discord for the first time." })); return; }
+    rows.forEach(a => {
+      const act = async (action, data, msg) => { try { const r = await api(action, Object.assign({ discordId: a.discordId }, data || {})); ACCTS = r.accounts; draw(); toast(msg, "ok"); } catch (e) { toast(e.message, "bad"); } };
+      const lv = h("select", { class: "role-sel", onchange: () => act("acctLevel", { level: lv.value }, "Level updated.") }, LEVELS.map(([v, l]) => h("option", { value: v, text: v ? l : l + " · " + (LEVELS.find(x => x[0] === a.level) || ["", a.level])[1] })));
+      lv.value = a.override || "";
+      list.append(h("div", { class: "urow" + (a.locked ? " locked" : "") },
+        h("div", { class: "av", text: initials(a.name || a.username || "?") }),
+        h("div", { class: "who-t" }, h("b", { text: (a.callsign ? a.callsign + " · " : "") + (a.name || a.username) }),
+          h("small", { text: "@" + a.username + " · " + a.discordId + (a.onRoster ? "" : " · not on the roster") + (a.hasPin ? "" : " · no PIN yet") + (a.locked ? " · LOCKED" : "") + " · last sign-in " + ago(a.last) })),
+        lv,
+        h("div", { class: "acts" },
+          h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Reset " + (a.name || a.username) + "'s PIN? They'll sign in with Discord again on each device and pick a new PIN.")) act("acctReset", {}, "PIN reset. They pick a new one at next sign-in."); } }, "Reset PIN"),
+          h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Sign " + (a.name || a.username) + " out on every device?")) act("acctSignOut", {}, "Signed out everywhere."); } }, "Sign out everywhere"),
+          h("button", { class: "btn " + (a.locked ? "ghost" : "danger") + " sm", onclick: () => { if (a.locked || confirm("Lock " + (a.name || a.username) + "? They can't sign in until unlocked. Their history is kept.")) act("acctLock", { locked: !a.locked }, a.locked ? "Account unlocked." : "Account locked."); } }, a.locked ? "Unlock" : "Lock"))));
+    });
+  };
+  q.oninput = draw;
+  const n = (ACCTS || []).length;
+  box.append(h("div", { class: "kpis" },
+    h("div", { class: "kpi" }, h("small", { text: "Accounts" }), h("b", { text: String(n) })),
+    h("div", { class: "kpi" }, h("small", { text: "Trainees" }), h("b", { text: String((ACCTS || []).filter(a => a.level === "trainee").length) })),
+    h("div", { class: "kpi" }, h("small", { text: "Locked" }), h("b", { text: String((ACCTS || []).filter(a => a.locked).length) })),
+    h("div", { class: "kpi" }, h("small", { text: "Signed in this week" }), h("b", { text: String((ACCTS || []).filter(a => a.last && Date.now() - new Date(a.last) < 7 * 864e5).length) }))),
+    h("div", { class: "sec flush" }, h("div", { style: "padding:14px 16px 4px" }, q), list));
+  draw();
+}
+function discordSec() {
+  const d = DISC || {}, sec = h("div", { class: "sec", style: "display:grid;gap:12px" });
+  const id = h("input", { type: "text", value: d.clientId || "", placeholder: "123456789012345678" });
+  const secret = h("input", { type: "password", autocomplete: "off", placeholder: d.hasSecret ? "Saved — leave blank to keep it" : "Paste the Client Secret" });
+  const redirect = h("input", { type: "text", value: d.redirect || location.origin + location.pathname.replace(/[^/]*$/, "") + "signon.html" });
+  const guild = h("input", { type: "text", value: d.guildId || "", placeholder: "Optional: your LSPD Discord server ID" });
+  sec.append(h("h3", { text: "Sign in with Discord" }),
+    h("p", { class: "help", text: "Uses a Discord application, not a bot: nothing joins any server. Create it at discord.com/developers → New Application → OAuth2. Add the redirect link below under Redirects, then paste the Client ID and Client Secret here. The secret is stored in Apps Script only and never shown again." }),
+    h("div", { class: "help", text: "Status: " + (d.clientId && d.hasSecret ? "set up ✓" : "not set up yet") }),
+    h("div", { class: "g2" }, field("Client ID", id), field("Client Secret", secret)),
+    h("div", { class: "g2" }, field("Redirect link (copy this into Discord)", redirect), field("Only allow members of this server (optional)", guild, "Discord server ID (Developer Mode → right-click the server → Copy Server ID). Officers outside it can't sign in.")),
+    h("div", {}, h("button", { class: "btn primary sm", onclick: async e => {
+      e.target.disabled = true;
+      try { const r = await api("discordSetup", { clientId: id.value.trim(), clientSecret: secret.value.trim(), redirect: redirect.value.trim(), guildId: guild.value.trim() }); DISC = r.discord; toast("Discord sign-in saved.", "ok"); sec.replaceWith(discordSec()); }
+      catch (err) { toast(err.message, "bad"); e.target.disabled = false; }
+    } }, "Save Discord settings")));
+  return sec;
 }
 
 /* ---------------- ADMINS ---------------- */
