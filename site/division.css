@@ -382,3 +382,4 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
   .gm-right{overflow:visible;padding:14px}
   .gm-keys{display:none}
 }
+.gm-left .pp-body{white-space:pre;overflow:auto}

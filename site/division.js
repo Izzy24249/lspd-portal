@@ -212,18 +212,27 @@
   // A report on "paper": the CID case file as the case builder prints it, and any other report laid out the same way
   function paperText(t) {
     t = String(t || "");
-    if (/^={20,}/.test(t)) return t;                                   // already a printed case file (CID)
+    if (/^={20,}/.test(t)) return window.CaseFile ? CaseFile.rewrap(t) : t;   // already a printed case file
     const lines = t.split("\n"), out = [], kv = /^([^:\n]{1,42}):\s(.*)$/;
     for (let i = 0; i < lines.length;) {
       if (kv.test(lines[i])) {                                         // a run of "Label: value" lines, values lined up
         const run = []; while (i < lines.length && kv.test(lines[i])) { const m = kv.exec(lines[i]); run.push([m[1], m[2]]); i++; }
-        const w = Math.min(26, Math.max(...run.map(x => x[0].length)) + 2); run.forEach(([a, b]) => out.push((a + ":").padEnd(w) + b));
+        const short = run.filter(([, b]) => b.indexOf("; ") === -1 && b.length <= 70), w = Math.min(26, Math.max(0, ...short.map(x => x[0].length)) + 2);
+        let open = false;
+        run.forEach(([a, b]) => {
+          if (b.indexOf("; ") !== -1 || b.length > 70) {            // a list or long text: its own section, one entry per line
+            out.push("", "[ " + a.toUpperCase() + " ]", "-".repeat(38));
+            if (b.indexOf("; ") !== -1) b.split(/;\s(?=\S)/).forEach(x => out.push("  • " + x)); else out.push(b);
+            out.push(""); open = false;
+          } else { if (!open && out.length && out[out.length - 1] !== "" && !/^-+$/.test(out[out.length - 1])) out.push(""); out.push((a + ":").padEnd(w) + b); open = true; }
+        });
       } else if (/^[A-Z0-9 &/().,'#-]{3,}$/.test(lines[i].trim()) && /[A-Z]/.test(lines[i])) {   // a section heading
         if (out.length && out[out.length - 1] !== "") out.push("");
         out.push("[ " + lines[i].trim() + " ]", "-".repeat(38)); i++;
       } else { out.push(lines[i]); i++; }
     }
-    return out.join("\n");
+    const txt = out.join("\n").replace(/\n{3,}/g, "\n\n");
+    return window.CaseFile ? CaseFile.rewrap(txt) : txt;
   }
   function paperHTML(r, text) {
     const dv = DATA.division, no = r.no || r.formTitle;
@@ -235,7 +244,14 @@
     const put = t => { if (box && box.isConnected) box.textContent = paperText(t); };
     if (FULL[id] != null) { put(FULL[id]); return; }
     put("Loading the full report…");
-    api("divReport", { id: id }).then(r => { FULL[id] = r.report || "No details recorded."; put(FULL[id]); document.querySelectorAll(`[data-full="${CSS.escape(id)}"]`).forEach(b => b.textContent = paperText(FULL[id])); })
+    api("divReport", { id: id }).then(x => {
+      const r = DATA.reports.find(y => y.id === id) || {};
+      let t = x.report || "No details recorded.";
+      if (!x.printed && x.data && x.form && window.CaseFile) {
+        try { t = CaseFile.text(x.form, x.data, { dept: "LSPD " + DATA.division.name, doc: "Official " + (x.form.title || "report"), number: r.no, filedBy: r.author ? (r.author.callsign ? r.author.callsign + " | " : "") + r.author.name : "", date: r.at ? new Date(r.at).toLocaleDateString() : "" }); } catch (e) {}
+      }
+      FULL[id] = t; put(FULL[id]); document.querySelectorAll(`[data-full="${CSS.escape(id)}"]`).forEach(b => b.textContent = paperText(FULL[id]));
+    })
       .catch(e => put("Couldn't load the full report: " + e.message));
   }
   const cards = list => list.map(r => reportCard(r, { open: OPEN.has(r.id) })).join("");

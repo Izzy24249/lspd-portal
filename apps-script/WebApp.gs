@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 53;
+const BACKEND_VERSION = 54;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -897,7 +897,7 @@ function handleSubmit_(d) {
   let logId = "";
   const saved = withLock_(() => {
     archiveRow_(form, archiveCols);
-    try { logId = actLog_(form, values, repeaters, archiveCols, { webhookId: webhook.id, threadId: threadId, messageId: r1.body && r1.body.id, content: first.content || "", title: first.thread_name || fillTemplate_(form.embedTitle || form.title, values) || form.title, report: cidX ? cidX.report : "" }); } catch (e) {}
+    try { logId = actLog_(form, values, repeaters, archiveCols, { webhookId: webhook.id, threadId: threadId, messageId: r1.body && r1.body.id, content: first.content || "", title: first.thread_name || fillTemplate_(form.embedTitle || form.title, values) || form.title, report: cidX ? cidX.report : "", data: { values: values, repeaters: repeaters, checklists: checklists } }); } catch (e) {}
     const lb = form.leaderboard;
     if (lb && lb.enabled && lb.countField && str_(values[lb.countField])) {
       lbSheet_().appendRow([new Date(), form.id, "'" + str_(values[lb.countField])]);
@@ -1865,7 +1865,7 @@ function cidHandle_(d) {
 // DIVISION COMMAND (division.html): every report, who filed it, who was tagged, grades
 // =====================================================================
 const ACT_SHEET_ = "Division Activity";
-const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source", "Report"];
+const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source", "Report", "Data"];
 const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divGrade: 1, divReport: 1, changePassword: 1 };
 const GRADES_ = ["A", "B", "C", "D", "F"];
 function actSheet_() {
@@ -1935,7 +1935,7 @@ function actLog_(form, values, repeaters, cols, x) {
   const caseF = allFields_(form).find(f => f.type === "case_number");
   const id = Utilities.getUuid().replace(/-/g, "").slice(0, 14);
   actSheet_().appendRow([id, new Date(), form.id, cellSafe_(caseF ? str_(values[caseF.id]) : ""), cellSafe_(clip_(x.title, 200)), JSON.stringify(people), cellSafe_(actSummary_(cols, people)),
-    "'" + (x.threadId || ""), "'" + (x.messageId || ""), x.webhookId || "", cellSafe_(clip_(x.content || "", 1900)), "", "", "", "", x.source || "report", cellSafe_(clip_(x.report || actFull_(cols), 45000))]);
+    "'" + (x.threadId || ""), "'" + (x.messageId || ""), x.webhookId || "", cellSafe_(clip_(x.content || "", 1900)), "", "", "", "", x.source || "report", cellSafe_(clip_(x.report || actFull_(cols), 45000)), (() => { const j = x.data ? JSON.stringify(x.data) : ""; return j.length < 48000 ? cellSafe_(j) : ""; })()]);
   divClearCache_();
   return id;
 }
@@ -1971,7 +1971,7 @@ function actRows_() {
     let people = []; try { people = JSON.parse(str_(r[5]) || "[]"); } catch (e) {}
     out.push({ row: i + 1, id: str_(r[0]), at: isDate_(r[1]) ? r[1].getTime() : new Date(r[1]).getTime() || 0, form: str_(r[2]), no: str_(r[3]), title: str_(r[4]), people: people, summary: str_(r[6]),
       threadId: str_(r[7]).replace(/^'/, ""), messageId: str_(r[8]).replace(/^'/, ""), webhookId: str_(r[9]), content: str_(r[10]),
-      grade: str_(r[11]), gradedBy: str_(r[12]), comments: str_(r[13]), gradedAt: isDate_(r[14]) ? r[14].getTime() : 0, source: str_(r[15]), report: str_(r[16]) }); }
+      grade: str_(r[11]), gradedBy: str_(r[12]), comments: str_(r[13]), gradedAt: isDate_(r[14]) ? r[14].getTime() : 0, source: str_(r[15]), report: str_(r[16]), data: str_(r[17]) }); }
   return out;
 }
 // Everything the Division Command page shows for one division: its officers + every report from its forms.
@@ -2049,6 +2049,28 @@ function divGrade_(d, me) {
     if (!r.ok) warning = "grade saved, but Discord said: " + r.error;
   } catch (e) { warning = "grade saved, but Discord couldn't be reached: " + errMsg_(e); }
   return warning ? { ok: true, warning: warning } : { ok: true };
+}
+// One report for reading/grading: the printed case file (CID page), and the answers + the form, so the page can lay it
+// out like the report writer. Reports logged before answers were saved get theirs back from the form's sheet tab.
+function divReport_(d) {
+  const r = actRows_().find(x => x.id === str_(d.id)); if (!r) return { ok: false, error: "That report isn't in the log." };
+  const form = getConfig_().forms.find(f => f.id === r.form);
+  let data = null; try { data = r.data ? JSON.parse(r.data) : null; } catch (e) {}
+  if (!data && form) { try { data = archiveLookup_(form, r); } catch (e) {} }
+  return { ok: true, report: r.report || r.summary, printed: /^={20,}/.test(r.report), data: data, form: form ? { id: form.id, title: form.title, blocks: form.blocks } : null };
+}
+function archiveLookup_(form, r) {
+  const src = r.source.indexOf("import:") === 0 ? Number(r.source.split(":")[2]) : r.at;
+  const sh = ss_().getSheetByName(clip_(str_(form.archiveSheet) || form.title || form.id, 90)); if (!sh || sh.getLastRow() < 2) return null;
+  const lastCol = sh.getLastColumn(), notes = sh.getRange(1, 1, 1, lastCol).getNotes()[0];
+  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, lastCol).getValues();
+  const caseF = allFields_(form).find(f => f.type === "case_number"), ci = caseF ? notes.indexOf(caseF.id) : -1;
+  let best = null, bestD = 6 * 60000;
+  rows.forEach(row => { const t = isDate_(row[0]) ? row[0].getTime() : new Date(row[0]).getTime(); if (isNaN(t)) return; const dd = Math.abs(t - src);
+    if (dd < bestD && (ci < 0 || !r.no || str_(row[ci]) === r.no)) { best = row; bestD = dd; } });
+  if (!best) return null;
+  const values = {}; notes.forEach((n, j) => { if (j && n) values[n] = str_(best[j]); });
+  return { values: values, repeaters: {}, checklists: {}, flat: true };    // lists come back as text ("a / b; c / d")
 }
 // An officer's own reports, by the log IDs their browser kept when they filed them (or a CID case's ID): grades and comments
 function divMine_(d) {
@@ -2342,7 +2364,7 @@ function handleAdmin_(d) {
   // division leaders: the Division Command page only (no forms, settings, webhooks or accounts)
   if (me.role === "leader" && !LEADER_ACTIONS_[a]) throw new Error("Division leader accounts can only use the Division Command page.");
   if (a === "divView") return divView_(d, me);
-  if (a === "divReport") { const r = actRows_().find(x => x.id === str_(d.id)); return r ? { ok: true, report: r.report || r.summary } : { ok: false, error: "That report isn't in the log." }; }
+  if (a === "divReport") return divReport_(d);
   if (a === "divGrade") return withLock_(() => divGrade_(d, me));
 
   switch (a) {
