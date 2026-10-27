@@ -1425,5 +1425,5 @@ window.Portal = (function () {
     return data.config;
   }
 
-  return { ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, setRoster, setRosters, render, post, loadConfig, esc, todayISO, sentence };
+  return { ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, setRoster, setRosters, render, post, loadConfig, esc, todayISO, sentence, chargeGroups, chargeItem };
 })();

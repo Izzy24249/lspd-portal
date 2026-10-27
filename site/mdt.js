@@ -28,19 +28,59 @@
   function who(p) { return p ? ((p.title || "Officer") + " " + last(p.name)) : "Officer"; }
   function drawStrip() {
     const p = (DATA && DATA.profile) || LS.json("lspd_prof") || {};
-    $("uCs").textContent = p.callsign || "----"; $("uName").textContent = who(p).toUpperCase();
-    $("me").innerHTML = 'Signed on as <b>' + esc(p.callsign || "—") + "</b> · " + esc(who(p)) + '<br><a href="signon.html?out=1">Sign off (10-7)</a>';
+    $("uCs").textContent = p.callsign || "----"; $("uName").textContent = who(p);
+    $("uRank").textContent = (DATA && DATA.fleet && DATA.fleet.rank && (DATA.fleet.rank.known || DATA.fleet.rank.trainee)) ? DATA.fleet.rank.name : (p.level || "");
     const sop = (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; $("sopLink").href = sop;
     const nt = UNIT && UNIT.sessions ? UNIT.sessions.filter(x => !x.mine && !x.full).length + (UNIT.checks || []).filter(c => !c.best).length : 0; $("nTrain").textContent = nt || "";
     const nb = (DATA && DATA.board && DATA.board.notices || []).length; $("nBolo").textContent = nb || ""; $("nBolo").className = nb ? "new" : "";
     if (DATA && DATA.fleet) { $("nFleet").textContent = DATA.fleet.vehicles.filter(v => v.allowed).length || ""; $("nUni").textContent = (DATA.fleet.uniforms[SEX] || []).filter(u => u.yours).length || ""; }
+    drawFormsNav();
   }
+  // ---------- unit status (10-codes), sound, mobile drawer ----------
+  const STATUSES = [["10-8", "In service", "#34d996"], ["10-6", "Busy", "#ffbe3d"], ["10-23", "On scene", "#4c8dff"], ["10-97", "En route", "#3ee0ff"], ["10-7", "Out of service", "#ff5d6c"]];
+  function paintStatus() { const st = STATUSES.find(x => x[0] === LS.get("mdt:status")) || STATUSES[0]; $("statusTxt").textContent = st[0] + " · " + st[1].toUpperCase(); const b = $("statusBtn"); b.style.color = st[2]; b.style.borderColor = st[2] + "66"; b.style.background = st[2] + "14"; }
+  $("statusMenu").innerHTML = STATUSES.map(x => '<button data-st="' + x[0] + '"><i style="background:' + x[2] + ';box-shadow:0 0 8px ' + x[2] + '"></i><b>' + x[0] + "</b>" + x[1] + "</button>").join("");
+  $("statusBtn").onclick = e => { e.stopPropagation(); $("statusMenu").hidden = !$("statusMenu").hidden; };
+  $("statusMenu").onclick = e => { const b = e.target.closest("[data-st]"); if (!b) return; LS.set("mdt:status", b.dataset.st); paintStatus(); $("statusMenu").hidden = true; blip(1300); toast("Status " + b.textContent.replace(/^(\S+)/, "$1 ·")); };
+  document.addEventListener("click", e => { if (!e.target.closest("#statusMenu,#statusBtn")) $("statusMenu").hidden = true; });
+  paintStatus();
+  let actx = null;
+  function blip(f) { if (LS.get("lspd_sound") === "off") return; try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.value = f || 900; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.035, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.08); } catch (e) {} }
+  function paintSnd() { $("sndBtn").classList.toggle("off", LS.get("lspd_sound") === "off"); }
+  $("sndBtn").onclick = () => { LS.set("lspd_sound", LS.get("lspd_sound") === "off" ? "" : "off"); paintSnd(); blip(); toast(LS.get("lspd_sound") === "off" ? "Sounds off" : "Sounds on"); };
+  paintSnd();
+  const side = $("side");
+  $("menuBtn").onclick = () => side.classList.add("open"); $("sideClose").onclick = () => side.classList.remove("open"); $("scrim").onclick = () => side.classList.remove("open");
+
+  // ---------- reports (forms) in the side panel ----------
+  let FORM_Q = "";
+  function myForms() { return (DATA && DATA.forms) || []; }
+  function drawFormsNav() {
+    const box = $("formsNav"); if (!DATA) return;
+    const list = myForms(), q = FORM_Q.toLowerCase(), cur = VIEW.indexOf("form:") === 0 ? VIEW.slice(5) : "";
+    $("nForms").textContent = list.filter(f => f.status === "live").length || "";
+    const shown = list.filter(f => !q || (f.title + " " + f.section + " " + f.division).toLowerCase().indexOf(q) !== -1);
+    const btn = f => '<button class="fa' + (f.status !== "live" ? " soon" : "") + (cur === f.id ? " on" : "") + '" ' + (f.status === "live" ? 'data-form="' + esc(f.id) + '"' : "disabled") + ' title="' + esc(f.desc || f.title) + '"><span class="fi">' + esc(f.icon) + "</span><span>" + esc(f.title) +
+      (f.status !== "live" ? "<small>Coming soon</small>" : f.division ? "<small>" + esc(f.division) + "</small>" : "") + "</span></button>";
+    const live = shown.filter(f => f.status === "live"), soon = shown.filter(f => f.status !== "live");
+    const html = (list.length > 6 ? '<input class="forms-filter" id="formsFilter" placeholder="Filter reports…" value="' + esc(FORM_Q) + '">' : "") +
+      live.map(btn).join("") + (soon.length ? '<details class="soonbox"' + (q ? " open" : "") + '><summary>Coming soon · ' + soon.length + "</summary>" + soon.map(btn).join("") + "</details>" : "") +
+      (shown.length ? "" : '<p style="padding:4px 10px;color:var(--dim);font-size:12.5px">No reports match.</p>');
+    if (box.__h !== html) { const had = document.activeElement && document.activeElement.id === "formsFilter", pos = had ? document.activeElement.selectionStart : 0; box.innerHTML = html; box.__h = html; if (had) { const n = $("formsFilter"); n.focus(); n.setSelectionRange(pos, pos); } }
+  }
+  document.addEventListener("input", e => { if (e.target.id === "formsFilter") { FORM_Q = e.target.value; drawFormsNav(); } });
+  document.addEventListener("click", e => { const b = e.target.closest("[data-form]"); if (b) { e.preventDefault(); go("form:" + b.getAttribute("data-form")); }
+    const fr = e.target.closest("[data-frame]"); if (fr) { e.preventDefault(); go("frame:" + fr.getAttribute("data-frame")); } });
+  // a report filed inside the terminal: refresh "My reports", the ticker and the stats
+  addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "lspd:filed") { toast("✓ " + (e.data.title || "Report") + " filed"); blip(1400); setTimeout(load, 1500); } });
 
   // ---------- router ----------
-  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training"];
-  function go(v) { VIEW = VIEWS.indexOf(v) >= 0 ? v : "home"; if (location.hash.slice(1) !== VIEW) history.replaceState(null, "", "#" + VIEW); draw(); window.scrollTo(0, 0); }
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports"];
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code & 10-codes"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"] };
+  const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
+  function go(v) { VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
-  addEventListener("hashchange", () => go(location.hash.slice(1)));
+  addEventListener("hashchange", () => { const h = decodeURIComponent(location.hash.slice(1)); if (h !== VIEW) go(h); });
 
   function drawTicker() {
     const t = $("ticker"), list = (DATA && DATA.board && DATA.board.dept && DATA.board.dept.ticker) || [];
@@ -48,14 +88,37 @@
     t.hidden = false; t.innerHTML = '<div class="live"><i></i>LIVE</div><div class="tk-run">' + list.concat(list).map(x => "<span>" + esc(x.t) + " · " + ago(x.at) + "</span>").join("") + "</div>";
   }
   function modal(html) { const m = $("modal"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
+  function frameHTML(src, icon, title, sub) {
+    return '<div class="formview"><div class="fv-bar"><span class="fi">' + esc(icon) + "</span><div><b>" + esc(title) + "</b><small>" + esc(sub) + '</small></div><span class="sp"></span><a class="btn ghost" href="' + esc(src.replace(/[?&]embed=1/, "")) + '" target="_blank" rel="noopener" title="Open in its own tab">↗ <span class="only-d">FULL PAGE</span></a></div>' +
+      '<div class="fv-frame"><div class="fv-load boot"><i></i>LOADING REPORT…</div><iframe src="' + esc(src) + '" title="' + esc(title) + '" onload="this.previousElementSibling.style.opacity=0"></iframe></div></div>';
+  }
   function draw() {
-    document.querySelectorAll("[data-go]").forEach(a => a.classList.toggle("on", a.getAttribute("data-go") === VIEW));
+    const navKey = VIEW.indexOf("form:") === 0 ? "reports" : VIEW;
+    document.querySelectorAll("[data-go]").forEach(a => a.classList.toggle("on", a.getAttribute("data-go") === navKey));
+    document.querySelectorAll("[data-frame]").forEach(a => a.classList.toggle("on", "frame:" + a.getAttribute("data-frame") === VIEW));
     drawStrip();
-    const m = $("main");
-    if (!DATA) { m.innerHTML = '<div class="boot">ESTABLISHING LINK…</div>'; return; }
-    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : homeHTML()) + "</div>";
+    const m = $("main"), framed = /^(form|frame):/.test(VIEW);
+    let t = TITLES[VIEW] || ["TERMINAL", "Dashboard"];
+    if (VIEW.indexOf("form:") === 0) { const f = myForms().find(x => x.id === VIEW.slice(5)); t = ["REPORTS", f ? f.title : "Report"]; }
+    if (VIEW.indexOf("frame:") === 0) { const a = document.querySelector('[data-frame="' + VIEW.slice(6) + '"]'); t = ["TERMINAL", a ? a.getAttribute("data-title") : "Page"]; }
+    $("crumbSec").textContent = t[0]; $("crumbTitle").textContent = t[1]; document.title = t[1] + " · LSPD MDT";
+    m.classList.toggle("flush", framed);
+    if (!DATA) { m.innerHTML = '<div class="boot"><i></i>ESTABLISHING LINK…</div>'; return; }
+    if (framed) {
+      if (m.__view === VIEW) return;                                   // keep the report open (and typed text) through background refreshes
+      m.__view = VIEW;
+      if (VIEW.indexOf("form:") === 0) {
+        const f = myForms().find(x => x.id === VIEW.slice(5));
+        if (!f) { m.__view = ""; m.innerHTML = '<div class="main-in"><div class="empty">That report isn\'t available to you.</div></div>'; return; }
+        m.innerHTML = frameHTML(f.cid ? "cid.html?embed=1" : "forms.html?embed=1#" + f.id, f.icon, f.title, f.division ? f.division + " report" : (f.desc || "Filed straight to Discord and Division Command"));
+      } else m.innerHTML = frameHTML(VIEW.slice(6) + "?embed=1", "📋", t[1], "Your filed reports and their grades");
+      $("ticker").hidden = true; return;
+    }
+    m.__view = "";
+    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
     if ((VIEW === "unit" || VIEW === "training") && !UNIT) loadUnit();
     if (VIEW === "reference" && !REF) loadRef();
+    m.querySelectorAll("[data-count]").forEach(el => { const to = +el.dataset.count || 0, t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); });
     if (VIEW === "records") { const q = $("recQ"); if (q && !matchMedia("(max-width:760px)").matches) q.focus(); }
     drawTicker();
   }
@@ -77,8 +140,15 @@
   function homeHTML() {
     const p = DATA.profile || {}, f = DATA.fleet || {}, B = DATA.board || {}, trainee = f.rank && f.rank.trainee, mine = B.mine || [];
     const waiting = mine.filter(r => !r.grade).length;
-    let h = '<div class="hello"><div><h1>' + esc(greet()) + ", " + esc(last(p.name) || "Officer") + '. <span>' + esc(trainee ? "Welcome to the academy." : "Ready when you are.") + "</span></h1>" +
-      '<p>Signed on as <b>' + esc(p.callsign || "—") + "</b> · " + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · " + waiting + " waiting on a grade" : "") : "") + '</p></div><a class="file" href="forms.html">FILE A REPORT <kbd>F</kbd></a></div>';
+    const D0 = B.dept || {}, NB0 = B.notices || [], st = (STATUSES.find(x => x[0] === LS.get("mdt:status")) || STATUSES[0]);
+    let h = '<section class="hero"><div><div class="kick">' + esc((p.callsign ? p.callsign + " · " : "") + st[0] + " " + st[1].toUpperCase()) + "</div><h1>Good " + esc(greet().toLowerCase()) + ", " + esc(last(p.name) || "Officer") + '.<br><span>' + esc(trainee ? "Welcome to the academy." : NB0.length ? NB0.length + " active BOLO" + (NB0.length > 1 ? "s" : "") + " on the board." : "All quiet on the board.") + "</span></h1>" +
+      '<p>' + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · <b>" + waiting + "</b> waiting on a grade" : "") : " · no reports on file yet") + '</p><div class="acts"><button class="btn" data-go="reports">FILE A REPORT <kbd>F</kbd></button><button class="btn ghost" data-go="records">RUN A RECORD</button><button class="btn ghost" id="palHero">SEARCH <kbd>Ctrl K</kbd></button></div></div>' +
+      '<div class="radar"><img src="img/lspd-badge.png" alt=""><i class="blip" style="left:30%;top:28%"></i><i class="blip" style="left:68%;top:62%;animation-delay:1.4s"></i><i class="blip" style="left:56%;top:22%;animation-delay:2.4s"></i></div></section>' +
+      '<div class="stats">' +
+      '<div class="stat"><svg viewBox="0 0 24 24"><use href="#i-clip"/></svg><small>Dept. reports · 7 days</small><b data-count="' + (D0.week || 0) + '">0</b>' + (D0.delta ? "<em" + (D0.delta < 0 ? ' style="color:var(--red)"' : "") + ">" + (D0.delta > 0 ? "▲ " : "▼ ") + Math.abs(D0.delta) + " vs last week</em>" : "<em>&nbsp;</em>") + "</div>" +
+      '<div class="stat"><svg viewBox="0 0 24 24"><use href="#i-file"/></svg><small>Your recent reports</small><b data-count="' + mine.length + '">0</b><em>' + (waiting ? waiting + " awaiting grade" : "all graded") + "</em></div>" +
+      '<div class="stat ' + (NB0.length ? "r" : "") + '"><svg viewBox="0 0 24 24"><use href="#i-radio"/></svg><small>Active BOLOs</small><b data-count="' + NB0.length + '">0</b><em>' + (NB0[0] ? esc(NB0[0].title).slice(0, 26) : "none posted") + "</em></div>" +
+      '<div class="stat a"><svg viewBox="0 0 24 24"><use href="#i-star"/></svg><small>Officers active · 7 days</small><b data-count="' + (D0.active || 0) + '">0</b><em>avg grade ' + esc(D0.avg || "—") + "</em></div></div>";
     if (UNIT && UNIT.ootm) h += '<a class="ootm mini" data-go="unit"><span>🏆</span><div><small>' + esc(UNIT.ootm.title) + "</small><b>" + esc(UNIT.ootm.to) + "</b></div></a>";
     if (UNIT && (UNIT.ribbons || []).length) h += '<div class="ribbons" style="margin:-8px 0 16px">' + UNIT.ribbons.map(r => '<span title="' + esc(r.title) + '"><i>' + esc(r.emoji) + "</i>" + esc(r.title) + "</span>").join("") + "</div>";
     const NB = B.notices || [];
@@ -103,6 +173,12 @@
     h += "</div>";
     if ((p.divisions || []).length) h += '<div class="tiles"><a class="tile" href="division.html"><svg><use href="#i-shield"/></svg><b>Division Command</b><small>Your divisions: activity, grading and officers</small></a></div>';
     return h;
+  }
+  function reportsHTML() {
+    const list = myForms();
+    return '<div class="h2"><div><h1>FILE A REPORT</h1><p>Every report you can file, right here in the terminal. Division reports only show for that division\'s officers.</p></div></div>' +
+      (list.length ? '<div class="reports-grid">' + list.map(f => '<button class="rcard' + (f.status !== "live" ? " soon" : "") + '" ' + (f.status === "live" ? 'data-form="' + esc(f.id) + '"' : "disabled") + '><span class="fi">' + esc(f.icon) + "</span><div><b>" + esc(f.title) + "</b><small>" + esc(f.status !== "live" ? "Coming soon" : f.desc || "Filed to Discord and Division Command") + "</small>" + (f.division ? '<span class="dv">' + esc(f.division.toUpperCase()) + "</span>" : "") + "</div></button>").join("") + "</div>"
+        : '<div class="empty">No reports are open to you yet.</div>');
   }
   function tile(go, icon, t, s) { return '<a class="tile" data-go="' + go + '"><svg><use href="#' + icon + '"/></svg><b>' + esc(t) + "</b><small>" + esc(s) + "</small></a>"; }
   function pathHTML(pa) {
@@ -163,16 +239,29 @@
   }
   // ---------- quick reference ----------
   async function loadRef() { const r = await Portal.post({ action: "quickRef", session: SESSION }).catch(() => null); REF = r && r.ok ? r : { penal: [], tenCodes: [], error: true }; if (VIEW === "reference") draw(); }
+  let REF_CAT = "";
   function refHTML() {
-    let h = '<div class="h2"><div><h1>QUICK REFERENCE</h1><p>Penal code from the LSPD report forms, and radio codes.</p></div><input class="refq" id="refQ" placeholder="Search charges or codes…" value="' + esc(REF_Q) + '"></div>';
-    if (!REF) return h + '<div class="boot">LOADING PENAL CODE…</div>';
-    const q = REF_Q.toLowerCase(), P = REF.penal.filter(x => !q || x.raw.toLowerCase().indexOf(q) !== -1), C = REF.tenCodes.filter(x => !q || (x[0] + " " + x[1]).toLowerCase().indexOf(q) !== -1);
-    h += '<div class="grid" style="align-items:start"><section class="pane"><div class="ph"><span class="lbl">Penal code · ' + P.length + "</span></div>" +
-      (P.length ? '<table class="pc"><tr><th>Charge</th><th>Class</th><th>Time</th><th>Fine</th></tr>' + P.map(x => "<tr><td>" + esc(x.name) + '</td><td><span class="cls c-' + esc(x.cls.toLowerCase()) + '">' + esc(x.cls || "—") + "</span></td><td>" + (x.months ? x.months + " mo" : "—") + "</td><td>" + (x.fine ? "$" + x.fine.toLocaleString() : "—") + "</td></tr>").join("") + "</table>"
-        : '<p style="color:var(--mute)">' + (REF.penal.length ? "No charge matches." : "No charges found in the forms yet. Charges written like \"Robbery (Felony, 18 Months - $9,000 Fine)\" in any form's charge list show up here.") + "</p>") + "</section>" +
-      '<section class="pane"><div class="ph"><span class="lbl">Radio codes</span></div><table class="pc">' + C.map(x => '<tr><td class="mono" style="white-space:nowrap;color:#cfe0ff">' + esc(x[0]) + "</td><td>" + esc(x[1]) + "</td></tr>").join("") + "</table></section></div>";
+    let h = '<div class="h2"><div><h1>PENAL CODE <span>&amp; 10-codes</span></h1><p>Grouped the same way as the charge lists in your reports. Tap a charge to copy it.</p></div></div>';
+    if (!REF) return h + '<div class="boot"><i></i>LOADING PENAL CODE…</div>';
+    const opts = REF.charges ? REF.charges.options : REF.penal.map(x => x.raw);
+    const groups = (window.Portal && Portal.chargeGroups ? Portal.chargeGroups(opts) : [{ name: "Charges", icon: "⚖️", items: opts }]);
+    const q = REF_Q.toLowerCase().trim(), match = o => !q || String(o).toLowerCase().indexOf(q) !== -1;
+    const total = groups.reduce((n, g) => n + g.items.length, 0);
+    h += '<div class="pen-head"><input class="refq" id="refQ" placeholder="Search ' + total + ' charges and 10-codes…" value="' + esc(REF_Q) + '" autocomplete="off"></div>';
+    h += '<div class="pen-cats"><button data-pcat="" class="' + (REF_CAT ? "" : "on") + '">All <em>' + total + "</em></button>" + groups.map(g => '<button data-pcat="' + esc(g.name) + '" class="' + (REF_CAT === g.name ? "on" : "") + '">' + esc(g.icon) + " " + esc(g.name) + " <em>" + g.items.filter(match).length + "</em></button>").join("") + "</div>";
+    let any = 0;
+    groups.filter(g => !REF_CAT || g.name === REF_CAT).forEach(g => {
+      const items = g.items.filter(match); if (!items.length) return; any += items.length;
+      h += '<details class="pen-grp"' + (q || REF_CAT || groups.length < 4 ? " open" : "") + '><summary><span class="ico">' + esc(g.icon) + "</span>" + esc(g.name) + "<em>" + items.length + '</em></summary><div class="pen-list">' +
+        items.map(o => { const it = Portal.chargeItem ? Portal.chargeItem(o) : { label: o, value: o };
+          return '<button class="chg" data-copy="' + esc(it.label) + '" data-what="Charge"><span class="b ' + esc(it.cls || "x") + '">' + esc(it.badge || "•") + "</span><div><b>" + (q ? hl(it.label, REF_Q) : esc(it.label)) + "</b>" + (it.cls ? "<small>" + esc(it.cls[0].toUpperCase() + it.cls.slice(1)) + "</small>" : "") + '</div><span class="t">' + esc(it.sub || "") + "</span></button>"; }).join("") + "</div></details>";
+    });
+    if (!any) h += '<div class="empty">' + (opts.length ? "No charge matches “" + esc(REF_Q) + "”." : "No charge list found in the report forms yet.") + "</div>";
+    const C = REF.tenCodes.filter(x => !q || (x[0] + " " + x[1]).toLowerCase().indexOf(q) !== -1);
+    if (C.length) h += '<div class="sect"><span class="lbl">Radio codes · ' + C.length + '</span></div><div class="codes">' + C.map(x => "<div><b>" + esc(x[0]) + "</b><span>" + esc(x[1]) + "</span></div>").join("") + "</div>";
     return h;
   }
+
 
   // ---------- unit life: kudos, awards, training, knowledge checks ----------
   let UNIT = LS.json("mdt:unit"), TAKING = null;
@@ -311,6 +400,8 @@
     const sc = e.target.closest("[data-sclose]"); if (sc) { unit("unitSessionClose", { id: sc.getAttribute("data-sclose") }, "Session closed."); return; }
     const tk = e.target.closest("[data-take]"); if (tk) { takeCheck(UNIT.checks.find(c => c.id === tk.getAttribute("data-take"))); return; }
     const cc = e.target.closest("[data-cclose]"); if (cc) { unit("unitCheckClose", { id: cc.getAttribute("data-cclose") }, "Check closed."); return; }
+    const pc = e.target.closest("[data-pcat]"); if (pc) { REF_CAT = pc.getAttribute("data-pcat"); draw(); return; }
+    if (e.target.closest("#palHero")) { openPal(); return; }
     const ak = e.target.closest("[data-ack]"); if (ak) { ak.disabled = true; Portal.post({ action: "mdtBriefAck", session: SESSION, id: ak.getAttribute("data-ack") }).then(r => { if (r.ok) { DATA.board.briefing.acked = true; if (DATA.board.briefing.ackCount != null) DATA.board.briefing.ackCount++; draw(); toast("Acknowledged. Have a safe shift."); } else { ak.disabled = false; toast(r.error || "Couldn't acknowledge."); } }); return; }
     if (e.target.closest("[data-past]")) { const P = (DATA.board.past || []); modal('<h3>Past briefings</h3>' + (P.length ? P.map(b => '<div class="pb"><b>' + esc(b.re) + "</b><small>" + esc(new Date(b.at).toLocaleDateString()) + " · " + esc(b.from) + "</small><p>" + esc(b.body).replace(/\n/g, "<br>") + "</p></div>").join("") : "<p>None yet.</p>") + '<div class="md-act"><button class="btn ghost" data-close>Close</button></div>'); return; }
     if (e.target.closest("[data-brief]")) {
@@ -319,6 +410,49 @@
         const r = await Portal.post({ action: "mdtBriefPost", session: SESSION, to: m.querySelector("#bTo").value, re: m.querySelector("#bRe").value, body: m.querySelector("#bBody").value }).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
         if (r.ok) { m.hidden = true; toast("Briefing posted."); load(); } else { b.disabled = false; toast(r.error || "Couldn't post."); } };
     }
+  });
+
+  // ---------- command palette: search everything ----------
+  let PAL_SEL = 0, PAL_ITEMS = [];
+  function palItems(q) {
+    q = q.toLowerCase().trim();
+    const out = [], add = (grp, icon, title, sub, run, extra) => { const hay = (title + " " + (sub || "") + " " + (extra || "")).toLowerCase(); if (!q || hay.indexOf(q) !== -1) out.push({ grp, icon, title, sub, run }); };
+    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"]].forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
+    add("Go to", "📋", "My reports", "", () => go("frame:myreports.html"));
+    myForms().filter(f => f.status === "live").forEach(f => add("File a report", f.icon, f.title, f.division ? f.division + " report" : "", () => go("form:" + f.id), f.section));
+    ((DATA && DATA.board && DATA.board.notices) || []).forEach(n => add("BOLOs", "🚨", n.title, n.type + " · " + n.from, () => go("records"), n.details));
+    if (q.length >= 2) add("Records", "🗂️", "Search records for “" + q + "”", "People, vehicles and plates in every report", () => { go("records"); setTimeout(() => { const i = $("recQ"); if (i) { i.value = q; runSearch(q); } }, 50); });
+    if (REF && q.length >= 2) {
+      const opts = REF.charges ? REF.charges.options : REF.penal.map(x => x.raw);
+      opts.filter(o => !/^#/.test(o) && o.toLowerCase().indexOf(q) !== -1).slice(0, 8).forEach(o => { const it = Portal.chargeItem(o); add("Charges", "⚖️", it.label, [it.cls, it.sub].filter(Boolean).join(" · "), () => copy(it.label, "Charge")); });
+      REF.tenCodes.filter(x => (x[0] + " " + x[1]).toLowerCase().indexOf(q) !== -1).slice(0, 6).forEach(x => add("Radio codes", "📻", x[0] + " — " + x[1], "", () => copy(x[0], "Code")));
+    }
+    return out.slice(0, 40);
+  }
+  function drawPal() {
+    PAL_ITEMS = palItems($("palQ").value); PAL_SEL = Math.min(PAL_SEL, Math.max(0, PAL_ITEMS.length - 1));
+    let h = "", g = "";
+    PAL_ITEMS.forEach((it, i) => { if (it.grp !== g) { g = it.grp; h += '<div class="ph2">' + esc(g) + "</div>"; } h += '<button data-pi="' + i + '" class="' + (i === PAL_SEL ? "on" : "") + '"><span class="pi">' + esc(it.icon) + "</span><div><b>" + esc(it.title) + "</b>" + (it.sub ? "<small>" + esc(it.sub) + "</small>" : "") + "</div>" + (i === PAL_SEL ? '<span class="px">↵</span>' : "") + "</button>"; });
+    $("palList").innerHTML = h || '<p style="padding:14px;color:var(--mute)">Nothing found.</p>';
+    const on = $("palList").querySelector("button.on"); if (on) on.scrollIntoView({ block: "nearest" });
+  }
+  function openPal() { $("pal").hidden = false; $("palQ").value = ""; PAL_SEL = 0; $("palQ").focus(); drawPal(); if (!REF) loadRef(); }
+  function closePal() { $("pal").hidden = true; }
+  function runPal(i) { const it = PAL_ITEMS[i]; if (!it) return; closePal(); it.run(); }
+  $("openPal").onclick = openPal;
+  $("pal").onclick = e => { if (e.target === $("pal")) closePal(); const b = e.target.closest("[data-pi]"); if (b) runPal(+b.dataset.pi); };
+  $("palQ").addEventListener("input", () => { PAL_SEL = 0; drawPal(); });
+  $("palQ").addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { PAL_SEL = Math.min(PAL_ITEMS.length - 1, PAL_SEL + 1); drawPal(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { PAL_SEL = Math.max(0, PAL_SEL - 1); drawPal(); e.preventDefault(); }
+    else if (e.key === "Enter") { runPal(PAL_SEL); e.preventDefault(); }
+    else if (e.key === "Escape") { closePal(); e.preventDefault(); }
+  });
+  addEventListener("keydown", e => {
+    const typing = /input|textarea|select/i.test((e.target.tagName || "")) || e.target.isContentEditable;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("pal").hidden ? openPal() : closePal(); }
+    else if (e.key === "/" && !typing && $("pal").hidden && $("modal").hidden && !document.querySelector(".lk")) { e.preventDefault(); openPal(); }
+    else if (e.key === "Escape" && !$("pal").hidden) closePal();
   });
 
   // ---------- data ----------
@@ -331,10 +465,10 @@
       draw();
     } catch (e) { if (!DATA) $("main").innerHTML = '<div class="boot">LINK FAILED · ' + esc(e.message) + ' · <a href="" style="color:#8fb2ff">retry</a></div>'; else toast("Showing saved data: " + e.message); }
   }
-  VIEW = VIEWS.indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : "home";
+  VIEW = okView(decodeURIComponent(location.hash.slice(1))) ? decodeURIComponent(location.hash.slice(1)) : "home";
   draw(); load(); loadUnit();
   setInterval(() => { if (!document.hidden) load(); }, 3 * 60e3);
   document.addEventListener("submit", e => { if (e.target.id === "recForm") { e.preventDefault(); const q = $("recQ").value.trim(); if (q.length >= 2) runSearch(q); else toast("Type at least 2 characters."); } });
   document.addEventListener("input", e => { if (e.target.id === "refQ") { REF_Q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("refQ"); n.focus(); n.setSelectionRange(pos, pos); } });
-  addEventListener("keydown", e => { if (e.key && e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey && !e.altKey && !/input|textarea|select/i.test((e.target.tagName || "")) && $("modal").hidden && !document.querySelector(".lk")) location.href = "forms.html"; });
+  addEventListener("keydown", e => { if (e.key && e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey && !e.altKey && !/input|textarea|select/i.test((e.target.tagName || "")) && $("modal").hidden && !document.querySelector(".lk")) go("reports"); });
 })();

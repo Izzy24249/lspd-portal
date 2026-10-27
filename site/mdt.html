@@ -6,12 +6,12 @@
 <meta name="robots" content="noindex, nofollow">
 <script src="gate.js?v=1"></script>
 <script src="lock.js?v=1"></script>
-<meta name="theme-color" content="#0b0f16">
+<meta name="theme-color" content="#070b12">
 <title>LSPD · Mobile Data Terminal</title>
 <link rel="icon" href="img/lspd-badge.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Courier+Prime:wght@400;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="mdt.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Courier+Prime:wght@400;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mdt.css?v=4">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -22,56 +22,85 @@
   <symbol id="i-shirt" viewBox="0 0 24 24"><path d="M8 3l4 2 4-2 5 4-3 3-2-1v12H8V9l-2 1-3-3z"/></symbol>
   <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1zM12 6v14"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
-  <symbol id="i-steps" viewBox="0 0 24 24"><path d="M4 19h4v-4h4v-4h4V7h4"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></symbol>
-  <symbol id="i-gavel" viewBox="0 0 24 24"><path d="M14 4l6 6M11 7l6 6M8.5 9.5l6 6M12.5 5.5l-5 5M18.5 11.5l-5 5M10 14l-6 6"/></symbol>
+  <symbol id="i-gavel" viewBox="0 0 24 24"><path d="M14.5 3.5l6 6M11 7l6 6M12.75 5.25l-5.5 5.5M18.75 11.25l-5.5 5.5M9.5 12.5L3 19l2 2 6.5-6.5"/></symbol>
   <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></symbol>
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="1.5"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><rect x="6" y="8" width="12" height="13" rx="2"/><path d="M9 8l6-5M9 13h6M9 17h3"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
   <symbol id="i-off" viewBox="0 0 24 24"><path d="M12 3.5v8"/><path d="M6.6 6.8a7.5 7.5 0 1 0 10.8 0"/></symbol>
+  <symbol id="i-snd" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></symbol>
 </svg>
 
-<header class="strip">
-  <div class="brand"><img src="img/lspd-badge.png" alt=""><div><b>LSPD :: MDT</b><small>MOBILE DATA TERMINAL</small></div></div>
-  <div class="unit"><b id="uCs">----</b><span id="uName">Signing on…</span><span class="status"><i></i>10-8 IN SERVICE</span></div>
-  <div class="grow"></div>
-  <div class="watch" id="watch"></div>
-  <div class="clock"><b id="clk">--:--:--</b><small id="clkD"></small></div>
-</header>
+<div class="bg" aria-hidden="true"><i class="glow g1"></i><i class="glow g2"></i><i class="grid"></i><i class="scan"></i></div>
 
-<div class="wrap">
-  <nav class="rail">
-    <div class="grp"><div class="lbl">Terminal</div>
-      <a class="app" data-go="home"><svg><use href="#i-home"/></svg>Home</a>
-      <a class="app" href="forms.html"><svg><use href="#i-clip"/></svg>File a report</a>
-      <a class="app" href="myreports.html"><svg><use href="#i-file"/></svg>My reports</a>
-      <a class="app" data-go="records"><svg><use href="#i-search"/></svg>Records &amp; BOLOs<em id="nBolo"></em></a>
-      <a class="app" data-go="reference"><svg><use href="#i-gavel"/></svg>Penal code &amp; 10-codes</a>
+<div class="shell">
+  <aside class="side" id="side">
+    <div class="side-top">
+      <a class="logo" data-go="home"><img src="img/lspd-badge.png" alt=""><div><b>LSPD<i>::</i>MDT</b><small>MOBILE DATA TERMINAL</small></div></a>
+      <button class="ibtn only-m" id="sideClose" aria-label="Close menu"><svg><use href="#i-x"/></svg></button>
     </div>
-    <div class="grp"><div class="lbl">Department</div>
-      <a class="app" data-go="fleet"><svg><use href="#i-car"/></svg>Fleet<em id="nFleet"></em></a>
-      <a class="app" data-go="uniforms"><svg><use href="#i-shirt"/></svg>Uniforms<em id="nUni"></em></a>
-      <a class="app" data-go="unit"><svg><use href="#i-star"/></svg>Kudos &amp; awards</a>
-      <a class="app" data-go="training"><svg><use href="#i-cal"/></svg>Training<em id="nTrain"></em></a>
-      <a class="app" id="sopLink" target="_blank" rel="noopener"><svg><use href="#i-book"/></svg>SOP ↗</a>
-      <a class="app" href="division.html" data-need-division hidden><svg><use href="#i-shield"/></svg>Division Command</a>
+    <div class="unit-card">
+      <div class="uc-top"><span class="uc-cs" id="uCs">----</span><span class="uc-rank" id="uRank"></span></div>
+      <b class="uc-name" id="uName">Signing on…</b>
+      <button class="status-pick" id="statusBtn" aria-haspopup="true"><i></i><span id="statusTxt">10-8 · IN SERVICE</span><em>▾</em></button>
+      <div class="status-menu" id="statusMenu" hidden></div>
     </div>
-    <div class="me" id="me">Signed on</div>
-  </nav>
+    <button class="side-search" id="openPal"><svg><use href="#i-search"/></svg><span>Search everything</span><kbd>Ctrl K</kbd></button>
+    <nav class="nav" id="nav">
+      <div class="nav-grp"><div class="nav-lbl">Terminal</div>
+        <a data-go="home"><svg><use href="#i-home"/></svg><span>Dashboard</span></a>
+        <a data-go="records"><svg><use href="#i-search"/></svg><span>Records &amp; BOLOs</span><em id="nBolo"></em></a>
+        <a data-go="reference"><svg><use href="#i-gavel"/></svg><span>Penal code</span></a>
+        <a href="myreports.html" data-frame="myreports.html" data-title="My reports"><svg><use href="#i-file"/></svg><span>My reports</span></a>
+      </div>
+      <div class="nav-grp"><div class="nav-lbl">Reports <em id="nForms"></em></div>
+        <div id="formsNav" class="forms-nav"><div class="nav-skel"></div><div class="nav-skel"></div><div class="nav-skel"></div></div>
+      </div>
+      <div class="nav-grp"><div class="nav-lbl">Department</div>
+        <a data-go="fleet"><svg><use href="#i-car"/></svg><span>Fleet</span><em id="nFleet"></em></a>
+        <a data-go="uniforms"><svg><use href="#i-shirt"/></svg><span>Uniforms</span><em id="nUni"></em></a>
+        <a data-go="training"><svg><use href="#i-cal"/></svg><span>Training</span><em id="nTrain"></em></a>
+        <a data-go="unit"><svg><use href="#i-star"/></svg><span>Kudos &amp; awards</span></a>
+        <a id="sopLink" target="_blank" rel="noopener"><svg><use href="#i-book"/></svg><span>SOP</span><svg class="ext"><use href="#i-ext"/></svg></a>
+        <a href="division.html" data-need-division hidden><svg><use href="#i-shield"/></svg><span>Division Command</span><svg class="ext"><use href="#i-ext"/></svg></a>
+      </div>
+    </nav>
+    <div class="side-foot">
+      <button class="ibtn" id="sndBtn" title="Sound on/off" aria-label="Sound on/off"><svg><use href="#i-snd"/></svg></button>
+      <a class="signoff" href="signon.html?out=1"><svg><use href="#i-off"/></svg>Sign off · 10-7</a>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
 
-  <main class="main" id="main"><div class="boot">ESTABLISHING LINK…</div></main>
+  <div class="stage">
+    <header class="topbar">
+      <button class="ibtn only-m" id="menuBtn" aria-label="Menu"><svg><use href="#i-menu"/></svg></button>
+      <div class="crumb"><span id="crumbSec">TERMINAL</span><b id="crumbTitle">Dashboard</b></div>
+      <div class="tb-right">
+        <span class="chip-live" id="liveChip"><i></i>LINK SECURE</span>
+        <span class="watch" id="watch"></span>
+        <div class="clock"><b id="clk">--:--:--</b><small id="clkD"></small></div>
+      </div>
+    </header>
+    <main class="main" id="main"><div class="boot"><i></i>ESTABLISHING LINK…</div></main>
+  </div>
 </div>
 
 <nav class="tabs">
   <a data-go="home"><svg><use href="#i-home"/></svg>HOME</a>
-  <a href="forms.html"><svg><use href="#i-clip"/></svg>FILE</a>
+  <a data-go="reports"><svg><use href="#i-clip"/></svg>REPORTS</a>
   <a data-go="records"><svg><use href="#i-search"/></svg>RECORDS</a>
   <a data-go="reference"><svg><use href="#i-gavel"/></svg>CODES</a>
 </nav>
 <div class="ticker" id="ticker" hidden></div>
+<div class="pal" id="pal" hidden><div class="pal-box"><div class="pal-in"><svg><use href="#i-search"/></svg><input id="palQ" placeholder="Search reports, charges, 10-codes, pages…" autocomplete="off"><kbd>Esc</kbd></div><div class="pal-list" id="palList"></div></div></div>
 <div class="md" id="modal" hidden></div>
 <div class="toast" id="toast"></div>
 
 <script src="forms.js?v=1"></script>
-<script src="mdt.js?v=1"></script>
+<script src="mdt.js?v=3"></script>
 </body>
 </html>

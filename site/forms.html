@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<script>if (/[?&]embed=1\b/.test(location.search)) document.documentElement.classList.add("embed");</script>
+<style>.embed header.top,.embed .crumbs,.embed .hero,.embed #programs{display:none!important}.embed body{background:transparent!important}.embed main{padding-top:18px!important}</style>
 <script src="gate.js?v=1"></script>
 <script src="lock.js?v=1"></script>
 <title>LSPD</title>
@@ -98,9 +100,13 @@ window.addEventListener("hashchange", ()=>{ const h = location.hash.slice(1); if
 // level-limited forms (Admin → Permissions): shown to signed-on officers at that level and up
 const LEVEL_ORDER = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
 function canFile(f) {
-  if (!f.minLevel) return true;
+  const tabs = (f.accessTabs || []).length;
+  if (!f.minLevel && !tabs) return true;
   let p = null, s = ""; try { p = JSON.parse(localStorage.getItem("lspd_prof") || "null"); s = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
-  return !!(s && p && LEVEL_ORDER.indexOf(p.level) >= LEVEL_ORDER.indexOf(f.minLevel));
+  if (!(s && p)) return false;
+  const lv = LEVEL_ORDER.indexOf(p.level);
+  if (f.minLevel && lv < LEVEL_ORDER.indexOf(f.minLevel)) return false;
+  return !tabs || lv >= LEVEL_ORDER.indexOf("command") || (p.forms || []).indexOf(f.id) !== -1;   // division-only: officers on that division's roster
 }
 function renderHome(){
   const s = CONFIG.settings || {};
@@ -319,6 +325,7 @@ $("theForm").addEventListener("submit", async e=>{
     const data = await Portal.post(ctrl.collect());
     if(data.ok){
       if(data.logId) MyReports.add({ id: data.logId, form: current.id, title: current.title, icon: current.icon || "", at: Date.now() });
+      try { if (window.parent !== window) window.parent.postMessage({ type: "lspd:filed", form: current.id, title: current.title }, location.origin); } catch (x) {}
       toast(data.warning ? "Posted, with a warning: " + data.warning : "Success: " + current.title + " posted to Discord!", data.warning ? "bad" : "ok");
       ctrl.clear();
     } else toast("Error: " + (data.error || "Unknown error"), "bad");

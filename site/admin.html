@@ -1891,11 +1891,28 @@ function pagePerms(page) {
   const opts = [["", "Everyone (trainees too)"], ["officer", "Officers and up"], ["fto", "FTOs and up"], ["leader", "Division leaders and up"], ["command", "Command and up"], ["admin", "Admins only"]];
   const forms = (CFG.forms || []).filter(f => f.status !== "hidden");
   page.append(h("div", { class: "sec flush" }, h("div", { style: "padding:14px 16px 4px" }, h("h3", { text: "Who can file each report" }),
-      h("p", { class: "help", text: "Limited reports only show for officers signed on to the MDT at that level, and the server refuses anyone else. Trainees see the reports set to Everyone, so keep training forms (Academy evaluation, ride-along…) on Everyone." })),
+      h("p", { class: "help", text: "Level: limited reports only show for officers signed on to the MDT at that level and up. Divisions: pick roster tabs (K-9, ASU, CID…) and only officers on those rosters see and can file it, the same way officer boxes use a division's roster; command and up always see every division's reports. The server refuses anyone else. Keep training forms on Everyone so trainees can file them." })),
     h("div", { class: "ulist" }, forms.map(f => { const sel = h("select", { class: "role-sel", onchange: async () => { try { const r = await api("formAccess", { formId: f.id, minLevel: sel.value });
         f.minLevel = sel.value; VERSION = r.config.version; try { const b = JSON.parse(BASE); (b.forms || []).forEach(x => { if (x.id === f.id) x.minLevel = sel.value; }); b.version = VERSION; BASE = JSON.stringify(b); } catch (x) {} CFG.version = VERSION; toast(f.title + ": " + opts.find(o => o[0] === sel.value)[1] + ".", "ok"); } catch (e) { toast(e.message, "bad"); sel.value = f.minLevel || ""; } } }, opts.map(([v, l]) => h("option", { value: v, text: l })));
       sel.value = f.minLevel || "";
-      return h("div", { class: "urow", style: "grid-template-columns:36px 1fr minmax(200px,260px)" }, h("div", { class: "av", text: f.icon || "📄" }), h("div", { class: "who-t" }, h("b", { text: f.title }), h("small", { text: f.status === "live" ? "Live" : "Coming soon" })), sel); }))));
+      // division-only: officers on these roster tabs (command and up always see it)
+      const picked = new Map((f.accessTabs || []).map(t => [Number(t.id), t.name]));
+      const sumTxt = () => picked.size ? "🛡 " + [...picked.values()].join(", ") : "All divisions";
+      const sum = h("summary", { class: "btn ghost sm", style: "list-style:none;cursor:pointer;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap", text: sumTxt() });
+      const box = h("div", { style: "position:absolute;z-index:20;right:0;margin-top:6px;width:260px;max-height:320px;overflow:auto;padding:10px 12px;display:grid;gap:6px;background:var(--panel,#121925);border:1px solid var(--line,rgba(255,255,255,.15));box-shadow:0 10px 30px rgba(0,0,0,.45)" }, h("div", { class: "help", text: "Loading roster tabs…" }));
+      const dd = h("details", { style: "position:relative" }, sum, box);
+      dd.addEventListener("toggle", () => { if (!dd.open || box.__done) return;
+        (ROSTER_TABS ? Promise.resolve() : api("rosterTabs", {}).then(r => { ROSTER_TABS = { book: r.book, tabs: r.tabs, url: (CFG.settings.roster || {}).url || "" }; })).then(() => {
+          box.__done = 1; box.innerHTML = "";
+          box.append(h("div", { class: "help", text: "Only officers on these roster tabs see and can file " + f.title + ". Leave all unticked for everyone." }));
+          (ROSTER_TABS.tabs || []).filter(t => !t.hidden).forEach(t => { const cb = h("input", { type: "checkbox" }); cb.checked = picked.has(Number(t.id)); cb.onchange = () => cb.checked ? picked.set(Number(t.id), t.name) : picked.delete(Number(t.id));
+            box.append(h("label", { style: "display:flex;gap:8px;align-items:center" }, cb, h("span", { text: t.name }))); });
+          box.append(h("button", { class: "btn primary sm", onclick: async () => {
+            try { const tabs = [...picked].map(([id, name]) => ({ id: id, name: name })); const r = await api("formAccess", { formId: f.id, minLevel: sel.value, accessTabs: tabs });
+              f.accessTabs = tabs; VERSION = r.config.version; try { const b = JSON.parse(BASE); (b.forms || []).forEach(x => { if (x.id === f.id) x.accessTabs = tabs; }); b.version = VERSION; BASE = JSON.stringify(b); } catch (x) {} CFG.version = VERSION;
+              sum.textContent = sumTxt(); dd.open = false; toast(f.title + ": " + (tabs.length ? tabs.map(t => t.name).join(", ") + " only" : "every division") + ".", "ok"); } catch (e) { toast(e.message, "bad"); } } }, "Save"));
+        }).catch(e => { box.innerHTML = ""; box.append(h("div", { class: "help", text: e.message })); }); });
+      return h("div", { class: "urow", style: "grid-template-columns:36px 1fr auto minmax(200px,240px)" }, h("div", { class: "av", text: f.icon || "📄" }), h("div", { class: "who-t" }, h("b", { text: f.title }), h("small", { text: (f.status === "live" ? "Live" : "Coming soon") + ((f.accessTabs || []).length ? " · division-only" : "") })), dd, sel); }))));
 }
 
 /* ---------------- FLEET & UNIFORMS ---------------- */

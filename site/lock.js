@@ -6,6 +6,7 @@
 (function () {
   "use strict";
   var IDLE_MS = 10 * 60 * 1000;
+  var EMBED = false; try { EMBED = window.top !== window; } catch (e) { EMBED = true; }   // a page shown inside the MDT: the MDT draws the lock
   var LS = {
     get: function (k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
     set: function (k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} },
@@ -96,6 +97,7 @@
   function msg(t) { if (root) root.querySelector(".lk-msg").textContent = t || ""; }
   function signOutTo() { LS.set("lspd_sess", ""); LS.set("lspd_locked", ""); toSignon(); }
   function show() {
+    if (EMBED) return;
     if (root || !document.body) return;
     css();
     var p = profile(), dev = LS.get("lspd_dev"), withPin = !!(dev && p);
@@ -149,6 +151,7 @@
 
   addEventListener("keydown", function (e) {
     if (!root) return;
+    if (document.activeElement && document.activeElement.tagName === "IFRAME") try { document.activeElement.blur(); } catch (x) {}
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (/^\d$/.test(e.key)) { press(e.key); e.preventDefault(); e.stopPropagation(); }
     else if (e.key === "Backspace") { press("b"); e.preventDefault(); e.stopPropagation(); }
@@ -158,9 +161,13 @@
   }, true);
   // other tabs: lock and unlock together
   addEventListener("storage", function (e) { if (e.key === "lspd_locked") { if (e.newValue === "1") show(); else hide(); } if (e.key === "lspd_prof") applyProfile(); });
-  setInterval(function () { if (!isLocked() && idleFor() > IDLE_MS) lock(); }, 15000);
+  setInterval(function () { if (!EMBED && !isLocked() && idleFor() > IDLE_MS) lock(); }, 15000);
 
   window.LSPDLock = { lock: lock, unlock: unlock, idleMs: IDLE_MS };
+  if (EMBED) {
+    addEventListener("keydown", function (e) { if (isLocked()) { e.preventDefault(); e.stopPropagation(); } }, true);
+    addEventListener("storage", function (e) { if (e.key === "lspd_locked" && e.newValue === "1" && document.activeElement) try { document.activeElement.blur(); } catch (x) {} });
+  }
   function boot() { applyProfile(); refreshProfile(); if (isLocked()) show(); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
   addEventListener("load", refreshProfile);

@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 74;
+const BACKEND_VERSION = 75;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -651,10 +651,11 @@ function handleSubmit_(d) {
 
   const form = cfg.forms.find(f => f.id === (d.form || "academy"));
   if (!form || form.status !== "live") return { ok: false, error: "This form is not accepting submissions right now." };
-  if (form.minLevel) {                           // restricted forms: the officer's sign-on decides
+  if (form.minLevel || (form.accessTabs || []).length) {   // restricted forms: the officer's sign-on decides
     const acct = officerSession_(d.session), lv = acct ? acctProfile_(acct).level : "";
     if (!acct) return { ok: false, error: "Sign on to the MDT to file this report." };
-    if (LEVELS_.indexOf(lv) < LEVELS_.indexOf(form.minLevel)) return { ok: false, error: "This report is for " + LEVEL_NAMES_[form.minLevel] + " and up." };
+    if (form.minLevel && LEVELS_.indexOf(lv) < LEVELS_.indexOf(form.minLevel)) return { ok: false, error: "This report is for " + LEVEL_NAMES_[form.minLevel] + " and up." };
+    if (!formAllowed_(form, acct, acctProfile_(acct))) return { ok: false, error: "This report is only for " + form.accessTabs.map(t => t.name).join(" / ") + " members." };
   }
 
   const values = d.values || d;                 // (d itself = old-style flat payload)
@@ -2403,7 +2404,8 @@ function acctDivisions_(acct, level) {
 function acctProfile_(acct) {
   const person = rosterPerson_(acct.id) || {};
   const level = acctLevel_(acct, person);
-  return { discordId: acct.id, username: acct.username, callsign: person.callsign || acct.callsign, name: person.name || acct.name, rank: person.rank || "", title: str_(acct.rankAs) || voiceTitleFor_(person), level: level, rank_i: LEVELS_.indexOf(level), divisions: acctDivisions_(acct, level) };
+  return { discordId: acct.id, username: acct.username, callsign: person.callsign || acct.callsign, name: person.name || acct.name, rank: person.rank || "", title: str_(acct.rankAs) || voiceTitleFor_(person), level: level, rank_i: LEVELS_.indexOf(level), divisions: acctDivisions_(acct, level),
+    forms: (() => { try { const pr = { level: level }; return getConfig_().forms.filter(f => (f.accessTabs || []).length && formAllowed_(f, acct, pr)).map(f => f.id); } catch (e) { return []; } })() };
 }
 function officerSession_(token) {
   const t = offRead_(token, "OFF"); if (!t) return null;
@@ -2756,10 +2758,18 @@ const TEN_CODES_ = [["10-1", "Weak signal"], ["10-3", "Stop transmitting"], ["10
   ["10-23", "Arrived on scene"], ["10-26", "ETA"], ["10-28", "Plate check"], ["10-29", "Warrant check"], ["10-31", "Crime in progress"], ["10-32", "Requesting backup"], ["10-38", "Suspicious vehicle"], ["10-41", "Beginning tour of duty"],
   ["10-42", "Ending tour of duty"], ["10-50", "Vehicle accident"], ["10-52", "EMS needed"], ["10-55", "Intoxicated driver"], ["10-57", "Hit and run"], ["10-60", "Pursuit"], ["10-70", "Foot pursuit"], ["10-71", "Shooting"],
   ["10-78", "Officer needs assistance"], ["10-80", "Vehicle pursuit"], ["10-97", "En route"], ["10-99", "Officer down / emergency"], ["Code 1", "Routine, no lights"], ["Code 2", "Urgent, lights only"], ["Code 3", "Emergency, lights and siren"], ["Code 4", "Scene secure, no further help"]];
+function chargeLists_() {
+  const out = [];
+  getConfig_().forms.forEach(f => (f.blocks || []).forEach(b => (b.columns || []).concat(b.fields || []).forEach(c => {
+    const o = (c.options || []).map(str_).filter(Boolean), real = o.filter(x => !/^#\s*\S/.test(x));
+    if (real.length >= 8 && real.filter(x => /\d+\s*Months?|\$\s*[\d,]+\s*Fine/i.test(x)).length >= real.length / 2) out.push({ form: f.title, label: c.label || b.title || "Charges", options: o });
+  })));
+  return out.sort((a, b) => b.options.length - a.options.length);
+}
 function quickRef_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
-  const s = getConfig_().settings || {};
-  return { ok: true, penal: penalCode_(), tenCodes: Array.isArray(s.tenCodes) && s.tenCodes.length ? s.tenCodes : TEN_CODES_ };
+  const s = getConfig_().settings || {}, lists = chargeLists_();
+  return { ok: true, penal: penalCode_(), charges: lists.length ? lists[0] : null, tenCodes: Array.isArray(s.tenCodes) && s.tenCodes.length ? s.tenCodes : TEN_CODES_ };
 }
 const NOTICE_SHEET_ = "Notices", NOTICE_HEAD_ = ["ID", "Posted", "From", "Type", "Title", "Details", "Image", "Expires", "Closed"];
 function noticeSheet_() {
@@ -2787,10 +2797,23 @@ function mdtNotice_(d) {
   return { ok: true };
 }
 
+// can this officer file this form? level (minLevel) + division rosters (accessTabs; command and up see every division's forms)
+function formAllowed_(form, acct, prof) {
+  const lv = LEVELS_.indexOf(prof.level);
+  if (form.minLevel && lv < LEVELS_.indexOf(form.minLevel)) return false;
+  if ((form.accessTabs || []).length && lv < LEVELS_.indexOf("command")) {
+    return form.accessTabs.some(t => { try { return (getRosterTab_(t.id, false, [], false, true).people || []).some(p => p.id === acct.id); } catch (e) { return false; } });
+  }
+  return true;
+}
+function myForms_(acct, prof) {
+  return getConfig_().forms.filter(f => (f.status === "live" || f.status === "soon") && formAllowed_(f, acct, prof))
+    .map(f => ({ id: f.id, title: f.title, icon: f.icon || "📄", status: f.status, section: f.section || "", desc: clip_(str_(f.desc || f.subtitle), 140), cid: !!f.cidApp, division: (f.accessTabs || []).map(t => t.name).join(", ") }));
+}
 function officerHome_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
   const person = rosterPerson_(acct.id), prof = acctProfile_(acct), s = getConfig_().settings || {};
-  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding), board: mdtBoard_(acct, prof, person) };
+  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding), board: mdtBoard_(acct, prof, person), forms: myForms_(acct, prof) };
 }
 
 // =====================================================================
@@ -3293,8 +3316,9 @@ function handleAdmin_(d) {
       return withLock_(() => {
         const cfg = getConfig_(), f = cfg.forms.find(x => x.id === str_(d.formId)); if (!f) throw new Error("Form not found.");
         const lv = str_(d.minLevel); f.minLevel = ["officer", "fto", "leader", "command", "admin"].indexOf(lv) === -1 ? "" : lv;
+        if (Array.isArray(d.accessTabs)) f.accessTabs = d.accessTabs.filter(t => t && !isNaN(Number(t.id))).slice(0, 12).map(t => ({ id: Number(t.id), name: clip_(str_(t.name), 100) }));
         cfg.version = (Number(cfg.version) || 0) + 1; writeConfig_(cfg, me.username);
-        logAdmin_(me.username, "permissions", f.title + " -> " + (f.minLevel || "everyone"));
+        logAdmin_(me.username, "permissions", f.title + " -> " + (f.minLevel || "everyone") + ((f.accessTabs || []).length ? " · " + f.accessTabs.map(t => t.name).join(", ") : ""));
         return { ok: true, config: cfg };
       });
     }
@@ -3661,7 +3685,8 @@ function validateConfig_(c) {
       if (!f.leaderboard.countField || !keys[f.leaderboard.countField]) throw new Error(f.title + ": pick which Discord ID field the leaderboard counts.");
     }
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
-    f.minLevel = ["officer", "fto", "leader", "command", "admin"].indexOf(str_(f.minLevel)) === -1 ? "" : str_(f.minLevel);   // who can file it (blank = everyone, trainees included)
+    f.minLevel = ["officer", "fto", "leader", "command", "admin"].indexOf(str_(f.minLevel)) === -1 ? "" : str_(f.minLevel);
+    f.accessTabs = (Array.isArray(f.accessTabs) ? f.accessTabs : []).filter(t => t && t.id !== "" && t.id != null && !isNaN(Number(t.id))).slice(0, 12).map(t => ({ id: Number(t.id), name: clip_(str_(t.name), 100) }));   // only officers on these roster tabs (divisions) can file it   // who can file it (blank = everyone, trainees included)
     f.section = clip_(str_(f.section), 40);
     f.discordStyle = f.discordStyle === "classic" || f.discordStyle === "record" ? f.discordStyle : "";
     f.discordEmoji = !!f.discordEmoji;
