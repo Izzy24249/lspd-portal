@@ -73,6 +73,13 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(640px 
 .foot{margin-top:16px;display:flex;justify-content:space-between;font:600 11px "Barlow Condensed",sans-serif;letter-spacing:.2em;color:var(--dim)}
 .skip{position:fixed;right:18px;bottom:16px;z-index:4;font:700 12px "Barlow Condensed",sans-serif;letter-spacing:.2em;color:var(--mute);border:1px solid var(--hair2);background:rgba(11,15,22,.8);padding:8px 14px;cursor:pointer}
 .skip[hidden]{display:none}
+.snd{position:fixed;left:16px;bottom:16px;z-index:4;width:38px;height:34px;border:1px solid var(--hair2);background:rgba(11,15,22,.8);color:var(--mute);cursor:pointer;font-size:15px}
+.snd:hover{color:var(--tx)} .snd.off{opacity:.55}
+.power{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:118px;width:100%;border:0;background:none;color:var(--tx);cursor:pointer;font:700 15px "Barlow Condensed",sans-serif;letter-spacing:.24em}
+.power i{width:46px;height:46px;border:2px solid var(--blue);border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:20px;color:var(--blue);box-shadow:0 0 18px rgba(63,127,255,.45);animation:pulse 1.6s ease-in-out infinite}
+.power small{font:500 11px "JetBrains Mono",monospace;letter-spacing:.08em;color:var(--dim)}
+.power:hover i{background:rgba(63,127,255,.15)}
+@keyframes pulse{50%{box-shadow:0 0 4px rgba(63,127,255,.2)}}
 body.is-demo{padding-top:52px}
 .demo{position:fixed;left:0;right:0;top:0;z-index:5;text-align:center;padding:5px;font:700 11px "Barlow Condensed",sans-serif;letter-spacing:.2em;background:var(--amber);color:#1a1200}
 @media(max-width:480px){.top img{width:56px;height:56px}.top b{font-size:25px}.card{padding:18px 16px 18px}.term{font-size:11px}.pad button{height:60px}}
@@ -89,6 +96,7 @@ body.is-demo{padding-top:52px}
   <div class="foot"><span>MISSION ROW · LOS SANTOS</span><span id="watch"></span></div>
 </div>
 <button class="skip" id="skip" type="button">SKIP ▸</button>
+<button class="snd" id="snd" type="button" title="Sound on/off" aria-label="Sound on/off">🔊</button>
 
 <script src="forms.js?v=202610200937"></script>
 <script>
@@ -109,6 +117,51 @@ body.is-demo{padding-top:52px}
     set(k, v) { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch (e) {} }
   };
   const params = new URLSearchParams(location.search);
+
+  // ---------- sound (made in code with Web Audio: no files to load) ----------
+  const SFX = (function () {
+    let ctx = null, on = store.get("lspd_sound") !== "off";
+    function ac() {
+      if (!on) return null;
+      try { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); } catch (e) { return null; }
+      return ctx;
+    }
+    function tone(f, dur, type, vol, at, slide) {
+      const c = ac(); if (!c) return; const t = c.currentTime + (at || 0);
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type || "sine"; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.06, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
+    }
+    function noise(dur, vol, at, freq) {               // radio static burst
+      const c = ac(); if (!c) return; const t = c.currentTime + (at || 0);
+      const n = Math.floor(c.sampleRate * dur), buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      const src = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = buf; bp.type = "bandpass"; bp.frequency.value = freq || 1800; bp.Q.value = 0.8;
+      g.gain.setValueAtTime(vol || 0.05, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(bp).connect(g).connect(c.destination); src.start(t);
+    }
+    return {
+      unlock() { ac(); },
+      get on() { return on; },
+      toggle() { on = !on; store.set("lspd_sound", on ? "" : "off"); if (on) this.key(); return on; },
+      power() { tone(55, 0.5, "sawtooth", 0.05, 0, 110); noise(0.25, 0.03, 0.05, 900); tone(880, 0.12, "sine", 0.04, 0.38); tone(1320, 0.18, "sine", 0.035, 0.48); },
+      tick() { tone(1650, 0.025, "square", 0.018); },
+      ok() { tone(1180, 0.05, "square", 0.022); tone(1580, 0.07, "square", 0.02, 0.055); },
+      warn() { tone(520, 0.09, "square", 0.025); },
+      key() { tone(1050, 0.035, "triangle", 0.07); noise(0.02, 0.02, 0, 3500); },
+      bad() { tone(190, 0.13, "sawtooth", 0.05); tone(150, 0.2, "sawtooth", 0.05, 0.15); },
+      good() { noise(0.12, 0.05, 0, 1600); tone(660, 0.12, "sine", 0.06, 0.1); tone(990, 0.22, "sine", 0.06, 0.2); },
+      squelch() { noise(0.18, 0.06, 0, 1400); tone(1400, 0.05, "square", 0.02, 0.17); }
+    };
+  })();
+  (function () {
+    const b = $("snd"); const paint = () => { b.textContent = SFX.on ? "🔊" : "🔇"; b.classList.toggle("off", !SFX.on); };
+    paint(); b.onclick = () => { SFX.toggle(); paint(); };
+    const first = () => { SFX.unlock(); document.removeEventListener("pointerdown", first, true); document.removeEventListener("keydown", first, true); };
+    document.addEventListener("pointerdown", first, true); document.addEventListener("keydown", first, true);
+  })();
 
   // where to go after signing on: only pages on this site
   function safeNext(v) { v = String(v || ""); return /^[A-Za-z0-9_\-\/]+(\.html)?([?#][^\s]*)?$/.test(v) && !/^\/\//.test(v) ? v : ""; }
@@ -144,9 +197,9 @@ body.is-demo{padding-top:52px}
     const el = document.createElement("div");
     el.innerHTML = '<span class="t">' + stamp() + "</span>" + text;
     el.classList.add("cur");
-    term.appendChild(el);
+    term.appendChild(el); SFX.tick();
     while (term.children.length > 6) term.removeChild(term.firstChild);
-    return { done(tag, cls) { el.classList.remove("cur"); el.insertAdjacentHTML("beforeend", ' <span class="' + (cls || "ok") + '">' + tag + "</span>"); } };
+    return { done(tag, cls) { (cls === "x" ? SFX.bad : cls === "w" ? SFX.warn : SFX.ok).call(SFX); el.classList.remove("cur"); el.insertAdjacentHTML("beforeend", ' <span class="' + (cls || "ok") + '">' + tag + "</span>"); } };
   }
   const hr = new Date().getHours();
   const WATCH = hr >= 6 && hr < 14 ? "DAY WATCH" : hr >= 14 && hr < 22 ? "SWING WATCH" : "NIGHT WATCH";
@@ -154,8 +207,17 @@ body.is-demo{padding-top:52px}
   const seen = sess.get("lspd_booted");
   $("skip").onclick = () => { skipping = true; $("skip").hidden = true; };
 
+  function powerGate() {
+    return new Promise(res => {
+      $("skip").hidden = true;
+      term.innerHTML = '<button class="power" id="power" type="button"><i>⏻</i>POWER ON TERMINAL<small>tap or press any key</small></button>';
+      const go = e => { if (e && e.type === "keydown" && (e.ctrlKey || e.metaKey || e.altKey)) return; document.removeEventListener("keydown", go); SFX.unlock(); SFX.power(); term.innerHTML = ""; $("skip").hidden = false; setTimeout(res, 450); };
+      $("power").onclick = go; document.addEventListener("keydown", go);
+    });
+  }
   async function bootIntro() {
     if (seen) { skipping = true; $("skip").hidden = true; }
+    else await powerGate();
     let l = line("Establishing secure uplink to Mission Row ...."); await sleep(520); l.done("OK"); progress(25);
     l = line("Verifying terminal certificate ..............."); await sleep(380); l.done("OK"); progress(45);
     sess.set("lspd_booted", "1");
@@ -177,6 +239,7 @@ body.is-demo{padding-top:52px}
       '<div class="msg' + (info ? " info" : "") + '" id="msg"' + (msg ? "" : " hidden") + ">" + esc(msg || "") + "</div>" +
       '<div class="links"><span>Your Discord ID must be on the LSPD roster.</span><a href="index.html">Back to the portal</a></div>');
     $("goDisc").onclick = async () => {
+      SFX.squelch();
       const b = $("goDisc"); b.disabled = true; b.lastChild.textContent = "Opening Discord…";
       const r = await api({ action: "acctDiscordUrl" });
       if (r.ok && r.url) { location.href = r.url; return; }
@@ -195,12 +258,13 @@ body.is-demo{padding-top:52px}
     const dots = host.querySelector("#dots"), pad = host.querySelector("#pad");
     const paint = () => dots.querySelectorAll("i").forEach((d, i) => d.classList.toggle("on", i < pin.length));
     const ctl = {
-      bad() { dots.classList.remove("bad"); void dots.offsetWidth; dots.classList.add("bad"); pin = ""; paint(); busy = false; pad.classList.remove("busy"); if (navigator.vibrate) try { navigator.vibrate(120); } catch (e) {} },
-      good() { dots.classList.add("good"); },
+      bad() { SFX.bad(); dots.classList.remove("bad"); void dots.offsetWidth; dots.classList.add("bad"); pin = ""; paint(); busy = false; pad.classList.remove("busy"); if (navigator.vibrate) try { navigator.vibrate(120); } catch (e) {} },
+      good() { SFX.good(); dots.classList.add("good"); },
       reset() { pin = ""; paint(); busy = false; pad.classList.remove("busy"); dots.classList.remove("bad", "good"); }
     };
     function press(k) {
       if (busy) return;
+      SFX.key();
       dots.classList.remove("bad");
       if (k === "c") pin = ""; else if (k === "b") pin = pin.slice(0, -1); else if (pin.length < 4) pin += k;
       paint();
