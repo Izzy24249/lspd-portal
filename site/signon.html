@@ -533,8 +533,8 @@ body.is-demo{padding-top:52px}
       for (let ch = 0; ch < buf.numberOfChannels; ch++) { const seg = Float32Array.from(buf.getChannelData(ch).subarray(a)); for (let i = 0; i < n; i++) seg[i] *= k; out.copyToChannel(seg, ch); }
       return { buf: out, voiceEnd: (z - a) / sr };       // seconds from clip start to the end of the last word
     }
-    // each clip finishes completely, then a 1-second break before the next one
-    const CLIP_BREAK = 1.0;
+    // each clip finishes completely, then a half-second break before the next one
+    const CLIP_BREAK = 0.5;
 
     async function play(when) {
       const c = SFX.ctx(); if (!c || !pending) return false;
