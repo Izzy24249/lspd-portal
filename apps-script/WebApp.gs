@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 51;
+const BACKEND_VERSION = 52;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1876,7 +1876,20 @@ function actSheet_() {
   }
   return sh;
 }
-function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view_" + x.id)); } catch (e) {} }
+function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view_" + x.id + "_n")); } catch (e) {} }
+// The script cache holds 100 KB per entry: bigger values are split over several entries ("key_n" says how many)
+function bigPut_(key, text, secs) {
+  const cache = CacheService.getScriptCache(), size = 90000, n = Math.ceil(text.length / size);
+  if (n > 20) return;
+  const parts = {}; for (let i = 0; i < n; i++) parts[key + "_" + i] = text.substr(i * size, size);
+  cache.putAll(parts, secs); cache.put(key + "_n", String(n), secs);
+}
+function bigGet_(key) {
+  const cache = CacheService.getScriptCache(), n = Number(cache.get(key + "_n") || 0); if (!n) return null;
+  const keys = []; for (let i = 0; i < n; i++) keys.push(key + "_" + i);
+  const got = cache.getAll(keys); if (keys.some(k => got[k] == null)) return null;
+  return keys.map(k => got[k]).join("");
+}
 // Boxes that hold people: officer / officers / Discord ID fields, roster-picker text boxes, and the same inside lists.
 function personSlots_(form) {
   const out = [], isP = f => ["officer", "officers", "discord_id"].indexOf(f.type) !== -1 || (f.type === "text" && (f.roster || f.rosterTabId != null && f.rosterTabId !== ""));
@@ -1961,7 +1974,7 @@ function divView_(d, me) {
   const dv = divs.find(x => x.id === str_(d.division)) || divs[0];
   if (!dv) return { ok: true, divisions: [], me: { username: me.username, role: me.role } };
   const cache = CacheService.getScriptCache(), ck = "div_view_" + dv.id;
-  if (!d.fresh) { const hit = cache.get(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
+  if (!d.fresh) { const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
   // officers from the division's roster tab
   let officers = [], rosterError = "";
   if (dv.rosterTabId != null) {
@@ -1989,7 +2002,7 @@ function divView_(d, me) {
   const out = { ok: true, division: dv, divisions: divList_(), officers: officers, rosterError: rosterError, reports: reports,
     forms: dv.forms.filter(f => formsById[f.id]).map(f => ({ id: f.id, title: formsById[f.id].title, icon: formsById[f.id].icon || "📄" })),
     weekStart: (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1, at: Date.now() };
-  try { const js = JSON.stringify(out); if (js.length < 95000) cache.put(ck, js, 120); } catch (e) {}
+  try { bigPut_(ck, JSON.stringify(out), 900); } catch (e) {}   // 15 min; cleared the moment a report is filed or graded
   out.me = { username: me.username, role: me.role };
   return out;
 }
@@ -2364,6 +2377,7 @@ function handleAdmin_(d) {
       const tabKeys = []; next.forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") tabKeys.push("roster_tab_" + fd.rosterTabId); })));
       if (tabKeys.length) CacheService.getScriptCache().removeAll(tabKeys);
       promoClearCache_();                                  // progression setup may have changed
+      divClearCache_();                                    // division setup may have changed
       logAdmin_(me.username, "save config", diffSummary_(cur, next));
       try { ensureWarmTrigger_(); } catch (e) {}
       snapshotSoon_();

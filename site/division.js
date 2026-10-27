@@ -18,7 +18,7 @@
 
   // ---------------- clock (the computer's own time) ----------------
   function tick() { const d = new Date(); $("clock").textContent = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }); $("clockDate").textContent = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }).toUpperCase();
-    if (LAST) { const s = Math.round((Date.now() - LAST) / 1000); $("liveTxt").textContent = s < 5 ? "LIVE" : "LIVE · " + (s < 60 ? s + "s" : Math.round(s / 60) + "m") + " ago"; } }
+    if (LAST && !$("live").classList.contains("upd")) { const s = Math.round((Date.now() - LAST) / 1000); $("liveTxt").textContent = s < 5 ? "LIVE" : "LIVE · " + (s < 60 ? s + "s" : Math.round(s / 60) + "m") + " ago"; } }
   setInterval(tick, 1000);
 
   // ---------------- sign in ----------------
@@ -31,43 +31,80 @@
       TOKEN = r.token;
       try { localStorage.removeItem(TK); sessionStorage.removeItem(TK); ($("lgKeep").checked ? localStorage : sessionStorage).setItem(TK, TOKEN); } catch (x) {}
       $("lgPass").value = ""; $("login").hidden = true; $("boot").hidden = false;
-      await load(true);
+      await load(false);
     } catch (x) { $("lgErr").textContent = x.message; }
     finally { $("lgBtn").disabled = false; $("lgBtn").textContent = "Enter command"; }
   };
   function signOut(expired) {
     if (!expired && TOKEN) Portal.post({ action: "logout", token: TOKEN }).catch(() => {});
-    TOKEN = ""; DATA = null; SEEN = null; try { localStorage.removeItem(TK); sessionStorage.removeItem(TK); } catch (e) {}
+    TOKEN = ""; DATA = null; SEEN = null; Object.keys(MEM).forEach(k => delete MEM[k]);
+    try { localStorage.removeItem(TK); sessionStorage.removeItem(TK); Object.keys(localStorage).filter(k => k.indexOf("dc:data:") === 0).forEach(k => localStorage.removeItem(k)); } catch (e) {}
     showLogin();
   }
   $("outBtn").onclick = () => signOut(false);
 
   // ---------------- data ----------------
-  let loading = false;
-  async function load(fresh, quiet) {
-    if (loading) return; loading = true;
-    try {
-      const r = await api("divView", { division: DIV, fresh: !!fresh });
-      ME = r.me;
-      if (!r.division) { DATA = r; drawEmpty(); return; }
-      const before = SEEN, ids = new Set(r.reports.map(x => x.id));
-      if (before && r.division.id === (DATA && DATA.division.id)) {
-        const nw = r.reports.filter(x => !before.has(x.id));
-        nw.forEach(x => x._new = true);
+  // Each division's last data is kept (in memory and in this browser), so switching shows it instantly;
+  // Google is asked for anything new in the background, and the other divisions are loaded ahead of time.
+  const MEM = {}, BUSY = {}, LSK = id => "dc:data:" + id;
+  const keep = (id, data) => { MEM[id] = { data: data, at: Date.now(), seen: new Set(data.reports.map(x => x.id)) };
+    try { localStorage.setItem(LSK(id), JSON.stringify({ at: Date.now(), data: data }, (k, v) => k === "_new" ? undefined : v)); } catch (e) {} };
+  const saved = id => { if (MEM[id]) return MEM[id]; try { const j = JSON.parse(localStorage.getItem(LSK(id)) || "null"); if (j && j.data && j.data.division) { MEM[id] = { data: j.data, at: j.at, seen: new Set(j.data.reports.map(x => x.id)), old: true }; return MEM[id]; } } catch (e) {} return null; };
+  function setLive(t) { $("live").classList.toggle("upd", !!t); if (t) $("liveTxt").textContent = t; else tick(); }
+  function show(data) {
+    DATA = data; ME = data.me || ME; DIV = data.division.id; store("dc:div", DIV);
+    $("boot").hidden = true; $("login").hidden = true; $("app").hidden = false;
+    document.documentElement.style.setProperty("--ac", data.division.color || "#2f7bff");
+    document.documentElement.style.setProperty("--acr", hexRgb(data.division.color || "#2f7bff"));
+    drawAll();
+  }
+  // fetch one division; it's drawn only if it's still the one on screen when the answer arrives
+  async function fetchDiv(id, fresh, quiet) {
+    if (BUSY[id]) return BUSY[id];
+    const run = (async () => {
+      const r = await api("divView", { division: id, fresh: !!fresh });
+      ME = r.me || ME;
+      if (!r.division) { if (!DATA || !DATA.division) { DATA = r; drawEmpty(); } return null; }
+      const rid = r.division.id, before = MEM[rid] && !MEM[rid].old ? MEM[rid].seen : null;
+      if (before && rid === DIV && DATA && DATA.division && DATA.division.id === rid) {
+        const nw = r.reports.filter(x => !before.has(x.id)); nw.forEach(x => x._new = true);
         if (nw.length) toast(nw.length === 1 ? "New report: " + (nw[0].author ? nw[0].author.name : "someone") + " · " + nw[0].formTitle : nw.length + " new reports came in", "ok");
       }
-      SEEN = ids; DATA = r; DIV = r.division.id; store("dc:div", DIV); LAST = Date.now();
-      $("boot").hidden = true; $("login").hidden = true; $("app").hidden = false;
-      document.documentElement.style.setProperty("--ac", r.division.color || "#2f7bff");
-      document.documentElement.style.setProperty("--acr", hexRgb(r.division.color || "#2f7bff"));
-      drawAll();
-    } catch (e) {
+      keep(rid, r);
+      if (!id || rid === DIV || !DATA || !DATA.division) { LAST = Date.now(); show(r); }
+      return r;
+    })();
+    BUSY[id] = run;
+    try { return await run; } finally { delete BUSY[id]; }
+  }
+  async function load(fresh, quiet) {
+    const s = DIV && saved(DIV);
+    if (s && (!DATA || !DATA.division || DATA.division.id !== DIV)) { LAST = s.at; show(s.data); }   // instant
+    setLive(DATA && DATA.division ? "UPDATING…" : "");
+    try { await fetchDiv(DIV, fresh, quiet); prefetch(); }
+    catch (e) {
       if (!TOKEN) return;
       if (!DATA) { $("boot").querySelector("span").textContent = e.message; setTimeout(() => { if (!DATA && TOKEN) load(fresh); }, 6000); }
       else if (!quiet) toast(e.message, "bad");
-    } finally { loading = false; }
+    } finally { setLive(""); }
+  }
+  // the other divisions, one after another, so they're ready before they're clicked
+  let pre = false;
+  async function prefetch() {
+    if (pre || !DATA || !DATA.divisions) return; pre = true;
+    try { for (const d of DATA.divisions) { if (!TOKEN) break; if (d.id === DIV) continue; const m = MEM[d.id]; if (m && !m.old && Date.now() - m.at < 120000) continue; try { await fetchDiv(d.id, false, true); } catch (e) {} } }
+    finally { pre = false; }
+  }
+  function switchDiv(id) {
+    if (id === DIV) return;
+    DIV = id; OPEN.clear(); store("dc:div", DIV);
+    const s = saved(id);
+    if (s) { LAST = s.at; show(s.data); if (Date.now() - s.at < 60000 && !s.old) return; }   // fresh enough: no wait at all
+    else { $("view").innerHTML = '<div class="dc-empty">Loading division…</div>'; }
+    load(false, true);
   }
   setInterval(() => { if (DATA && TOKEN && !document.hidden && $("modal").hidden) load(false, true); }, 60000);
+  setInterval(() => { if (DATA && TOKEN && !document.hidden) prefetch(); }, 300000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && DATA && Date.now() - LAST > 60000) load(false, true); });
   $("refreshBtn").onclick = async () => { $("refreshBtn").classList.add("spin"); await load(true); $("refreshBtn").classList.remove("spin"); };
   function hexRgb(h) { const m = /^#?([0-9a-f]{6})$/i.exec(h) || [0, "2f7bff"]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(","); }
@@ -311,7 +348,7 @@
       try {
         const res = await api("divGrade", { id: r.id, division: DATA.division.id, grade: pick, comments: $("gmCm").value.trim(), gradedBy: gby, clear: !!clear, post: posted, pingTagged: !!($("gmPing") && $("gmPing").checked) });
         Object.assign(r, clear ? { grade: "", gradedBy: "", comments: "", gradedAt: 0 } : { grade: pick, gradedBy: gby || ME.username, comments: $("gmCm").value.trim(), gradedAt: Date.now() });
-        closeModal(); drawAll(); if (!$("drawer").hidden) { const k = $("dpanel").dataset.key; if (k) openOfficer(k); }
+        keep(DATA.division.id, DATA); closeModal(); drawAll(); if (!$("drawer").hidden) { const k = $("dpanel").dataset.key; if (k) openOfficer(k); }
         toast(res.warning ? "Grade saved (" + res.warning + ")" : clear ? "Grade removed" : "Grade " + pick + " saved" + (posted ? " and posted to Discord" : ""), res.warning ? "bad" : "ok");
       } catch (e) { toast(e.message, "bad"); btn.disabled = false; btn.textContent = lab; }
     };
@@ -324,7 +361,7 @@
   // ---------------- clicks ----------------
   document.addEventListener("click", e => {
     const t = e.target;
-    const dvb = t.closest("[data-div]"); if (dvb) { if (dvb.dataset.div !== DIV) { DIV = dvb.dataset.div; SEEN = null; OPEN.clear(); load(false); } return; }
+    const dvb = t.closest("[data-div]"); if (dvb) { switchDiv(dvb.dataset.div); return; }
     const pb = t.closest("#period [data-p]"); if (pb) { PERIOD = pb.dataset.p; store("dc:period", PERIOD); drawAll(); return; }
     const tb = t.closest("[data-tab],[data-t]"); if (tb && !t.closest("#dpanel")) { TAB = tb.dataset.tab || tb.dataset.t; drawAll(); window.scrollTo({ top: $("kpis").offsetTop - 120, behavior: "smooth" }); return; }
     const g = t.closest("[data-grade]"); if (g) { e.stopPropagation(); openGrade(g.dataset.grade); return; }
