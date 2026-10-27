@@ -31,11 +31,13 @@
     $("uCs").textContent = p.callsign || "----"; $("uName").textContent = who(p).toUpperCase();
     $("me").innerHTML = 'Signed on as <b>' + esc(p.callsign || "—") + "</b> · " + esc(who(p)) + '<br><a href="signon.html?out=1">Sign off (10-7)</a>';
     const sop = (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; $("sopLink").href = sop;
+    const nb = (DATA && DATA.board && DATA.board.notices || []).length; $("nBolo").textContent = nb || ""; $("nBolo").className = nb ? "new" : "";
     if (DATA && DATA.fleet) { $("nFleet").textContent = DATA.fleet.vehicles.filter(v => v.allowed).length || ""; $("nUni").textContent = (DATA.fleet.uniforms[SEX] || []).filter(u => u.yours).length || ""; }
   }
 
   // ---------- router ----------
-  function go(v) { VIEW = ["home", "fleet", "uniforms"].indexOf(v) >= 0 ? v : "home"; if (location.hash.slice(1) !== VIEW) history.replaceState(null, "", "#" + VIEW); draw(); window.scrollTo(0, 0); }
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference"];
+  function go(v) { VIEW = VIEWS.indexOf(v) >= 0 ? v : "home"; if (location.hash.slice(1) !== VIEW) history.replaceState(null, "", "#" + VIEW); draw(); window.scrollTo(0, 0); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
   addEventListener("hashchange", () => go(location.hash.slice(1)));
 
@@ -50,14 +52,16 @@
     drawStrip();
     const m = $("main");
     if (!DATA) { m.innerHTML = '<div class="boot">ESTABLISHING LINK…</div>'; return; }
-    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : homeHTML()) + "</div>";
+    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : homeHTML()) + "</div>";
+    if (VIEW === "reference" && !REF) loadRef();
+    if (VIEW === "records") { const q = $("recQ"); if (q && !matchMedia("(max-width:760px)").matches) q.focus(); }
     drawTicker();
   }
 
   // ---------- home ----------
   function greet() { const h = new Date().getHours(); return h < 5 ? "Evening" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening"; }
   const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
-  const gcls = g => { const x = String(g || "").toUpperCase()[0]; return x === "A" ? "a" : x === "B" ? "b" : x === "C" ? "c" : x ? "c" : "w"; };
+  const gcls = g => { const x = String(g || "").toUpperCase()[0]; return x === "R" ? "r" : x === "A" ? "a" : x === "B" ? "b" : x === "C" ? "c" : x ? "c" : "w"; };
   function memoHTML(b, B) {
     if (!b) return '<div class="memo"><div class="mh"><span>LSPD · MEMORANDUM</span><span>' + esc(new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()) + "</span></div><p>No briefing posted for this shift. Check your division channels and stay safe out there.</p></div>";
     const d = new Date(b.at);
@@ -73,6 +77,8 @@
     const waiting = mine.filter(r => !r.grade).length;
     let h = '<div class="hello"><div><h1>' + esc(greet()) + ", " + esc(last(p.name) || "Officer") + '. <span>' + esc(trainee ? "Welcome to the academy." : "Ready when you are.") + "</span></h1>" +
       '<p>Signed on as <b>' + esc(p.callsign || "—") + "</b> · " + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · " + waiting + " waiting on a grade" : "") : "") + '</p></div><a class="file" href="index.html">FILE A REPORT <kbd>F</kbd></a></div>';
+    const NB = B.notices || [];
+    if (NB.length) h += '<section class="bolos">' + NB.slice(0, 3).map(n => '<a class="bolo t-' + esc(n.type.toLowerCase()) + '" data-go="records"><b>' + esc(n.type.toUpperCase()) + "</b><span>" + esc(n.title) + "</span><small>" + esc(n.from) + " · " + ago(n.at) + " ago</small></a>").join("") + (NB.length > 3 ? '<a class="bolo more" data-go="records">+' + (NB.length - 3) + " more</a>" : "") + "</section>";
     // briefing | path
     h += '<div class="grid"><section class="pane"><div class="ph"><span class="lbl">Shift briefing</span>' + (B.canBrief ? '<a data-brief>Post briefing</a>' : (B.past || []).length ? '<a data-past>Past briefings</a>' : "") + "</div>" + memoHTML(B.briefing, B) + "</section>";
     if ((DATA.paths || []).length) h += pathHTML(DATA.paths[0]);
@@ -83,7 +89,7 @@
     // reports | department | needs you / tiles
     const D = B.dept || {};
     h += '<div class="grid3"><section class="pane"><div class="ph"><span class="lbl">My reports</span><a href="myreports.html">All</a></div>' +
-      (mine.length ? mine.map(r => '<div class="rep"><div><b>' + esc((r.no ? r.no + " · " : "") + (r.title || r.formTitle)) + "</b><small>" + esc(r.formTitle) + (r.tagged ? " · you were tagged" : "") + " · " + (r.grade ? "graded by " + esc(r.gradedBy || "command") + (r.comments ? ' · "' + esc(r.comments) + '"' : "") : "filed " + ago(r.at) + " ago") + '</small></div><span class="gr ' + gcls(r.grade) + '">' + esc(r.grade || "…") + "</span></div>").join("")
+      (mine.length ? mine.map(r => '<div class="rep"><div><b>' + esc((r.no ? r.no + " · " : "") + (r.title || r.formTitle)) + "</b><small>" + esc(r.formTitle) + (r.tagged ? " · you were tagged" : "") + " · " + (r.grade ? "graded by " + esc(r.gradedBy || "command") + (r.comments ? ' · "' + esc(r.comments) + '"' : "") : "filed " + ago(r.at) + " ago") + '</small></div><span class="gr ' + gcls(r.grade) + '"' + (r.grade === "R" ? ' title="Returned for correction: fix it and file again"' : "") + ">" + esc(r.grade === "R" ? "↩" : r.grade || "…") + "</span></div>").join("")
         : '<p style="color:var(--mute)">Nothing yet. Reports you file, or get tagged in, show up here with their grade.</p>') + "</section>";
     h += '<section class="pane"><div class="ph"><span class="lbl">Department · this week</span></div><div class="big"><div><small>Reports filed</small><b>' + (D.week || 0) + "</b>" + (D.delta ? "<em" + (D.delta < 0 ? ' style="color:var(--red)"' : "") + ">" + (D.delta > 0 ? "▲ " : "▼ ") + Math.abs(D.delta) + "</em>" : "") + "</div><div><small>Officers active</small><b>" + (D.active || 0) + "</b></div><div><small>Avg. grade (30 days)</small><b>" + esc(D.avg || "—") + "</b></div><div><small>Trainees in program</small><b>" + (D.trainees || 0) + "</b></div></div>";
     const mx = Math.max(1, ...(D.days || []).map(x => x.n));
@@ -115,6 +121,53 @@
     if (pa.deadline) h += '<div class="dl ' + esc(pa.deadline.state) + '"><span>Deadline · ' + esc(pa.deadline.date) + (pa.deadline.extended ? " (extended)" : "") + "</span><b>" +
       (pa.deadline.state === "done" ? "Complete" : pa.deadline.left <= 0 ? "Overdue" : pa.deadline.left + " days left") + "</b></div>";
     return h + "</section>";
+  }
+
+  // ---------- records & BOLOs ----------
+  let REC = null, REC_KIND = "person", REC_BUSY = false, REF = null, REF_Q = "";
+  function boloCard(n, canClose) {
+    return '<div class="card bolo-c t-' + esc(n.type.toLowerCase()) + '">' + (n.image ? '<div class="pic" style="background-image:url(\'' + esc(n.image) + '\')"></div>' : "") +
+      '<div class="bd"><span class="rk ' + (n.type === "Notice" ? "lo" : "no") + '" style="position:static;justify-self:start">' + esc(n.type.toUpperCase()) + '</span><b class="bt">' + esc(n.title) + "</b>" +
+      (n.details ? '<p class="bdx">' + esc(n.details).replace(/\n/g, "<br>") + "</p>" : "") + '<small class="bm">' + esc(n.from) + " · " + new Date(n.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) +
+      (n.expires ? " · until " + new Date(n.expires).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "") + "</small>" + (canClose ? '<button class="btn ghost" data-close-notice="' + esc(n.id) + '">CLEAR</button>' : "") + "</div></div>";
+  }
+  function recordsHTML() {
+    const B = DATA.board || {}, NB = B.notices || [];
+    let h = '<div class="h2"><div><h1>RECORDS <span>· people &amp; vehicles</span></h1><p>Search every report on file: suspects, victims, witnesses, plates and vehicles.</p></div>' +
+      (B.canNotice ? '<button class="btn" data-new-notice>+ POST BOLO / NOTICE</button>' : "") + "</div>";
+    if (B.canRecords === false) h += '<div class="empty">Records lookup opens up once you\'re certified (Officer level). Active BOLOs are below.</div>';
+    else h += '<form class="recf" id="recForm"><div class="seg"><button type="button" data-rk="person" class="' + (REC_KIND === "person" ? "on" : "") + '">PERSON</button><button type="button" data-rk="vehicle" class="' + (REC_KIND === "vehicle" ? "on" : "") + '">VEHICLE</button><button type="button" data-rk="any" class="' + (REC_KIND === "any" ? "on" : "") + '">ANYTHING</button></div>' +
+      '<input id="recQ" autocomplete="off" placeholder="' + (REC_KIND === "vehicle" ? "Plate, model or color…" : REC_KIND === "person" ? "Name or Discord ID…" : "Any word in a report…") + '" value="' + esc(REC ? REC.q : "") + '"><button class="btn" type="submit">' + (REC_BUSY ? "SEARCHING…" : "RUN") + "</button></form>" + recResults();
+    h += '<div class="sect"><span class="lbl">Active BOLOs &amp; notices · ' + NB.length + '</span></div>' + (NB.length ? '<div class="cards">' + NB.map(n => boloCard(n, B.canNotice)).join("") + "</div>" : '<div class="empty">No active BOLOs.</div>');
+    return h;
+  }
+  function recResults() {
+    if (!REC) return '<p class="rec-hint">Tip: a last name finds every report it appears in. Results show newest first.</p>';
+    if (REC.error) return '<div class="empty">' + esc(REC.error) + "</div>";
+    if (!REC.total) return '<div class="empty">No records for "' + esc(REC.q) + '".</div>';
+    let h = '<p class="rec-hint"><b>' + REC.total + "</b> report" + (REC.total === 1 ? "" : "s") + ' mention "' + esc(REC.q) + '"' + (REC.total > REC.results.length ? " · showing the newest " + REC.results.length : "") + "</p>";
+    if ((REC.subjects || []).length > 1) h += '<div class="subj">' + REC.subjects.map(x => '<span>' + (x.kind === "vehicle" ? "🚗 " : "👤 ") + esc(x.name) + " <b>" + x.n + "</b></span>").join("") + "</div>";
+    h += '<div class="recs">' + REC.results.map((r, i) => '<button class="rec" data-rec="' + i + '"><span class="ic">' + esc(r.icon) + '</span><div><b>' + esc(r.form) + "</b><small>" + (r.at ? esc(new Date(r.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })) : "") + "</small>" +
+      r.match.map(m => '<div class="mt"><span>' + esc(m.label) + "</span>" + hl(m.value, REC.q) + "</div>").join("") + '</div><em>VIEW ›</em></button>').join("") + "</div>";
+    return h;
+  }
+  function hl(v, q) { v = String(v).replace(/\s*\(\d{15,21}\)/g, ""); const i = v.toLowerCase().indexOf(q.toLowerCase()); return i < 0 ? esc(v) : esc(v.slice(0, i)) + "<mark>" + esc(v.slice(i, i + q.length)) + "</mark>" + esc(v.slice(i + q.length)); }
+  async function runSearch(q) {
+    REC_BUSY = true; draw();
+    const r = await Portal.post({ action: "recordsSearch", session: SESSION, q: q, kind: REC_KIND }).catch(() => ({ ok: false, error: "Couldn't reach the records server." }));
+    REC_BUSY = false; REC = r.ok ? r : { q: q, error: r.error === "AUTH" ? "Sign on again." : r.error }; draw();
+  }
+  // ---------- quick reference ----------
+  async function loadRef() { const r = await Portal.post({ action: "quickRef", session: SESSION }).catch(() => null); REF = r && r.ok ? r : { penal: [], tenCodes: [], error: true }; if (VIEW === "reference") draw(); }
+  function refHTML() {
+    let h = '<div class="h2"><div><h1>QUICK REFERENCE</h1><p>Penal code from the LSPD report forms, and radio codes.</p></div><input class="refq" id="refQ" placeholder="Search charges or codes…" value="' + esc(REF_Q) + '"></div>';
+    if (!REF) return h + '<div class="boot">LOADING PENAL CODE…</div>';
+    const q = REF_Q.toLowerCase(), P = REF.penal.filter(x => !q || x.raw.toLowerCase().indexOf(q) !== -1), C = REF.tenCodes.filter(x => !q || (x[0] + " " + x[1]).toLowerCase().indexOf(q) !== -1);
+    h += '<div class="grid" style="align-items:start"><section class="pane"><div class="ph"><span class="lbl">Penal code · ' + P.length + "</span></div>" +
+      (P.length ? '<table class="pc"><tr><th>Charge</th><th>Class</th><th>Time</th><th>Fine</th></tr>' + P.map(x => "<tr><td>" + esc(x.name) + '</td><td><span class="cls c-' + esc(x.cls.toLowerCase()) + '">' + esc(x.cls || "—") + "</span></td><td>" + (x.months ? x.months + " mo" : "—") + "</td><td>" + (x.fine ? "$" + x.fine.toLocaleString() : "—") + "</td></tr>").join("") + "</table>"
+        : '<p style="color:var(--mute)">' + (REF.penal.length ? "No charge matches." : "No charges found in the forms yet. Charges written like \"Robbery (Felony, 18 Months - $9,000 Fine)\" in any form's charge list show up here.") + "</p>") + "</section>" +
+      '<section class="pane"><div class="ph"><span class="lbl">Radio codes</span></div><table class="pc">' + C.map(x => '<tr><td class="mono" style="white-space:nowrap;color:#cfe0ff">' + esc(x[0]) + "</td><td>" + esc(x[1]) + "</td></tr>").join("") + "</table></section></div>";
+    return h;
   }
 
   // ---------- fleet ----------
@@ -184,6 +237,17 @@
     const fa = e.target.closest("[data-fa]"); if (fa) { FLEET_ALL = fa.getAttribute("data-fa") === "1"; LS.set("mdt:fleetAll", FLEET_ALL ? "1" : ""); draw(); return; }
     const ua = e.target.closest("[data-ua]"); if (ua) { UNI_ALL = ua.getAttribute("data-ua") === "1"; LS.set("mdt:uniAll", UNI_ALL ? "1" : ""); draw(); return; }
     const sx = e.target.closest("[data-sex]"); if (sx) { SEX = sx.getAttribute("data-sex"); LS.set("mdt:sex", SEX); draw(); return; }
+    const rk = e.target.closest("[data-rk]"); if (rk) { REC_KIND = rk.getAttribute("data-rk"); const q = ($("recQ") || {}).value || ""; REC = null; draw(); const n = $("recQ"); if (n) { n.value = q; n.focus(); } return; }
+    const rc = e.target.closest("[data-rec]"); if (rc) { const r = REC.results[+rc.getAttribute("data-rec")]; modal("<h3>" + esc(r.icon + " " + r.form) + '</h3><dl class="kv full">' + r.fields.map(f => "<dt>" + esc(f.label) + "</dt><dd>" + hl(f.value, REC.q).replace(/\n/g, "<br>") + "</dd>").join("") + '</dl><div class="md-act"><button class="btn ghost" data-close>Close</button></div>'); return; }
+    const cn = e.target.closest("[data-close-notice]"); if (cn) { cn.disabled = true; Portal.post({ action: "mdtNoticeClose", session: SESSION, id: cn.getAttribute("data-close-notice") }).then(r => { if (r.ok) { DATA.board.notices = DATA.board.notices.filter(n => n.id !== cn.getAttribute("data-close-notice")); draw(); toast("Cleared."); } else { cn.disabled = false; toast(r.error || "Couldn't clear it."); } }); return; }
+    if (e.target.closest("[data-new-notice]")) {
+      const m = modal('<h3>Post a BOLO or notice</h3><div class="seg" id="nType"><button type="button" class="on" data-t="BOLO">BOLO</button><button type="button" data-t="Wanted">WANTED</button><button type="button" data-t="Notice">NOTICE</button></div><label>Title<input id="nTitle" maxlength="120" placeholder="Black Sultan RS · plate 46EEK572"></label><label>Details<textarea id="nDet" rows="5" maxlength="2000" placeholder="Last seen heading north on Route 68. Armed. Approach with caution."></textarea></label><label>Photo link (optional)<input id="nImg" placeholder="https://i.imgur.com/….png"></label><label>Keep it up for<input id="nDays" type="number" min="1" max="30" value="7"></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="nGo">POST</button></div>');
+      let type = "BOLO"; m.querySelector("#nType").onclick = ev => { const b = ev.target.closest("[data-t]"); if (!b) return; type = b.dataset.t; m.querySelectorAll("#nType button").forEach(x => x.classList.toggle("on", x === b)); };
+      m.querySelector("#nGo").onclick = async () => { const b = m.querySelector("#nGo"); b.disabled = true;
+        const r = await Portal.post({ action: "mdtNoticePost", session: SESSION, type: type, title: m.querySelector("#nTitle").value, details: m.querySelector("#nDet").value, image: m.querySelector("#nImg").value.trim(), days: m.querySelector("#nDays").value }).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
+        if (r.ok) { m.hidden = true; toast("Posted to every MDT."); load(); } else { b.disabled = false; toast(r.error || "Couldn't post."); } };
+      return;
+    }
     const ak = e.target.closest("[data-ack]"); if (ak) { ak.disabled = true; Portal.post({ action: "mdtBriefAck", session: SESSION, id: ak.getAttribute("data-ack") }).then(r => { if (r.ok) { DATA.board.briefing.acked = true; if (DATA.board.briefing.ackCount != null) DATA.board.briefing.ackCount++; draw(); toast("Acknowledged. Have a safe shift."); } else { ak.disabled = false; toast(r.error || "Couldn't acknowledge."); } }); return; }
     if (e.target.closest("[data-past]")) { const P = (DATA.board.past || []); modal('<h3>Past briefings</h3>' + (P.length ? P.map(b => '<div class="pb"><b>' + esc(b.re) + "</b><small>" + esc(new Date(b.at).toLocaleDateString()) + " · " + esc(b.from) + "</small><p>" + esc(b.body).replace(/\n/g, "<br>") + "</p></div>").join("") : "<p>None yet.</p>") + '<div class="md-act"><button class="btn ghost" data-close>Close</button></div>'); return; }
     if (e.target.closest("[data-brief]")) {
@@ -204,8 +268,10 @@
       draw();
     } catch (e) { if (!DATA) $("main").innerHTML = '<div class="boot">LINK FAILED · ' + esc(e.message) + ' · <a href="" style="color:#8fb2ff">retry</a></div>'; else toast("Showing saved data: " + e.message); }
   }
-  VIEW = ["home", "fleet", "uniforms"].indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : "home";
+  VIEW = VIEWS.indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : "home";
   draw(); load();
   setInterval(() => { if (!document.hidden) load(); }, 3 * 60e3);
+  document.addEventListener("submit", e => { if (e.target.id === "recForm") { e.preventDefault(); const q = $("recQ").value.trim(); if (q.length >= 2) runSearch(q); else toast("Type at least 2 characters."); } });
+  document.addEventListener("input", e => { if (e.target.id === "refQ") { REF_Q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("refQ"); n.focus(); n.setSelectionRange(pos, pos); } });
   addEventListener("keydown", e => { if (e.key && e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey && !e.altKey && !/input|textarea|select/i.test((e.target.tagName || "")) && $("modal").hidden && !document.querySelector(".lk")) location.href = "index.html"; });
 })();

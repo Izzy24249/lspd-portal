@@ -272,7 +272,7 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
 .gm-m{font-size:12.5px;color:var(--muted);margin-top:-6px}
 .gm-sum summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .gm-sum pre{margin-top:8px;padding:10px 12px;border-radius:9px;background:rgba(0,0,0,.35);border:1px solid var(--line);font:12px/1.6 "JetBrains Mono",monospace;color:#cbd5e1;white-space:pre-wrap;max-height:220px;overflow:auto}
-.gm-letters{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.gm-letters{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
 .gm-letters button{display:grid;justify-items:center;gap:3px;padding:12px 4px;border-radius:12px;border:2px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:var(--text);cursor:pointer;transition:.15s}
 .gm-letters button b{font:700 30px/1 Oswald,sans-serif}
 .gm-letters button small{font-size:10.5px;color:var(--muted)}
@@ -383,3 +383,6 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
   .gm-keys{display:none}
 }
 .gm-left .pp-body{white-space:pre;overflow:auto}
+
+/* returned for correction */
+.g-r{color:#e9d5ff!important;border-color:#a78bfa!important}.gm-letters .g-r.on{background:rgba(167,139,250,.2)}

@@ -384,13 +384,13 @@
         <div class="dc-kick">GRADE REPORT</div><h2>${esc(r.title || r.formTitle)}</h2>
         <div class="gm-m">${esc(r.formTitle)}${r.no ? " · " + esc(r.no) : ""} · ${esc(fullTime(r.at))}</div>
         <div class="rc-p">${r.author ? personChip(r.author, "author") : ""}${r.tagged.map(t => personChip(t, "assist")).join("")}</div>
-        <div class="gm-letters">${["A", "B", "C", "D", "F"].map(g => `<button type="button" data-g="${g}" class="${GCLS(g)}${pick === g ? " on" : ""}" title="Press ${g}"><b>${g}</b><small>${{ A: "Excellent", B: "Good", C: "Acceptable", D: "Needs work", F: "Unacceptable" }[g]}</small></button>`).join("")}</div>
+        <div class="gm-letters">${["A", "B", "C", "D", "F", "R"].map(g => `<button type="button" data-g="${g}" class="${GCLS(g)}${pick === g ? " on" : ""}" title="Press ${g}"><b>${g === "R" ? "↩" : g}</b><small>${{ A: "Excellent", B: "Good", C: "Acceptable", D: "Needs work", F: "Unacceptable", R: "Return to fix" }[g]}</small></button>`).join("")}</div>
         <label class="gm-f"><span>Comments for the officer</span><textarea id="gmCm" maxlength="1500" placeholder="What was done well, what to fix next time…">${esc(r.comments || "")}</textarea></label>
         <label class="gm-f"><span>Graded by</span><input id="gmBy" maxlength="60" value="${esc(r.gradedBy || by)}"></label>
         <label class="gm-c${r.canPost ? "" : " dis"}"><input type="checkbox" id="gmPost" ${r.canPost ? "checked" : "disabled"}> Post to Discord: grade line on the report + a reply tagging ${esc(r.author ? r.author.name : "the officer")}${r.canPost ? "" : " <small>(this report's Discord post wasn't recorded" + (r.imported ? ": imported from the sheet" : "") + ")</small>"}</label>
         ${r.tagged.length ? `<label class="gm-c${r.canPost ? "" : " dis"}"><input type="checkbox" id="gmPing" ${DATA.division.pingTagged ? "checked" : ""} ${r.canPost ? "" : "disabled"}> Also tag the ${r.tagged.length} assisting officer${r.tagged.length === 1 ? "" : "s"}</label>` : ""}
         <div class="gm-b">${r.grade ? '<button type="button" class="dc-btn danger" id="gmClear">Remove grade</button>' : ""}<span></span><button type="button" class="dc-btn" data-mclose>Close</button>${nextUn ? '<button type="button" class="dc-btn" id="gmSaveNext" title="Save, then open the next report that needs a grade">Save &amp; next ›</button>' : ""}<button type="button" class="dc-btn ac" id="gmSave">Save grade</button></div>
-        <p class="gm-keys">Keys: <b>A–F</b> pick a grade · <b>← →</b> previous / next report · <b>Esc</b> close</p>
+        <p class="gm-keys">Keys: <b>A–F</b> pick a grade · <b>R</b> return for correction · <b>← →</b> previous / next report · <b>Esc</b> close</p>
       </div></div>`;
     $("modal").hidden = false;
     const card0 = () => $("mcard").querySelector(".pp-body");
@@ -419,7 +419,7 @@
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "");
       if (typing) return;
       const k = e.key.toUpperCase();
-      if (["A", "B", "C", "D", "F"].includes(k)) { const b = card.querySelector(`[data-g="${k}"]`); if (b) b.click(); e.preventDefault(); }
+      if (["A", "B", "C", "D", "F", "R"].includes(k)) { const b = card.querySelector(`[data-g="${k}"]`); if (b) b.click(); e.preventDefault(); }
       else if (e.key === "ArrowLeft" && prev) openGrade(prev.id);
       else if (e.key === "ArrowRight" && next) openGrade(next.id);
     };

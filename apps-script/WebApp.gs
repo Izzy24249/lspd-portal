@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 70;
+const BACKEND_VERSION = 71;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1879,7 +1879,7 @@ function cidHandle_(d) {
 const ACT_SHEET_ = "Division Activity";
 const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source", "Report", "Data"];
 const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divGrade: 1, divReport: 1, changePassword: 1 };
-const GRADES_ = ["A", "B", "C", "D", "F"];
+const GRADES_ = ["A", "B", "C", "D", "F", "R"];   // R = returned to the officer for correction
 function actSheet_() {
   const ss = ss_();
   let sh = ss.getSheetByName(ACT_SHEET_);
@@ -2029,7 +2029,7 @@ function divGrade_(d, me) {
   const rows = actRows_(), rec = rows.find(r => r.id === str_(d.id));
   if (!rec) return { ok: false, error: "That report isn't in the log." };
   const clear = !!d.clear, grade = clear ? "" : str_(d.grade).toUpperCase();
-  if (!clear && GRADES_.indexOf(grade) === -1) return { ok: false, error: "Pick a grade A to F." };
+  if (!clear && GRADES_.indexOf(grade) === -1) return { ok: false, error: "Pick a grade A to F, or R to return it for correction." };
   const by = clip_(str_(d.gradedBy) || me.username, 60), comments = clear ? "" : clip_(str_(d.comments), 1500);
   actSheet_().getRange(rec.row, 12, 1, 4).setValues([[grade, clear ? "" : cellSafe_(by), cellSafe_(comments), clear ? "" : new Date()]]);
   divClearCache_();
@@ -2045,7 +2045,7 @@ function divGrade_(d, me) {
   if (author) add(author.i);
   if (d.pingTagged) rec.people.forEach(p => add(p.i));
   const medal = { A: "🟢", B: "🟢", C: "🟡", D: "🟠", F: "🔴" }[grade];
-  const line = "🏅 **Division review:** " + medal + " Grade **" + grade + "** · by " + by;
+  const line = grade === "R" ? "🏅 **Division review:** ↩️ **Returned for correction** · by " + by + " — fix and file it again" : "🏅 **Division review:** " + medal + " Grade **" + grade + "** · by " + by;
   let warning = "";
   try {
     const base = wh.url.split("?")[0];
@@ -2478,7 +2478,8 @@ function mdtBoard_(acct, prof, person) {
   return {
     briefing: b ? { id: b.id, at: b.at, from: b.from, to: b.to, re: b.re, body: b.body, acked: b.acks.indexOf(acct.id) !== -1, ackCount: lv >= LEVELS_.indexOf("command") ? b.acks.length : undefined } : null,
     past: briefs.slice(1, 6).map(x => ({ id: x.id, at: x.at, from: x.from, re: x.re, body: x.body })),
-    canBrief: lv >= LEVELS_.indexOf("command"),
+    canBrief: lv >= LEVELS_.indexOf("command"), canNotice: lv >= LEVELS_.indexOf("leader"), canRecords: lv >= LEVELS_.indexOf("officer"),
+    notices: noticesActive_().map(x => ({ id: x.id, at: x.at, from: x.from, type: x.type, title: x.title, details: x.details, image: x.image, expires: x.expires })),
     mine: mdtMine_(acct, person), dept: mdtDept_(),
     needs: lv >= LEVELS_.indexOf("fto") ? mdtNeeds_() : null
   };
@@ -2496,6 +2497,78 @@ function mdtBrief_(d) {
   if (!re || !body) return { ok: false, error: "Add a subject and the briefing text." };
   const from = ((prof.title || "") + " " + voiceLast_(prof.name || "")).trim() + (prof.callsign ? " (" + prof.callsign + ")" : "");
   withLock_(() => { briefSheet_().appendRow([Utilities.getUuid().slice(0, 8), new Date(), cellSafe_(from), cellSafe_(to), cellSafe_(re), cellSafe_(body), "[]"]); return { ok: true }; });
+  return { ok: true };
+}
+
+// ---- Records lookup (people & vehicles in every filed report), quick reference, BOLO / notices ----
+const REC_PERSON_ = /name|suspect|victim|witness|officer|person|subject|driver|owner|complainant|offender|detainee|arrest|lead|assist|trainee|discord|\bid\b|dob|phone/i;
+const REC_VEHICLE_ = /plate|vehicle|model|make|colou?r|vin|car|registration|reg\b/i;
+function recordsSearch_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  if (LEVELS_.indexOf(acctProfile_(acct).level) < LEVELS_.indexOf("officer")) return { ok: false, error: "Records lookup is for sworn officers. Trainees get access when they're certified." };
+  const q = str_(d.q).toLowerCase().trim(), kind = ["person", "vehicle"].indexOf(str_(d.kind)) !== -1 ? str_(d.kind) : "any";
+  if (q.length < 2) return { ok: false, error: "Type at least 2 characters." };
+  const cfg = getConfig_(), ss = ss_(), hits = [], subjects = {};
+  cfg.forms.forEach(form => {
+    const sh = ss.getSheetByName(clip_(str_(form.archiveSheet) || form.title || form.id, 90)); if (!sh || sh.getLastRow() < 2) return;
+    const n = sh.getLastRow(), first = Math.max(2, n - 1999), lastCol = Math.min(sh.getLastColumn(), 60);
+    const heads = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0], rows = sh.getRange(first, 1, n - first + 1, lastCol).getDisplayValues();
+    const want = heads.map(hd => kind === "any" || (kind === "person" ? REC_PERSON_ : REC_VEHICLE_).test(hd));
+    rows.forEach((r, i) => {
+      const match = []; r.forEach((v, c) => { if (want[c] && v && v.toLowerCase().indexOf(q) !== -1) match.push({ label: heads[c] || "Field", value: clip_(v, 300) }); });
+      if (!match.length) return;
+      const at = (() => { for (let c = 0; c < Math.min(r.length, 4); c++) { const t = Date.parse(r[c]); if (!isNaN(t) && /\d{4}|\d{1,2}\/\d{1,2}/.test(r[c])) return t; } return 0; })();
+      const fields = []; r.forEach((v, c) => { if (v && heads[c] && fields.length < 40) fields.push({ label: heads[c], value: clip_(v, 600) }); });
+      hits.push({ form: form.title, icon: form.icon || "📄", row: first + i, at: at, match: match.slice(0, 4), fields: fields });
+      match.forEach(m => { m.value.split(/[;,\n]/).map(x => x.trim()).filter(x => x.toLowerCase().indexOf(q) !== -1).forEach(x => { const k = x.toLowerCase().replace(/\s*\(\d{15,21}\)\s*$/, ""); subjects[k] = subjects[k] || { name: x.replace(/\s*\(\d{15,21}\)\s*$/, ""), n: 0, kind: REC_VEHICLE_.test(m.label) ? "vehicle" : "person" }; subjects[k].n++; }); });
+    });
+  });
+  hits.sort((a, b) => b.at - a.at);
+  return { ok: true, q: str_(d.q), kind: kind, total: hits.length, results: hits.slice(0, 40), subjects: Object.keys(subjects).map(k => subjects[k]).sort((a, b) => b.n - a.n).slice(0, 12) };
+}
+// penal code from every charge list in the forms: "Robbery (Felony, 18 Months - $9,000 Fine)"
+function penalCode_() {
+  const cfg = getConfig_(), seen = {}, out = [];
+  const walk = x => { if (Array.isArray(x)) x.forEach(walk); else if (x && typeof x === "object") Object.keys(x).forEach(k => walk(x[k])); else if (typeof x === "string" && /\d+\s*Months?|\$\s*[\d,]+\s*Fine/i.test(x)) {
+    const key = x.trim().toLowerCase(); if (seen[key]) return; seen[key] = 1;
+    const m = /(\d+)\s*Months?/i.exec(x), f = /\$\s*([\d,]+)\s*Fine/i.exec(x), cls = /\b(felony|misdemeanor|infraction|citation)\b/i.exec(x);
+    out.push({ name: x.replace(/\s*\([^)]*(months?|fine)[^)]*\)\s*$/i, "").trim() || x.trim(), months: m ? +m[1] : 0, fine: f ? +f[1].replace(/,/g, "") : 0, cls: cls ? cls[1][0].toUpperCase() + cls[1].slice(1).toLowerCase() : "", raw: x.trim() }); } };
+  walk(cfg.forms);
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+const TEN_CODES_ = [["10-1", "Weak signal"], ["10-3", "Stop transmitting"], ["10-4", "Acknowledged"], ["10-5", "Meal break"], ["10-6", "Busy"], ["10-7", "Out of service"], ["10-8", "In service"], ["10-9", "Repeat"],
+  ["10-10", "Fight in progress"], ["10-11", "Traffic stop"], ["10-12", "Stand by"], ["10-13", "Shots fired"], ["10-15", "Prisoner in custody"], ["10-16", "Pick up prisoner"], ["10-19", "Return to station"], ["10-20", "Location"],
+  ["10-23", "Arrived on scene"], ["10-26", "ETA"], ["10-28", "Plate check"], ["10-29", "Warrant check"], ["10-31", "Crime in progress"], ["10-32", "Requesting backup"], ["10-38", "Suspicious vehicle"], ["10-41", "Beginning tour of duty"],
+  ["10-42", "Ending tour of duty"], ["10-50", "Vehicle accident"], ["10-52", "EMS needed"], ["10-55", "Intoxicated driver"], ["10-57", "Hit and run"], ["10-60", "Pursuit"], ["10-70", "Foot pursuit"], ["10-71", "Shooting"],
+  ["10-78", "Officer needs assistance"], ["10-80", "Vehicle pursuit"], ["10-97", "En route"], ["10-99", "Officer down / emergency"], ["Code 1", "Routine, no lights"], ["Code 2", "Urgent, lights only"], ["Code 3", "Emergency, lights and siren"], ["Code 4", "Scene secure, no further help"]];
+function quickRef_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  const s = getConfig_().settings || {};
+  return { ok: true, penal: penalCode_(), tenCodes: Array.isArray(s.tenCodes) && s.tenCodes.length ? s.tenCodes : TEN_CODES_ };
+}
+const NOTICE_SHEET_ = "Notices", NOTICE_HEAD_ = ["ID", "Posted", "From", "Type", "Title", "Details", "Image", "Expires", "Closed"];
+function noticeSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(NOTICE_SHEET_);
+  if (!sh) { sh = ss.insertSheet(NOTICE_SHEET_); sh.appendRow(NOTICE_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, NOTICE_HEAD_.length).setFontWeight("bold"); }
+  return sh;
+}
+function noticesActive_() {
+  const sh = noticeSheet_(), n = sh.getLastRow(); if (n < 2) return [];
+  const now = Date.now();
+  return sh.getRange(2, 1, n - 1, 9).getValues().map((r, i) => ({ row: i + 2, id: str_(r[0]), at: isDate_(r[1]) ? r[1].getTime() : 0, from: str_(r[2]), type: str_(r[3]), title: str_(r[4]), details: str_(r[5]), image: str_(r[6]),
+    expires: isDate_(r[7]) ? r[7].getTime() : 0, closed: r[8] === true || str_(r[8]).toUpperCase() === "TRUE" }))
+    .filter(x => x.id && !x.closed && (!x.expires || x.expires > now)).reverse().slice(0, 20);
+}
+function mdtNotice_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  const prof = acctProfile_(acct);
+  if (LEVELS_.indexOf(prof.level) < LEVELS_.indexOf("leader")) return { ok: false, error: "Division leaders and command staff post BOLOs and notices." };
+  if (d.action === "mdtNoticeClose") return withLock_(() => { const x = noticesActive_().find(n => n.id === str_(d.id)); if (x) noticeSheet_().getRange(x.row, 9).setValue(true); return { ok: true }; });
+  const type = ["BOLO", "Wanted", "Notice"].indexOf(str_(d.type)) !== -1 ? str_(d.type) : "Notice", title = clip_(str_(d.title), 120), details = clip_(str_(d.details), 2000);
+  const img = /^https:\/\/\S+$/.test(str_(d.image)) ? clip_(str_(d.image), 500) : "", days = Math.min(30, Math.max(1, Number(d.days) || 7));
+  if (!title) return { ok: false, error: "Give it a title." };
+  const from = ((prof.title || "") + " " + voiceLast_(prof.name || "")).trim() + (prof.callsign ? " (" + prof.callsign + ")" : "");
+  withLock_(() => { noticeSheet_().appendRow([Utilities.getUuid().slice(0, 8), new Date(), cellSafe_(from), type, cellSafe_(title), cellSafe_(details), img, new Date(Date.now() + days * 864e5), false]); return { ok: true }; });
   return { ok: true };
 }
 
@@ -2887,6 +2960,9 @@ function handleAdmin_(d) {
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
+  if (a === "recordsSearch") return recordsSearch_(d);
+  if (a === "quickRef") return quickRef_(d);
+  if (a === "mdtNoticePost" || a === "mdtNoticeClose") return mdtNotice_(d);
 
   if (d.session && /^div(View|Report|Grade)$/.test(a)) return divOfficer_(d);
 
