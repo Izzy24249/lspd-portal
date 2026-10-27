@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0b0f16">
+<title>Sign on · LSPD MDT</title>
+<link rel="icon" href="img/lspd-badge.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0b0f16;--steel:#121925;--steel2:#18212f;--hair:rgba(160,184,220,.13);--hair2:rgba(160,184,220,.22);
+  --tx:#dfe6f2;--mute:#8592a8;--dim:#5d6a80;--blue:#3f7fff;--amber:#f0b43c;--green:#3ad18a;--red:#ff5a5f;--disc:#5865f2}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--ink);color:var(--tx);font:14px/1.5 Inter,system-ui,sans-serif;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-items:center;min-height:100vh;padding:24px 16px;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(640px 460px at 50% 40%,rgba(63,127,255,.15),transparent 70%);pointer-events:none}
+.crt{position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px);z-index:3}
+.boot{width:100%;max-width:540px;min-width:0;position:relative;z-index:1}
+.top{display:flex;align-items:center;gap:16px;margin-bottom:22px}
+.top img{width:70px;height:70px;object-fit:contain;filter:drop-shadow(0 0 18px rgba(63,127,255,.45))}
+.top b{display:block;font:700 30px/1 "Barlow Condensed",sans-serif;letter-spacing:.1em}
+.top b i{font-style:normal;color:var(--blue)}
+.top small{display:block;margin-top:6px;font:600 12px "Barlow Condensed",sans-serif;letter-spacing:.32em;color:var(--mute)}
+.clip{clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%)}
+.term{border:1px solid var(--hair2);background:rgba(8,12,19,.85);padding:14px 16px;font:12px/1.8 "JetBrains Mono",monospace;color:#b9c6dc;min-height:118px}
+.term div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.term .t{color:var(--dim);margin-right:8px}
+.term .ok{color:var(--green)} .term .w{color:var(--amber)} .term .x{color:var(--red)}
+.term .cur::after{content:"█";color:var(--blue);margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.prog{display:flex;align-items:center;gap:12px;margin-top:12px}
+.prog div{flex:1;height:3px;background:rgba(255,255,255,.08)}
+.prog i{display:block;height:100%;width:0;background:var(--blue);box-shadow:0 0 12px var(--blue);transition:width .35s}
+.prog span{font:600 11.5px "JetBrains Mono",monospace;color:var(--mute);width:38px;text-align:right}
+.card{margin-top:16px;border:1px solid var(--hair2);background:linear-gradient(180deg,var(--steel2),var(--steel));padding:20px 22px 22px;animation:rise .35s ease-out}
+.card[hidden]{display:none}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+.card h2{font:700 20px "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase}
+.card p.sub{color:var(--mute);font-size:13px;margin:4px 0 18px}
+.who{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--hair);background:rgba(0,0,0,.2);margin-bottom:18px}
+.who .cs{font:600 13px "JetBrains Mono",monospace;color:#cfe0ff;padding:3px 8px;border:1px solid rgba(63,127,255,.45);background:rgba(63,127,255,.12)}
+.who b{font-weight:600}
+.who small{display:block;color:var(--mute);font-size:12px}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:50px;border:0;cursor:pointer;font:700 16px "Barlow Condensed",sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#fff;background:var(--blue);clip-path:polygon(0 0,100% 0,100% 70%,96% 100%,0 100%);transition:filter .15s}
+.btn:hover{filter:brightness(1.12)} .btn:disabled{filter:grayscale(.6) brightness(.7);cursor:wait}
+.btn.disc{background:var(--disc)}
+.btn svg{width:22px;height:22px;fill:currentColor}
+.msg{margin-top:12px;padding:9px 12px;font-size:13px;border-left:3px solid var(--red);background:rgba(255,90,95,.08);color:#ffd0d1}
+.msg.info{border-color:var(--amber);background:rgba(240,180,60,.08);color:#f6e2b6}
+.msg[hidden]{display:none}
+.links{display:flex;justify-content:space-between;gap:12px;margin-top:14px;font-size:12.5px;color:var(--mute);flex-wrap:wrap}
+.links a{color:var(--mute);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.links a:hover{color:var(--tx)}
+.steps{display:flex;gap:6px;margin-bottom:16px}
+.steps span{flex:1;height:3px;background:rgba(255,255,255,.1)} .steps span.on{background:var(--blue)}
+/* PIN pad */
+.dots{display:flex;justify-content:center;gap:16px;margin:4px 0 18px}
+.dots i{width:16px;height:16px;border:2px solid var(--hair2);transform:rotate(45deg);transition:.12s}
+.dots i.on{background:var(--blue);border-color:var(--blue);box-shadow:0 0 10px rgba(63,127,255,.6)}
+.dots.bad{animation:shake .35s} .dots.bad i{border-color:var(--red)}
+.dots.good i{background:var(--green);border-color:var(--green);box-shadow:0 0 10px rgba(58,209,138,.6)}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:300px;margin:0 auto}
+.pad button{height:56px;border:1px solid var(--hair2);background:#0d131d;color:var(--tx);font:600 22px "JetBrains Mono",monospace;cursor:pointer;transition:background .1s,border-color .1s}
+.pad button:hover{border-color:rgba(63,127,255,.5)}
+.pad button:active,.pad button.hit{background:rgba(63,127,255,.22);border-color:var(--blue)}
+.pad button.fn{font:700 12px "Barlow Condensed",sans-serif;letter-spacing:.16em;color:var(--mute)}
+.pad.busy{opacity:.5;pointer-events:none}
+.ok-big{display:flex;align-items:center;gap:14px}
+.ok-big i{width:44px;height:44px;display:grid;place-items:center;border:2px solid var(--green);color:var(--green);font:700 22px Inter;font-style:normal;flex:none}
+.foot{margin-top:16px;display:flex;justify-content:space-between;font:600 11px "Barlow Condensed",sans-serif;letter-spacing:.2em;color:var(--dim)}
+.skip{position:fixed;right:18px;bottom:16px;z-index:4;font:700 12px "Barlow Condensed",sans-serif;letter-spacing:.2em;color:var(--mute);border:1px solid var(--hair2);background:rgba(11,15,22,.8);padding:8px 14px;cursor:pointer}
+.skip[hidden]{display:none}
+body.is-demo{padding-top:52px}
+.demo{position:fixed;left:0;right:0;top:0;z-index:5;text-align:center;padding:5px;font:700 11px "Barlow Condensed",sans-serif;letter-spacing:.2em;background:var(--amber);color:#1a1200}
+@media(max-width:480px){.top img{width:56px;height:56px}.top b{font-size:25px}.card{padding:18px 16px 18px}.term{font-size:11px}.pad button{height:60px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="crt"></div>
+<div class="boot">
+  <div class="top"><img src="img/lspd-badge.png" alt=""><div><b>LSPD <i>::</i> MDT</b><small>MOBILE DATA TERMINAL</small></div></div>
+  <div class="term clip" id="term" aria-live="polite"></div>
+  <div class="prog"><div><i id="bar"></i></div><span id="pct">0%</span></div>
+  <div class="card clip" id="card" hidden></div>
+  <div class="foot"><span>MISSION ROW · LOS SANTOS</span><span id="watch"></span></div>
+</div>
+<button class="skip" id="skip" type="button">SKIP ▸</button>
+
+<script src="forms.js?v=202610200937"></script>
+<script>
+(function () {
+  "use strict";
+  const DEMO = /[?&]demo=1\b/.test(location.search);
+  const P = DEMO ? "demo_" : "";
+  const K = { dev: P + "lspd_dev", sess: P + "lspd_sess", prof: P + "lspd_prof" };
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const store = {
+    get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+    set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} },
+    json(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } }
+  };
+  const sess = {
+    get(k) { try { return sessionStorage.getItem(k) || ""; } catch (e) { return ""; } },
+    set(k, v) { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch (e) {} }
+  };
+  const params = new URLSearchParams(location.search);
+
+  // where to go after signing on: only pages on this site
+  function safeNext(v) { v = String(v || ""); return /^[A-Za-z0-9_\-\/]+(\.html)?([?#][^\s]*)?$/.test(v) && !/^\/\//.test(v) ? v : ""; }
+  if (safeNext(params.get("next"))) sess.set("lspd_next", safeNext(params.get("next")));
+  const NEXT = () => sess.get("lspd_next") || "index.html";
+
+  // ---------- backend ----------
+  async function api(body) {
+    if (DEMO) return demoApi(body);
+    try { return await Portal.post(body); }
+    catch (e) { return { ok: false, error: "Couldn't reach the LSPD server. Check your connection and try again.", net: true }; }
+  }
+  function demoApi(b) {
+    const wait = v => new Promise(r => setTimeout(() => r(v), 450));
+    const prof = { callsign: "L-104", name: "F. Duzen", rank: "Sergeant", level: "officer" };
+    if (b.action === "acctDiscordUrl") return wait({ ok: true, url: location.pathname + "?demo=1&code=demo&state=demo" });
+    if (b.action === "acctDiscord") return wait({ ok: true, device: "demo-device", hasPin: !!sess.get("demo_pin"), profile: prof });
+    if (b.action === "acctSetPin") { sess.set("demo_pin", b.pin); return wait({ ok: true, session: "demo-session", profile: prof }); }
+    if (b.action === "acctPin") return wait(b.pin === sess.get("demo_pin") ? { ok: true, session: "demo-session", profile: prof } : { ok: false, error: "Wrong PIN." });
+    if (b.action === "acctMe") return wait({ ok: false, error: "AUTH" });
+    return wait({ ok: false, error: "Unknown action." });
+  }
+
+  // ---------- boot log ----------
+  const term = $("term"), card = $("card");
+  let skipping = false, pct = 0;
+  const pad2 = n => String(n).padStart(2, "0");
+  const stamp = () => { const d = new Date(); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds()); };
+  const sleep = ms => skipping ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
+  function progress(n) { pct = Math.max(pct, n); $("bar").style.width = pct + "%"; $("pct").textContent = pct + "%"; }
+  function line(text) {
+    term.querySelectorAll(".cur").forEach(x => x.classList.remove("cur"));
+    const el = document.createElement("div");
+    el.innerHTML = '<span class="t">' + stamp() + "</span>" + text;
+    el.classList.add("cur");
+    term.appendChild(el);
+    while (term.children.length > 6) term.removeChild(term.firstChild);
+    return { done(tag, cls) { el.classList.remove("cur"); el.insertAdjacentHTML("beforeend", ' <span class="' + (cls || "ok") + '">' + tag + "</span>"); } };
+  }
+  const hr = new Date().getHours();
+  const WATCH = hr >= 6 && hr < 14 ? "DAY WATCH" : hr >= 14 && hr < 22 ? "SWING WATCH" : "NIGHT WATCH";
+  $("watch").textContent = WATCH;
+  const seen = sess.get("lspd_booted");
+  $("skip").onclick = () => { skipping = true; $("skip").hidden = true; };
+
+  async function bootIntro() {
+    if (seen) { skipping = true; $("skip").hidden = true; }
+    let l = line("Establishing secure uplink to Mission Row ...."); await sleep(520); l.done("OK"); progress(25);
+    l = line("Verifying terminal certificate ..............."); await sleep(380); l.done("OK"); progress(45);
+    sess.set("lspd_booted", "1");
+  }
+
+  // ---------- screens ----------
+  function show(html) { card.hidden = false; card.innerHTML = html; card.style.animation = "none"; void card.offsetWidth; card.style.animation = ""; }
+  function whoHTML(p) {
+    if (!p || !(p.callsign || p.name)) return "";
+    return '<div class="who">' + (p.callsign ? '<span class="cs">' + esc(p.callsign) + "</span>" : "") + "<div><b>" + esc(p.name || "Officer") + "</b>" + (p.rank ? "<small>" + esc(p.rank) + "</small>" : "") + "</div></div>";
+  }
+  const DISCORD_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.6 19.6 0 0 0-4.9 1.5C.6 9.1-.3 13.7.2 18.2a19.8 19.8 0 0 0 6 3l1.3-2a12.7 12.7 0 0 1-2-1l.5-.4a14 14 0 0 0 12 0l.5.4-2 1 1.3 2a19.7 19.7 0 0 0 6-3c.5-5.2-.9-9.8-3.5-13.8ZM8 15.4c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.6 8 10.6s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>';
+
+  function screenDiscord(msg, info) {
+    progress(100);
+    show('<div class="steps"><span class="on"></span><span></span></div>' +
+      "<h2>Sign on to the MDT</h2><p class=\"sub\">First time on this device? Confirm who you are with Discord. You only do this once per device. After that it's just your 4-digit PIN.</p>" +
+      '<button class="btn disc" id="goDisc" type="button">' + DISCORD_SVG + "Sign in with Discord</button>" +
+      '<div class="msg' + (info ? " info" : "") + '" id="msg"' + (msg ? "" : " hidden") + ">" + esc(msg || "") + "</div>" +
+      '<div class="links"><span>Your Discord ID must be on the LSPD roster.</span><a href="index.html">Back to the portal</a></div>');
+    $("goDisc").onclick = async () => {
+      const b = $("goDisc"); b.disabled = true; b.lastChild.textContent = "Opening Discord…";
+      const r = await api({ action: "acctDiscordUrl" });
+      if (r.ok && r.url) { location.href = r.url; return; }
+      b.disabled = false; b.lastChild.textContent = "Sign in with Discord";
+      const m = $("msg"); m.hidden = false; m.className = "msg"; m.textContent = r.error || "Couldn't start the sign-in.";
+    };
+  }
+
+  // a 4-digit pad; calls onDone(pin, api) where api = { bad(msg), good(), reset() }
+  let activePad = null;
+  function makePad(host, onDone) {
+    host.innerHTML = '<div class="dots" id="dots"><i></i><i></i><i></i><i></i></div><div class="pad" id="pad">' +
+      [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => '<button type="button" data-k="' + n + '">' + n + "</button>").join("") +
+      '<button type="button" class="fn" data-k="c">CLEAR</button><button type="button" data-k="0">0</button><button type="button" class="fn" data-k="b">⌫ BACK</button></div>';
+    let pin = "", busy = false;
+    const dots = host.querySelector("#dots"), pad = host.querySelector("#pad");
+    const paint = () => dots.querySelectorAll("i").forEach((d, i) => d.classList.toggle("on", i < pin.length));
+    const ctl = {
+      bad() { dots.classList.remove("bad"); void dots.offsetWidth; dots.classList.add("bad"); pin = ""; paint(); busy = false; pad.classList.remove("busy"); if (navigator.vibrate) try { navigator.vibrate(120); } catch (e) {} },
+      good() { dots.classList.add("good"); },
+      reset() { pin = ""; paint(); busy = false; pad.classList.remove("busy"); dots.classList.remove("bad", "good"); }
+    };
+    function press(k) {
+      if (busy) return;
+      dots.classList.remove("bad");
+      if (k === "c") pin = ""; else if (k === "b") pin = pin.slice(0, -1); else if (pin.length < 4) pin += k;
+      paint();
+      if (pin.length === 4) { busy = true; pad.classList.add("busy"); const p = pin; setTimeout(() => onDone(p, ctl), 120); }
+    }
+    pad.addEventListener("click", e => { const b = e.target.closest("button"); if (b) press(b.dataset.k); });
+    activePad = (key) => { const b = pad.querySelector('[data-k="' + key + '"]'); if (b) { b.classList.add("hit"); setTimeout(() => b.classList.remove("hit"), 110); } press(key); };
+    return ctl;
+  }
+  document.addEventListener("keydown", e => {
+    if (!activePad || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^\d$/.test(e.key)) { activePad(e.key); e.preventDefault(); }
+    else if (e.key === "Backspace") { activePad("b"); e.preventDefault(); }
+    else if (e.key === "Escape" || e.key === "Delete") { activePad("c"); e.preventDefault(); }
+  });
+
+  function weakPin(p) { return /^(\d)\1{3}$/.test(p) || /^(\d\d)\1$/.test(p) || "0123456789012".indexOf(p) !== -1 || "9876543210987".indexOf(p) !== -1; }
+
+  function screenCreate(profile) {
+    progress(100);
+    let first = "";
+    show('<div class="steps"><span class="on"></span><span class="on"></span></div>' + whoHTML(profile) +
+      '<h2 id="ct">Create your PIN</h2><p class="sub" id="cs">Pick 4 digits you\'ll remember. You\'ll use this PIN to sign on from now on. Avoid easy ones like 1111, 1212 or 1234.</p>' +
+      '<div id="padHost"></div><div class="msg" id="msg" hidden></div>' +
+      '<div class="links"><span>Command staff can reset it if you forget.</span></div>');
+    const msg = $("msg");
+    const ctl = makePad($("padHost"), async (pin, c) => {
+      msg.hidden = true;
+      if (!first) {
+        if (weakPin(pin)) { msg.hidden = false; msg.textContent = "That PIN is too easy to guess. Pick a less obvious one."; c.bad(); return; }
+        first = pin; $("ct").textContent = "Confirm your PIN"; $("cs").textContent = "Enter the same 4 digits again."; c.reset(); return;
+      }
+      if (pin !== first) { first = ""; $("ct").textContent = "Create your PIN"; $("cs").textContent = "Those didn't match. Start again: pick 4 digits."; c.bad(); return; }
+      const r = await api({ action: "acctSetPin", device: store.get(K.dev), pin: pin });
+      if (r.ok) { c.good(); return finish(r); }
+      msg.hidden = false; msg.textContent = r.error || "Couldn't save your PIN.";
+      if (/Discord again/i.test(r.error || "")) { store.set(K.dev, ""); return setTimeout(() => screenDiscord(r.error), 900); }
+      first = ""; $("ct").textContent = "Create your PIN"; c.bad();
+    });
+    return ctl;
+  }
+
+  function screenPin(profile, note) {
+    progress(100);
+    show(whoHTML(profile) + '<h2>Enter your PIN</h2><p class="sub">Welcome back' + (profile && profile.name ? ", " + esc(lastName(profile.name)) : "") + '. Enter your 4-digit PIN to sign on.</p>' +
+      '<div id="padHost"></div><div class="msg" id="msg"' + (note ? "" : " hidden") + ">" + esc(note || "") + "</div>" +
+      '<div class="links"><a id="notMe">Not you? Use a different Discord account</a><span>Forgot it? Ask command staff to reset your PIN.</span></div>');
+    const msg = $("msg");
+    makePad($("padHost"), async (pin, c) => {
+      msg.hidden = true;
+      const r = await api({ action: "acctPin", device: store.get(K.dev), pin: pin });
+      if (r.ok) { c.good(); return finish(r); }
+      if (r.needPin) return screenCreate(profile);
+      msg.hidden = false; msg.textContent = r.error || "Couldn't sign on.";
+      if (/Discord again/i.test(r.error || "")) { store.set(K.dev, ""); store.set(K.prof, ""); return setTimeout(() => screenDiscord(r.error), 900); }
+      c.bad();
+    });
+    $("notMe").onclick = () => { store.set(K.dev, ""); store.set(K.sess, ""); store.set(K.prof, ""); activePad = null; screenDiscord(); };
+  }
+
+  function lastName(n) { const parts = String(n).trim().split(/\s+/); return parts[parts.length - 1].replace(/^[A-Z]\.$/, "") || parts[0]; }
+  function greet() { const h = new Date().getHours(); return h < 5 ? "Evening" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening"; }
+
+  async function finish(r) {
+    activePad = null;
+    store.set(K.sess, r.session || ""); if (r.profile) store.set(K.prof, JSON.stringify(r.profile));
+    const p = r.profile || store.json(K.prof) || {};
+    const l = line("Signing on " + esc(p.callsign || "unit") + " ......................"); progress(100);
+    await new Promise(res => setTimeout(res, 350)); l.done("10-8");
+    show('<div class="ok-big"><i>✓</i><div><h2>' + esc(greet()) + ", " + esc(p.name ? lastName(p.name) : "Officer") + '.</h2><p class="sub" style="margin:2px 0 0">Signed on' + (p.callsign ? " as <b>" + esc(p.callsign) + "</b>" : "") + ". Opening the terminal…</p></div></div>");
+    const to = NEXT(); sess.set("lspd_next", "");
+    setTimeout(() => { if (DEMO) { show('<div class="ok-big"><i>✓</i><div><h2>Demo complete</h2><p class="sub" style="margin:2px 0 0">On the live site this now opens the portal. <a href="?demo=1" style="color:var(--blue)">Run the demo again</a> (your demo PIN is remembered until you close the tab).</p></div></div>'); return; } location.replace(to); }, 1300);
+  }
+
+  function screenError(msg) {
+    progress(100);
+    show('<h2>Can\'t reach the terminal</h2><p class="sub">' + esc(msg) + '</p><button class="btn" type="button" id="retry">Try again</button>');
+    $("retry").onclick = () => location.reload();
+  }
+
+  // ---------- flow ----------
+  async function run() {
+    if (params.get("out") === "1") { store.set(K.sess, ""); }       // sign out on this device (keeps the device, so next time is just the PIN)
+    const intro = bootIntro();
+    const code = params.get("code"), state = params.get("state"), err = params.get("error");
+    if (code || err) history.replaceState(null, "", location.pathname + (DEMO ? "?demo=1" : ""));
+
+    if (err) { await intro; line("Discord sign-in cancelled").done("ABORT", "w"); return screenDiscord("Discord sign-in was cancelled. Try again when you're ready.", true); }
+
+    if (code) {
+      await intro;
+      const l = line("Confirming Discord identity ................");
+      const r = await api({ action: "acctDiscord", code: code, state: state });
+      if (!r.ok) { l.done("DENIED", "x"); return r.net ? screenError(r.error) : screenDiscord(r.error); }
+      l.done("OK"); progress(70);
+      store.set(K.dev, r.device); if (r.profile) store.set(K.prof, JSON.stringify(r.profile));
+      const l2 = line("Matching LSPD roster ......................."); await sleep(300); l2.done(r.profile && r.profile.callsign ? r.profile.callsign : "OK"); progress(90);
+      return r.hasPin ? screenPin(r.profile) : screenCreate(r.profile);
+    }
+
+    const session = store.get(K.sess), device = store.get(K.dev), profile = store.json(K.prof);
+    if (session) {
+      await intro;
+      const l = line("Restoring session ..........................");
+      const r = await api({ action: "acctMe", session: session });
+      if (r.ok) { l.done("OK"); return finish({ session: session, profile: r.profile }); }
+      if (r.net) { l.done("OFFLINE", "x"); return screenError(r.error); }
+      l.done("EXPIRED", "w"); store.set(K.sess, "");
+    }
+    await intro;
+    if (device) { const l = line("Device recognised, PIN required ............"); await sleep(250); l.done("LOCKED", "w"); return screenPin(profile); }
+    const l = line("Unknown device, identity check required ....."); await sleep(250); l.done("STANDBY", "w");
+    screenDiscord();
+  }
+
+  if (DEMO) document.body.classList.add("is-demo");
+  if (DEMO) document.body.insertAdjacentHTML("afterbegin", '<div class="demo">DEMO MODE · NOTHING IS SAVED · TRY ANY PIN, THEN SIGN ON WITH IT</div>');
+  run().then(() => { $("skip").hidden = true; }).catch(e => screenError(e && e.message ? e.message : "Something went wrong."));
+})();
+</script>
+</body>
+</html>

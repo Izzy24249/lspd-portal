@@ -1,0 +1,5 @@
+# Cloudflare Pages short links: lspdisthebest.net/<name>
+/sop      https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0  302
+/signin   /signon  302
+/login    /signon  302
+/mdt      /signon  302
