@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 48;
+const BACKEND_VERSION = 49;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -266,6 +266,7 @@ function getRosterTab_(tabId, fresh, cols, cacheOnly, noExclude) {
         if (shownName !== p.name) out.withCallsign++;
         const person = { name: clip_(shownName, 80), id: p.id, extra: clip_(p.extra, 80) };
         if (p.more) person.more = p.more;                                  // extra columns a form asked for (e.g. K9 name in J)
+        if (p.sec) person.sec = p.sec;                                     // the roster's section heading above them (e.g. HIGH COMMAND)
         out.people.push(person);
       });
     }
@@ -432,14 +433,14 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
   const head = shown[hr].map(h => String(h).toLowerCase());
   const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
   const statusCols = head.map((h, i) => /status|state|active|standing/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
-  let inOutSection = false;
+  let inOutSection = false, section = "";
   const checkHidden = shown.length - hr <= 400;      // per-row hidden checks are slow; skip them on very long tabs
   for (let i = hr + 1; i < shown.length; i++) {
     const filled = shown[i].filter(c => str_(c)).length;
     if (filled === 1 && !(idCol >= 0 && str_(shown[i][idCol]))) {           // section heading row
       const t = str_(shown[i].find(c => str_(c)));
       const heading = isOut(t) || (/[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t)) || /member|roster|division|section|command|staff|personnel|active/i.test(t);
-      if (heading) { inOutSection = isOut(t); continue; }
+      if (heading) { inOutSection = isOut(t); if (!inOutSection) section = clip_(t, 60); continue; }
     }
     if (!filled) continue;
     const why = inOutSection || statusCols.some(c => isOut(shown[i][c])) ||
@@ -456,7 +457,7 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
     } else if (id && !/^\d{15,21}$/.test(id)) id = "";
     const more = {};
     (opts.moreCols || []).forEach(L => { const c = colIndex_(L), v = c >= 0 && c < shown[i].length ? str_(shown[i][c]) : ""; if (v) more[L] = clip_(v, 60); });
-    rows.push({ more: Object.keys(more).length ? more : undefined, name: name, id: id, cs: cs, extra: extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), call: callKey_(cs || name), nm: nameKey_(name) });
+    rows.push({ more: Object.keys(more).length ? more : undefined, name: name, id: id, cs: cs, extra: extraCols.map(c => str_(shown[i][c])).filter(Boolean).join(" · "), call: callKey_(cs || name), nm: nameKey_(name), sec: section || undefined });
     if (!id) info.noId++;
   }
   return rows;
@@ -1927,8 +1928,16 @@ function cleanDivisions_(list, forms) {
     return { id: id, name: name, tagline: clip_(str_(d.tagline), 80), color: /^#[0-9a-f]{6}$/i.test(str_(d.color)) ? str_(d.color) : "#2f7bff", logoUrl: logo,
       rosterTabId: d.rosterTabId === "" || d.rosterTabId == null ? null : Number(d.rosterTabId), rosterTabName: clip_(str_(d.rosterTabName), 100),
       forms: fl, quota: Math.max(0, Math.min(50, parseInt(d.quota, 10) || 0)), quotaPer: d.quotaPer === "month" ? "month" : "week", quotaAssists: d.quotaAssists !== false,
-      warnDays: n(d.warnDays), inactiveDays: n(d.inactiveDays), pingTagged: !!d.pingTagged };
+      warnDays: n(d.warnDays), inactiveDays: n(d.inactiveDays), pingTagged: !!d.pingTagged,
+      exempt: clip_(str_(d.exempt), 300) };
   });
+}
+// "Command, High Command, L-101" -> does any of these words appear in the officer's roster section, rank, callsign or name?
+function exemptHit_(rule, fields) {
+  const words = str_(rule).split(",").map(w => w.trim().toLowerCase()).filter(Boolean); if (!words.length) return "";
+  const hay = fields.map(x => str_(x).toLowerCase());
+  const hit = words.find(w => hay.some(h => h && (callKey_(w) && callKey_(h) ? callKey_(w) === callKey_(h) : new RegExp("(^|[^a-z])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z]|$)").test(h))));
+  return hit ? fields.find(x => str_(x).toLowerCase().indexOf(hit) !== -1) || hit : "";
 }
 function divList_() { return ((getConfig_().settings || {}).divisions || []).map(x => ({ id: x.id, name: x.name, color: x.color, logoUrl: x.logoUrl, tagline: x.tagline })); }
 function actRows_() {
@@ -1954,7 +1963,8 @@ function divView_(d, me) {
     try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [], false, false); rosterError = t.error || "";
       officers = (t.people || []).map(p => { const cs = p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : (callKey_(p.name) ? (/\b[A-Za-z]{1,4}\s*-?\s*\d{1,5}\b/.exec(p.name) || [""])[0] : "");
         const nm = p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name.replace(cs, "").trim() || p.name;
-        return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: cs, id: p.id || "" }; });
+        return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: cs, id: p.id || "", section: p.sec || "", rank: p.extra || "",
+          exempt: exemptHit_(dv.exempt, [p.sec, p.extra, cs, nm]) }; });
     } catch (e) { rosterError = errMsg_(e); }
   } else rosterError = "No roster tab picked for this division yet (admin → Division Command).";
   const find = p => (p.i && officers.find(o => o.id === p.i)) || (callKey_(p.n) && officers.find(o => o.callsign && callKey_(o.callsign) === callKey_(p.n))) || (nameKey_(p.n) && officers.find(o => nameKey_(o.name) === nameKey_(p.n))) || null;

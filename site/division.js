@@ -4,7 +4,7 @@
   "use strict";
   const $ = id => document.getElementById(id), esc = s => Portal.esc(s);
   const TK = "lspd_admin_token";
-  let TOKEN = "", ME = null, DATA = null, DIV = "", PERIOD = "week", TAB = "overview", SEEN = null, OFF_Q = "", OFF_SORT = "status", REP_F = { state: "all", form: "", q: "" }, REP_N = 40, LAST = 0;
+  let TOKEN = "", ME = null, DATA = null, DIV = "", PERIOD = "week", TAB = "overview", SEEN = null, OFF_Q = "", OFF_SORT = "roster", REP_F = { state: "all", form: "", q: "" }, REP_N = 40, LAST = 0;
   try { TOKEN = localStorage.getItem(TK) || sessionStorage.getItem(TK) || ""; DIV = localStorage.getItem("dc:div") || ""; PERIOD = localStorage.getItem("dc:period") || "week"; } catch (e) {}
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
@@ -89,7 +89,7 @@
   function stats() {
     const dv = DATA.division, from = periodStart(PERIOD), qFrom = periodStart(dv.quotaPer === "month" ? "month" : "week");
     const inP = DATA.reports.filter(r => r.at >= from);
-    const O = DATA.officers.map(o => {
+    const O = DATA.officers.map((o, idx) => {
       const filedAll = DATA.reports.filter(r => r.author && r.author.key === o.key), assistAll = DATA.reports.filter(r => r.tagged.some(t => t.key === o.key));
       const filed = filedAll.filter(r => r.at >= from), assists = assistAll.filter(r => r.at >= from);
       const last = Math.max(0, ...filedAll.map(r => r.at), ...assistAll.map(r => r.at));
@@ -98,9 +98,10 @@
       if (days == null) status = dv.inactiveDays || dv.warnDays ? "never" : "quiet";
       else if (dv.inactiveDays && days >= dv.inactiveDays) status = "bad";
       else if (dv.warnDays && days >= dv.warnDays) status = "warn";
+      if (o.exempt) status = "exempt";          // Command / High Command etc.: no report requirement, activity still shown
       const qCount = filedAll.filter(r => r.at >= qFrom).length + (dv.quotaAssists ? assistAll.filter(r => r.at >= qFrom).length : 0);
-      return Object.assign({}, o, { filedAll, assistAll, filed, assists, last, days, status, score: filed.length + assists.length * 0.5, grade: avgGrade(filed), gradeAll: avgGrade(filedAll),
-        quota: dv.quota ? { n: qCount, need: dv.quota, met: qCount >= dv.quota } : null });
+      return Object.assign({}, o, { idx, filedAll, assistAll, filed, assists, last, days, status, score: filed.length + assists.length * 0.5, grade: avgGrade(filed), gradeAll: avgGrade(filedAll),
+        quota: dv.quota && !o.exempt ? { n: qCount, need: dv.quota, met: qCount >= dv.quota } : null, qn: qCount });
     });
     const active = O.filter(o => o.filed.length || o.assists.length).length;
     const assists = inP.reduce((n, r) => n + r.tagged.filter(t => t.key).length, 0);
@@ -175,9 +176,12 @@
 
   function statusPill(o) {
     const L = { ok: "Active", warn: "Slowing down", bad: "Inactive", never: "No activity yet", quiet: "No activity yet" };
+    if (o.status === "exempt") return `<span class="st st-exempt" title="No report requirement (${esc(o.exempt)})"><i></i>${esc(titleCase(o.exempt))} · no quota${o.days != null ? ` · last ${o.days === 0 ? "today" : o.days + "d"}` : ""}</span>`;
     return `<span class="st st-${o.status}"><i></i>${L[o.status]}${o.days != null ? ` · ${o.days === 0 ? "today" : o.days + "d"}` : ""}</span>`;
   }
+  const titleCase = t => String(t || "").toLowerCase().replace(/(^|[\s\-/])([a-z])/g, (m, a, b) => a + b.toUpperCase());
   function quotaBar(o) {
+    if (o.exempt && DATA.division.quota) return `<div class="qb ex"><span>Exempt · ${o.qn} this ${esc(DATA.division.quotaPer)}</span></div>`;
     if (!o.quota) return "";
     const f = Math.min(1, o.quota.n / o.quota.need);
     return `<div class="qb${o.quota.met ? " met" : ""}"><div><i style="width:${f * 100}%"></i></div><span>${o.quota.n}/${o.quota.need}</span></div>`;
@@ -187,7 +191,7 @@
     const feed = S.inP.slice(0, 20);
     const att = S.O.filter(o => o.status === "bad" || o.status === "never" || o.status === "warn").sort((a, b) => (b.days == null ? 1e9 : b.days) - (a.days == null ? 1e9 : a.days)).slice(0, 8);
     const top = S.O.filter(o => o.score).sort((a, b) => b.score - a.score || b.filed.length - a.filed.length).slice(0, 5);
-    const q = DATA.division.quota ? S.O.slice().sort((a, b) => (a.quota.n / a.quota.need) - (b.quota.n / b.quota.need)).slice(0, 8) : [];
+    const q = DATA.division.quota ? S.O.filter(o => o.quota).sort((a, b) => (a.quota.n / a.quota.need) - (b.quota.n / b.quota.need)).slice(0, 8) : [];
     $("view").innerHTML = `<div class="dc-ov">
       <section class="dc-panel"><header><h2><i class="pulse"></i>Live activity</h2><button class="dc-link" data-tab="reports">All reports →</button></header>
         <div class="feed">${feed.length ? cards(feed) : `<div class="dc-empty">No reports ${esc(PNAME[PERIOD])} yet.</div>`}</div></section>
@@ -202,15 +206,22 @@
   const fmtPts = n => (Math.round(n * 10) / 10).toString();
 
   function viewOfficers(S) {
-    const rank = { never: 0, bad: 1, warn: 2, quiet: 3, ok: 4 };
-    let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign).toLowerCase().includes(OFF_Q.toLowerCase()));
-    list.sort(OFF_SORT === "name" ? (a, b) => (a.callsign || a.name).localeCompare(b.callsign || b.name, undefined, { numeric: true }) : OFF_SORT === "activity" ? (a, b) => b.score - a.score : (a, b) => rank[a.status] - rank[b.status] || (b.days || 0) - (a.days || 0));
-    $("view").innerHTML = `<div class="dc-tools"><input type="search" id="offQ" placeholder="Search officers…" value="${esc(OFF_Q)}"><div class="dc-seg sm" id="offSort">${[["status", "Needs attention first"], ["activity", "Most active"], ["name", "Callsign"]].map(([k, l]) => `<button data-s="${k}" class="${OFF_SORT === k ? "on" : ""}">${l}</button>`).join("")}</div></div>
-      <div class="ogrid">${list.map(o => `<button type="button" class="oc s-${o.status}" data-off="${esc(o.key)}">
-        <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${esc(o.callsign || "—")}</small></span>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
+    const rank = { never: 0, bad: 1, warn: 2, quiet: 3, ok: 4, exempt: 5 };
+    let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign + " " + o.rank + " " + o.section).toLowerCase().includes(OFF_Q.toLowerCase()));
+    list.sort(OFF_SORT === "roster" ? (a, b) => a.idx - b.idx : OFF_SORT === "name" ? (a, b) => (a.callsign || a.name).localeCompare(b.callsign || b.name, undefined, { numeric: true }) : OFF_SORT === "activity" ? (a, b) => b.score - a.score : (a, b) => rank[a.status] - rank[b.status] || (b.days || 0) - (a.days || 0));
+    const card = o => `<button type="button" class="oc s-${o.status}" data-off="${esc(o.key)}">
+        <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${esc(o.callsign || "—")}${o.rank ? " · " + esc(o.rank) : ""}</small></span>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
         ${statusPill(o)}
         <div class="oc-n"><span><b>${o.filed.length}</b>filed</span><span><b>${o.assists.length}</b>assists</span><span><b>${fmtPts(o.score)}</b>points</span></div>
-        ${quotaBar(o)}</button>`).join("") || '<div class="dc-empty">No officers found on the division roster.</div>'}</div>`;
+        ${quotaBar(o)}</button>`;
+    // roster order: same order and section headings as the roster sheet
+    let body = "";
+    if (OFF_SORT === "roster" && list.some(o => o.section)) {
+      const groups = []; list.forEach(o => { const g = groups[groups.length - 1]; if (g && g.name === (o.section || "")) g.list.push(o); else groups.push({ name: o.section || "", list: [o] }); });
+      body = groups.map(g => `${g.name ? `<div class="og-h"><span>${esc(g.name)}</span><i></i><small>${g.list.length}</small></div>` : ""}<div class="ogrid">${g.list.map(card).join("")}</div>`).join("");
+    } else body = `<div class="ogrid">${list.map(card).join("")}</div>`;
+    $("view").innerHTML = `<div class="dc-tools"><input type="search" id="offQ" placeholder="Search officers…" value="${esc(OFF_Q)}"><div class="dc-seg sm" id="offSort">${[["roster", "Roster order"], ["status", "Needs attention first"], ["activity", "Most active"], ["name", "Callsign"]].map(([k, l]) => `<button data-s="${k}" class="${OFF_SORT === k ? "on" : ""}">${l}</button>`).join("")}</div></div>
+      ${list.length ? body : '<div class="dc-empty">No officers found on the division roster.</div>'}`;
     const q = $("offQ"); q.oninput = () => { OFF_Q = q.value; const pos = q.selectionStart; viewOfficers(S); const n = $("offQ"); n.focus(); n.setSelectionRange(pos, pos); };
     $("offSort").onclick = e => { const b = e.target.closest("[data-s]"); if (b) { OFF_SORT = b.dataset.s; viewOfficers(S); } };
   }

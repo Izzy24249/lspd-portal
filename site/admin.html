@@ -1579,7 +1579,7 @@ function pageDivisions(page) {
   const D = CFG.settings.divisions;
   page.append(head("Division Command", "Each division gets a command page (division.html) where its leader sees every report, who filed it, who was tagged, quotas, inactivity and a leaderboard, and can grade reports (the grade is posted on the report in Discord). Give leaders a Division leader account under Admins: they only see this page, never settings.",
     h("a", { class: "btn ghost sm", href: "division.html", target: "_blank", style: "text-decoration:none" }, "Open Division Command ↗"),
-    h("button", { class: "btn primary sm", onclick: () => { D.push({ id: "", name: "New division", tagline: "", color: "#2f7bff", logoUrl: "", rosterTabId: null, rosterTabName: "", forms: [], quota: 0, quotaPer: "week", quotaAssists: true, warnDays: 4, inactiveDays: 10, pingTagged: false }); changed(true); } }, "+ Add division")));
+    h("button", { class: "btn primary sm", onclick: () => { D.push({ id: "", name: "New division", tagline: "", color: "#2f7bff", logoUrl: "", rosterTabId: null, rosterTabName: "", forms: [], quota: 0, quotaPer: "week", quotaAssists: true, warnDays: 4, inactiveDays: 10, pingTagged: false, exempt: "High Command, Command" }); changed(true); } }, "+ Add division")));
   if (!D.length) { page.append(h("div", { class: "sec empty-note", text: "No divisions yet. Add one, pick its roster tab and the forms that count, then Save & publish." })); }
   const tabs = () => (ROSTER_TABS && ROSTER_TABS.tabs) || [];
   if (!ROSTER_TABS) api("rosterTabs", {}).then(r => { ROSTER_TABS = { book: r.book, tabs: r.tabs, url: (CFG.settings.roster || {}).url || "" }; if (TAB === "divisions") renderPage(true); }).catch(() => {});
@@ -1605,6 +1605,8 @@ function pageDivisions(page) {
         h("div", { class: "g2" }, field("Roster tab (the division's officers)", tabSel, ROSTER_TABS ? "Saved: " + (dv.rosterTabName || "—") : "Loading tabs…"), field("Logo (optional)", bind(dv, "logoUrl", { placeholder: "img/cid-logo.png" }), "A file in the site's img folder or an https:// link.")),
         h("div", {}, h("h4", { class: "div-h4", text: "Reports that count" }), h("div", { class: "div-forms" }, formRows)),
         h("h4", { class: "div-h4", text: "Accountability" }),
+        field("No reports required for (classification)", bind(dv, "exempt", { placeholder: "High Command, Command", max: 300 }),
+          "Comma-separated. Anyone whose roster section heading (like HIGH COMMAND above their rows), rank, callsign or name matches is exempt: no quota and no inactivity warnings, but their reports and assists still show and count on the leaderboard. Example: High Command, Command, L-101"),
         h("div", { class: "g3" },
           field("Quota (reports per officer)", bind(dv, "quota", { type: "number", set: v => Math.max(0, Math.min(50, Number(v) || 0)) }), "0 = no quota."),
           field("Quota period", bind(dv, "quotaPer", { type: "select", options: [["week", "Per week"], ["month", "Per month"]] })),
