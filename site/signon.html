@@ -304,7 +304,8 @@ body.is-demo{padding-top:52px}
   const hr = new Date().getHours();
   const WATCH = hr >= 6 && hr < 14 ? "DAY WATCH" : hr >= 14 && hr < 22 ? "SWING WATCH" : "NIGHT WATCH";
   $("watch").textContent = WATCH;
-  const seen = sess.get("lspd_booted");
+  // demo mode always replays the full boot (except right after the pretend Discord step); the live site plays it once per browser session
+  const seen = DEMO && !params.get("code") ? "" : sess.get("lspd_booted");
   $("skip").onclick = () => { skipping = true; $("skip").hidden = true; };
 
   function powerGate() {
