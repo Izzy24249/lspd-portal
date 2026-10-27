@@ -1,35 +1,33 @@
-# Uploads everything in /site to InfinityFree's htdocs folder on every push to main.
-# Only changed files are uploaded (the action keeps a small state file on the server).
+# The portal is now hosted on Cloudflare Pages (https://lspdisthebest.net), which builds
+# straight from this repo on every push (Build command: sh build.sh · Output directory: site).
 #
-# Required repo secrets (Settings > Secrets and variables > Actions > New repository secret):
-#   FTP_SERVER    e.g. ftpupload.net        (InfinityFree control panel > FTP Details > FTP Hostname)
-#   FTP_USERNAME  e.g. if0_12345678         (FTP Username)
-#   FTP_PASSWORD  your hosting account password (FTP Password, "Show")
+# This workflow only keeps the OLD InfinityFree address working: it uploads the small
+# infinityfree/ folder (a redirect) to htdocs, so old links land on the new site.
+# It runs when that folder changes, or by hand from the Actions tab.
+#
+# Repo secrets it uses (already set): FTP_SERVER, FTP_USERNAME, FTP_PASSWORD
 
-name: Deploy to InfinityFree
+name: Redirect old InfinityFree address
 
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/deploy.yml"]
-  workflow_dispatch: # lets you re-run it by hand from the Actions tab
+    paths: ["infinityfree/**", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
 
 concurrency:
   group: deploy
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  redirect:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Get the code
         uses: actions/checkout@v4
 
-      - name: Stamp file versions so browsers fetch the new files
-        run: sed -i -E "s/(portal\.css|forms\.js|templates\.js|cid\.js|cid\.css|division\.js|division\.css|casefile\.js)\?v=[0-9a-z]+/\1?v=${GITHUB_SHA::8}/g" site/index.html site/admin.html site/cid.html site/cid-command.html site/division.html site/myreports.html
-
-      - name: Upload site/ to htdocs over FTP
+      - name: Upload the redirect to htdocs over FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -37,6 +35,6 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftp
           port: 21
-          local-dir: ./site/
+          local-dir: ./infinityfree/
           server-dir: /htdocs/
           timeout: 120000

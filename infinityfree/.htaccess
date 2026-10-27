@@ -1,0 +1,4 @@
+# The portal moved to https://lspdisthebest.net (Cloudflare Pages).
+# Anyone opening the old InfinityFree address is sent to the same page on the new one.
+RewriteEngine On
+RewriteRule ^(.*)$ https://lspdisthebest.net/$1 [R=302,L]

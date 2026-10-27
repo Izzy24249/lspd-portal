@@ -846,7 +846,7 @@ function pageEditor(page) {
     field("Embed title", embedT), chipRow(embedT),
     field("Forum thread name", threadT, "Only used for forum-channel webhooks. Click a {field} to insert the officer's answer."), chipRow(threadT),
     h("div", { class: "g2" }, field("Embed colour", bind(form, "color", { type: "color" })), field("Sheet tab for submissions", bind(form, "archiveSheet", { placeholder: form.title }), "Created automatically on first submission.")),
-    field("Logo in the Discord post (optional https link)", bind(form, "discordThumb", { placeholder: "https://i.imgur.com/xxxxxxx.png" }), "Shown in the top-right corner of the post. Upload the logo to imgur.com, right-click the image → Copy image address, and paste it here. (Discord attachment links expire, and InfinityFree images usually won't load in Discord.)")));
+    field("Logo in the Discord post (optional https link)", bind(form, "discordThumb", { placeholder: "https://i.imgur.com/xxxxxxx.png" }), "Shown in the top-right corner of the post. Upload the logo to imgur.com, right-click the image → Copy image address, and paste it here. (Discord attachment links expire, so imgur is the safe choice.)")));
 
   // ---- tags ----
   const tagBody = [];
