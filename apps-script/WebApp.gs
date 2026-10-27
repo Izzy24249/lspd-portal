@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 59;
+const BACKEND_VERSION = 60;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2263,7 +2263,7 @@ function acctAdmin_(a, d, me) {
 // Clips live in the "Voice Clips" tab (small MP3s as text), with a cache in front.
 // =====================================================================
 const VOICE_SHEET_ = "Voice Clips", VOICE_MODELS_ = ["eleven_multilingual_v2", "eleven_flash_v2_5"];
-const VOICE_GREET_ = { morning: "Good morning,", afternoon: "Good afternoon,", evening: "Good evening," };
+const VOICE_GREET_ = { morning: "Good morning.", afternoon: "Good afternoon.", evening: "Good evening." };   // full sentences: the model finishes every word
 const VOICE_CLOSE_ = "You're signed on.";
 const VOICE_ERR_ = { v: "" };
 function voiceCfg_() {
@@ -2293,15 +2293,15 @@ function voiceNameText_(acct, person) {
   const last = str_(acct.sayAs) || voiceLast_(name);
   return ((voiceTitle_(person && person.rank) || "Officer") + (last ? " " + last : "")).replace(/[^A-Za-z0-9 '\-]/g, "").trim() + ".";
 }
-const VOICE_RECIPE_ = "r2";             // bump when the recording settings change, so clips are recorded again
+const VOICE_RECIPE_ = "r3";             // bump when the recording settings change, so clips are recorded again
 function voiceHash_(s) { s = VOICE_RECIPE_ + "|" + s; return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8).slice(0, 9).map(b => ((b + 256) % 256).toString(16).padStart(2, "0")).join(""); }
 // a clip = what to say + the words around it (ElevenLabs uses them so the pieces flow as one sentence)
 function voiceKey_(kind, when) {
   const c = voiceCfg_();
-  if (kind === "greet") { const t = VOICE_GREET_[when] || VOICE_GREET_.evening; return { key: "g" + voiceHash_(c.voice + "|" + c.model + "|" + t), text: t, next: "Sergeant Smith. " + VOICE_CLOSE_ }; }
-  return { key: "c" + voiceHash_(c.voice + "|" + c.model + "|" + VOICE_CLOSE_), text: VOICE_CLOSE_, prev: "Good evening, Sergeant Smith." };
+  if (kind === "greet") { const t = VOICE_GREET_[when] || VOICE_GREET_.evening; return { key: "g" + voiceHash_(c.voice + "|" + c.model + "|" + t), text: t }; }
+  return { key: "c" + voiceHash_(c.voice + "|" + c.model + "|" + VOICE_CLOSE_), text: VOICE_CLOSE_ };
 }
-function voiceNameKey_(text) { const c = voiceCfg_(); return { key: "n" + voiceHash_(c.voice + "|" + c.model + "|" + text), text: text, prev: "Good evening,", next: VOICE_CLOSE_ }; }
+function voiceNameKey_(text) { const c = voiceCfg_(); return { key: "n" + voiceHash_(c.voice + "|" + c.model + "|" + text), text: text }; }   // recorded on its own, like the others
 function voiceSheet_() {
   const ss = ss_(); let sh = ss.getSheetByName(VOICE_SHEET_);
   if (!sh) { sh = ss.insertSheet(VOICE_SHEET_); sh.appendRow(["Key", "Says", "Voice", "Recorded", "Audio (MP3, base64)"]); sh.setFrozenRows(1); sh.getRange(1, 1, 1, 5).setFontWeight("bold"); }
