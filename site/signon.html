@@ -24,7 +24,8 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(640px 
 .top b i{font-style:normal;color:var(--blue)}
 .top small{display:block;margin-top:6px;font:600 12px "Barlow Condensed",sans-serif;letter-spacing:.32em;color:var(--mute)}
 .clip{clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%)}
-.term{border:1px solid var(--hair2);background:rgba(8,12,19,.85);padding:14px 16px;font:12px/1.8 "JetBrains Mono",monospace;color:#b9c6dc;min-height:118px}
+.term{border:1px solid var(--hair2);background:rgba(8,12,19,.85);padding:14px 16px;font:12px/1.8 "JetBrains Mono",monospace;color:#b9c6dc;height:182px;overflow:hidden}
+.term .hx{color:#4f6a94} .term .hx b{color:#7fa6e8;font-weight:400} .term .n{color:#cfe0ff}
 .term div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .term .t{color:var(--dim);margin-right:8px}
 .term .ok{color:var(--green)} .term .w{color:var(--amber)} .term .x{color:var(--red)}
@@ -75,7 +76,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(640px 
 .skip[hidden]{display:none}
 .snd{position:fixed;left:16px;bottom:16px;z-index:4;width:38px;height:34px;border:1px solid var(--hair2);background:rgba(11,15,22,.8);color:var(--mute);cursor:pointer;font-size:15px}
 .snd:hover{color:var(--tx)} .snd.off{opacity:.55}
-.power{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:118px;width:100%;border:0;background:none;color:var(--tx);cursor:pointer;font:700 15px "Barlow Condensed",sans-serif;letter-spacing:.24em}
+.power{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:152px;width:100%;border:0;background:none;color:var(--tx);cursor:pointer;font:700 15px "Barlow Condensed",sans-serif;letter-spacing:.24em}
 .power i{width:46px;height:46px;border:2px solid var(--blue);border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:20px;color:var(--blue);box-shadow:0 0 18px rgba(63,127,255,.45);animation:pulse 1.6s ease-in-out infinite}
 .power small{font:500 11px "JetBrains Mono",monospace;letter-spacing:.08em;color:var(--dim)}
 .power:hover i{background:rgba(63,127,255,.15)}
@@ -153,6 +154,8 @@ body.is-demo{padding-top:52px}
       key() { tone(1050, 0.035, "triangle", 0.07); noise(0.02, 0.02, 0, 3500); },
       bad() { tone(190, 0.13, "sawtooth", 0.05); tone(150, 0.2, "sawtooth", 0.05, 0.15); },
       good() { noise(0.12, 0.05, 0, 1600); tone(660, 0.12, "sine", 0.06, 0.1); tone(990, 0.22, "sine", 0.06, 0.2); },
+      data() { tone(900 + Math.random() * 1600, 0.018, "square", 0.012); },
+      whir() { const c = ac(); if (!c) return; noise(0.5, 0.025, 0, 600); tone(120, 0.45, "sawtooth", 0.012, 0, 240); },
       squelch() { noise(0.18, 0.06, 0, 1400); tone(1400, 0.05, "square", 0.02, 0.17); }
     };
   })();
@@ -197,10 +200,18 @@ body.is-demo{padding-top:52px}
     const el = document.createElement("div");
     el.innerHTML = '<span class="t">' + stamp() + "</span>" + text;
     el.classList.add("cur");
-    term.appendChild(el); SFX.tick();
-    while (term.children.length > 6) term.removeChild(term.firstChild);
-    return { done(tag, cls) { (cls === "x" ? SFX.bad : cls === "w" ? SFX.warn : SFX.ok).call(SFX); el.classList.remove("cur"); el.insertAdjacentHTML("beforeend", ' <span class="' + (cls || "ok") + '">' + tag + "</span>"); } };
+    term.appendChild(el); if (!skipping) SFX.tick();
+    while (term.children.length > 7) term.removeChild(term.firstChild);
+    return { el: el, set(t) { el.innerHTML = '<span class="t">' + stamp() + "</span>" + t; }, done(tag, cls) { if (!skipping || cls === "x") (cls === "x" ? SFX.bad : cls === "w" ? SFX.warn : SFX.ok).call(SFX); el.classList.remove("cur"); el.insertAdjacentHTML("beforeend", ' <span class="' + (cls || "ok") + '">' + tag + "</span>"); } };
   }
+  function raw(html) {
+    const el = document.createElement("div"); el.className = "hx"; el.innerHTML = html; term.appendChild(el);
+    while (term.children.length > 7) term.removeChild(term.firstChild);
+  }
+  const hex = n => Math.floor(Math.random() * n).toString(16).toUpperCase();
+  function hexRow(addr) { let b = ""; for (let i = 0; i < 8; i++) b += (i === 4 ? " " : "") + " " + pad2(hex(256)).replace(/^(.)$/, "0$1"); return "<b>0x" + addr.toString(16).toUpperCase().padStart(6, "0") + "</b>" + b + "  " + Array.from({ length: 8 }, () => ".:#=+-*@LSPD"[Math.floor(Math.random() * 12)]).join(""); }
+  async function stream(rows, ms) { let a = 0x7f3a00 + Math.floor(Math.random() * 0x400) * 16; for (let i = 0; i < rows && !skipping; i++) { raw(hexRow(a)); a += 16; SFX.data(); await sleep(ms); } }
+  async function count(label, to, unit, steps, ms) { const l = line(label + ' <span class="n">0</span>' + unit); for (let i = 1; i <= steps && !skipping; i++) { l.el.querySelector(".n").textContent = Math.round(to * i / steps).toLocaleString("en-US"); if (i % 2) SFX.tick(); await sleep(ms); } l.el.querySelector(".n").textContent = to.toLocaleString("en-US"); return l; }
   const hr = new Date().getHours();
   const WATCH = hr >= 6 && hr < 14 ? "DAY WATCH" : hr >= 14 && hr < 22 ? "SWING WATCH" : "NIGHT WATCH";
   $("watch").textContent = WATCH;
@@ -218,8 +229,19 @@ body.is-demo{padding-top:52px}
   async function bootIntro() {
     if (seen) { skipping = true; $("skip").hidden = true; }
     else await powerGate();
-    let l = line("Establishing secure uplink to Mission Row ...."); await sleep(520); l.done("OK"); progress(25);
-    l = line("Verifying terminal certificate ..............."); await sleep(380); l.done("OK"); progress(45);
+    let l;
+    if (!seen) {                                         // the full cold boot, once per browser session
+      l = line("LSPD-MDT BIOS v4.2 · power-on self test ......"); await sleep(420); l.done("PASS"); progress(4);
+      l = await count("Memory check", 16384, "K OK", 16, 45); l.done("OK"); progress(9);
+      l = line("Mounting encrypted volume /mdt/secure ........"); SFX.whir(); await sleep(620); l.done("OK"); progress(14);
+      await stream(5, 55);
+      for (const [db, pc] of [["penal_code.db", 20], ["reports.db", 25], ["roster.db", 30], ["bolo_wanted.db", 35]]) {
+        l = line("Loading " + db + " ".padEnd(26 - db.length, ".") ); SFX.whir(); await stream(2, 45); await sleep(160); l.done("OK"); progress(pc);
+      }
+      l = line("AES-256 handshake ............................"); await stream(3, 40); l.done("OK"); progress(40);
+    }
+    l = line("Establishing secure uplink to Mission Row ...."); await sleep(seen ? 0 : 520); l.done("OK"); progress(seen ? 25 : 46);
+    l = line("Verifying terminal certificate ..............."); await sleep(seen ? 0 : 380); l.done("OK"); progress(seen ? 45 : 52);
     sess.set("lspd_booted", "1");
   }
 
