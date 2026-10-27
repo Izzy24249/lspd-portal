@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 67;
+const BACKEND_VERSION = 68;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2289,6 +2289,130 @@ function acctAdmin_(a, d, me) {
 }
 
 // =====================================================================
+// OFFICER HOME: training path, SOP, Fleet (vehicles by rank) and Uniforms
+// Fleet and uniforms are read from the main roster's guideline tabs, laid out as card grids:
+//   vehicles: a rank heading, then "Mods: / Color: / Required Extras: / Optional Extras: / Requiered Livery: / Slicktop: / Spawncode:" rows, then the vehicle name
+//   uniforms: an outfit title, then "Duplicate code: NNNN | Category | Male" and one row per clothing item; plus the Rank Insignia Chart
+// Photos: an =IMAGE("https://…") formula inside the card, or a link an admin adds (Admin → Fleet & Uniforms).
+// =====================================================================
+const SOP_URL_DEFAULT_ = "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0";
+const RANKS_ = ["Police Officer", "Police Officer II", "Police Officer III", "Corporal", "Sergeant", "Staff Sergeant", "Sergeant Major", "Lieutenant", "Captain", "Major", "Commander", "Deputy Chief", "Assistant Chief", "Chief of Police"];
+// any rank text (full or abbreviated) -> position on the ladder above; -1 if none
+function rankIndex_(t) {
+  const r = " " + str_(t).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim() + " ";
+  const T = [[/ (sergeant major|sgt ?maj|sgm) /, 6], [/ (assistant chief|asst chief|aoc) /, 12], [/ (deputy chief|dep chief) /, 11], [/ (chief|cop) /, 13], [/ (commander|cmdr|cdr) /, 10],
+    [/ (captain|capt|cpt) /, 8], [/ (major|maj) /, 9], [/ (lieutenant|lieut|lt) /, 7], [/ (staff sergeant|staff sgt|ssgt|s sgt) /, 5], [/ (sergeant|sgt) /, 4], [/ (corporal|cpl) /, 3],
+    [/ (third class|po ?iii|po ?3|officer iii|officer 3) /, 2], [/ (second class|po ?ii|po ?2|officer ii|officer 2) /, 1],
+    [/ (first class|po ?i|po ?1|police officer|officer|ofc|probationary|recruit|cadet|trainee) /, 0]];
+  for (let i = 0; i < T.length; i++) if (T[i][0].test(r)) return T[i][1];
+  return -1;
+}
+// which ranks an outfit/vehicle heading covers ("Class A Police Officer Second Class - Police Officer Third Class", "Supervisor Team", "All Ranks"…)
+function rankSpan_(t) {
+  const x = str_(t).toLowerCase();
+  if (/all ranks/.test(x)) return [0, RANKS_.length - 1];
+  if (/command staff/.test(x)) return [7, RANKS_.length - 1];
+  if (/supervisor/.test(x)) return [4, 6];
+  if (/po ?1 ?- ?po ?3/.test(x)) return [0, 2];
+  const parts = x.split(/\s[-–&]\s|\s(?:to|and)\s/).map(rankIndex_).filter(i => i >= 0);
+  if (!parts.length) { const i = rankIndex_(x); return i >= 0 ? [i, i] : null; }
+  return [Math.min.apply(null, parts), Math.max.apply(null, parts)];
+}
+function guideTab_(re) { try { return rosterBook_().getSheets().find(sh => re.test(sh.getName())) || null; } catch (e) { return null; } }
+function imgUrl_(f) { const m = /IMAGE\(\s*"([^"]+)"/i.exec(str_(f)); return m ? m[1] : ""; }
+function fleetParse_(fresh) {
+  const cache = CacheService.getScriptCache(), ck = "fleet_v1";
+  if (!fresh) { const hit = cache.get(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const out = { vehicles: [], uniforms: { male: [], female: [] }, insignia: [], vehicleRules: [], uniformRules: [], tabs: {} };
+  // ---- vehicles ----
+  const vt = guideTab_(/vehicle guidelines/i);
+  if (vt) {
+    out.tabs.vehicles = vt.getName();
+    const R = vt.getRange(1, 1, Math.min(vt.getLastRow(), 400), Math.min(vt.getLastColumn(), 40)), v = R.getDisplayValues(), fx = R.getFormulas();
+    const cell = (r, c) => r >= 0 && r < v.length && c >= 0 && c < v[r].length ? str_(v[r][c]).trim() : "";
+    const LBL = { "mods:": "mods", "color:": "color", "required extras:": "req", "optional extras:": "opt", "requiered livery:": "livery", "required livery:": "livery", "slicktop:": "slick", "spawncode:": "spawn", "spawn code:": "spawn" };
+    let section = "", firstCard = v.length;
+    for (let r = 0; r < v.length; r++) for (let c = 0; c < v[r].length; c++) {
+      if (cell(r, c).toLowerCase() !== "mods:") continue;
+      firstCard = Math.min(firstCard, r);
+      const card = {}; let rr = r;
+      for (; rr < Math.min(v.length, r + 9); rr++) { const k = LBL[cell(rr, c).toLowerCase()]; if (!k) break;
+        let val = ""; for (let cc = c + 1; cc <= c + 4 && !val; cc++) { if (LBL[cell(rr, cc).toLowerCase()]) break; val = cell(rr, cc); } card[k] = val; }
+      const name = cell(rr, c) || cell(rr, c - 1) || cell(rr, c + 1);
+      // rank heading: nearest text above the card in its columns (not a label)
+      let rank = "", rankRow = -1, photo = "";
+      for (let up = r - 1; up >= Math.max(0, r - 12) && !rank; up--) for (let cc = c - 1; cc <= c + 2; cc++) { const t = cell(up, cc); if (t && !LBL[t.toLowerCase()] && (rankSpan_(t) || /rank/i.test(t))) { rank = t; rankRow = up; break; } }
+      for (let up = r - 1; up > rankRow && !photo; up--) for (let cc = c - 1; cc <= c + 4 && !photo; cc++) photo = imgUrl_(fx[up] && fx[up][cc]);
+      section = "";
+      for (let up = r - 1; up >= 0 && !section; up--) for (let cc = 0; cc < v[up].length; cc++) { const t = cell(up, cc); if (/vehicles$/i.test(t) && !/guidelines/i.test(t)) { section = t; break; } }
+      const span = rankSpan_(rank) || [0, RANKS_.length - 1];
+      out.vehicles.push({ key: "v:" + (card.spawn || name).toLowerCase(), name: name || "Vehicle", rank: rank || "All Ranks", minRank: span[0], section: section,
+        spawn: card.spawn || "", mods: card.mods || "", color: card.color || "", req: card.req || "", opt: card.opt || "", livery: card.livery || "", slick: card.slick || "", photo: photo });
+    }
+    for (let r = 0; r < Math.min(firstCard, v.length); r++) { const t = cell(r, 1) || cell(r, 0); if (t && t.length > 25 && !/^★/.test(t) && !/vehicle guidelines|regulations|structure/i.test(t) && out.vehicleRules.indexOf(t) === -1) out.vehicleRules.push(t); }
+  }
+  // ---- uniforms (male tab, and a female tab when one exists) ----
+  [["male", /^(?!.*female).*attire/i], ["female", /female.*attire/i]].forEach(pair => {
+    const ut = guideTab_(pair[1]); if (!ut) return;
+    out.tabs[pair[0]] = ut.getName();
+    const R = ut.getRange(1, 1, Math.min(ut.getLastRow(), 400), Math.min(ut.getLastColumn(), 40)), v = R.getDisplayValues(), fx = R.getFormulas();
+    const cell = (r, c) => r >= 0 && r < v.length && c >= 0 && c < v[r].length ? str_(v[r][c]).trim() : "";
+    for (let r = 0; r < v.length; r++) for (let c = 0; c < v[r].length; c++) {
+      const t = cell(r, c);
+      if (/^duplicate code/i.test(t)) {
+        const title = cell(r - 1, c) || cell(r - 1, c + 1), code = t.replace(/^duplicate code:?\s*/i, ""), items = []; let photo = "";
+        for (let rr = r + 1; rr < Math.min(v.length, r + 25); rr++) { const lab = cell(rr, c + 1); if (!lab) break; if (/^more customization$/i.test(lab)) { items.push({ head: lab }); continue; } items.push({ label: lab, value: cell(rr, c + 2) }); }
+        for (let up = r - 1; up >= Math.max(0, r - 6) && !photo; up--) for (let cc = c; cc <= c + 3 && !photo; cc++) photo = imgUrl_(fx[up] && fx[up][cc]);
+        const span = rankSpan_(title) || [0, RANKS_.length - 1];
+        out.uniforms[pair[0]].push({ key: "u:" + code, title: title, code: code, items: items, from: span[0], to: span[1], photo: photo });
+      }
+      if (pair[0] === "male" && /^rank insignia chart$/i.test(t)) {       // Chevron | Rank | Badges & Logos
+        for (let rr = r + 2; rr < Math.min(v.length, r + 25); rr++) { const rk = cell(rr, c + 1); if (!rk) break; out.insignia.push({ rank: rk, idx: rankIndex_(rk), chevron: cell(rr, c), badge: cell(rr, c + 2) }); }
+      }
+      if (pair[0] === "male" && /attire guidelines/i.test(t) && !/^duplicate/i.test(t)) {
+        for (let rr = r + 1; rr < v.length; rr++) { const x = cell(rr, c); if (/^rank insignia chart$/i.test(x)) break; if (x && x.length > 12 && out.uniformRules.indexOf(x) === -1) out.uniformRules.push(x.replace(/\s+/g, " ")); }
+      }
+    }
+  });
+  const js = JSON.stringify(out); if (js.length < 95000) cache.put(ck, js, 900);   // 15 min: fixes in the sheet (like a missing spawn code) show up on their own
+  return out;
+}
+// this officer's view: everything marked for their rank (vehicles at or below it; uniforms that include it; their own badge)
+function fleetFor_(rank, trainee) {
+  const f = fleetParse_(false), photos = (getConfig_().settings || {}).fleetPhotos || {};
+  let ri = trainee ? 0 : rankIndex_(rank); const known = ri >= 0; if (!known) ri = 0;
+  const ins = f.insignia.find(x => x.idx === ri) || null;
+  const pic = x => photos[x.key] || x.photo || "";
+  return {
+    rank: { idx: ri, name: RANKS_[ri], known: known, trainee: !!trainee },
+    vehicles: f.vehicles.map(x => Object.assign({}, x, { photo: pic(x), allowed: x.minRank <= ri })),
+    uniforms: { male: f.uniforms.male.map(x => Object.assign({}, x, { photo: pic(x), yours: ri >= x.from && ri <= x.to, locked: ri < x.from })),
+      female: f.uniforms.female.map(x => Object.assign({}, x, { photo: pic(x), yours: ri >= x.from && ri <= x.to, locked: ri < x.from })) },
+    badge: ins ? { rank: ins.rank, value: ins.badge, chevron: ins.chevron } : null,
+    insignia: f.insignia, vehicleRules: f.vehicleRules, uniformRules: f.uniformRules, female: f.uniforms.female.length > 0
+  };
+}
+// the officer's own progression (onboarding, promotion programs): tasks, counts, deadline
+function myPaths_(person) {
+  const out = []; if (!person) return out;
+  try {
+    programs_().forEach(pc => {
+      if (!pc.on) return;
+      const v = promoView_(false, pc.id), c = (v.candidates || []).find(x => (person.callsign && x.callsign === person.callsign) || (!person.callsign && x.name === person.name));
+      if (!c) return;
+      out.push({ id: pc.id, title: v.title, subtitle: v.subtitle, since: c.since, tig: c.tig, tigDays: v.tigDays, done: c.done, total: c.total, complete: c.complete, deadline: c.deadline,
+        tasks: (v.tasks || []).map(t => Object.assign({ id: t.id, title: t.title, desc: t.desc, need: t.need, final: t.final }, c.tasks[t.id] || {})) });
+    });
+  } catch (e) {}
+  return out;
+}
+function officerHome_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  const person = rosterPerson_(acct.id), prof = acctProfile_(acct), s = getConfig_().settings || {};
+  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding) };
+}
+
+// =====================================================================
 // SIGN-IN VOICE: ElevenLabs clips, stitched in the browser
 //   "Good morning," + "Sergeant Duzen." + "You're signed on."
 // The greeting and closing are recorded once for everyone; each officer's rank + last name is
@@ -2668,6 +2792,7 @@ function handleAdmin_(d) {
   if (a === "divMine") return divMine_(d);
   if (/^acct(DiscordUrl|Discord|SetPin|Pin|Me|Out)$/.test(a)) return acctHandle_(d);
   if (a === "acctVoice") return voiceForDevice_(d);
+  if (a === "officerHome") return officerHome_(d);
 
   if (d.session && /^div(View|Report|Grade)$/.test(a)) return divOfficer_(d);
 
@@ -2741,6 +2866,23 @@ function handleAdmin_(d) {
       if (d.clear) ["ELEVEN_KEY", "ELEVEN_VOICE", "ELEVEN_VOICE_NAME", "ELEVEN_ON"].forEach(k => PROPS_.deleteProperty(k));
       logAdmin_(me.username, "sign-in voice", d.clear ? "removed" : "settings saved");
       return { ok: true, voice: voiceStatus_() };
+    }
+    case "fleetAdmin": {         // owner/admin: every vehicle and outfit read from the sheet, with photo links
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can manage Fleet & Uniforms.");
+      const f = fleetParse_(!!d.fresh), s = getConfig_().settings || {};
+      return { ok: true, fleet: f, photos: s.fleetPhotos || {}, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_ };
+    }
+    case "fleetPhoto": case "sopSet": {
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");
+      return withLock_(() => {
+        const cfg = getConfig_(); cfg.settings = cfg.settings || {};
+        if (a === "sopSet") { const u = str_(d.url); if (u && !/^https:\/\//.test(u)) throw new Error("Use an https:// link."); cfg.settings.sopUrl = u; }
+        else { const u = str_(d.url), k = str_(d.key); if (!k) throw new Error("Missing card."); if (u && !/^https:\/\//.test(u)) throw new Error("Use an https:// image link (imgur works well).");
+          cfg.settings.fleetPhotos = cfg.settings.fleetPhotos || {}; if (u) cfg.settings.fleetPhotos[k] = clip_(u, 500); else delete cfg.settings.fleetPhotos[k]; }
+        cfg.version = (Number(cfg.version) || 0) + 1; writeConfig_(cfg, me.username);
+        logAdmin_(me.username, a === "sopSet" ? "SOP link" : "fleet photo", a === "sopSet" ? str_(d.url) : str_(d.key));
+        return { ok: true, photos: cfg.settings.fleetPhotos || {}, sop: str_(cfg.settings.sopUrl) || SOP_URL_DEFAULT_ };
+      });
     }
     case "voiceVoices": {        // owner: list the account's voices + characters used
       ownerOnly();
@@ -3039,6 +3181,8 @@ function validateConfig_(c) {
   out.settings.promo = cleanPromo_(s.promo);
   out.settings.programs = cleanPrograms_(s.programs);
   out.settings.divisions = cleanDivisions_(s.divisions, Array.isArray(c.forms) ? c.forms : []);
+  out.settings.sopUrl = /^https:\/\//.test(str_(s.sopUrl)) ? clip_(str_(s.sopUrl), 500) : "";
+  out.settings.fleetPhotos = {}; Object.keys(s.fleetPhotos || {}).slice(0, 300).forEach(k => { const u = str_(s.fleetPhotos[k]); if (/^[uv]:/.test(k) && /^https:\/\//.test(u)) out.settings.fleetPhotos[clip_(k, 120)] = clip_(u, 500); });
   if (out.settings.hours.board && !out.settings.hours.webhookId) throw new Error("Weekly hours board: pick which webhook it posts to (or turn it off).");
   if (out.settings.roster.verify.on && !out.settings.roster.verify.tab.trim() && out.settings.roster.verify.tabId == null) throw new Error("Roster: pick which tab is the main personnel roster (or turn the two-way check off).");
   if (out.settings.roster.verify.url && !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(out.settings.roster.verify.url)) throw new Error("Main roster link must be a Google Sheets link.");

@@ -401,6 +401,7 @@
 <button data-tab="divisions"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Division Command</span></button>
         <div class="ng">Administration</div>
 <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Portal Settings</span></button>
+<button data-tab="fleet"><svg viewBox="0 0 24 24"><path d="M4 16v-4l2-5h12l2 5v4M4 16h16M4 16v2h3v-2M17 16v2h3v-2M7 12h10"/></svg><span>Fleet &amp; Uniforms</span></button>
 <button data-tab="accounts"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg><span>Officer Accounts</span></button>
 <button data-tab="admins"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a6 6 0 0 1 3 6"/></svg><span>Admins</span></button>
 <button data-tab="activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Activity Log</span></button>
@@ -653,7 +654,7 @@ function renderPage(keepScroll) {
   const y = window.scrollY;
   document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
   const page = $("page"); page.innerHTML = ""; page.className = "pg pg-" + TAB;
-  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
+  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, fleet: pageFleet, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
   if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
 }
 const TAB_GROUP = { hours: "Operations", promo: "Operations", settings: "Administration", admins: "Administration", activity: "Administration", account: "Account" };
@@ -1821,6 +1822,40 @@ function voiceSec() {
         e.target.disabled = false;
       } }, "▶ Play test"))));
   return sec;
+}
+
+/* ---------------- FLEET & UNIFORMS ---------------- */
+let FLEET = null;
+function pageFleet(page) {
+  page.append(head("Fleet & Uniforms", "Officers see these on their MDT under Fleet and Uniforms, filtered to their rank (column B of the roster). Everything is read from the roster's \"Vehicle Guidelines\" and \"Patrol Attire Guidelines\" tabs, so edit the sheet and it updates here within 15 minutes. Add a photo to any card with an image link (imgur works well), or put =IMAGE(\"link\") in the card's photo area in the sheet.",
+    h("button", { class: "btn ghost sm", onclick: () => { FLEET = null; renderPage(true, true); } }, "Re-read the sheet")));
+  const box = h("div", {}, h("div", { class: "sec empty-note", text: "Reading the roster's guideline tabs…" })); page.append(box);
+  (FLEET ? Promise.resolve() : api("fleetAdmin", { fresh: true }).then(r => { FLEET = r; })).then(() => {
+    box.innerHTML = "";
+    const f = FLEET.fleet, photos = FLEET.photos || {};
+    const sop = h("input", { type: "text", value: FLEET.sop || "" });
+    box.append(h("div", { class: "sec", style: "display:grid;gap:10px" }, h("h3", { text: "SOP link" }), h("p", { class: "help", text: "The Standard Operating Procedures button on every officer's MDT home." }),
+      h("div", { class: "g2" }, field("SOP document link", sop), h("div", { style: "display:flex;align-items:flex-end" }, h("button", { class: "btn primary sm", onclick: async () => { try { const r = await api("sopSet", { url: sop.value.trim() }); FLEET.sop = r.sop; toast("SOP link saved.", "ok"); } catch (e) { toast(e.message, "bad"); } } }, "Save")))));
+    const row = (key, title, sub, sheetPhoto, missing) => {
+      const inp = h("input", { type: "text", value: photos[key] || "", placeholder: sheetPhoto ? "Using the =IMAGE() photo from the sheet" : "https://i.imgur.com/….png" });
+      const prev = h("div", { style: "width:72px;height:48px;background:#05080d center/cover no-repeat;border:1px solid var(--line,rgba(255,255,255,.15));flex:none" + ((photos[key] || sheetPhoto) ? ";background-image:url('" + (photos[key] || sheetPhoto).replace(/'/g, "%27") + "')" : "") });
+      return h("div", { class: "urow", style: "grid-template-columns:auto 1fr minmax(200px,340px) auto" }, prev,
+        h("div", { class: "who-t" }, h("b", { text: title }), h("small", { text: sub + (missing ? " · ⚠ spawn code missing in the sheet" : "") })),
+        inp, h("button", { class: "btn ghost sm", onclick: async () => { try { const r = await api("fleetPhoto", { key: key, url: inp.value.trim() }); FLEET.photos = r.photos; photos[key] = r.photos[key]; prev.style.backgroundImage = (r.photos[key] || sheetPhoto) ? "url('" + (r.photos[key] || sheetPhoto) + "')" : ""; toast("Photo saved.", "ok"); } catch (e) { toast(e.message, "bad"); } } }, "Save photo"));
+    };
+    const tabs = f.tabs || {};
+    box.append(h("div", { class: "kpis" },
+      h("div", { class: "kpi" }, h("small", { text: "Vehicles" }), h("b", { text: String(f.vehicles.length) })),
+      h("div", { class: "kpi" }, h("small", { text: "Uniforms (male)" }), h("b", { text: String(f.uniforms.male.length) })),
+      h("div", { class: "kpi" }, h("small", { text: "Uniforms (female)" }), h("b", { text: String(f.uniforms.female.length) })),
+      h("div", { class: "kpi" }, h("small", { text: "Missing spawn codes" }), h("b", { text: String(f.vehicles.filter(v => !v.spawn).length) }))));
+    box.append(h("div", { class: "sec flush" }, h("div", { style: "padding:14px 16px 4px" }, h("h3", { text: "Vehicles" + (tabs.vehicles ? " · from \"" + tabs.vehicles + "\"" : " · no Vehicle Guidelines tab found") })),
+      h("div", { class: "ulist" }, f.vehicles.map(v => row(v.key, v.name, v.rank + (v.spawn ? " · " + v.spawn : ""), v.photo, !v.spawn)))));
+    ["male", "female"].forEach(sx => { if (!f.uniforms[sx].length) return;
+      box.append(h("div", { class: "sec flush" }, h("div", { style: "padding:14px 16px 4px" }, h("h3", { text: (sx === "male" ? "Uniforms (male)" : "Uniforms (female)") + (tabs[sx] ? " · from \"" + tabs[sx] + "\"" : "") })),
+        h("div", { class: "ulist" }, f.uniforms[sx].map(u => row(u.key, u.title, "Duplicate code " + u.code, u.photo, false))))); });
+    if (!f.uniforms.female.length) box.append(h("div", { class: "sec help", text: "Female uniforms: add a tab named like \"Female Patrol Attire Guidelines\" laid out the same way as the male one. A Male / Female switch then appears on every officer's Uniforms page automatically." }));
+  }).catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 68 ? "Paste the new WebApp.gs (version 68 or newer) and deploy a new version to use Fleet & Uniforms." : e.message })); });
 }
 
 /* ---------------- ADMINS ---------------- */

@@ -241,7 +241,7 @@ body.is-demo{padding-top:52px}
   // where to go after signing on: only pages on this site
   function safeNext(v) { v = String(v || ""); return /^[A-Za-z0-9_\-\/]+(\.html)?([?#][^\s]*)?$/.test(v) && !/^\/\//.test(v) ? v : ""; }
   if (safeNext(params.get("next"))) sess.set("lspd_next", safeNext(params.get("next")));
-  const NEXT = () => sess.get("lspd_next") || "index.html";
+  const NEXT = () => sess.get("lspd_next") || "mdt.html";
 
   // ---------- backend ----------
   async function api(body) {
