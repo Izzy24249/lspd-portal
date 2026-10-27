@@ -310,7 +310,9 @@ body.is-demo{padding-top:52px}
   const WATCH = hr >= 6 && hr < 14 ? "DAY WATCH" : hr >= 14 && hr < 22 ? "SWING WATCH" : "NIGHT WATCH";
   $("watch").textContent = WATCH;
   // demo mode always replays the full boot (except right after the pretend Discord step); the live site plays it once per browser session
-  const seen = DEMO && !params.get("code") ? "" : sess.get("lspd_booted");
+  // the power button + full boot come back after an hour away from the portal (no activity on this device)
+  const AWAY_MS = 3600e3, lastActive = Math.max(Number(store.get("lspd_booted_at")) || 0, Number(store.get("lspd_seen_at")) || 0);
+  const seen = params.get("code") ? "1" : DEMO ? "" : (Date.now() - lastActive < AWAY_MS ? "1" : "");
   $("skip").onclick = () => { skipping = true; $("skip").hidden = true; };
 
   function powerGate() {
@@ -354,7 +356,7 @@ body.is-demo{padding-top:52px}
     l = line("Secure uplink to Mission Row ................."); await sleep(seen ? 0 : 420); l.done("ONLINE"); progress(seen ? 30 : 62);
     if (seen) linkState("SECURE · AES-256", "green");
     l = line("Verifying terminal certificate ..............."); await sleep(seen ? 0 : 320); l.done("OK"); progress(seen ? 45 : 66);
-    sess.set("lspd_booted", "1");
+    if (!DEMO) store.set("lspd_booted_at", String(Date.now()));
     SFX.settle();
   }
 
@@ -563,7 +565,7 @@ body.is-demo{padding-top:52px}
   async function finish(r) {
     activePad = null;
     store.set(K.sess, r.session || ""); if (r.profile) store.set(K.prof, JSON.stringify(r.profile));
-    if (!DEMO) store.set("lspd_seen_at", String(Date.now()));          // the portal lets them in for the next 2 hours of activity
+    if (!DEMO) store.set("lspd_seen_at", String(Date.now()));          // the portal lets them in for the next hour of activity
     const p = r.profile || store.json(K.prof) || {};
     const l = line("Signing on " + esc((p.callsign ? p.callsign + " · " : "") + addr(p).toUpperCase()) + " ...."); progress(100);
     await new Promise(res => setTimeout(res, 350)); l.done("10-8");

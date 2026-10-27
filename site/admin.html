@@ -1711,7 +1711,7 @@ function signonSec() {
   const g = SIGNON || {}, sec = h("div", { class: "sec", style: "display:grid;gap:10px" });
   const req = h("input", { type: "checkbox" }), pin = h("input", { type: "checkbox" }); req.checked = !!g.required; pin.checked = !!g.pinEvery;
   sec.append(h("h3", { text: "Sign-on screen (front door)" }),
-    h("p", { class: "help", text: "When on, officers see the MDT sign-on screen before the portal (home, My Reports, CID case builder) and land where they were going afterwards. A sign-on lasts for 2 hours of activity on that device, so new tabs don't boot the terminal again. Admin and Division Command keep their own logins." }),
+    h("p", { class: "help", text: "When on, officers see the MDT sign-on screen before the portal (home, My Reports, CID case builder) and land where they were going afterwards. A sign-on lasts while they keep using the portal; after an hour away, the power button and boot come back. Admin and Division Command keep their own logins." }),
     g.ready ? null : h("div", { class: "help", style: "color:#f0b43c", text: "Set up Sign in with Discord below first. Until then this can't be switched on, so nobody gets locked out." }),
     h("label", { style: "display:flex;gap:8px;align-items:center" }, req, h("span", { text: "Officers must sign on before using the portal" })),
     h("label", { style: "display:flex;gap:8px;align-items:center" }, pin, h("span", { text: "Ask for the PIN on every visit (otherwise a sign-in is remembered for 30 days and the screen just greets them)" })),

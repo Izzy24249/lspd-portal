@@ -1,8 +1,8 @@
 /* LSPD sign-on gate: when command switches it on (Admin → Officer Accounts), officers see the
-   MDT sign-on screen before the portal. A sign-on is remembered for 2 hours of activity on this device,
+   MDT sign-on screen before the portal. A sign-on is remembered for 1 hour of activity on this device,
    so new tabs and page changes don't boot the terminal again. Admin and Division Command keep their own logins. */
 (function () {
-  var HOURS = 2;
+  var HOURS = 1;
   function read(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
   function signedOn() { return !!read("lspd_sess", "") && Date.now() - Number(read("lspd_seen_at", 0)) < HOURS * 3600e3; }
   function go() {
