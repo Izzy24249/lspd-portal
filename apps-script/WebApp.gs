@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 73;
+const BACKEND_VERSION = 74;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -53,6 +53,7 @@ function doGet(e) {
 const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1, hoursRefresh: 1, promoCredit: 1, promoRemove: 1, promoExcuse: 1, promoSince: 1, cidSetPassword: 1 };
 
 function doPost(e) {
+  ACCT_MEMO_ = null;
   let d;
   try { d = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "Bad request." }); }
   try {
@@ -72,7 +73,8 @@ function doPost(e) {
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(45000)) return { ok: false, error: "Server busy, please try again in a few seconds." };
-  try { try { flushDeferred_(); } catch (e) {} return fn(); } finally { lock.releaseLock(); }
+  ACCT_MEMO_ = null;
+  try { try { flushDeferred_(); } catch (e) {} return fn(); } finally { ACCT_MEMO_ = null; lock.releaseLock(); }
 }
 
 function json_(obj) {
@@ -345,6 +347,9 @@ function warmRosters() {
   const cfg = getConfig_();
   try { callsignMap_(true); } catch (e) {}
   rostersFor_(cfg.forms, { fresh: true });
+  // sign-in: the Personnel / Onboarding tabs (with the rank column) are ready before anyone signs on
+  [PERSONNEL_TAB_, ONBOARD_TAB_].forEach(t => { try { const tid = rosterTabByName_(t); if (tid != null) getRosterTab_(tid, true, [RANK_COL_], false, true); } catch (e) {} });
+  try { CacheService.getScriptCache().remove("builder_people"); builderPeople_(); } catch (e) {}
   try { if (usesOldRoster_(cfg.forms)) getRoster_(true); } catch (e) {}
   programs_(cfg).forEach(p => { try { if (p.on) promoCandidates_(true, p.id); } catch (e) {} });
   try { promoSync_(); } catch (e) {}
@@ -2329,11 +2334,14 @@ function acctSheet_() {
   if (!sh) { sh = ss.insertSheet(ACCT_SHEET_); sh.appendRow(ACCT_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, ACCT_HEAD_.length).setFontWeight("bold"); sh.getRange("A:A").setNumberFormat("@"); }
   return sh;
 }
+var ACCT_MEMO_ = null;
 function acctAll_() {
+  if (ACCT_MEMO_) return ACCT_MEMO_;
   const v = acctSheet_().getDataRange().getValues(), out = [];
   for (let i = 1; i < v.length; i++) { const r = v[i], id = str_(r[0]).replace(/^'/, ""); if (!id) continue;
     out.push({ row: i + 1, id: id, username: str_(r[1]), callsign: str_(r[2]), name: str_(r[3]), override: str_(r[4]), salt: str_(r[5]), hash: str_(r[6]),
       created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0, sayAs: str_(r[12]), rankAs: str_(r[13]), divisions: str_(r[14]).split(",").map(x => x.trim()).filter(Boolean) }); }
+  ACCT_MEMO_ = out;
   return out;
 }
 function acctFind_(id) { return acctAll_().find(a => a.id === str_(id)) || null; }
@@ -2353,11 +2361,23 @@ function offRead_(token, kind) {
 // Certified officers are on "LSPD Personnel Roster"; onboarding officers (trainees) on "LSPD Onboarding Roster".
 const PERSONNEL_TAB_ = "LSPD Personnel Roster", ONBOARD_TAB_ = "LSPD Onboarding Roster", RANK_COL_ = "B";   // ranks live in column B of both tabs
 function rosterTabByName_(name) {
-  try { const want = name.toLowerCase(), sh = rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want); return sh ? sh.getSheetId() : null; } catch (e) { return null; }
+  const cache = CacheService.getScriptCache(), ck = "tabid_" + voiceHash_(str_(((getConfig_().settings || {}).roster || {}).url) + "|" + name.toLowerCase());
+  const hit = cache.get(ck); if (hit !== null) return hit === "" ? null : Number(hit);
+  let id = null;
+  try { const want = name.toLowerCase(), sh = rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want); id = sh ? sh.getSheetId() : null; } catch (e) { return null; }
+  cache.put(ck, id == null ? "" : String(id), 21600);
+  return id;
 }
 // roster tags stuck to the end of a name ("F. DuzenRM", "F. Duzen RM") aren't part of the name
 function cleanName_(n) { return str_(n).replace(/([a-z'])RM\b/g, "$1").replace(/\s+RM\b/g, "").trim(); }
 function rosterPerson_(id) {
+  const cache = CacheService.getScriptCache(), ck = "rp_" + str_(id), hit = cache.get(ck);
+  if (hit !== null) { try { return hit === "" ? null : JSON.parse(hit); } catch (e) {} }
+  const p = rosterPersonRead_(id);
+  try { cache.put(ck, p ? JSON.stringify(p) : "", p ? 600 : 60); } catch (e) {}   // someone just added to the roster is found within a minute
+  return p;
+}
+function rosterPersonRead_(id) {
   const split = n => { const cs = n.indexOf("|") !== -1 ? n.split("|")[0].trim() : ""; return { callsign: cs, name: cleanName_(cs ? n.split("|").slice(1).join("|").trim() : n) }; };
   let hit = null, trainee = false;
   const fromTab = (name, isTrainee) => { if (hit) return; const tid = rosterTabByName_(name); if (tid == null) return;
