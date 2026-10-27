@@ -2110,7 +2110,7 @@ function divImport_() {
 }
 
 // =====================================================================
-// OFFICER ACCOUNTS: sign in with Discord once per device, then a 6-digit PIN
+// OFFICER ACCOUNTS: sign in with Discord once per device, then a 4-digit PIN
 // =====================================================================
 const ACCT_SHEET_ = "Officer Accounts";
 const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices"];
@@ -2197,8 +2197,8 @@ function acctHandle_(d) {
   // device token → set the first PIN (or a new one after an admin reset)
   if (a === "acctSetPin") {
     const dv = offRead_(d.device, "DEV"); if (!dv) return { ok: false, error: "Sign in with Discord again on this device." };
-    const pin = str_(d.pin); if (!/^\d{6}$/.test(pin)) return { ok: false, error: "Your PIN must be 6 digits." };
-    if (/^(\d)\1{5}$/.test(pin) || "0123456789012".indexOf(pin) !== -1 || "9876543210987".indexOf(pin) !== -1) return { ok: false, error: "Pick a less obvious PIN (not 111111 or 123456)." };
+    const pin = str_(d.pin); if (!/^\d{4}$/.test(pin)) return { ok: false, error: "Your PIN must be 4 digits." };
+    if (/^(\d)\1{3}$/.test(pin) || /^(\d\d)\1$/.test(pin) || "0123456789012".indexOf(pin) !== -1 || "9876543210987".indexOf(pin) !== -1) return { ok: false, error: "Pick a less obvious PIN (not 1111, 1212 or 1234)." };
     let acct = acctFind_(dv.id); if (!acct) return { ok: false, error: "Sign in with Discord again on this device." };
     if (acct.hash) return { ok: false, error: "You already have a PIN. Enter it to sign in (an admin can reset it)." };
     const salt = Utilities.getUuid();
