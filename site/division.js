@@ -210,7 +210,7 @@
     let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign + " " + o.rank + " " + o.section).toLowerCase().includes(OFF_Q.toLowerCase()));
     list.sort(OFF_SORT === "roster" ? (a, b) => a.idx - b.idx : OFF_SORT === "name" ? (a, b) => (a.callsign || a.name).localeCompare(b.callsign || b.name, undefined, { numeric: true }) : OFF_SORT === "activity" ? (a, b) => b.score - a.score : (a, b) => rank[a.status] - rank[b.status] || (b.days || 0) - (a.days || 0));
     const card = o => `<button type="button" class="oc s-${o.status}" data-off="${esc(o.key)}">
-        <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${o.rank ? esc(o.rank) : "&nbsp;"}</small></span><em class="cs${o.callsign ? "" : " none"}" title="Unit callsign">${esc(o.callsign || "NO CALLSIGN")}</em>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
+        <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${o.rank ? esc(o.rank === o.rank.toUpperCase() ? titleCase(o.rank) : o.rank) : "&nbsp;"}</small></span><em class="cs${o.callsign ? "" : " none"}" title="Unit callsign">${esc(o.callsign || "NO CALLSIGN")}</em>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
         ${statusPill(o)}
         <div class="oc-n"><span><b>${o.filed.length}</b>filed</span><span><b>${o.assists.length}</b>assists</span><span><b>${fmtPts(o.score)}</b>points</span></div>
         ${quotaBar(o)}</button>`;
@@ -219,7 +219,8 @@
     // grouped by the roster's section headings, or by position/rank when the roster has no headings;
     // groups appear in the order they first show up on the roster
     // position/rank column first (K9, CRU…); the roster's section headings only when there's no position column (ASU)
-    const useRank = S.O.filter(o => o.rank).length >= S.O.length / 2, useSec = !useRank && S.O.some(o => o.section);
+    const gb = DATA.division.groupBy || "auto";
+    const useRank = gb === "position" || (gb === "auto" && S.O.filter(o => o.rank).length >= S.O.length / 2), useSec = !useRank && gb !== "none" && S.O.some(o => o.section);
     const grp = o => (useRank ? o.rank.split(" · ")[0] : o.section) || "Other";
     if (OFF_SORT === "roster" && (useRank || useSec)) {
       const groups = [], at = {};

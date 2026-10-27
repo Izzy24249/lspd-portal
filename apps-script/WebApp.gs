@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 50;
+const BACKEND_VERSION = 51;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -438,11 +438,11 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
   for (let i = hr + 1; i < shown.length; i++) {
     const filled = shown[i].filter(c => str_(c)).length;
     const noId = !(idCol >= 0 && str_(shown[i][idCol])), noCall = !(callCol >= 0 && callKey_(shown[i][callCol]));
-    if (filled >= 1 && filled <= 2 && noId && noCall) {           // section heading row ("COMMANDING PILOTS", "Senior Pilots (4)", "Trainees")
+    if (filled === 1 && noId && noCall) {           // section heading row ("COMMANDING PILOTS", "Senior Pilots (4)", "Trainees")
       const t = str_(shown[i].find(c => str_(c)));
       const loud = /[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t);
       const heading = isOut(t) || loud || /member|roster|division|section|command|staff|personnel|active/i.test(t) ||
-        (/[A-Za-z]{3}/.test(t) && !/\|/.test(t) && callCol >= 0);   // a lone label on a roster that keeps callsigns in their own column
+        (filled === 1 && !str_(shown[i][nameCol]) && /[A-Za-z]{3}/.test(t) && !/\|/.test(t));   // a lone banner row ("Supervisory Pilots") with nothing in the name column
       if (heading) { inOutSection = isOut(t); if (!inOutSection) section = clip_(t.replace(/\s*[([]\s*\d+\s*[)\]]\s*$/, "").replace(/\s*[-–:]\s*\d+\s*$/, ""), 60); continue; }
     }
     if (!filled) continue;
@@ -1932,7 +1932,9 @@ function cleanDivisions_(list, forms) {
       rosterTabId: d.rosterTabId === "" || d.rosterTabId == null ? null : Number(d.rosterTabId), rosterTabName: clip_(str_(d.rosterTabName), 100),
       forms: fl, quota: Math.max(0, Math.min(50, parseInt(d.quota, 10) || 0)), quotaPer: d.quotaPer === "month" ? "month" : "week", quotaAssists: d.quotaAssists !== false,
       warnDays: n(d.warnDays), inactiveDays: n(d.inactiveDays), pingTagged: !!d.pingTagged,
-      exempt: clip_(str_(d.exempt), 300) };
+      exempt: clip_(str_(d.exempt), 300),
+      unitCol: colIndex_(d.unitCol) >= 0 ? str_(d.unitCol).toUpperCase() : "", positionCol: colIndex_(d.positionCol) >= 0 ? str_(d.positionCol).toUpperCase() : "",
+      groupBy: ["position", "headings", "none"].indexOf(d.groupBy) !== -1 ? d.groupBy : "auto" };
   });
 }
 // "Command, High Command, L-101" -> does any of these words appear in the officer's roster section, rank, callsign or name?
@@ -1963,14 +1965,15 @@ function divView_(d, me) {
   // officers from the division's roster tab
   let officers = [], rosterError = "";
   if (dv.rosterTabId != null) {
-    try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [], false, false); rosterError = t.error || "";
+    try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [dv.unitCol, dv.positionCol].filter(Boolean), false, false); rosterError = t.error || "";
       officers = (t.people || []).map(p => { const cs = p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : (callKey_(p.name) ? (/\b[A-Za-z]{1,4}\s*-?\s*\d{1,5}\b/.exec(p.name) || [""])[0] : "");
         const nm = p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name.replace(cs, "").trim() || p.name;
-        return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: cs, id: p.id || "", section: p.sec || "", rank: p.extra || "",
-          exempt: exemptHit_(dv.exempt, [p.sec, p.extra, cs, nm]) }; });
+        const more = p.more || {}, unit = dv.unitCol ? str_(more[dv.unitCol]) : "", rank = (dv.positionCol ? str_(more[dv.positionCol]) : "") || p.extra || "";
+        return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: unit || cs, alt: unit && cs ? cs : "", id: p.id || "", section: p.sec || "", rank: rank,
+          exempt: exemptHit_(dv.exempt, [p.sec, rank, unit, cs, nm]) }; });
     } catch (e) { rosterError = errMsg_(e); }
   } else rosterError = "No roster tab picked for this division yet (admin → Division Command).";
-  const find = p => (p.i && officers.find(o => o.id === p.i)) || (callKey_(p.n) && officers.find(o => o.callsign && callKey_(o.callsign) === callKey_(p.n))) || (nameKey_(p.n) && officers.find(o => nameKey_(o.name) === nameKey_(p.n))) || null;
+  const find = p => (p.i && officers.find(o => o.id === p.i)) || (callKey_(p.n) && officers.find(o => [o.callsign, o.alt].some(c => c && callKey_(c) === callKey_(p.n)))) || (nameKey_(p.n) && officers.find(o => nameKey_(o.name) === nameKey_(p.n))) || null;
   const formsById = {}; cfg.forms.forEach(f => formsById[f.id] = f);
   const fset = {}; dv.forms.forEach(f => { const form = formsById[f.id]; if (!form) return; const slots = personSlots_(form); fset[f.id] = { author: f.author && slots.some(x => x.key === f.author) ? f.author : autoAuthor_(form), labels: slots.reduce((m, x) => (m[x.key] = x.label, m), {}) }; });
   const since = Date.now() - 400 * 864e5;
