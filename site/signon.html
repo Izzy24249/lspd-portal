@@ -439,7 +439,7 @@ body.is-demo{padding-top:52px}
 
   function screenPin(profile, note) {
     progress(100);
-    show(whoHTML(profile) + '<h2>Enter your PIN</h2><p class="sub">Welcome back' + (profile && profile.name ? ", " + esc(lastName(profile.name)) : "") + '. Enter your 4-digit PIN to sign on.</p>' +
+    show(whoHTML(profile) + '<h2>Enter your PIN</h2><p class="sub">Welcome back' + (profile && profile.name ? ", " + esc(addr(profile)) : "") + '. Enter your 4-digit PIN to sign on.</p>' +
       '<div id="padHost"></div><div class="msg" id="msg"' + (note ? "" : " hidden") + ">" + esc(note || "") + "</div>" +
       '<div class="links"><a id="notMe">Not you? Use a different Discord account</a><span>Forgot it? Ask command staff to reset your PIN.</span></div>');
     const msg = $("msg");
@@ -455,16 +455,33 @@ body.is-demo{padding-top:52px}
     $("notMe").onclick = () => { store.set(K.dev, ""); store.set(K.sess, ""); store.set(K.prof, ""); activePad = null; screenDiscord(); };
   }
 
-  function lastName(n) { const parts = String(n).trim().split(/\s+/); return parts[parts.length - 1].replace(/^[A-Z]\.$/, "") || parts[0]; }
-  function greet() { const h = new Date().getHours(); return h < 5 ? "Evening" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening"; }
+  // "F. Duzen", "Frank Duzen", "Duzen, F." → "Duzen" (drops initials, suffixes and nicknames in quotes or brackets)
+  function lastName(n) {
+    n = String(n || "").replace(/["“”'(\[].*?["“”')\]]/g, " ").trim();
+    if (n.indexOf(",") > 0) return n.split(",")[0].trim().split(/\s+/).pop();
+    const parts = n.split(/\s+/).filter(w => !/^(jr|sr|ii|iii|iv)\.?$/i.test(w) && !/^[A-Za-z]\.?$/.test(w));
+    return parts.length ? parts[parts.length - 1] : n;
+  }
+  // roster rank → how you'd address them: "Police Officer II" → "Officer", "Staff Sergeant" stays
+  function title(rank) {
+    const r = String(rank || "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+    if (!r) return "";
+    const T = [[/sergeant major/, "Sergeant Major"], [/assistant chief/, "Assistant Chief"], [/deputy chief/, "Deputy Chief"], [/\bchief\b/, "Chief"], [/commander/, "Commander"], [/\bmajor\b/, "Major"],
+      [/captain/, "Captain"], [/lieutenant/, "Lieutenant"], [/sergeant major/, "Sergeant Major"], [/staff sergeant/, "Staff Sergeant"], [/sergeant/, "Sergeant"],
+      [/corporal/, "Corporal"], [/detective/, "Detective"], [/officer|recruit|cadet|trainee|probation|\bpo\b/, "Officer"]];
+    for (const [re, t] of T) if (re.test(r)) return t;
+    return "";
+  }
+  const addr = p => { const ln = p && p.name ? lastName(p.name) : ""; return ln ? ((title(p.rank) || "Officer") + " " + ln) : "Officer"; };
+  function greet() { const h = new Date().getHours(); return h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
 
   async function finish(r) {
     activePad = null;
     store.set(K.sess, r.session || ""); if (r.profile) store.set(K.prof, JSON.stringify(r.profile));
     const p = r.profile || store.json(K.prof) || {};
-    const l = line("Signing on " + esc(p.callsign || "unit") + " ......................"); progress(100);
+    const l = line("Signing on " + esc((p.callsign ? p.callsign + " · " : "") + addr(p).toUpperCase()) + " ...."); progress(100);
     await new Promise(res => setTimeout(res, 350)); l.done("10-8");
-    show('<div class="ok-big"><i>✓</i><div><h2>' + esc(greet()) + ", " + esc(p.name ? lastName(p.name) : "Officer") + '.</h2><p class="sub" style="margin:2px 0 0">Signed on' + (p.callsign ? " as <b>" + esc(p.callsign) + "</b>" : "") + ". Opening the terminal…</p></div></div>");
+    show('<div class="ok-big"><i>✓</i><div><h2>' + esc(greet()) + ", " + esc(addr(p)) + '.</h2><p class="sub" style="margin:2px 0 0">Signed on' + (p.callsign ? " as <b>" + esc(p.callsign) + "</b>" : "") + ". Opening the terminal…</p></div></div>");
     const to = NEXT(); sess.set("lspd_next", "");
     setTimeout(() => { if (DEMO) { show('<div class="ok-big"><i>✓</i><div><h2>Demo complete</h2><p class="sub" style="margin:2px 0 0">On the live site this now opens the portal. <a href="?demo=1" style="color:var(--blue)">Run the demo again</a> (your demo PIN is remembered until you close the tab).</p></div></div>'); return; } location.replace(to); }, 1300);
   }
