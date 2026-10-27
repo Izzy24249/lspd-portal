@@ -218,8 +218,10 @@
     let body = "";
     // grouped by the roster's section headings, or by position/rank when the roster has no headings;
     // groups appear in the order they first show up on the roster
-    const useSec = S.O.some(o => o.section), grp = o => (useSec ? o.section : o.rank.split(" · ")[0]) || "Other";
-    if (OFF_SORT === "roster" && (useSec || S.O.some(o => o.rank))) {
+    // position/rank column first (K9, CRU…); the roster's section headings only when there's no position column (ASU)
+    const useRank = S.O.filter(o => o.rank).length >= S.O.length / 2, useSec = !useRank && S.O.some(o => o.section);
+    const grp = o => (useRank ? o.rank.split(" · ")[0] : o.section) || "Other";
+    if (OFF_SORT === "roster" && (useRank || useSec)) {
       const groups = [], at = {};
       list.forEach(o => { const k = grp(o); if (!at[k]) { at[k] = { name: k, list: [] }; groups.push(at[k]); } at[k].list.push(o); });
       body = groups.map(g => `${g.name ? `<div class="og-h"><span>${esc(g.name)}</span><i></i><small>${g.list.length}</small></div>` : ""}<div class="ogrid">${g.list.map(card).join("")}</div>`).join("");
