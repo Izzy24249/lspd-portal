@@ -87,7 +87,7 @@
     if (!list.length) { t.hidden = true; return; }
     t.hidden = false; t.innerHTML = '<div class="live"><i></i>LIVE</div><div class="tk-run">' + list.concat(list).map(x => "<span>" + esc(x.t) + " · " + ago(x.at) + "</span>").join("") + "</div>";
   }
-  function modal(html) { const m = $("modal"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
+  function modal(html) { const m = $("modal"); m.classList.remove("cc"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
   // the SOP as an embeddable page: Google Docs block /edit inside frames, /preview is the read-only view that allows it
   function sopEmbed(u) {
     const g = /^(https:\/\/docs\.google\.com\/(?:document|spreadsheets|presentation)\/d\/[\w-]+)/.exec(u || "");
@@ -247,10 +247,25 @@
   }
   // ---------- quick reference ----------
   async function loadRef() { const r = await Portal.post({ action: "quickRef", session: SESSION }).catch(() => null); REF = r && r.ok ? r : { penal: [], tenCodes: [], error: true }; if (VIEW === "reference") draw(); }
-  let REF_CAT = "", REF_CLS = "", REF_TAB = "charges";
+  let REF_CAT = "", REF_CLS = "", REF_TAB = "charges", PEN = {};
+  const lawOf = it => (window.LSPD_LAW || {})[String(it.label).toLowerCase().trim()] || null;
+  const penParts = it => { const sub = it.sub || ""; return { tm: (sub.split(" · ").find(x => /month/.test(x))) || "", fn: ((sub.split(" · ").find(x => /fine/.test(x))) || "").replace(" fine", "") }; };
+  // charge detail card
+  function chargeCard(key) {
+    const e = PEN[key]; if (!e) return; const it = e.it, g = e.g, law = lawOf(it), pp = penParts(it);
+    const rel = g.items.filter(x => x.label !== it.label).sort((a, b) => (b.cls === it.cls) - (a.cls === it.cls)).slice(0, 4);
+    modal('<div class="cc-kick"><span>' + esc(g.icon) + " " + esc(g.name) + '</span><button class="ibtn" data-close aria-label="Close">✕</button></div>' +
+      '<h3 class="cc-title">' + esc(it.label) + "</h3>" +
+      '<div class="cc-stats"><div class="k-' + esc(it.cls || "") + '"><small>Class</small><b><i></i>' + esc(CLS_NAME[it.cls] || "—") + "</b></div><div><small>Jail time</small><b>" + esc(pp.tm || "None") + "</b></div><div><small>Fine</small><b class=\"fn\">" + esc(pp.fn || "None") + "</b></div></div>" +
+      (law ? '<div class="cc-law"><div class="cc-code"><small>Based on</small><b>' + esc(law[0]) + "</b></div><p>" + esc(law[1]) + "</p></div>" : '<div class="cc-law"><p>No California code reference on file for this charge yet.</p></div>') +
+      '<div class="cc-acts"><button class="btn" data-copy="' + esc(it.label) + '" data-what="Charge">COPY CHARGE</button>' + (law ? '<button class="btn ghost" data-copy="' + esc(it.label + " (" + law[0] + ")") + '" data-what="Charge with code">COPY WITH CODE</button>' : "") + "</div>" +
+      (rel.length ? '<div class="cc-rel"><small>Related in ' + esc(g.name) + "</small>" + rel.map(x => '<button data-charge="' + esc(x.label) + '"><i class="k-' + esc(x.cls || "") + '"></i>' + esc(x.label) + "</button>").join("") + "</div>" : "") +
+      '<p class="cc-note">Code references are the California law each charge is modeled on. Sentences and fines follow the LSPD charge list.</p>');
+    $("modal").classList.add("cc"); blip();
+  }
   const CLS_NAME = { felony: "Felony", misdemeanor: "Misdemeanor", infraction: "Infraction", citation: "Citation" };
   function refHTML() {
-    let h = '<div class="pen-top"><div><h1>Penal Code</h1><p>Tap any charge to copy it into your report.</p></div></div>';
+    let h = '<div class="pen-top"><div><h1>Penal Code</h1><p>Tap any charge for its details and the California law it\'s based on.</p></div></div>';
     if (!REF) return h + '<div class="boot"><i></i>LOADING PENAL CODE…</div>';
     const opts = REF.charges ? REF.charges.options : REF.penal.map(x => x.raw);
     const groups = (window.Portal && Portal.chargeGroups ? Portal.chargeGroups(opts) : [{ name: "Charges", icon: "⚖️", items: opts }])
@@ -272,13 +287,14 @@
     h += '<div class="pen-wrap"><nav class="pen-rail"><button data-pcat="" class="' + (REF_CAT ? "" : "on") + '"><span class="ic">⚖️</span><span class="nm">All charges</span><em>' + all + "</em></button>" +
       groups.map((g, i) => '<button data-pcat="' + esc(g.name) + '" class="' + (REF_CAT === g.name ? "on" : "") + (counts[i] ? "" : " none") + '"><span class="ic">' + esc(g.icon) + '</span><span class="nm">' + esc(g.name) + "</span><em>" + counts[i] + "</em></button>").join("") + "</nav>";
     let body = "", any = 0;
+    PEN = {}; groups.forEach(g => g.items.forEach(it => { PEN[it.label] = { it: it, g: g }; }));
     groups.forEach((g, i) => {
       if (REF_CAT && g.name !== REF_CAT) return;
       const items = g.items.filter(match); if (!items.length) return; any += items.length;
       body += '<div class="pen-sec"><div class="pen-sh"><span>' + esc(g.icon) + "</span>" + esc(g.name) + "<em>" + items.length + "</em></div>" +
-        items.map(it => '<button class="pen-row" data-copy="' + esc(it.label) + '" data-what="Charge"><span class="nm">' + (q ? hl(it.label, REF_Q) : esc(it.label)) + "</span>" +
+        items.map(it => { const law = lawOf(it); return '<button class="pen-row" data-charge="' + esc(it.label) + '"><span class="nm">' + (q ? hl(it.label, REF_Q) : esc(it.label)) + (law ? "<small>" + esc(law[0]) + "</small>" : "") + "</span>" +
           (it.cls ? '<span class="cls k-' + esc(it.cls) + '">' + esc(CLS_NAME[it.cls] || it.cls) + "</span>" : '<span class="cls"></span>') +
-          '<span class="tm">' + esc(((it.sub || "").split(" · ").find(x => /month/.test(x))) || "—") + '</span><span class="fn">' + esc((((it.sub || "").split(" · ").find(x => /fine/.test(x))) || "—").replace(" fine", "")) + "</span></button>").join("") + "</div>";
+          '<span class="tm">' + esc(((it.sub || "").split(" · ").find(x => /month/.test(x))) || "—") + '</span><span class="fn">' + esc((((it.sub || "").split(" · ").find(x => /fine/.test(x))) || "—").replace(" fine", "")) + "</span></button>"; }).join("") + "</div>";
     });
     if (!any) body = '<div class="empty">' + (opts.length ? "No charge matches" + (REF_Q ? " “" + esc(REF_Q) + "”" : "") + (REF_CLS ? " in " + CLS_NAME[REF_CLS] + "s" : "") + "." + (q && C.length ? ' <a href="#" data-rtab="codes">' + C.length + " radio code" + (C.length > 1 ? "s" : "") + " match.</a>" : "") : "No charge list found in the report forms yet.") + "</div>";
     else body = '<div class="pen-th"><span>Charge</span><span>Class</span><span>Time</span><span>Fine</span></div>' + body;
@@ -424,6 +440,7 @@
     const tk = e.target.closest("[data-take]"); if (tk) { takeCheck(UNIT.checks.find(c => c.id === tk.getAttribute("data-take"))); return; }
     const cc = e.target.closest("[data-cclose]"); if (cc) { unit("unitCheckClose", { id: cc.getAttribute("data-cclose") }, "Check closed."); return; }
     const pc = e.target.closest("[data-pcat]"); if (pc) { REF_CAT = pc.getAttribute("data-pcat"); draw(); const mm = document.querySelector(".pen-main"); if (mm) mm.scrollTop = 0; return; }
+    const ch = e.target.closest("[data-charge]"); if (ch) { chargeCard(ch.getAttribute("data-charge")); return; }
     const pk = e.target.closest("[data-pcls]"); if (pk) { REF_CLS = pk.getAttribute("data-pcls"); draw(); return; }
     const rt = e.target.closest("[data-rtab]"); if (rt) { e.preventDefault(); REF_TAB = rt.getAttribute("data-rtab"); draw(); return; }
     if (e.target.closest("[data-refclear]")) { REF_Q = ""; draw(); const n = $("refQ"); if (n) n.focus(); return; }
@@ -450,7 +467,7 @@
     if (q.length >= 2) add("Records", "🗂️", "Search records for “" + q + "”", "People, vehicles and plates in every report", () => { go("records"); setTimeout(() => { const i = $("recQ"); if (i) { i.value = q; runSearch(q); } }, 50); });
     if (REF && q.length >= 2) {
       const opts = REF.charges ? REF.charges.options : REF.penal.map(x => x.raw);
-      opts.filter(o => !/^#/.test(o) && o.toLowerCase().indexOf(q) !== -1).slice(0, 8).forEach(o => { const it = Portal.chargeItem(o); add("Charges", "⚖️", it.label, [it.cls, it.sub].filter(Boolean).join(" · "), () => copy(it.label, "Charge")); });
+      opts.filter(o => !/^#/.test(o) && o.toLowerCase().indexOf(q) !== -1).slice(0, 8).forEach(o => { const it = Portal.chargeItem(o); add("Charges", "⚖️", it.label, [it.cls, it.sub].filter(Boolean).join(" · "), () => { go("reference"); chargeCard(it.label); }); });
       REF.tenCodes.filter(x => (x[0] + " " + x[1]).toLowerCase().indexOf(q) !== -1).slice(0, 6).forEach(x => add("Radio codes", "📻", x[0] + " — " + x[1], "", () => copy(x[0], "Code")));
     }
     return out.slice(0, 40);
