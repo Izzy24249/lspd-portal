@@ -525,22 +525,16 @@ body.is-demo{padding-top:52px}
     }
     function ab(b64) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
     function decode(c, b64) { return new Promise((res, rej) => { try { const p = c.decodeAudioData(ab(b64), res, rej); if (p && p.then) p.then(res, rej); } catch (e) { rej(e); } }); }
-    function shapeClip(c, buf, tail, fade) {   // trim dead air; keep 'tail' s after the last word and ease it out over 'fade' s
+    function shapeClip(c, buf) {   // play the whole clip untouched (no end cut); trim only dead air before the first word; note where the voice ends
       const d = buf.getChannelData(0), sr = buf.sampleRate; let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
-      let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < peak * 0.04) a++; while (z > a && Math.abs(d[z]) < peak * 0.006) z--;
-      a = Math.max(0, a - Math.floor(sr * 0.03)); const end = z + Math.floor(sr * tail), n = end - a + 1;
-      const out = c.createBuffer(buf.numberOfChannels, n, sr), fi = Math.floor(sr * 0.008), fo = Math.min(n, Math.floor(sr * fade)), k = peak > 0 ? 0.8 / peak : 1;
-      for (let ch = 0; ch < buf.numberOfChannels; ch++) {
-        const src = buf.getChannelData(ch), seg = new Float32Array(n);
-        for (let i = 0; i < n; i++) seg[i] = (a + i < src.length ? src[a + i] : 0) * k;           // same loudness for every clip
-        for (let i = 0; i < fi; i++) seg[i] *= i / fi;
-        for (let i = 0; i < fo; i++) seg[n - fo + i] *= 0.5 + 0.5 * Math.cos(Math.PI * i / fo);    // smooth cosine fade-out
-        out.copyToChannel(seg, ch);
-      }
-      return out;
+      let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < peak * 0.04) a++; while (z > a && Math.abs(d[z]) < peak * 0.004) z--;
+      a = Math.max(0, a - Math.floor(sr * 0.03)); const n = d.length - a, k = peak > 0 ? 0.8 / peak : 1;
+      const out = c.createBuffer(buf.numberOfChannels, n, sr);
+      for (let ch = 0; ch < buf.numberOfChannels; ch++) { const seg = Float32Array.from(buf.getChannelData(ch).subarray(a)); for (let i = 0; i < n; i++) seg[i] *= k; out.copyToChannel(seg, ch); }
+      return { buf: out, voiceEnd: (z - a) / sr };       // seconds from clip start to the end of the last word
     }
-    // greeting fades softly and the name rolls in as it fades; a full-stop pause before "You're signed on."
-    const CLIP_SHAPE = [[0.38, 0.32], [0.14, 0.06], [0.3, 0.22]], CLIP_JOIN = [-0.24, 0.24, 0];
+    // each clip finishes completely, then a 1-second break before the next one
+    const CLIP_BREAK = 1.0;
 
     async function play(when) {
       const c = SFX.ctx(); if (!c || !pending) return false;
@@ -548,10 +542,11 @@ body.is-demo{padding-top:52px}
       const parts = [plan.greet[when], plan.name, plan.close].map(k => { try { return localStorage.getItem(LS + k); } catch (e) { return null; } });
       if (parts.some(x => !x)) return false;
       try {
-        const bufs = (await Promise.all(parts.map(b => decode(c, b)))).map((b, i) => shapeClip(c, b, CLIP_SHAPE[i][0], CLIP_SHAPE[i][1]));
+        const bufs = (await Promise.all(parts.map(b => decode(c, b)))).map(b => shapeClip(c, b));
         const g = c.createGain(); g.gain.value = 1; g.connect(c.destination);
-        let t = c.currentTime + 0.08; const gaps = CLIP_JOIN;
-        bufs.forEach((b, i) => { const src = c.createBufferSource(); src.buffer = b; src.connect(g); src.start(t); t += b.duration + gaps[i]; });
+        let t = c.currentTime + 0.08, end = t;
+        bufs.forEach(x => { const src = c.createBufferSource(); src.buffer = x.buf; src.connect(g); src.start(t); end = t + x.buf.duration; t += x.voiceEnd + CLIP_BREAK; });
+        t = end;
         await new Promise(r => setTimeout(r, (t - c.currentTime) * 1000 + 150));
         return true;
       } catch (e) { return false; }
