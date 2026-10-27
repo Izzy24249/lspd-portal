@@ -9,7 +9,7 @@
   const SESSION = LS.get("lspd_sess");
   if (!SESSION) { location.replace("signon.html?next=" + encodeURIComponent("mdt.html" + location.hash)); return; }
 
-  let DATA = LS.json("mdt:home"), VIEW = "home", FLEET_ALL = LS.get("mdt:fleetAll") === "1", UNI_ALL = LS.get("mdt:uniAll") === "1", SEX = LS.get("mdt:sex") || "male";
+  let DATA = LS.json("mdt:home"), VIEW = "home", SNAP_FORMS = null, FLEET_ALL = LS.get("mdt:fleetAll") === "1", UNI_ALL = LS.get("mdt:uniAll") === "1", SEX = LS.get("mdt:sex") || "male";
   function toast(t) { const x = $("toast"); x.textContent = t; x.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => x.classList.remove("show"), 2200); }
   function copy(text, what) {
     const done = () => toast(what + " copied: " + text);
@@ -54,9 +54,36 @@
 
   // ---------- reports (forms) in the side panel ----------
   let FORM_Q = "";
-  function myForms() { return (DATA && DATA.forms) || []; }
+  function myForms() { return (DATA && DATA.forms) || SNAP_FORMS || []; }
+  // first visit on this device: list the reports straight away from the site's own copy of the forms (data/portal.json)
+  // and the officer's sign-on profile; the live list from the server replaces it a moment later
+  function snapForms() {
+    fetch("data/portal.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(sn => {
+      if (DATA || !sn || !sn.config) return;
+      const pr = LS.json("lspd_prof") || {}, L = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"], lv = L.indexOf(pr.level || "officer");
+      SNAP_FORMS = (sn.config.forms || []).filter(f => (f.status === "live" || f.status === "soon") && !(f.minLevel && lv < L.indexOf(f.minLevel)) &&
+        !((f.accessTabs || []).length && lv < L.indexOf("command") && (pr.forms || []).indexOf(f.id) === -1))
+        .map(f => ({ id: f.id, title: f.title, icon: f.icon || "📄", status: f.status, section: f.section || "", desc: String(f.desc || f.subtitle || "").slice(0, 140), cid: !!f.cidApp, division: (f.accessTabs || []).map(t => t.name).join(", ") }));
+      drawFormsNav(); if (/^form:/.test(VIEW)) draw();
+    }).catch(() => {});
+  }
+  // one report window, loaded in the background as soon as the terminal opens and kept open:
+  // switching reports only changes which form it shows, so reports open instantly
+  let FH_READY = false, FH_WANT = "";
+  function formHost() {
+    let h = $("fhost"); if (h.__made) return h; h.__made = 1;
+    h.innerHTML = '<div class="formview"><div class="fv-bar" id="fhBar"></div><div class="fv-frame"><div class="fv-load boot" id="fhLoad"><i></i>LOADING REPORT…</div><iframe id="fhFrame" title="Report" src="forms.html?embed=1"></iframe></div></div>';
+    $("fhFrame").addEventListener("load", () => { FH_READY = true; if (FH_WANT) showForm(FH_WANT); });
+    return h;
+  }
+  function showForm(id) {
+    FH_WANT = id; formHost();
+    if (!FH_READY) { $("fhLoad").style.opacity = 1; return; }
+    try { const w = $("fhFrame").contentWindow; if (w.location.hash.slice(1) !== id) w.location.hash = id; } catch (e) { $("fhFrame").src = "forms.html?embed=1#" + id; }
+    setTimeout(() => { $("fhLoad").style.opacity = 0; }, 120);
+  }
   function drawFormsNav() {
-    const box = $("formsNav"); if (!DATA) return;
+    const box = $("formsNav"); if (!DATA && !SNAP_FORMS) return;
     const list = myForms(), q = FORM_Q.toLowerCase(), cur = VIEW.indexOf("form:") === 0 ? VIEW.slice(5) : "";
     $("nForms").textContent = list.filter(f => f.status === "live").length || "";
     const shown = list.filter(f => !q || (f.title + " " + f.section + " " + f.division).toLowerCase().indexOf(q) !== -1);
@@ -110,8 +137,16 @@
     if (VIEW.indexOf("frame:") === 0) { const a = document.querySelector('[data-frame="' + VIEW.slice(6) + '"]'); t = ["TERMINAL", a ? a.getAttribute("data-title") : "Page"]; }
     $("crumbSec").textContent = t[0]; $("crumbTitle").textContent = t[1]; document.title = t[1] + " · LSPD MDT";
     m.classList.toggle("flush", framed);
-    if (!DATA) { m.innerHTML = '<div class="boot"><i></i>ESTABLISHING LINK…</div>'; return; }
+    const inHost = VIEW.indexOf("form:") === 0 && myForms().some(x => x.id === VIEW.slice(5) && !x.cid);
+    $("fhost").hidden = !inHost; m.hidden = inHost;
+    if (inHost) {
+      const f = myForms().find(x => x.id === VIEW.slice(5)); m.__view = "";
+      formHost(); $("fhBar").innerHTML = '<span class="fi">' + esc(f.icon) + "</span><div><b>" + esc(f.title) + "</b><small>" + esc(f.division ? f.division + " report" : (f.desc || "Filed straight to Discord and Division Command")) + '</small></div><span class="sp"></span><a class="btn ghost" href="forms.html#' + esc(f.id) + '" target="_blank" rel="noopener" title="Open in its own tab">↗ <span class="only-d">FULL PAGE</span></a>';
+      showForm(f.id); $("ticker").hidden = true; return;
+    }
+    if (!DATA && !framed) { m.innerHTML = '<div class="boot"><i></i>ESTABLISHING LINK…</div>'; return; }
     if (framed) {
+      if (!DATA && VIEW.indexOf("form:") === 0) { m.innerHTML = '<div class="boot"><i></i>ESTABLISHING LINK…</div>'; return; }
       if (m.__view === VIEW) return;                                   // keep the report open (and typed text) through background refreshes
       m.__view = VIEW;
       if (VIEW.indexOf("form:") === 0) {
@@ -509,7 +544,10 @@
     } catch (e) { if (!DATA) $("main").innerHTML = '<div class="boot">LINK FAILED · ' + esc(e.message) + ' · <a href="" style="color:#8fb2ff">retry</a></div>'; else toast("Showing saved data: " + e.message); }
   }
   VIEW = okView(decodeURIComponent(location.hash.slice(1))) ? decodeURIComponent(location.hash.slice(1)) : "home";
+  { const pr = LS.json("lspd_prof"); if (DATA && DATA.profile && pr && pr.discordId && DATA.profile.discordId !== pr.discordId) DATA = null; }   // another officer used this device
+  if (!DATA) snapForms();
   draw(); load(); loadUnit();
+  setTimeout(formHost, 700);
   setInterval(() => { if (!document.hidden) load(); }, 3 * 60e3);
   document.addEventListener("submit", e => { if (e.target.id === "recForm") { e.preventDefault(); const q = $("recQ").value.trim(); if (q.length >= 2) runSearch(q); else toast("Type at least 2 characters."); } });
   document.addEventListener("input", e => { if (e.target.id === "refQ") { REF_Q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("refQ"); n.focus(); n.setSelectionRange(pos, pos); } });

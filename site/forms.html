@@ -357,7 +357,7 @@ const MyReports = (()=>{
     }
   };
 })();
-setTimeout(() => MyReports.check(), 1500);
+if (!document.documentElement.classList.contains("embed")) setTimeout(() => MyReports.check(), 1500);   // inside the terminal, the MDT shows grades itself
 
 /* ---------- boot: show cached forms instantly, then refresh from Google ---------- */
 function apply(cfg){
