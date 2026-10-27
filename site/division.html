@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Division Command · LSPD</title>
 <meta name="robots" content="noindex">
+<script src="gate.js?v=1"></script>
+<script src="lock.js?v=1"></script>
 <link rel="icon" href="img/lspd-seal.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Courier+Prime:wght@400;700&family=Saira+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
@@ -20,12 +22,15 @@
     <div class="dc-emblem"><img src="img/lspd-seal.png" alt=""><i></i></div>
     <div class="dc-kick">LOS SANTOS POLICE DEPARTMENT</div>
     <h1>DIVISION COMMAND</h1>
-    <p>Sign in with your portal account.</p>
+    <p>Leaders and command staff: sign on with your officer account.</p>
+    <a class="dc-btn ac big" href="signon.html?next=division.html" style="display:grid;place-items:center;text-decoration:none">Sign on to the MDT</a>
+    <details style="margin-top:14px"><summary style="cursor:pointer;color:var(--muted,#8592a8);font-size:13px">Portal admin login</summary>
     <label><span>Username</span><input id="lgUser" autocomplete="username" required></label>
     <label><span>Password</span><input id="lgPass" type="password" autocomplete="current-password" required></label>
     <label class="dc-chk"><input type="checkbox" id="lgKeep" checked> Keep me signed in on this device</label>
     <div class="dc-err" id="lgErr"></div>
     <button class="dc-btn ac big" id="lgBtn">Enter command</button>
+    </details>
   </form>
 </section>
 

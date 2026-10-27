@@ -9,9 +9,14 @@
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
   function toast(m, t) { const x = $("toast"); x.textContent = m; x.className = "toast show " + (t || ""); clearTimeout(toast.t); toast.t = setTimeout(() => x.className = "toast", 4500); }
+  // officers come in with their MDT sign-on (Leader level and up); portal admins can still use the admin login
+  let SESSION = ""; try { SESSION = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
+  const OFFICER = () => !TOKEN && !!SESSION;
   async function api(action, data) {
-    const r = await Portal.post(Object.assign({ action: action, token: TOKEN }, data || {}));
-    if (!r.ok && r.error === "AUTH") { signOut(true); throw new Error(r.message || "Please sign in again."); }
+    const r = await Portal.post(Object.assign({ action: action }, OFFICER() ? { session: SESSION } : { token: TOKEN }, data || {}));
+    if (!r.ok && r.error === "AUTH") {
+      if (OFFICER()) { location.replace("signon.html?next=division.html"); throw new Error("Sign on again."); }
+      signOut(true); throw new Error(r.message || "Please sign in again."); }
     if (!r.ok) throw new Error(r.message || r.error || "Something went wrong.");
     return r;
   }
@@ -41,7 +46,7 @@
     try { localStorage.removeItem(TK); sessionStorage.removeItem(TK); Object.keys(localStorage).filter(k => k.indexOf("dc:data:") === 0).forEach(k => localStorage.removeItem(k)); } catch (e) {}
     showLogin();
   }
-  $("outBtn").onclick = () => signOut(false);
+  $("outBtn").onclick = () => { if (OFFICER()) location.href = "index.html"; else signOut(false); };
 
   // ---------------- data ----------------
   // Each division's last data is kept (in memory and in this browser), so switching shows it instantly;
@@ -83,8 +88,8 @@
     setLive(DATA && DATA.division ? "UPDATING…" : "");
     try { await fetchDiv(DIV, fresh, quiet); prefetch(); }
     catch (e) {
-      if (!TOKEN) return;
-      if (!DATA) { $("boot").querySelector("span").textContent = e.message; setTimeout(() => { if (!DATA && TOKEN) load(fresh); }, 6000); }
+      if (!TOKEN && !SESSION) return;
+      if (!DATA) { $("boot").querySelector("span").textContent = e.message; setTimeout(() => { if (!DATA && (TOKEN || SESSION)) load(fresh); }, 6000); }
       else if (!quiet) toast(e.message, "bad");
     } finally { setLive(""); }
   }
@@ -92,7 +97,7 @@
   let pre = false;
   async function prefetch() {
     if (pre || !DATA || !DATA.divisions) return; pre = true;
-    try { for (const d of DATA.divisions) { if (!TOKEN) break; if (d.id === DIV) continue; const m = MEM[d.id]; if (m && !m.old && Date.now() - m.at < 120000) continue; try { await fetchDiv(d.id, false, true); } catch (e) {} } }
+    try { for (const d of DATA.divisions) { if (!TOKEN && !SESSION) break; if (d.id === DIV) continue; const m = MEM[d.id]; if (m && !m.old && Date.now() - m.at < 120000) continue; try { await fetchDiv(d.id, false, true); } catch (e) {} } }
     finally { pre = false; }
   }
   function switchDiv(id) {
@@ -103,8 +108,8 @@
     else { $("view").innerHTML = '<div class="dc-empty">Loading division…</div>'; }
     load(false, true);
   }
-  setInterval(() => { if (DATA && TOKEN && !document.hidden && $("modal").hidden) load(false, true); }, 60000);
-  setInterval(() => { if (DATA && TOKEN && !document.hidden) prefetch(); }, 300000);
+  setInterval(() => { if (DATA && (TOKEN || SESSION) && !document.hidden && $("modal").hidden) load(false, true); }, 60000);
+  setInterval(() => { if (DATA && (TOKEN || SESSION) && !document.hidden) prefetch(); }, 300000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && DATA && Date.now() - LAST > 60000) load(false, true); });
   $("refreshBtn").onclick = async () => { $("refreshBtn").classList.add("spin"); await load(true); $("refreshBtn").classList.remove("spin"); };
   function hexRgb(h) { const m = /^#?([0-9a-f]{6})$/i.exec(h) || [0, "2f7bff"]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(","); }
@@ -155,7 +160,7 @@
     const dv = DATA.division, S = stats();
     $("topDiv").textContent = dv.name.toUpperCase();
     $("me").innerHTML = `<i class="r-${esc(ME.role)}">${esc(ME.role === "leader" ? "LEADER" : ME.role.toUpperCase())}</i>${esc(ME.username)}`;
-    $("adminLink").hidden = ME.role === "leader";
+    $("adminLink").hidden = ME.role === "leader" || (!!ME.officer && ["admin", "owner"].indexOf(ME.role) === -1);
     $("divs").innerHTML = (DATA.divisions || []).length > 1 ? DATA.divisions.map(d => `<button data-div="${esc(d.id)}" class="${d.id === dv.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("") : "";
     document.querySelectorAll("#period [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === PERIOD));
     document.querySelectorAll("#tabs [data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === TAB));
@@ -451,5 +456,6 @@
 
   // ---------------- start ----------------
   tick();
-  if (TOKEN) load(false); else showLogin();
+  if (OFFICER()) { $("outBtn").textContent = "← Portal"; }
+  if (TOKEN || SESSION) load(false); else showLogin();
 })();

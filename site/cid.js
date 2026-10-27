@@ -576,7 +576,8 @@
   // ---------------- idle lock (5 minutes away) ----------------
   const Idle = {
     t: null, ms: 5 * 60 * 1000,
-    start() { ["pointerdown", "pointermove", "keydown", "wheel", "scroll", "touchstart"].forEach(ev => addEventListener(ev, () => Idle.poke(), { passive: true })); this.poke(); },
+    start() { if (window.LSPDLock) return;   // the portal-wide lock (lock.js) covers this page
+      ["pointerdown", "pointermove", "keydown", "wheel", "scroll", "touchstart"].forEach(ev => addEventListener(ev, () => Idle.poke(), { passive: true })); this.poke(); },
     poke() { if (!$("lock").hidden) return; clearTimeout(this.t); this.t = setTimeout(() => this.lock(), this.ms); },
     clock: null,
     tickClock() {   // the computer's own clock and date

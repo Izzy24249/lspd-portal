@@ -1656,14 +1656,14 @@ function pageDivisions(page) {
 }
 
 /* ---------------- OFFICER ACCOUNTS (sign in with Discord + 4-digit PIN) ---------------- */
-let ACCTS = null, DISC = null, VOICE = null, SIGNON = null;
+let ACCTS = null, DISC = null, VOICE = null, SIGNON = null, DIVLIST = [];
 const LEVELS = [["", "Automatic (from the roster)"], ["trainee", "Trainee"], ["officer", "Officer"], ["fto", "FTO / Trainer"], ["leader", "Division leader"], ["command", "Command"], ["admin", "Admin"], ["owner", "Owner"]];
 function pageAccounts(page) {
   page.append(head("Officer Accounts", "Officers sign in with Discord once per device, then a 4-digit PIN. Certified officers come from LSPD Personnel Roster, trainees from LSPD Onboarding Roster. Reset a forgotten PIN, sign someone out everywhere, lock an account or change its level here.",
     h("button", { class: "btn ghost sm", onclick: () => { ACCTS = null; renderPage(true); } }, "Refresh")));
   const box = h("div", {}, h("div", { class: "sec empty-note", text: "Loading accounts…" }));
   page.append(box);
-  const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; VOICE = r.voice || null; SIGNON = r.signon || null; });
+  const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; VOICE = r.voice || null; SIGNON = r.signon || null; DIVLIST = r.divisionList || []; });
   load.then(() => { box.innerHTML = ""; if (["owner", "admin"].includes(ME.role)) box.append(signonSec()); drawAccounts(box); if (ME.role === "owner") box.append(discordSec(), voiceSec()); })
     .catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 55 ? "Paste the new WebApp.gs (version 55 or newer) and deploy a new version to use officer accounts." : e.message })); });
 }
@@ -1679,12 +1679,23 @@ function drawAccounts(box) {
       const act = async (action, data, msg) => { try { const r = await api(action, Object.assign({ discordId: a.discordId }, data || {})); ACCTS = r.accounts; draw(); toast(msg, "ok"); } catch (e) { toast(e.message, "bad"); } };
       const lv = h("select", { class: "role-sel", onchange: () => act("acctLevel", { level: lv.value }, "Level updated.") }, LEVELS.map(([v, l]) => h("option", { value: v, text: v ? l : l + " · " + (LEVELS.find(x => x[0] === a.level) || ["", a.level])[1] })));
       lv.value = a.override || "";
+      // Leaders: pick the divisions they run in Division Command (Command and up see all of them)
+      let divPick = null;
+      if (a.level === "leader") {
+        const sel = new Set(a.divisions || []);
+        divPick = h("details", { class: "divpick", style: "position:relative" },
+          h("summary", { class: "btn ghost sm", style: "list-style:none;cursor:pointer", text: "🛡 " + (sel.size ? DIVLIST.filter(x => sel.has(x.id)).map(x => x.name).join(", ") : "Pick divisions") }),
+          h("div", { style: "position:absolute;z-index:20;right:0;margin-top:6px;min-width:220px;padding:10px 12px;display:grid;gap:6px;background:var(--panel,#121925);border:1px solid var(--line,rgba(255,255,255,.15));box-shadow:0 10px 30px rgba(0,0,0,.45)" },
+            DIVLIST.length ? DIVLIST.map(x => { const cb = h("input", { type: "checkbox" }); cb.checked = sel.has(x.id); cb.onchange = () => cb.checked ? sel.add(x.id) : sel.delete(x.id);
+              return h("label", { style: "display:flex;gap:8px;align-items:center" }, cb, h("span", { text: x.name })); }) : h("span", { class: "help", text: "No divisions set up yet (Admin → Division Command)." }),
+            h("button", { class: "btn primary sm", onclick: () => act("acctDivisions", { divisions: [...sel] }, "Divisions saved.") }, "Save")));
+      }
       list.append(h("div", { class: "urow" + (a.locked ? " locked" : "") },
         h("div", { class: "av", text: initials(a.name || a.username || "?") }),
         h("div", { class: "who-t" }, h("b", { text: (a.callsign ? a.callsign + " · " : "") + (a.name || a.username) }),
           h("small", { text: (a.onRoster ? "Rank: " + (a.title || "?") + (a.rank || a.section ? " (roster says \"" + [a.rank, a.section].filter(Boolean).join(" / ") + "\")" : " (no rank on the roster)") + " · " : "") + "@" + a.username + " · " + a.discordId + (a.onRoster ? "" : " · not on the roster") + (a.hasPin ? "" : " · no PIN yet") + (a.locked ? " · LOCKED" : "") + " · last sign-in " + ago(a.last) })),
         lv,
-        h("div", { class: "acts" },
+        h("div", { class: "acts" }, divPick,
           h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Reset " + (a.name || a.username) + "'s PIN? They'll sign in with Discord again on each device and pick a new PIN.")) act("acctReset", {}, "PIN reset. They pick a new one at next sign-in."); } }, "Reset PIN"),
           h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Sign " + (a.name || a.username) + " out on every device?")) act("acctSignOut", {}, "Signed out everywhere."); } }, "Sign out everywhere"),
           h("button", { class: "btn ghost sm", title: "Rank and name used for the greeting: " + (a.voiceAs || ""), onclick: () => {

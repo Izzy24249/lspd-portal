@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 66;
+const BACKEND_VERSION = 67;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2120,7 +2120,7 @@ function divImport_() {
 // OFFICER ACCOUNTS: sign in with Discord once per device, then a 4-digit PIN
 // =====================================================================
 const ACCT_SHEET_ = "Officer Accounts";
-const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices", "Say Name As", "Say Rank As"];
+const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices", "Say Name As", "Say Rank As", "Divisions"];
 const LEVELS_ = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
 const OFFICER_DAYS_ = 30;              // a PIN sign-in lasts 30 days on that device
 function acctSheet_() {
@@ -2132,7 +2132,7 @@ function acctAll_() {
   const v = acctSheet_().getDataRange().getValues(), out = [];
   for (let i = 1; i < v.length; i++) { const r = v[i], id = str_(r[0]).replace(/^'/, ""); if (!id) continue;
     out.push({ row: i + 1, id: id, username: str_(r[1]), callsign: str_(r[2]), name: str_(r[3]), override: str_(r[4]), salt: str_(r[5]), hash: str_(r[6]),
-      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0, sayAs: str_(r[12]), rankAs: str_(r[13]) }); }
+      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0, sayAs: str_(r[12]), rankAs: str_(r[13]), divisions: str_(r[14]).split(",").map(x => x.trim()).filter(Boolean) }); }
   return out;
 }
 function acctFind_(id) { return acctAll_().find(a => a.id === str_(id)) || null; }
@@ -2172,10 +2172,17 @@ function acctLevel_(acct, person) {
   if (acct && LEVELS_.indexOf(acct.override) !== -1) return acct.override;
   return person && person.trainee ? "trainee" : "officer";
 }
+// Division Command through the officer sign-in: Leaders see the divisions assigned to them; Command, Admin and Owner see all
+function acctDivisions_(acct, level) {
+  const all = ((getConfig_().settings || {}).divisions || []).map(x => x.id);
+  if (["command", "admin", "owner"].indexOf(level) !== -1) return all;
+  if (level === "leader") return (acct.divisions || []).filter(id => all.indexOf(id) !== -1);
+  return [];
+}
 function acctProfile_(acct) {
   const person = rosterPerson_(acct.id) || {};
   const level = acctLevel_(acct, person);
-  return { discordId: acct.id, username: acct.username, callsign: person.callsign || acct.callsign, name: person.name || acct.name, rank: person.rank || "", title: str_(acct.rankAs) || voiceTitleFor_(person), level: level, rank_i: LEVELS_.indexOf(level) };
+  return { discordId: acct.id, username: acct.username, callsign: person.callsign || acct.callsign, name: person.name || acct.name, rank: person.rank || "", title: str_(acct.rankAs) || voiceTitleFor_(person), level: level, rank_i: LEVELS_.indexOf(level), divisions: acctDivisions_(acct, level) };
 }
 function officerSession_(token) {
   const t = offRead_(token, "OFF"); if (!t) return null;
@@ -2243,9 +2250,26 @@ function acctHandle_(d) {
   if (a === "acctOut") return { ok: true };       // the browser forgets its tokens
   return { ok: false, error: "Unknown action." };
 }
+// Division Command for a signed-in officer (no separate login): only their allowed divisions
+function divOfficer_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH", message: "Sign on again." };
+  const prof = acctProfile_(acct), allowed = prof.divisions || [];
+  if (!allowed.length) return { ok: false, error: "Division Command is for division leaders and command staff. Ask command to give your account access." };
+  const name = ((prof.title || "Officer") + " " + voiceLast_(prof.name || "")).trim() || prof.callsign || acct.username;
+  const me = { username: name, role: prof.level === "leader" ? "leader" : prof.level, officer: true };
+  if (d.action === "divView") {
+    const want = allowed.indexOf(str_(d.division)) !== -1 ? str_(d.division) : allowed[0];
+    const r = divView_(Object.assign({}, d, { division: want }), me);
+    if (r && r.divisions) r.divisions = r.divisions.filter(x => allowed.indexOf(x.id) !== -1);
+    if (r) r.me = me;
+    return r;
+  }
+  if (d.action === "divGrade") { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." }; return withLock_(() => divGrade_(d, me)); }
+  return divReport_(d);
+}
 function acctList_() {
   return acctAll_().map(a => { const p = rosterPerson_(a.id); return { discordId: a.id, username: a.username, callsign: (p && p.callsign) || a.callsign, name: (p && p.name) || a.name, rank: p ? p.rank : "", section: p ? p.section || "" : "", title: a.rankAs || voiceTitleFor_(p), rankAs: a.rankAs, onRoster: !!p,
-    level: acctLevel_(a, p), override: a.override, sayAs: a.sayAs, voiceAs: voiceNameText_(a, p), hasPin: !!a.hash, locked: a.locked, created: a.created, last: a.last, devices: a.devices }; });
+    level: acctLevel_(a, p), override: a.override, divisions: a.divisions, sayAs: a.sayAs, voiceAs: voiceNameText_(a, p), hasPin: !!a.hash, locked: a.locked, created: a.created, last: a.last, devices: a.devices }; });
 }
 function acctAdmin_(a, d, me) {
   const acct = acctFind_(d.discordId); if (!acct) throw new Error("Account not found.");
@@ -2645,6 +2669,8 @@ function handleAdmin_(d) {
   if (/^acct(DiscordUrl|Discord|SetPin|Pin|Me|Out)$/.test(a)) return acctHandle_(d);
   if (a === "acctVoice") return voiceForDevice_(d);
 
+  if (d.session && /^div(View|Report|Grade)$/.test(a)) return divOfficer_(d);
+
   const me = sessionAdmin_(d.token);
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
   const isOwner = me.role === "owner";
@@ -2680,7 +2706,15 @@ function handleAdmin_(d) {
       logAdmin_(me.username, "division logs", "imported " + r.added + " past reports");
       return Object.assign({ ok: true }, r);
     }
-    case "acctList": return { ok: true, accounts: acctList_(), discord: discordStatus_(), voice: voiceStatus_(), signon: signonCfg_() };
+    case "acctList": return { ok: true, accounts: acctList_(), discord: discordStatus_(), voice: voiceStatus_(), signon: signonCfg_(), divisionList: divList_() };
+    case "acctDivisions": {      // which divisions a Leader runs in Division Command
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can assign divisions.");
+      const acct = acctFind_(d.discordId); if (!acct) throw new Error("Account not found.");
+      const all = divList_().map(x => x.id), ids = (Array.isArray(d.divisions) ? d.divisions : []).map(str_).filter(id => all.indexOf(id) !== -1);
+      withLock_(() => { acctSheet_().getRange(acct.row, 15).setValue(ids.join(", ")); return { ok: true }; });
+      logAdmin_(me.username, "officer account", "divisions " + str_(d.discordId) + " -> " + (ids.join(", ") || "none"));
+      return { ok: true, accounts: acctList_() };
+    }
     case "signonSetup": {        // owner/admin: make the sign-on screen the front door
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");
       if (d.required && !signonCfg_().ready) throw new Error("Set up Sign in with Discord first, otherwise nobody could get in.");
