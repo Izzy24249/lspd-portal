@@ -475,6 +475,35 @@ body.is-demo{padding-top:52px}
   const addr = p => { const ln = p && p.name ? lastName(p.name) : ""; return ln ? ((title(p.rank) || "Officer") + " " + ln) : "Officer"; };
   function greet() { const h = new Date().getHours(); return h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
 
+  // ---------- spoken greeting (the browser's built-in voice; follows the sound on/off button) ----------
+  const Voice = (function () {
+    const ok = "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function";
+    let voices = [];
+    const load = () => { try { voices = speechSynthesis.getVoices() || []; } catch (e) {} };
+    if (ok) { load(); try { speechSynthesis.addEventListener("voiceschanged", load); } catch (e) {} }
+    function pick() {                                    // the most natural-sounding English voice this device has
+      const en = voices.filter(v => /^en(-|_|$)/i.test(v.lang));
+      const pref = [/natural|neural|online/i, /google us english/i, /\b(guy|davis|christopher|eric|andrew|brian)\b/i, /\b(aria|jenny|samantha|ava|allison)\b/i, /en-us/i];
+      for (const re of pref) { const v = en.find(x => re.test(x.name + " " + x.lang)); if (v) return v; }
+      return en[0] || null;
+    }
+    return {
+      say(text) {
+        return new Promise(res => {
+          if (!ok || !SFX.on) return res();
+          try {
+            speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text), v = pick();
+            if (v) u.voice = v; u.lang = (v && v.lang) || "en-US"; u.rate = 0.98; u.pitch = 0.95; u.volume = 1;
+            const done = () => { clearTimeout(cap); res(); }, cap = setTimeout(res, 4500);
+            u.onend = done; u.onerror = done;
+            speechSynthesis.speak(u);
+          } catch (e) { res(); }
+        });
+      }
+    };
+  })();
+
   async function finish(r) {
     activePad = null;
     store.set(K.sess, r.session || ""); if (r.profile) store.set(K.prof, JSON.stringify(r.profile));
@@ -483,7 +512,9 @@ body.is-demo{padding-top:52px}
     await new Promise(res => setTimeout(res, 350)); l.done("10-8");
     show('<div class="ok-big"><i>✓</i><div><h2>' + esc(greet()) + ", " + esc(addr(p)) + '.</h2><p class="sub" style="margin:2px 0 0">Signed on' + (p.callsign ? " as <b>" + esc(p.callsign) + "</b>" : "") + ". Opening the terminal…</p></div></div>");
     const to = NEXT(); sess.set("lspd_next", "");
-    setTimeout(() => { if (DEMO) { show('<div class="ok-big"><i>✓</i><div><h2>Demo complete</h2><p class="sub" style="margin:2px 0 0">On the live site this now opens the portal. <a href="?demo=1" style="color:var(--blue)">Run the demo again</a> (your demo PIN is remembered until you close the tab).</p></div></div>'); return; } location.replace(to); }, 1300);
+    const spoken = Voice.say(greet() + ", " + addr(p) + ". You're signed on.");
+    await Promise.all([spoken, new Promise(res => setTimeout(res, 1300))]);
+    setTimeout(() => { if (DEMO) { show('<div class="ok-big"><i>✓</i><div><h2>Demo complete</h2><p class="sub" style="margin:2px 0 0">On the live site this now opens the portal. <a href="?demo=1" style="color:var(--blue)">Run the demo again</a> (your demo PIN is remembered until you close the tab).</p></div></div>'); return; } location.replace(to); }, 250);
   }
 
   function screenError(msg) {
