@@ -1682,14 +1682,17 @@ function drawAccounts(box) {
       list.append(h("div", { class: "urow" + (a.locked ? " locked" : "") },
         h("div", { class: "av", text: initials(a.name || a.username || "?") }),
         h("div", { class: "who-t" }, h("b", { text: (a.callsign ? a.callsign + " · " : "") + (a.name || a.username) }),
-          h("small", { text: "@" + a.username + " · " + a.discordId + (a.onRoster ? "" : " · not on the roster") + (a.hasPin ? "" : " · no PIN yet") + (a.locked ? " · LOCKED" : "") + " · last sign-in " + ago(a.last) })),
+          h("small", { text: (a.onRoster ? "Rank: " + (a.title || "?") + (a.rank || a.section ? " (roster says \"" + [a.rank, a.section].filter(Boolean).join(" / ") + "\")" : " (no rank on the roster)") + " · " : "") + "@" + a.username + " · " + a.discordId + (a.onRoster ? "" : " · not on the roster") + (a.hasPin ? "" : " · no PIN yet") + (a.locked ? " · LOCKED" : "") + " · last sign-in " + ago(a.last) })),
         lv,
         h("div", { class: "acts" },
           h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Reset " + (a.name || a.username) + "'s PIN? They'll sign in with Discord again on each device and pick a new PIN.")) act("acctReset", {}, "PIN reset. They pick a new one at next sign-in."); } }, "Reset PIN"),
           h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Sign " + (a.name || a.username) + " out on every device?")) act("acctSignOut", {}, "Signed out everywhere."); } }, "Sign out everywhere"),
-          VOICE && VOICE.enabled ? h("button", { class: "btn ghost sm", title: "The sign-in voice says: " + (a.voiceAs || ""), onclick: () => {
-            const v = prompt("The sign-in voice says: \"" + (a.voiceAs || "") + "\"\n\nIf the last name sounds wrong, type it the way it sounds (for example Doo-zen). Leave blank to go back to automatic.", a.sayAs || "");
-            if (v !== null) act("acctSayAs", { sayAs: v.trim() }, v.trim() ? "Saved. It's recorded the next time they sign in." : "Back to automatic."); } }, "🔊 Name") : null,
+          h("button", { class: "btn ghost sm", title: "Rank and name used for the greeting: " + (a.voiceAs || ""), onclick: () => {
+            const rk = prompt("Greeting says: \"" + (a.voiceAs || "") + "\"\n\nRANK: type the rank to say (e.g. Sergeant, Lieutenant). Leave blank to use the roster" + (a.rank || a.section ? " (\"" + [a.rank, a.section].filter(Boolean).join(" / ") + "\")" : "") + ".", a.rankAs || "");
+            if (rk === null) return;
+            const v = prompt("LAST NAME: if it sounds wrong, type it the way it sounds (e.g. Doo-zen). Leave blank for the roster name.", a.sayAs || "");
+            if (v === null) return;
+            act("acctSayAs", { sayAs: v.trim(), rankAs: rk.trim() }, "Saved. The greeting uses it from their next sign-in."); } }, "🔊 Rank & name"),
           VOICE && VOICE.enabled ? h("button", { class: "btn ghost sm", title: "Record this officer's name clip again", onclick: () => { if (confirm("Record " + (a.name || a.username) + "'s name clip again? It's re-recorded at their next sign-in (about 15 characters).")) act("voiceRedo", {}, "Will be re-recorded at next sign-in."); } }, "Re-record") : null,
           h("button", { class: "btn " + (a.locked ? "ghost" : "danger") + " sm", onclick: () => { if (a.locked || confirm("Lock " + (a.name || a.username) + "? They can't sign in until unlocked. Their history is kept.")) act("acctLock", { locked: !a.locked }, a.locked ? "Account unlocked." : "Account locked."); } }, a.locked ? "Unlock" : "Lock"))));
     });

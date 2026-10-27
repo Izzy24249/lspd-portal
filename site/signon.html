@@ -359,7 +359,7 @@ body.is-demo{padding-top:52px}
   function show(html) { card.hidden = false; card.innerHTML = html; card.style.animation = "none"; void card.offsetWidth; card.style.animation = ""; }
   function whoHTML(p) {
     if (!p || !(p.callsign || p.name)) return "";
-    return '<div class="who">' + (p.callsign ? '<span class="cs">' + esc(p.callsign) + "</span>" : "") + "<div><b>" + esc(String(p.name || "Officer").replace(/([a-z'])RM\b/g, "$1").replace(/\s+RM\b/g, "")) + "</b>" + (p.rank ? "<small>" + esc(p.rank) + "</small>" : "") + "</div></div>";
+    return '<div class="who">' + (p.callsign ? '<span class="cs">' + esc(p.callsign) + "</span>" : "") + "<div><b>" + esc(String(p.name || "Officer").replace(/([a-z'])RM\b/g, "$1").replace(/\s+RM\b/g, "")) + "</b>" + (p.title || p.rank ? "<small>" + esc(p.title || p.rank) + "</small>" : "") + "</div></div>";
   }
   const DISCORD_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.6 19.6 0 0 0-4.9 1.5C.6 9.1-.3 13.7.2 18.2a19.8 19.8 0 0 0 6 3l1.3-2a12.7 12.7 0 0 1-2-1l.5-.4a14 14 0 0 0 12 0l.5.4-2 1 1.3 2a19.7 19.7 0 0 0 6-3c.5-5.2-.9-9.8-3.5-13.8ZM8 15.4c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.6 8 10.6s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>';
 
@@ -476,7 +476,7 @@ body.is-demo{padding-top:52px}
     for (const [re, t] of T) if (re.test(r)) return t;
     return "";
   }
-  const addr = p => { const ln = p && p.name ? lastName(p.name) : ""; return ln ? ((title(p.rank) || "Officer") + " " + ln) : "Officer"; };
+  const addr = p => { const ln = p && p.name ? lastName(p.name) : ""; return ln ? ((p.title || title(p.rank) || "Officer") + " " + ln) : "Officer"; };
   function greet() { const h = new Date().getHours(); return h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
 
   // ---------- spoken greeting (the browser's built-in voice; follows the sound on/off button) ----------

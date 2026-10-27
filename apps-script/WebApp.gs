@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 62;
+const BACKEND_VERSION = 64;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2120,7 +2120,7 @@ function divImport_() {
 // OFFICER ACCOUNTS: sign in with Discord once per device, then a 4-digit PIN
 // =====================================================================
 const ACCT_SHEET_ = "Officer Accounts";
-const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices", "Say Name As"];
+const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices", "Say Name As", "Say Rank As"];
 const LEVELS_ = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
 const OFFICER_DAYS_ = 30;              // a PIN sign-in lasts 30 days on that device
 function acctSheet_() {
@@ -2132,7 +2132,7 @@ function acctAll_() {
   const v = acctSheet_().getDataRange().getValues(), out = [];
   for (let i = 1; i < v.length; i++) { const r = v[i], id = str_(r[0]).replace(/^'/, ""); if (!id) continue;
     out.push({ row: i + 1, id: id, username: str_(r[1]), callsign: str_(r[2]), name: str_(r[3]), override: str_(r[4]), salt: str_(r[5]), hash: str_(r[6]),
-      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0, sayAs: str_(r[12]) }); }
+      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0, sayAs: str_(r[12]), rankAs: str_(r[13]) }); }
   return out;
 }
 function acctFind_(id) { return acctAll_().find(a => a.id === str_(id)) || null; }
@@ -2160,7 +2160,7 @@ function rosterPerson_(id) {
   const split = n => { const cs = n.indexOf("|") !== -1 ? n.split("|")[0].trim() : ""; return { callsign: cs, name: cleanName_(cs ? n.split("|").slice(1).join("|").trim() : n) }; };
   let hit = null, trainee = false;
   const fromTab = (name, isTrainee) => { if (hit) return; const tid = rosterTabByName_(name); if (tid == null) return;
-    try { const p = (getRosterTab_(tid, false, [], false, true).people || []).find(x => x.id === id); if (p) { hit = Object.assign(split(p.name), { rank: p.extra || "" }); trainee = isTrainee; } } catch (e) {} };
+    try { const p = (getRosterTab_(tid, false, [], false, true).people || []).find(x => x.id === id); if (p) { hit = Object.assign(split(p.name), { rank: p.extra || "", section: p.sec || "" }); trainee = isTrainee; } } catch (e) {} };
   fromTab(PERSONNEL_TAB_, false);
   fromTab(ONBOARD_TAB_, true);
   if (hit) return Object.assign(hit, { trainee: trainee });
@@ -2175,7 +2175,7 @@ function acctLevel_(acct, person) {
 function acctProfile_(acct) {
   const person = rosterPerson_(acct.id) || {};
   const level = acctLevel_(acct, person);
-  return { discordId: acct.id, username: acct.username, callsign: person.callsign || acct.callsign, name: person.name || acct.name, rank: person.rank || "", level: level, rank_i: LEVELS_.indexOf(level) };
+  return { discordId: acct.id, username: acct.username, callsign: person.callsign || acct.callsign, name: person.name || acct.name, rank: person.rank || "", title: str_(acct.rankAs) || voiceTitleFor_(person), level: level, rank_i: LEVELS_.indexOf(level) };
 }
 function officerSession_(token) {
   const t = offRead_(token, "OFF"); if (!t) return null;
@@ -2244,7 +2244,7 @@ function acctHandle_(d) {
   return { ok: false, error: "Unknown action." };
 }
 function acctList_() {
-  return acctAll_().map(a => { const p = rosterPerson_(a.id); return { discordId: a.id, username: a.username, callsign: (p && p.callsign) || a.callsign, name: (p && p.name) || a.name, rank: p ? p.rank : "", onRoster: !!p,
+  return acctAll_().map(a => { const p = rosterPerson_(a.id); return { discordId: a.id, username: a.username, callsign: (p && p.callsign) || a.callsign, name: (p && p.name) || a.name, rank: p ? p.rank : "", section: p ? p.section || "" : "", title: a.rankAs || voiceTitleFor_(p), rankAs: a.rankAs, onRoster: !!p,
     level: acctLevel_(a, p), override: a.override, sayAs: a.sayAs, voiceAs: voiceNameText_(a, p), hasPin: !!a.hash, locked: a.locked, created: a.created, last: a.last, devices: a.devices }; });
 }
 function acctAdmin_(a, d, me) {
@@ -2282,14 +2282,21 @@ function voiceCfg_() {
 function voiceStatus_() { const c = voiceCfg_(); return { hasKey: !!c.key, voiceId: c.voice, voiceName: c.voiceName, model: c.model, enabled: c.on && !!c.key && !!c.voice, models: VOICE_MODELS_ }; }
 // roster rank -> how you'd address them ("Police Officer II" -> "Officer"); same rules as the sign-on page
 function voiceTitle_(rank) {
-  const r = str_(rank).toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
-  if (!r) return "";
-  const T = [[/sergeant major/, "Sergeant Major"], [/assistant chief/, "Assistant Chief"], [/deputy chief/, "Deputy Chief"], [/\bchief\b/, "Chief"], [/commander/, "Commander"], [/\bmajor\b/, "Major"],
-    [/captain/, "Captain"], [/lieutenant/, "Lieutenant"], [/staff sergeant/, "Staff Sergeant"], [/sergeant/, "Sergeant"], [/corporal/, "Corporal"], [/detective/, "Detective"],
-    [/officer|recruit|cadet|trainee|probation|\bpo\b/, "Officer"]];
+  // full words and the usual roster abbreviations (Sgt., Cpl, Lt, SSgt, PO II…); the most senior match wins
+  const r = " " + str_(rank).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim() + " ";
+  if (!r.trim()) return "";
+  const T = [[/ (sergeant major|sgt ?maj|sgm|sgtmaj) /, "Sergeant Major"], [/ (assistant chief|asst chief|aoc|a c o p) /, "Assistant Chief"], [/ (deputy chief|dep chief|doc) /, "Deputy Chief"],
+    [/ (chief|cop) /, "Chief"], [/ (commander|cmdr|cdr) /, "Commander"], [/ (major|maj) /, "Major"], [/ (captain|capt|cpt) /, "Captain"],
+    [/ (lieutenant|lieut|lt|1st lt|2nd lt) /, "Lieutenant"], [/ (staff sergeant|staff sgt|ssgt|s sgt) /, "Staff Sergeant"], [/ (sergeant|sgt) /, "Sergeant"],
+    [/ (corporal|cpl) /, "Corporal"], [/ (detective|det) /, "Detective"],
+    [/ (officer|ofc|off|po|po ?i+|po ?[123]|recruit|cadet|trainee|probationary|probie|rookie) /, "Officer"]];
   for (let i = 0; i < T.length; i++) if (T[i][0].test(r)) return T[i][1];
+  // plural section headings ("SERGEANTS", "CORPORALS")
+  const pl = r.replace(/s /g, " ");
+  if (pl !== r) for (let i = 0; i < T.length; i++) if (T[i][0].test(pl)) return T[i][1];
   return "";
 }
+function voiceTitleFor_(person) { return person ? (voiceTitle_(person.rank) || voiceTitle_(person.section)) : ""; }
 function voiceLast_(n) {
   n = cleanName_(n).replace(/["“”'(\[].*?["“”')\]]/g, " ").trim();
   if (n.indexOf(",") > 0) return n.split(",")[0].trim().split(/\s+/).pop();
@@ -2300,7 +2307,7 @@ function voiceLast_(n) {
 function voiceNameText_(acct, person) {
   const name = (person && person.name) || acct.name || acct.username || "";
   const last = str_(acct.sayAs) || voiceLast_(name);
-  return ((voiceTitle_(person && person.rank) || "Officer") + (last ? " " + last : "")).replace(/[^A-Za-z0-9 '\-]/g, "").trim() + ".";
+  return ((str_(acct.rankAs) || voiceTitleFor_(person) || "Officer") + (last ? " " + last : "")).replace(/[^A-Za-z0-9 '\-]/g, "").trim() + ".";
 }
 const VOICE_RECIPE_ = "r3";             // bump when the recording settings change, so clips are recorded again
 function voiceHash_(s) { s = VOICE_RECIPE_ + "|" + s; return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8).slice(0, 9).map(b => ((b + 256) % 256).toString(16).padStart(2, "0")).join(""); }
@@ -2680,7 +2687,8 @@ function handleAdmin_(d) {
     case "acctSayAs": case "voiceRedo": {      // how the voice says an officer's name / record their clip again
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change the sign-in voice.");
       const acct = acctFind_(d.discordId); if (!acct) throw new Error("Account not found.");
-      if (a === "acctSayAs") withLock_(() => { acctSheet_().getRange(acct.row, 13).setValue(cellSafe_(clip_(str_(d.sayAs), 60))); return { ok: true }; });
+      if (a === "acctSayAs") withLock_(() => { const sh = acctSheet_(); sh.getRange(acct.row, 13).setValue(cellSafe_(clip_(str_(d.sayAs), 60)));
+        if (d.rankAs != null) sh.getRange(acct.row, 14).setValue(cellSafe_(clip_(str_(d.rankAs).replace(/[^A-Za-z '\-]/g, "").trim(), 40))); return { ok: true }; });
       else voiceForget_(voiceNameText_(acct, rosterPerson_(acct.id)));
       logAdmin_(me.username, "sign-in voice", (a === "acctSayAs" ? "say name as '" + str_(d.sayAs) + "' for " : "re-record ") + str_(d.discordId));
       return { ok: true, accounts: acctList_() };
