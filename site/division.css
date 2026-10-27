@@ -323,3 +323,6 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
 .av.s-exempt{border-color:#818cf8}
 .oc.s-exempt::before{background:linear-gradient(90deg,#818cf8,#c084fc)}
 .qb.ex span{color:#a5b4fc;font-family:Inter,sans-serif}
+.oc-h .cs{flex:none;font:700 13px/1 "JetBrains Mono",monospace;font-style:normal;letter-spacing:.04em;padding:6px 9px;border-radius:7px;background:rgba(var(--acr),.16);border:1px solid rgba(var(--acr),.55);color:#fff}
+.oc-h .cs.none{font-size:9.5px;letter-spacing:.1em;color:var(--muted);background:none;border-style:dashed;border-color:var(--line)}
+.oc-h small{font-family:Inter,sans-serif!important;font-weight:600}

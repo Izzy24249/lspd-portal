@@ -22,7 +22,7 @@
   setInterval(tick, 1000);
 
   // ---------------- sign in ----------------
-  function showLogin() { $("boot").hidden = true; $("app").hidden = true; $("login").hidden = false; setTimeout(() => $("lgUser").focus(), 50); }
+  function showLogin() { $("boot").hidden = true; $("app").hidden = true; $("login").hidden = false; setTimeout(() => { if (!document.activeElement || document.activeElement === document.body) $("lgUser").focus(); }, 50); }
   $("loginForm").onsubmit = async e => {
     e.preventDefault(); $("lgErr").textContent = ""; $("lgBtn").disabled = true; $("lgBtn").textContent = "Verifying…";
     try {
@@ -210,14 +210,18 @@
     let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign + " " + o.rank + " " + o.section).toLowerCase().includes(OFF_Q.toLowerCase()));
     list.sort(OFF_SORT === "roster" ? (a, b) => a.idx - b.idx : OFF_SORT === "name" ? (a, b) => (a.callsign || a.name).localeCompare(b.callsign || b.name, undefined, { numeric: true }) : OFF_SORT === "activity" ? (a, b) => b.score - a.score : (a, b) => rank[a.status] - rank[b.status] || (b.days || 0) - (a.days || 0));
     const card = o => `<button type="button" class="oc s-${o.status}" data-off="${esc(o.key)}">
-        <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${esc(o.callsign || "—")}${o.rank ? " · " + esc(o.rank) : ""}</small></span>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
+        <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${o.rank ? esc(o.rank) : "&nbsp;"}</small></span><em class="cs${o.callsign ? "" : " none"}" title="Unit callsign">${esc(o.callsign || "NO CALLSIGN")}</em>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
         ${statusPill(o)}
         <div class="oc-n"><span><b>${o.filed.length}</b>filed</span><span><b>${o.assists.length}</b>assists</span><span><b>${fmtPts(o.score)}</b>points</span></div>
         ${quotaBar(o)}</button>`;
     // roster order: same order and section headings as the roster sheet
     let body = "";
-    if (OFF_SORT === "roster" && list.some(o => o.section)) {
-      const groups = []; list.forEach(o => { const g = groups[groups.length - 1]; if (g && g.name === (o.section || "")) g.list.push(o); else groups.push({ name: o.section || "", list: [o] }); });
+    // grouped by the roster's section headings, or by position/rank when the roster has no headings;
+    // groups appear in the order they first show up on the roster
+    const useSec = S.O.some(o => o.section), grp = o => (useSec ? o.section : o.rank.split(" · ")[0]) || "Other";
+    if (OFF_SORT === "roster" && (useSec || S.O.some(o => o.rank))) {
+      const groups = [], at = {};
+      list.forEach(o => { const k = grp(o); if (!at[k]) { at[k] = { name: k, list: [] }; groups.push(at[k]); } at[k].list.push(o); });
       body = groups.map(g => `${g.name ? `<div class="og-h"><span>${esc(g.name)}</span><i></i><small>${g.list.length}</small></div>` : ""}<div class="ogrid">${g.list.map(card).join("")}</div>`).join("");
     } else body = `<div class="ogrid">${list.map(card).join("")}</div>`;
     $("view").innerHTML = `<div class="dc-tools"><input type="search" id="offQ" placeholder="Search officers…" value="${esc(OFF_Q)}"><div class="dc-seg sm" id="offSort">${[["roster", "Roster order"], ["status", "Needs attention first"], ["activity", "Most active"], ["name", "Callsign"]].map(([k, l]) => `<button data-s="${k}" class="${OFF_SORT === k ? "on" : ""}">${l}</button>`).join("")}</div></div>
