@@ -204,6 +204,7 @@ body.is-demo{padding-top:52px}
     }
     return {
       unlock() { ac(); },
+      ctx() { return ac(); },
       get on() { return on; },
       toggle() { on = !on; store.set("lspd_sound", on ? "" : "off"); if (!on) settle(); else this.key(); return on; },
       settle: settle,
@@ -416,6 +417,7 @@ body.is-demo{padding-top:52px}
   function screenCreate(profile) {
     progress(100);
     let first = "";
+    EVoice.prefetch(store.get(K.dev));
     show('<div class="steps"><span class="on"></span><span class="on"></span></div>' + whoHTML(profile) +
       '<h2 id="ct">Create your PIN</h2><p class="sub" id="cs">Pick 4 digits you\'ll remember. You\'ll use this PIN to sign on from now on. Avoid easy ones like 1111, 1212 or 1234.</p>' +
       '<div id="padHost"></div><div class="msg" id="msg" hidden></div>' +
@@ -439,6 +441,7 @@ body.is-demo{padding-top:52px}
 
   function screenPin(profile, note) {
     progress(100);
+    EVoice.prefetch(store.get(K.dev));
     show(whoHTML(profile) + '<h2>Enter your PIN</h2><p class="sub">Welcome back' + (profile && profile.name ? ", " + esc(addr(profile)) : "") + '. Enter your 4-digit PIN to sign on.</p>' +
       '<div id="padHost"></div><div class="msg" id="msg"' + (note ? "" : " hidden") + ">" + esc(note || "") + "</div>" +
       '<div class="links"><a id="notMe">Not you? Use a different Discord account</a><span>Forgot it? Ask command staff to reset your PIN.</span></div>');
@@ -504,6 +507,50 @@ body.is-demo{padding-top:52px}
     };
   })();
 
+  // ---------- ElevenLabs greeting: 3 saved clips stitched into one sentence ----------
+  // "Good morning," + "Sergeant Duzen." + "You're signed on."  (the browser keeps clips it already has)
+  const EVoice = (function () {
+    const LS = "lspd_vc:"; let pending = null;
+    function keys() { const out = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf(LS) === 0) out.push(k.slice(LS.length)); } } catch (e) {} return out; }
+    function keep(plan) { const want = [plan.name, plan.close].concat(Object.values(plan.greet)); keys().forEach(k => { if (want.indexOf(k) === -1) try { localStorage.removeItem(LS + k); } catch (e) {} }); }
+    function prefetch(device) {
+      if (DEMO || !device) return null;
+      if (!pending) pending = api({ action: "acctVoice", device: device, have: keys() }).then(r => {
+        if (!r || !r.ok || !r.on || !r.plan) return null;
+        keep(r.plan);
+        Object.keys(r.audio || {}).forEach(k => { try { localStorage.setItem(LS + k, r.audio[k]); } catch (e) {} });
+        return r.plan;
+      }).catch(() => null);
+      return pending;
+    }
+    function ab(b64) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
+    function decode(c, b64) { return new Promise((res, rej) => { try { const p = c.decodeAudioData(ab(b64), res, rej); if (p && p.then) p.then(res, rej); } catch (e) { rej(e); } }); }
+    function trim(c, buf) {                            // cut the silence ElevenLabs leaves at each end, so the joins are tight
+      const d = buf.getChannelData(0), th = 0.012, pad = Math.floor(buf.sampleRate * 0.015);
+      let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < th) a++; while (z > a && Math.abs(d[z]) < th) z--;
+      a = Math.max(0, a - pad); z = Math.min(d.length - 1, z + pad * 2);
+      const out = c.createBuffer(buf.numberOfChannels, z - a + 1, buf.sampleRate);
+      for (let ch = 0; ch < buf.numberOfChannels; ch++) out.copyToChannel(buf.getChannelData(ch).subarray(a, z + 1), ch);
+      return out;
+    }
+    async function play(when) {
+      const c = SFX.ctx(); if (!c || !pending) return false;
+      const plan = await Promise.race([pending, new Promise(r => setTimeout(() => r(null), 2500))]); if (!plan) return false;
+      const parts = [plan.greet[when], plan.name, plan.close].map(k => { try { return localStorage.getItem(LS + k); } catch (e) { return null; } });
+      if (parts.some(x => !x)) return false;
+      try {
+        const bufs = (await Promise.all(parts.map(b => decode(c, b)))).map(b => trim(c, b));
+        const g = c.createGain(); g.gain.value = 1.15; g.connect(c.destination);
+        let t = c.currentTime + 0.08; const gaps = [0.07, 0.16, 0];
+        bufs.forEach((b, i) => { const src = c.createBufferSource(); src.buffer = b; src.connect(g); src.start(t); t += b.duration + gaps[i]; });
+        await new Promise(r => setTimeout(r, (t - c.currentTime) * 1000 + 150));
+        return true;
+      } catch (e) { return false; }
+    }
+    return { prefetch, play };
+  })();
+  const whenNow = () => { const h = new Date().getHours(); return h < 5 ? "evening" : h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; };
+
   async function finish(r) {
     activePad = null;
     store.set(K.sess, r.session || ""); if (r.profile) store.set(K.prof, JSON.stringify(r.profile));
@@ -512,7 +559,7 @@ body.is-demo{padding-top:52px}
     await new Promise(res => setTimeout(res, 350)); l.done("10-8");
     show('<div class="ok-big"><i>✓</i><div><h2>' + esc(greet()) + ", " + esc(addr(p)) + '.</h2><p class="sub" style="margin:2px 0 0">Signed on' + (p.callsign ? " as <b>" + esc(p.callsign) + "</b>" : "") + ". Opening the terminal…</p></div></div>");
     const to = NEXT(); sess.set("lspd_next", "");
-    const spoken = Voice.say(greet() + ", " + addr(p) + ". You're signed on.");
+    const spoken = EVoice.play(whenNow()).then(done => done ? null : Voice.say(greet() + ", " + addr(p) + ". You're signed on."));
     await Promise.all([spoken, new Promise(res => setTimeout(res, 1300))]);
     setTimeout(() => { if (DEMO) { show('<div class="ok-big"><i>✓</i><div><h2>Demo complete</h2><p class="sub" style="margin:2px 0 0">On the live site this now opens the portal. <a href="?demo=1" style="color:var(--blue)">Run the demo again</a> (your demo PIN is remembered until you close the tab).</p></div></div>'); return; } location.replace(to); }, 250);
   }
@@ -548,7 +595,7 @@ body.is-demo{padding-top:52px}
       await intro;
       const l = line("Restoring session ..........................");
       const r = await api({ action: "acctMe", session: session });
-      if (r.ok) { l.done("OK"); return finish({ session: session, profile: r.profile }); }
+      if (r.ok) { l.done("OK"); EVoice.prefetch(device); return finish({ session: session, profile: r.profile }); }
       if (r.net) { l.done("OFFLINE", "x"); return screenError(r.error); }
       l.done("EXPIRED", "w"); store.set(K.sess, "");
     }

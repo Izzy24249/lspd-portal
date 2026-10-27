@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 55;
+const BACKEND_VERSION = 56;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2113,7 +2113,7 @@ function divImport_() {
 // OFFICER ACCOUNTS: sign in with Discord once per device, then a 4-digit PIN
 // =====================================================================
 const ACCT_SHEET_ = "Officer Accounts";
-const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices"];
+const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices", "Say Name As"];
 const LEVELS_ = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
 const OFFICER_DAYS_ = 30;              // a PIN sign-in lasts 30 days on that device
 function acctSheet_() {
@@ -2125,7 +2125,7 @@ function acctAll_() {
   const v = acctSheet_().getDataRange().getValues(), out = [];
   for (let i = 1; i < v.length; i++) { const r = v[i], id = str_(r[0]).replace(/^'/, ""); if (!id) continue;
     out.push({ row: i + 1, id: id, username: str_(r[1]), callsign: str_(r[2]), name: str_(r[3]), override: str_(r[4]), salt: str_(r[5]), hash: str_(r[6]),
-      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0 }); }
+      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0, sayAs: str_(r[12]) }); }
   return out;
 }
 function acctFind_(id) { return acctAll_().find(a => a.id === str_(id)) || null; }
@@ -2236,7 +2236,7 @@ function acctHandle_(d) {
 }
 function acctList_() {
   return acctAll_().map(a => { const p = rosterPerson_(a.id); return { discordId: a.id, username: a.username, callsign: (p && p.callsign) || a.callsign, name: (p && p.name) || a.name, rank: p ? p.rank : "", onRoster: !!p,
-    level: acctLevel_(a, p), override: a.override, hasPin: !!a.hash, locked: a.locked, created: a.created, last: a.last, devices: a.devices }; });
+    level: acctLevel_(a, p), override: a.override, sayAs: a.sayAs, voiceAs: voiceNameText_(a, p), hasPin: !!a.hash, locked: a.locked, created: a.created, last: a.last, devices: a.devices }; });
 }
 function acctAdmin_(a, d, me) {
   const acct = acctFind_(d.discordId); if (!acct) throw new Error("Account not found.");
@@ -2253,6 +2253,122 @@ function acctAdmin_(a, d, me) {
     }
     return { ok: true, accounts: acctList_() };
   });
+}
+
+// =====================================================================
+// SIGN-IN VOICE: ElevenLabs clips, stitched in the browser
+//   "Good morning," + "Sergeant Duzen." + "You're signed on."
+// The greeting and closing are recorded once for everyone; each officer's rank + last name is
+// recorded once and reused, and only recorded again when the rank (or the spoken name) changes.
+// Clips live in the "Voice Clips" tab (small MP3s as text), with a cache in front.
+// =====================================================================
+const VOICE_SHEET_ = "Voice Clips", VOICE_MODELS_ = ["eleven_multilingual_v2", "eleven_flash_v2_5"];
+const VOICE_GREET_ = { morning: "Good morning,", afternoon: "Good afternoon,", evening: "Good evening," };
+const VOICE_CLOSE_ = "You're signed on.";
+const VOICE_ERR_ = { v: "" };
+function voiceCfg_() {
+  return { key: PROPS_.getProperty("ELEVEN_KEY") || "", voice: PROPS_.getProperty("ELEVEN_VOICE") || "", voiceName: PROPS_.getProperty("ELEVEN_VOICE_NAME") || "",
+    model: PROPS_.getProperty("ELEVEN_MODEL") || VOICE_MODELS_[0], on: PROPS_.getProperty("ELEVEN_ON") === "1" };
+}
+function voiceStatus_() { const c = voiceCfg_(); return { hasKey: !!c.key, voiceId: c.voice, voiceName: c.voiceName, model: c.model, enabled: c.on && !!c.key && !!c.voice, models: VOICE_MODELS_ }; }
+// roster rank -> how you'd address them ("Police Officer II" -> "Officer"); same rules as the sign-on page
+function voiceTitle_(rank) {
+  const r = str_(rank).toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+  if (!r) return "";
+  const T = [[/sergeant major/, "Sergeant Major"], [/assistant chief/, "Assistant Chief"], [/deputy chief/, "Deputy Chief"], [/\bchief\b/, "Chief"], [/commander/, "Commander"], [/\bmajor\b/, "Major"],
+    [/captain/, "Captain"], [/lieutenant/, "Lieutenant"], [/staff sergeant/, "Staff Sergeant"], [/sergeant/, "Sergeant"], [/corporal/, "Corporal"], [/detective/, "Detective"],
+    [/officer|recruit|cadet|trainee|probation|\bpo\b/, "Officer"]];
+  for (let i = 0; i < T.length; i++) if (T[i][0].test(r)) return T[i][1];
+  return "";
+}
+function voiceLast_(n) {
+  n = str_(n).replace(/["“”'(\[].*?["“”')\]]/g, " ").trim();
+  if (n.indexOf(",") > 0) return n.split(",")[0].trim().split(/\s+/).pop();
+  const parts = n.split(/\s+/).filter(w => !/^(jr|sr|ii|iii|iv)\.?$/i.test(w) && !/^[A-Za-z]\.?$/.test(w));
+  return parts.length ? parts[parts.length - 1] : n;
+}
+// what the voice says for this officer: "Sergeant Duzen." (Say Name As replaces the last name)
+function voiceNameText_(acct, person) {
+  const name = (person && person.name) || acct.name || acct.username || "";
+  const last = str_(acct.sayAs) || voiceLast_(name);
+  return ((voiceTitle_(person && person.rank) || "Officer") + (last ? " " + last : "")).replace(/[^A-Za-z0-9 '\-]/g, "").trim() + ".";
+}
+function voiceHash_(s) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8).slice(0, 9).map(b => ((b + 256) % 256).toString(16).padStart(2, "0")).join(""); }
+// a clip = what to say + the words around it (ElevenLabs uses them so the pieces flow as one sentence)
+function voiceKey_(kind, when) {
+  const c = voiceCfg_();
+  if (kind === "greet") { const t = VOICE_GREET_[when] || VOICE_GREET_.evening; return { key: "g" + voiceHash_(c.voice + "|" + c.model + "|" + t), text: t, next: "Officer Smith. " + VOICE_CLOSE_ }; }
+  return { key: "c" + voiceHash_(c.voice + "|" + c.model + "|" + VOICE_CLOSE_), text: VOICE_CLOSE_, prev: "Good evening, Officer Smith." };
+}
+function voiceNameKey_(text) { const c = voiceCfg_(); return { key: "n" + voiceHash_(c.voice + "|" + c.model + "|" + text), text: text, prev: "Good evening,", next: VOICE_CLOSE_ }; }
+function voiceSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(VOICE_SHEET_);
+  if (!sh) { sh = ss.insertSheet(VOICE_SHEET_); sh.appendRow(["Key", "Says", "Voice", "Recorded", "Audio (MP3, base64)"]); sh.setFrozenRows(1); sh.getRange(1, 1, 1, 5).setFontWeight("bold"); }
+  return sh;
+}
+function voiceFind_(key) {
+  const sh = voiceSheet_(), last = sh.getLastRow(); if (last < 2) return null;
+  const keys = sh.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = 0; i < keys.length; i++) if (str_(keys[i][0]) === key) return { row: i + 2, b64: str_(sh.getRange(i + 2, 5).getValue()) };
+  return null;
+}
+function eleven_(clip) {
+  const c = voiceCfg_(); VOICE_ERR_.v = "";
+  const body = { text: clip.text, model_id: c.model, voice_settings: { stability: 0.55, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true } };
+  if (clip.prev) body.previous_text = clip.prev;
+  if (clip.next) body.next_text = clip.next;
+  const r = UrlFetchApp.fetch("https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(c.voice) + "?output_format=mp3_22050_32",
+    { method: "post", contentType: "application/json", headers: { "xi-api-key": c.key, Accept: "audio/mpeg" }, payload: JSON.stringify(body), muteHttpExceptions: true });
+  const code = r.getResponseCode();
+  if (code !== 200) {
+    let msg = "", st = ""; try { const j = JSON.parse(r.getContentText()); st = str_(j.detail && j.detail.status); msg = (j.detail && j.detail.message) || j.message || ""; } catch (e) {}
+    VOICE_ERR_.v = /quota|credit|limit/i.test(st + " " + msg) ? "Out of ElevenLabs characters for this month." : code === 401 ? "ElevenLabs refused the API key (check it has Text to Speech access)." : "ElevenLabs error " + code + (msg ? ": " + msg : "") + ".";
+    return "";
+  }
+  return Utilities.base64Encode(r.getBlob().getBytes());
+}
+// the clip's audio: cache -> sheet -> record it now (and keep it)
+function voiceClip_(clip) {
+  const cache = CacheService.getScriptCache(), ck = "vc_" + clip.key;
+  const hit = cache.get(ck); if (hit) return hit;
+  const f = voiceFind_(clip.key); if (f && f.b64) { try { cache.put(ck, f.b64, 21600); } catch (e) {} return f.b64; }
+  const b64 = eleven_(clip); if (!b64) return "";
+  withLock_(() => { if (!voiceFind_(clip.key)) voiceSheet_().appendRow([clip.key, clip.text, voiceCfg_().voiceName || voiceCfg_().voice, new Date(), b64]); return { ok: true }; });
+  try { cache.put(ck, b64, 21600); } catch (e) {}
+  return b64;
+}
+function voiceForget_(text) {
+  const k = voiceNameKey_(text).key, f = voiceFind_(k);
+  CacheService.getScriptCache().remove("vc_" + k);
+  if (f) withLock_(() => { voiceSheet_().deleteRow(f.row); return { ok: true }; });
+}
+// signed-in device asks for its greeting; the browser keeps clips it already has (d.have)
+function voiceForDevice_(d) {
+  const c = voiceCfg_(); if (!c.on || !c.key || !c.voice) return { ok: true, on: false };
+  const dv = offRead_(d.device, "DEV"); if (!dv) return { ok: false, error: "AUTH" };
+  const acct = acctFind_(dv.id); if (!acct || acct.locked) return { ok: false, error: "AUTH" };
+  const have = {}; (Array.isArray(d.have) ? d.have : []).slice(0, 60).forEach(k => { have[str_(k)] = 1; });
+  const nk = voiceNameKey_(voiceNameText_(acct, rosterPerson_(acct.id))), ck = voiceKey_("close");
+  const plan = { greet: {}, name: nk.key, close: ck.key, says: nk.text }, audio = {}, need = [ck, nk];
+  Object.keys(VOICE_GREET_).forEach(w => { const k = voiceKey_("greet", w); plan.greet[w] = k.key; need.push(k); });
+  for (let i = 0; i < need.length; i++) { if (have[need[i].key]) continue; const b = voiceClip_(need[i]); if (!b) return { ok: true, on: false, error: VOICE_ERR_.v }; audio[need[i].key] = b; }
+  return { ok: true, on: true, plan: plan, audio: audio };
+}
+function voiceUsage_() {
+  const c = voiceCfg_(); if (!c.key) return null;
+  try { const r = UrlFetchApp.fetch("https://api.elevenlabs.io/v1/user/subscription", { headers: { "xi-api-key": c.key }, muteHttpExceptions: true });
+    if (r.getResponseCode() !== 200) return null; const j = JSON.parse(r.getContentText());
+    return { used: Number(j.character_count) || 0, limit: Number(j.character_limit) || 0, resets: j.next_character_count_reset_unix ? new Date(j.next_character_count_reset_unix * 1000).toISOString() : "", tier: str_(j.tier) };
+  } catch (e) { return null; }
+}
+function voiceVoices_() {
+  const c = voiceCfg_(); if (!c.key) throw new Error("Paste the ElevenLabs API key first.");
+  const r = UrlFetchApp.fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": c.key }, muteHttpExceptions: true });
+  if (r.getResponseCode() === 401) throw new Error("ElevenLabs refused the API key. Make sure the key has Voices (read) access.");
+  if (r.getResponseCode() !== 200) throw new Error("ElevenLabs error " + r.getResponseCode() + ".");
+  const voices = (JSON.parse(r.getContentText()).voices || []).map(v => ({ id: str_(v.voice_id), name: str_(v.name), preview: str_(v.preview_url),
+    about: [v.labels && v.labels.gender, v.labels && v.labels.accent, v.labels && (v.labels.description || v.labels.descriptive), v.labels && (v.labels.use_case || v.labels.use_case)].filter(Boolean).join(" · ") }));
+  return { voices: voices, usage: voiceUsage_(), voice: voiceStatus_() };
 }
 
 // =====================================================================
@@ -2503,6 +2619,7 @@ function handleAdmin_(d) {
   if (/^cid(Mine|List|Review)$/.test(a)) return cidHandle_(d);
   if (a === "divMine") return divMine_(d);
   if (/^acct(DiscordUrl|Discord|SetPin|Pin|Me|Out)$/.test(a)) return acctHandle_(d);
+  if (a === "acctVoice") return voiceForDevice_(d);
 
   const me = sessionAdmin_(d.token);
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
@@ -2539,7 +2656,38 @@ function handleAdmin_(d) {
       logAdmin_(me.username, "division logs", "imported " + r.added + " past reports");
       return Object.assign({ ok: true }, r);
     }
-    case "acctList": return { ok: true, accounts: acctList_(), discord: discordStatus_() };
+    case "acctList": return { ok: true, accounts: acctList_(), discord: discordStatus_(), voice: voiceStatus_() };
+    case "acctSayAs": case "voiceRedo": {      // how the voice says an officer's name / record their clip again
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change the sign-in voice.");
+      const acct = acctFind_(d.discordId); if (!acct) throw new Error("Account not found.");
+      if (a === "acctSayAs") withLock_(() => { acctSheet_().getRange(acct.row, 13).setValue(cellSafe_(clip_(str_(d.sayAs), 60))); return { ok: true }; });
+      else voiceForget_(voiceNameText_(acct, rosterPerson_(acct.id)));
+      logAdmin_(me.username, "sign-in voice", (a === "acctSayAs" ? "say name as '" + str_(d.sayAs) + "' for " : "re-record ") + str_(d.discordId));
+      return { ok: true, accounts: acctList_() };
+    }
+    case "voiceSetup": {         // owner: ElevenLabs API key, voice and model
+      ownerOnly();
+      if (str_(d.apiKey)) PROPS_.setProperty("ELEVEN_KEY", str_(d.apiKey));
+      if (d.voiceId != null) PROPS_.setProperty("ELEVEN_VOICE", str_(d.voiceId));
+      if (d.voiceName != null) PROPS_.setProperty("ELEVEN_VOICE_NAME", clip_(str_(d.voiceName), 80));
+      if (d.model != null) PROPS_.setProperty("ELEVEN_MODEL", VOICE_MODELS_.indexOf(str_(d.model)) !== -1 ? str_(d.model) : VOICE_MODELS_[0]);
+      if (d.enabled != null) PROPS_.setProperty("ELEVEN_ON", d.enabled ? "1" : "");
+      if (d.clear) ["ELEVEN_KEY", "ELEVEN_VOICE", "ELEVEN_VOICE_NAME", "ELEVEN_ON"].forEach(k => PROPS_.deleteProperty(k));
+      logAdmin_(me.username, "sign-in voice", d.clear ? "removed" : "settings saved");
+      return { ok: true, voice: voiceStatus_() };
+    }
+    case "voiceVoices": {        // owner: list the account's voices + characters used
+      ownerOnly();
+      return Object.assign({ ok: true }, voiceVoices_());
+    }
+    case "voiceTest": {          // owner/admin: hear "Good evening, Sergeant Duzen. You're signed on."
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can test the voice.");
+      const c = voiceCfg_(); if (!c.key || !c.voice) throw new Error("Add the ElevenLabs API key and pick a voice first.");
+      const nameText = clip_(str_(d.text) || "Sergeant Duzen", 60).replace(/[.!?]*$/, ".");
+      const keys = [voiceKey_("greet", str_(d.when) || "evening"), voiceNameKey_(nameText), voiceKey_("close")];
+      const audio = {}; keys.forEach(k => { const b = voiceClip_(k); if (!b) throw new Error(VOICE_ERR_.v || "ElevenLabs didn't return audio."); audio[k.key] = b; });
+      return { ok: true, keys: keys.map(k => k.key), audio: audio, usage: voiceUsage_() };
+    }
     case "acctReset": case "acctLock": case "acctSignOut": case "acctLevel": {
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can manage officer accounts.");
       const r = acctAdmin_(a, d, me); logAdmin_(me.username, "officer account", a.replace("acct", "") + " " + str_(d.discordId) + (d.level ? " -> " + d.level : "") + (d.locked != null ? " -> " + (d.locked ? "locked" : "unlocked") : ""));

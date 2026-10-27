@@ -1656,15 +1656,15 @@ function pageDivisions(page) {
 }
 
 /* ---------------- OFFICER ACCOUNTS (sign in with Discord + 4-digit PIN) ---------------- */
-let ACCTS = null, DISC = null;
+let ACCTS = null, DISC = null, VOICE = null;
 const LEVELS = [["", "Automatic (from the roster)"], ["trainee", "Trainee"], ["officer", "Officer"], ["fto", "FTO / Trainer"], ["leader", "Division leader"], ["command", "Command"], ["admin", "Admin"], ["owner", "Owner"]];
 function pageAccounts(page) {
   page.append(head("Officer Accounts", "Officers sign in with Discord once per device, then a 4-digit PIN. Certified officers come from LSPD Personnel Roster, trainees from LSPD Onboarding Roster. Reset a forgotten PIN, sign someone out everywhere, lock an account or change its level here.",
     h("button", { class: "btn ghost sm", onclick: () => { ACCTS = null; renderPage(true); } }, "Refresh")));
   const box = h("div", {}, h("div", { class: "sec empty-note", text: "Loading accounts…" }));
   page.append(box);
-  const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; });
-  load.then(() => { box.innerHTML = ""; drawAccounts(box); if (ME.role === "owner") box.append(discordSec()); })
+  const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; VOICE = r.voice || null; });
+  load.then(() => { box.innerHTML = ""; drawAccounts(box); if (ME.role === "owner") box.append(discordSec(), voiceSec()); })
     .catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 55 ? "Paste the new WebApp.gs (version 55 or newer) and deploy a new version to use officer accounts." : e.message })); });
 }
 function drawAccounts(box) {
@@ -1687,6 +1687,10 @@ function drawAccounts(box) {
         h("div", { class: "acts" },
           h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Reset " + (a.name || a.username) + "'s PIN? They'll sign in with Discord again on each device and pick a new PIN.")) act("acctReset", {}, "PIN reset. They pick a new one at next sign-in."); } }, "Reset PIN"),
           h("button", { class: "btn ghost sm", onclick: () => { if (confirm("Sign " + (a.name || a.username) + " out on every device?")) act("acctSignOut", {}, "Signed out everywhere."); } }, "Sign out everywhere"),
+          VOICE && VOICE.enabled ? h("button", { class: "btn ghost sm", title: "The sign-in voice says: " + (a.voiceAs || ""), onclick: () => {
+            const v = prompt("The sign-in voice says: \"" + (a.voiceAs || "") + "\"\n\nIf the last name sounds wrong, type it the way it sounds (for example Doo-zen). Leave blank to go back to automatic.", a.sayAs || "");
+            if (v !== null) act("acctSayAs", { sayAs: v.trim() }, v.trim() ? "Saved. It's recorded the next time they sign in." : "Back to automatic."); } }, "🔊 Name") : null,
+          VOICE && VOICE.enabled ? h("button", { class: "btn ghost sm", title: "Record this officer's name clip again", onclick: () => { if (confirm("Record " + (a.name || a.username) + "'s name clip again? It's re-recorded at their next sign-in (about 15 characters).")) act("voiceRedo", {}, "Will be re-recorded at next sign-in."); } }, "Re-record") : null,
           h("button", { class: "btn " + (a.locked ? "ghost" : "danger") + " sm", onclick: () => { if (a.locked || confirm("Lock " + (a.name || a.username) + "? They can't sign in until unlocked. Their history is kept.")) act("acctLock", { locked: !a.locked }, a.locked ? "Account unlocked." : "Account locked."); } }, a.locked ? "Unlock" : "Lock"))));
     });
   };
@@ -1716,6 +1720,68 @@ function discordSec() {
       try { const r = await api("discordSetup", { clientId: id.value.trim(), clientSecret: secret.value.trim(), redirect: redirect.value.trim(), guildId: guild.value.trim() }); DISC = r.discord; toast("Discord sign-in saved.", "ok"); sec.replaceWith(discordSec()); }
       catch (err) { toast(err.message, "bad"); e.target.disabled = false; }
     } }, "Save Discord settings")));
+  return sec;
+}
+
+// play the stitched test greeting (same trimming/joins as the sign-on page)
+async function playClips(keys, audio) {
+  const C = window.AudioContext || window.webkitAudioContext; if (!C) throw new Error("This browser can't play audio.");
+  const c = playClips.c || (playClips.c = new C()); if (c.state === "suspended") await c.resume();
+  const ab = b => { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
+  const bufs = await Promise.all(keys.map(k => new Promise((res, rej) => { const p = c.decodeAudioData(ab(audio[k]), res, rej); if (p && p.then) p.then(res, rej); })));
+  const trim = buf => { const d = buf.getChannelData(0), pad = Math.floor(buf.sampleRate * 0.015); let a = 0, z = d.length - 1;
+    while (a < z && Math.abs(d[a]) < 0.012) a++; while (z > a && Math.abs(d[z]) < 0.012) z--; a = Math.max(0, a - pad); z = Math.min(d.length - 1, z + pad * 2);
+    const o = c.createBuffer(buf.numberOfChannels, z - a + 1, buf.sampleRate); for (let ch = 0; ch < buf.numberOfChannels; ch++) o.copyToChannel(buf.getChannelData(ch).subarray(a, z + 1), ch); return o; };
+  let t = c.currentTime + 0.08; const gaps = [0.07, 0.16, 0];
+  bufs.map(trim).forEach((b, i) => { const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(t); t += b.duration + gaps[i]; });
+}
+function voiceSec() {
+  const v = VOICE || {}, sec = h("div", { class: "sec", style: "display:grid;gap:12px" });
+  const usageLine = h("div", { class: "help" });
+  const showUsage = u => { usageLine.textContent = u && u.limit ? "ElevenLabs characters used this month: " + u.used.toLocaleString() + " of " + u.limit.toLocaleString() + (u.resets ? " · resets " + new Date(u.resets).toLocaleDateString() : "") : ""; };
+  const key = h("input", { type: "password", autocomplete: "off", placeholder: v.hasKey ? "Saved — leave blank to keep it" : "Paste the ElevenLabs API key" });
+  const voiceSel = h("select", {}, h("option", { value: v.voiceId || "", text: v.voiceName || (v.voiceId ? v.voiceId : "Load your voices first") }));
+  const model = h("select", {}, h("option", { value: "eleven_multilingual_v2", text: "Multilingual v2 · smoothest (recommended)" }), h("option", { value: "eleven_flash_v2_5", text: "Flash v2.5 · fastest, uses fewer credits" }));
+  model.value = v.model || "eleven_multilingual_v2";
+  const on = h("input", { type: "checkbox" }); on.checked = !!v.enabled;
+  let VOICES = [];
+  const preview = h("button", { class: "btn ghost sm", type: "button", onclick: () => { const x = VOICES.find(o => o.id === voiceSel.value); if (x && x.preview) new Audio(x.preview).play().catch(() => toast("Couldn't play the preview.", "bad")); else toast("Load your voices first.", "bad"); } }, "▶ Preview voice");
+  const load = h("button", { class: "btn ghost sm", type: "button", onclick: async e => {
+    e.target.disabled = true;
+    try {
+      if (key.value.trim()) { const r0 = await api("voiceSetup", { apiKey: key.value.trim() }); VOICE = r0.voice; key.value = ""; key.placeholder = "Saved — leave blank to keep it"; }
+      const r = await api("voiceVoices", {}); VOICES = r.voices || []; showUsage(r.usage);
+      voiceSel.innerHTML = ""; VOICES.forEach(o => voiceSel.append(h("option", { value: o.id, text: o.name + (o.about ? " — " + o.about : "") })));
+      if (v.voiceId && VOICES.some(o => o.id === v.voiceId)) voiceSel.value = v.voiceId;
+      toast(VOICES.length + " voices loaded. Pick one and press ▶ to hear it.", "ok");
+    } catch (err) { toast(err.message, "bad"); }
+    e.target.disabled = false;
+  } }, v.hasKey ? "Load my voices" : "Save key & load voices");
+  const sample = h("input", { type: "text", value: "Sergeant Duzen" }), when = h("select", {}, ["morning", "afternoon", "evening"].map(w => h("option", { value: w, text: "Good " + w })));
+  when.value = new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening";
+  sec.append(h("h3", { text: "Sign-in voice (ElevenLabs)" }),
+    h("p", { class: "help", text: "After a correct PIN the terminal says \"Good morning, Sergeant Duzen. You're signed on.\" It's stitched from saved clips: the greetings and \"You're signed on\" are recorded once for everyone, and each officer's rank + last name is recorded once and only again after a promotion, so a normal month uses a few hundred characters. If ElevenLabs is off or out of characters, the browser's built-in voice is used instead. Get a key at elevenlabs.io → Developers → API Keys (give it Text to Speech, Voices: read and User: read access). The key is stored in Apps Script only and never shown again." }),
+    h("div", { class: "help", text: "Status: " + (v.enabled ? "on ✓ · " + (v.voiceName || v.voiceId) : v.hasKey ? "key saved · pick a voice and switch it on" : "not set up · using the browser voice") }), usageLine,
+    h("div", { class: "g2" }, field("API key", key), h("div", { style: "display:flex;align-items:flex-end;gap:8px" }, load)),
+    h("div", { class: "g2" }, field("Voice", voiceSel), h("div", { style: "display:flex;align-items:flex-end;gap:8px" }, preview)),
+    h("div", { class: "g2" }, field("Model", model, "Changing the voice or model records new clips as officers sign in."), field("Use it at sign-in", h("label", { style: "display:flex;gap:8px;align-items:center" }, on, h("span", { text: "Speak the greeting with this voice" })))),
+    h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
+      h("button", { class: "btn primary sm", onclick: async e => {
+        e.target.disabled = true;
+        try { const name = (VOICES.find(o => o.id === voiceSel.value) || {}).name || v.voiceName || "";
+          const r = await api("voiceSetup", { apiKey: key.value.trim(), voiceId: voiceSel.value, voiceName: name, model: model.value, enabled: on.checked });
+          VOICE = r.voice; toast("Sign-in voice saved.", "ok"); renderPage(true); }
+        catch (err) { toast(err.message, "bad"); e.target.disabled = false; }
+      } }, "Save voice settings"),
+      v.hasKey ? h("button", { class: "btn danger sm", onclick: async () => { if (!confirm("Remove the ElevenLabs key? Sign-in goes back to the browser voice. Saved clips stay in the Voice Clips tab.")) return;
+        try { const r = await api("voiceSetup", { clear: true }); VOICE = r.voice; toast("Removed.", "ok"); renderPage(true); } catch (err) { toast(err.message, "bad"); } } }, "Remove key") : null),
+    h("div", { class: "g2" }, field("Test: rank and last name", sample, "Records this name once (about 15 characters), then plays the full greeting."), h("div", { style: "display:flex;align-items:flex-end;gap:8px" }, when,
+      h("button", { class: "btn ghost sm", onclick: async e => {
+        e.target.disabled = true;
+        try { const r = await api("voiceTest", { text: sample.value.trim(), when: when.value }); showUsage(r.usage); await playClips(r.keys, r.audio); }
+        catch (err) { toast(err.message, "bad"); }
+        e.target.disabled = false;
+      } }, "▶ Play test"))));
   return sec;
 }
 
