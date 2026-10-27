@@ -95,6 +95,13 @@ function go(view){
 window.addEventListener("hashchange", ()=>{ const h = location.hash.slice(1); if(h && h !== (current && current.id)) go(h); });
 
 /* ---------- home ---------- */
+// level-limited forms (Admin → Permissions): shown to signed-on officers at that level and up
+const LEVEL_ORDER = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
+function canFile(f) {
+  if (!f.minLevel) return true;
+  let p = null, s = ""; try { p = JSON.parse(localStorage.getItem("lspd_prof") || "null"); s = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
+  return !!(s && p && LEVEL_ORDER.indexOf(p.level) >= LEVEL_ORDER.indexOf(f.minLevel));
+}
 function renderHome(){
   const s = CONFIG.settings || {};
   document.title = s.portalName || "LSPD";
@@ -116,7 +123,7 @@ function renderHome(){
   const m = s.maintenance || {};
   ["maint","formMaint"].forEach(id => { $(id).style.display = m.on ? "" : "none"; $(id).textContent = "🛠️ " + (m.message || "Maintenance in progress."); });
 
-  const forms = (CONFIG.forms || []).filter(f => f.status === "live" || f.status === "soon");
+  const forms = (CONFIG.forms || []).filter(f => (f.status === "live" || f.status === "soon") && canFile(f));
   // forms are grouped by their "Home page section" (set in the admin builder); order follows the form list
   const groups = [];
   forms.forEach(f => {
@@ -274,6 +281,11 @@ $("formGrid").addEventListener("click", e => { const c = e.target.closest("[data
 function openForm(id){
   const f = CONFIG && (CONFIG.forms || []).find(x => x.id === id && x.status === "live");
   if(!f) return false;
+  if(!canFile(f)) {   // limited to a level: sign on first (already signed on = not their level)
+    let signed = ""; try { signed = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
+    if(!signed) location.href = "signon.html?next=" + encodeURIComponent("index.html#" + id);
+    return false;
+  }
   if(current && current.id === id && JSON.stringify(current) === JSON.stringify(f)) return true;
   if(ctrl) ctrl.saveDraft();
   current = f;

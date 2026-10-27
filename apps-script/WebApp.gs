@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 69;
+const BACKEND_VERSION = 70;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -645,6 +645,11 @@ function handleSubmit_(d) {
 
   const form = cfg.forms.find(f => f.id === (d.form || "academy"));
   if (!form || form.status !== "live") return { ok: false, error: "This form is not accepting submissions right now." };
+  if (form.minLevel) {                           // restricted forms: the officer's sign-on decides
+    const acct = officerSession_(d.session), lv = acct ? acctProfile_(acct).level : "";
+    if (!acct) return { ok: false, error: "Sign on to the MDT to file this report." };
+    if (LEVELS_.indexOf(lv) < LEVELS_.indexOf(form.minLevel)) return { ok: false, error: "This report is for " + LEVEL_NAMES_[form.minLevel] + " and up." };
+  }
 
   const values = d.values || d;                 // (d itself = old-style flat payload)
   const checklists = d.checklists || {};
@@ -2122,6 +2127,7 @@ function divImport_() {
 const ACCT_SHEET_ = "Officer Accounts";
 const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices", "Say Name As", "Say Rank As", "Divisions"];
 const LEVELS_ = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
+const LEVEL_NAMES_ = { trainee: "Trainees", officer: "Officers", fto: "FTOs", leader: "Division leaders", command: "Command staff", admin: "Admins", owner: "Owners" };
 const OFFICER_DAYS_ = 30;              // a PIN sign-in lasts 30 days on that device
 function acctSheet_() {
   const ss = ss_(); let sh = ss.getSheetByName(ACCT_SHEET_);
@@ -2972,6 +2978,16 @@ function handleAdmin_(d) {
         return { ok: true, photos: cfg.settings.fleetPhotos || {}, sop: str_(cfg.settings.sopUrl) || SOP_URL_DEFAULT_ };
       });
     }
+    case "formAccess": {         // owner/admin: who can file a form (Permissions page)
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change permissions.");
+      return withLock_(() => {
+        const cfg = getConfig_(), f = cfg.forms.find(x => x.id === str_(d.formId)); if (!f) throw new Error("Form not found.");
+        const lv = str_(d.minLevel); f.minLevel = ["officer", "fto", "leader", "command", "admin"].indexOf(lv) === -1 ? "" : lv;
+        cfg.version = (Number(cfg.version) || 0) + 1; writeConfig_(cfg, me.username);
+        logAdmin_(me.username, "permissions", f.title + " -> " + (f.minLevel || "everyone"));
+        return { ok: true, config: cfg };
+      });
+    }
     case "voiceVoices": {        // owner: list the account's voices + characters used
       ownerOnly();
       return Object.assign({ ok: true }, voiceVoices_());
@@ -3335,6 +3351,7 @@ function validateConfig_(c) {
       if (!f.leaderboard.countField || !keys[f.leaderboard.countField]) throw new Error(f.title + ": pick which Discord ID field the leaderboard counts.");
     }
     f.status = ["live", "soon", "hidden"].indexOf(f.status) === -1 ? "hidden" : f.status;
+    f.minLevel = ["officer", "fto", "leader", "command", "admin"].indexOf(str_(f.minLevel)) === -1 ? "" : str_(f.minLevel);   // who can file it (blank = everyone, trainees included)
     f.section = clip_(str_(f.section), 40);
     f.discordStyle = f.discordStyle === "classic" || f.discordStyle === "record" ? f.discordStyle : "";
     f.discordEmoji = !!f.discordEmoji;

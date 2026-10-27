@@ -401,6 +401,7 @@
 <button data-tab="divisions"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Division Command</span></button>
         <div class="ng">Administration</div>
 <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Portal Settings</span></button>
+<button data-tab="perms"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Permissions</span></button>
 <button data-tab="fleet"><svg viewBox="0 0 24 24"><path d="M4 16v-4l2-5h12l2 5v4M4 16h16M4 16v2h3v-2M17 16v2h3v-2M7 12h10"/></svg><span>Fleet &amp; Uniforms</span></button>
 <button data-tab="accounts"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg><span>Officer Accounts</span></button>
 <button data-tab="admins"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a6 6 0 0 1 3 6"/></svg><span>Admins</span></button>
@@ -654,7 +655,7 @@ function renderPage(keepScroll) {
   const y = window.scrollY;
   document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
   const page = $("page"); page.innerHTML = ""; page.className = "pg pg-" + TAB;
-  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, fleet: pageFleet, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
+  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, fleet: pageFleet, perms: pagePerms, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
   if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
 }
 const TAB_GROUP = { hours: "Operations", promo: "Operations", settings: "Administration", admins: "Administration", activity: "Administration", account: "Account" };
@@ -1822,6 +1823,30 @@ function voiceSec() {
         e.target.disabled = false;
       } }, "▶ Play test"))));
   return sec;
+}
+
+/* ---------------- PERMISSIONS ---------------- */
+const LADDER = [
+  ["trainee", "Trainee", "From the LSPD Onboarding Roster", ["MDT home with their training path", "SOP, Fleet and Uniforms for their rank", "Reports open to everyone (training forms)", "My reports"]],
+  ["officer", "Officer", "From the LSPD Personnel Roster", ["Everything a trainee has", "Reports set to Officers and up", "Their own and tagged reports with grades"]],
+  ["fto", "FTO / Trainer", "Set in Officer Accounts", ["Everything an officer has", "\"Needs you\" trainee list on the MDT", "Reports set to FTOs and up (evaluations)"]],
+  ["leader", "Division leader", "Set in Officer Accounts + pick divisions", ["Everything an FTO has", "Division Command for their assigned divisions: activity, grading, officers"]],
+  ["command", "Command", "Set in Officer Accounts", ["Everything a leader has", "Division Command for every division", "Posts the shift briefing and sees roll-call counts"]],
+  ["admin", "Admin", "Owner sets it", ["Everything command has", "This admin portal (with an admin login): forms, settings, accounts"]],
+  ["owner", "Owner", "Owner sets it", ["Everything", "Admin logins, Discord sign-in, voice and owner-only settings"]]];
+function pagePerms(page) {
+  page.append(head("Permissions", "Who can do what. An officer's level comes from the roster (Onboarding Roster = Trainee, Personnel Roster = Officer) unless you set it in Officer Accounts. Each level includes everything below it."));
+  page.append(h("div", { class: "sec flush" }, h("div", { class: "ulist" }, LADDER.map(([id, name, how, can], i) => h("div", { class: "urow", style: "grid-template-columns:36px 210px 1fr" },
+    h("div", { class: "av", text: String(i + 1) }), h("div", { class: "who-t" }, h("b", { text: name }), h("small", { text: how })),
+    h("div", { style: "display:flex;flex-wrap:wrap;gap:6px" }, can.map(c => h("span", { class: "chip", style: "padding:4px 9px;border:1px solid var(--line,rgba(255,255,255,.15));font-size:12.5px", text: c }))))))));
+  const opts = [["", "Everyone (trainees too)"], ["officer", "Officers and up"], ["fto", "FTOs and up"], ["leader", "Division leaders and up"], ["command", "Command and up"], ["admin", "Admins only"]];
+  const forms = (CFG.forms || []).filter(f => f.status !== "hidden");
+  page.append(h("div", { class: "sec flush" }, h("div", { style: "padding:14px 16px 4px" }, h("h3", { text: "Who can file each report" }),
+      h("p", { class: "help", text: "Limited reports only show for officers signed on to the MDT at that level, and the server refuses anyone else. Trainees see the reports set to Everyone, so keep training forms (Academy evaluation, ride-along…) on Everyone." })),
+    h("div", { class: "ulist" }, forms.map(f => { const sel = h("select", { class: "role-sel", onchange: async () => { try { const r = await api("formAccess", { formId: f.id, minLevel: sel.value });
+        f.minLevel = sel.value; VERSION = r.config.version; try { const b = JSON.parse(BASE); (b.forms || []).forEach(x => { if (x.id === f.id) x.minLevel = sel.value; }); b.version = VERSION; BASE = JSON.stringify(b); } catch (x) {} CFG.version = VERSION; toast(f.title + ": " + opts.find(o => o[0] === sel.value)[1] + ".", "ok"); } catch (e) { toast(e.message, "bad"); sel.value = f.minLevel || ""; } } }, opts.map(([v, l]) => h("option", { value: v, text: l })));
+      sel.value = f.minLevel || "";
+      return h("div", { class: "urow", style: "grid-template-columns:36px 1fr minmax(200px,260px)" }, h("div", { class: "av", text: f.icon || "📄" }), h("div", { class: "who-t" }, h("b", { text: f.title }), h("small", { text: f.status === "live" ? "Live" : "Coming soon" })), sel); }))));
 }
 
 /* ---------------- FLEET & UNIFORMS ---------------- */
