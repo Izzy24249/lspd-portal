@@ -2142,9 +2142,19 @@ function offRead_(token, kind) {
   return { id: b[1], issued: Number(b[3]) };
 }
 // who is this Discord ID on the rosters? main roster first, then the progression (onboarding) and division tabs
+// Certified officers are on "LSPD Personnel Roster"; onboarding officers (trainees) on "LSPD Onboarding Roster".
+const PERSONNEL_TAB_ = "LSPD Personnel Roster", ONBOARD_TAB_ = "LSPD Onboarding Roster";
+function rosterTabByName_(name) {
+  try { const want = name.toLowerCase(), sh = rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want); return sh ? sh.getSheetId() : null; } catch (e) { return null; }
+}
 function rosterPerson_(id) {
   const split = n => { const cs = n.indexOf("|") !== -1 ? n.split("|")[0].trim() : ""; return { callsign: cs, name: cs ? n.split("|").slice(1).join("|").trim() : n }; };
   let hit = null, trainee = false;
+  const fromTab = (name, isTrainee) => { if (hit) return; const tid = rosterTabByName_(name); if (tid == null) return;
+    try { const p = (getRosterTab_(tid, false, [], false, true).people || []).find(x => x.id === id); if (p) { hit = Object.assign(split(p.name), { rank: p.extra || "" }); trainee = isTrainee; } } catch (e) {} };
+  fromTab(PERSONNEL_TAB_, false);
+  fromTab(ONBOARD_TAB_, true);
+  if (hit) return Object.assign(hit, { trainee: trainee });
   try { const p = (getRoster_(false).people || []).find(x => x.id === id); if (p) hit = Object.assign(split(p.name), { rank: p.extra || "" }); } catch (e) {}
   try { programs_().forEach(pc => { if (!pc.on) return; const c = promoCandidates_(false, pc.id).list.find(x => x.id === id); if (c) { if (!hit) hit = { callsign: c.callsign, name: c.name, rank: "" }; if (/onboard|recruit|cadet|trainee|probation/i.test(pc.id + " " + pc.title + " " + (pc.rosterTabName || ""))) trainee = true; } }); } catch (e) {}
   return hit ? Object.assign(hit, { trainee: trainee }) : null;
