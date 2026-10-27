@@ -1732,8 +1732,8 @@ function shapeClip(c, buf) {   // play the whole clip untouched (no end cut); tr
   for (let ch = 0; ch < buf.numberOfChannels; ch++) { const seg = Float32Array.from(buf.getChannelData(ch).subarray(a)); for (let i = 0; i < n; i++) seg[i] *= k; out.copyToChannel(seg, ch); }
   return { buf: out, voiceEnd: (z - a) / sr };       // seconds from clip start to the end of the last word
 }
-// each clip finishes completely, then a third-of-a-second break before the next one
-const CLIP_BREAK = 0.33;
+// each clip finishes completely, then a quarter-second break before the next one
+const CLIP_BREAK = 0.25;
 async function playClips(keys, audio) {
   const C = window.AudioContext || window.webkitAudioContext; if (!C) throw new Error("This browser can't play audio.");
   const c = playClips.c || (playClips.c = new C()); if (c.state === "suspended") await c.resume();
