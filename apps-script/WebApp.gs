@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 58;
+const BACKEND_VERSION = 59;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2293,12 +2293,13 @@ function voiceNameText_(acct, person) {
   const last = str_(acct.sayAs) || voiceLast_(name);
   return ((voiceTitle_(person && person.rank) || "Officer") + (last ? " " + last : "")).replace(/[^A-Za-z0-9 '\-]/g, "").trim() + ".";
 }
-function voiceHash_(s) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8).slice(0, 9).map(b => ((b + 256) % 256).toString(16).padStart(2, "0")).join(""); }
+const VOICE_RECIPE_ = "r2";             // bump when the recording settings change, so clips are recorded again
+function voiceHash_(s) { s = VOICE_RECIPE_ + "|" + s; return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8).slice(0, 9).map(b => ((b + 256) % 256).toString(16).padStart(2, "0")).join(""); }
 // a clip = what to say + the words around it (ElevenLabs uses them so the pieces flow as one sentence)
 function voiceKey_(kind, when) {
   const c = voiceCfg_();
-  if (kind === "greet") { const t = VOICE_GREET_[when] || VOICE_GREET_.evening; return { key: "g" + voiceHash_(c.voice + "|" + c.model + "|" + t), text: t, next: "Officer Smith. " + VOICE_CLOSE_ }; }
-  return { key: "c" + voiceHash_(c.voice + "|" + c.model + "|" + VOICE_CLOSE_), text: VOICE_CLOSE_, prev: "Good evening, Officer Smith." };
+  if (kind === "greet") { const t = VOICE_GREET_[when] || VOICE_GREET_.evening; return { key: "g" + voiceHash_(c.voice + "|" + c.model + "|" + t), text: t, next: "Sergeant Smith. " + VOICE_CLOSE_ }; }
+  return { key: "c" + voiceHash_(c.voice + "|" + c.model + "|" + VOICE_CLOSE_), text: VOICE_CLOSE_, prev: "Good evening, Sergeant Smith." };
 }
 function voiceNameKey_(text) { const c = voiceCfg_(); return { key: "n" + voiceHash_(c.voice + "|" + c.model + "|" + text), text: text, prev: "Good evening,", next: VOICE_CLOSE_ }; }
 function voiceSheet_() {
@@ -2314,7 +2315,8 @@ function voiceFind_(key) {
 }
 function eleven_(clip) {
   const c = voiceCfg_(); VOICE_ERR_.v = "";
-  const body = { text: clip.text, model_id: c.model, voice_settings: { stability: 0.55, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true } };
+  // steady, identical settings + a fixed seed so every clip lands on the same pitch and tone (they're joined in the browser)
+  const body = { text: clip.text, model_id: c.model, seed: 4242, voice_settings: { stability: 0.8, similarity_boost: 0.8, style: 0, use_speaker_boost: true, speed: 1 } };
   if (clip.prev) body.previous_text = clip.prev;
   if (clip.next) body.next_text = clip.next;
   const r = UrlFetchApp.fetch("https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(c.voice) + "?output_format=mp3_22050_32",

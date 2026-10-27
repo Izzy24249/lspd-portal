@@ -537,6 +537,8 @@ body.is-demo{padding-top:52px}
         for (let i = 0; i < fo && i < n; i++) seg[n - 1 - i] *= i / fo;         // soft out, no click
         out.copyToChannel(seg, ch);
       }
+      let pk = 0; for (let i = 0; i < out.getChannelData(0).length; i++) pk = Math.max(pk, Math.abs(out.getChannelData(0)[i]));
+      if (pk > 0) { const k = 0.8 / pk; for (let ch = 0; ch < out.numberOfChannels; ch++) { const x = out.getChannelData(ch); for (let i = 0; i < x.length; i++) x[i] *= k; } }   // same loudness for every clip
       return out;
     }
     async function play(when) {
@@ -546,7 +548,7 @@ body.is-demo{padding-top:52px}
       if (parts.some(x => !x)) return false;
       try {
         const bufs = (await Promise.all(parts.map(b => decode(c, b)))).map(b => trim(c, b));
-        const g = c.createGain(); g.gain.value = 1.15; g.connect(c.destination);
+        const g = c.createGain(); g.gain.value = 1; g.connect(c.destination);
         let t = c.currentTime + 0.08; const gaps = [0.16, 0.24, 0];   // comma pause after the greeting, full stop after the name
         bufs.forEach((b, i) => { const src = c.createBufferSource(); src.buffer = b; src.connect(g); src.start(t); t += b.duration + gaps[i]; });
         await new Promise(r => setTimeout(r, (t - c.currentTime) * 1000 + 150));
