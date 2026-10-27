@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 72;
+const BACKEND_VERSION = 73;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2035,6 +2035,7 @@ function divGrade_(d, me) {
   actSheet_().getRange(rec.row, 12, 1, 4).setValues([[grade, clear ? "" : cellSafe_(by), cellSafe_(comments), clear ? "" : new Date()]]);
   divClearCache_();
   logAdmin_(me.username, "division grade", (rec.no || rec.title) + " -> " + (grade || "cleared"));
+  if (grade) try { const au = (rec.people || [])[0]; if (au && au.i) dm_(au.i, (grade === "R" ? "↩️ Your report **" + (rec.no || rec.title) + "** was returned for correction by " + by : "🏅 Your report **" + (rec.no || rec.title) + "** was graded **" + grade + "** by " + by) + (comments ? "\n> " + clip_(comments, 400) : "")); } catch (e) {}
   if (clear || !d.post) return { ok: true };
   // Discord: the report's own post gets a grade line, and a reply tags whoever filed it (and the tagged officers if asked)
   const wh = webhookById_(rec.webhookId);
@@ -2183,6 +2184,136 @@ function builderSetup_(me, on) {
 function builderStatus_() {
   const rows = actRows_().filter(r => r.form === BUILDER_FORM_), wk = rows.filter(r => Date.now() - r.at < 7 * 864e5);
   return { on: PROPS_.getProperty("BUILDER_ON") === "1", week: wk.length, total: rows.length, last: rows.length ? rows[rows.length - 1].at : 0 };
+}
+
+// =====================================================================
+// UNIT LIFE: kudos, ribbons, Officer of the Month, training sign-ups, knowledge checks,
+// weekly digest (Discord), and Discord DMs (built, OFF until the bot owner allows it)
+// =====================================================================
+function tab_(name, head) {
+  const ss = ss_(); let sh = ss.getSheetByName(name);
+  if (!sh) { sh = ss.insertSheet(name); sh.appendRow(head); sh.setFrozenRows(1); sh.getRange(1, 1, 1, head.length).setFontWeight("bold"); }
+  return sh;
+}
+function rows_(name, head) { const sh = tab_(name, head), n = sh.getLastRow(); return n < 2 ? [] : sh.getRange(2, 1, n - 1, head.length).getValues().map((r, i) => ({ row: i + 2, r: r })); }
+const KUDOS_ = ["ID", "When", "From ID", "From", "To ID", "To", "Message"];
+const AWARDS_ = ["ID", "When", "Type", "Title", "Emoji", "To ID", "To", "Awarded By", "Note"];
+const SESS_ = ["ID", "Posted", "When", "Topic", "Host ID", "Host", "Slots", "Signed Up", "Closed", "Details"];
+const CHECKS_ = ["ID", "Created", "Title", "By", "Questions (JSON)", "Pass %", "Closed"];
+const RESULTS_ = ["Check ID", "When", "Officer ID", "Officer", "Score", "Out Of", "Passed"];
+function me_(acct) { const p = acctProfile_(acct); return { id: acct.id, name: ((p.title || "Officer") + " " + voiceLast_(p.name || "")).trim(), cs: p.callsign || "", level: p.level, lv: LEVELS_.indexOf(p.level) }; }
+const atLeast_ = (m, lv) => m.lv >= LEVELS_.indexOf(lv);
+// --- Discord DMs: only when switched on AND a bot token is saved (Admin → Officer Accounts, owner) ---
+function dmOn_() { return PROPS_.getProperty("DM_ON") === "1" && !!PROPS_.getProperty("BOT_TOKEN"); }
+function dm_(discordId, text) {
+  if (!dmOn_() || !/^\d{15,21}$/.test(str_(discordId))) return false;
+  try {
+    const H = { Authorization: "Bot " + PROPS_.getProperty("BOT_TOKEN") };
+    const ch = UrlFetchApp.fetch("https://discord.com/api/v10/users/@me/channels", { method: "post", contentType: "application/json", headers: H, payload: JSON.stringify({ recipient_id: str_(discordId) }), muteHttpExceptions: true });
+    if (ch.getResponseCode() !== 200) return false;
+    const id = JSON.parse(ch.getContentText()).id;
+    return UrlFetchApp.fetch("https://discord.com/api/v10/channels/" + id + "/messages", { method: "post", contentType: "application/json", headers: H, payload: JSON.stringify({ content: clip_(text, 1900), allowed_mentions: { parse: [] } }), muteHttpExceptions: true }).getResponseCode() === 200;
+  } catch (e) { return false; }
+}
+function unitView_(acct) {
+  const m = me_(acct), now = Date.now();
+  const kudos = rows_("Kudos", KUDOS_).map(x => ({ id: str_(x.r[0]), at: isDate_(x.r[1]) ? x.r[1].getTime() : 0, fromId: str_(x.r[2]), from: str_(x.r[3]), toId: str_(x.r[4]), to: str_(x.r[5]), msg: str_(x.r[6]) })).reverse();
+  const awards = rows_("Awards", AWARDS_).map(x => ({ id: str_(x.r[0]), at: isDate_(x.r[1]) ? x.r[1].getTime() : 0, type: str_(x.r[2]), title: str_(x.r[3]), emoji: str_(x.r[4]), toId: str_(x.r[5]), to: str_(x.r[6]), by: str_(x.r[7]), note: str_(x.r[8]) })).reverse();
+  const ootm = awards.find(a => a.type === "ootm") || null;
+  const sessions = rows_("Training Sessions", SESS_).map(x => { let su = []; try { su = JSON.parse(str_(x.r[7]) || "[]"); } catch (e) {}
+    return { id: str_(x.r[0]), when: isDate_(x.r[2]) ? x.r[2].getTime() : Date.parse(x.r[2]) || 0, topic: str_(x.r[3]), hostId: str_(x.r[4]), host: str_(x.r[5]), slots: Number(x.r[6]) || 0, signups: su, closed: x.r[8] === true || str_(x.r[8]).toUpperCase() === "TRUE", details: str_(x.r[9]) }; })
+    .filter(x => x.id && !x.closed && x.when > now - 3 * 3600e3).sort((a, b) => a.when - b.when).map(x => Object.assign(x, { mine: x.signups.some(y => y.i === m.id), full: x.slots > 0 && x.signups.length >= x.slots, canManage: x.hostId === m.id || atLeast_(m, "command") }));
+  const results = rows_("Check Results", RESULTS_).map(x => ({ check: str_(x.r[0]), id: str_(x.r[2]), score: Number(x.r[4]) || 0, of: Number(x.r[5]) || 0, passed: x.r[6] === true || str_(x.r[6]).toUpperCase() === "TRUE" }));
+  const checks = rows_("Knowledge Checks", CHECKS_).filter(x => str_(x.r[0]) && !(x.r[6] === true || str_(x.r[6]).toUpperCase() === "TRUE")).map(x => { let qs = []; try { qs = JSON.parse(str_(x.r[4]) || "[]"); } catch (e) {}
+    const mine = results.filter(r => r.check === str_(x.r[0]) && r.id === m.id), best = mine.sort((a, b) => b.score - a.score)[0] || null, all = results.filter(r => r.check === str_(x.r[0]));
+    return { id: str_(x.r[0]), title: str_(x.r[2]), by: str_(x.r[3]), pass: Number(x.r[5]) || 80, questions: qs.map(q => ({ q: q.q, options: q.options })), best: best, takers: atLeast_(m, "fto") ? all.length : undefined, passedN: atLeast_(m, "fto") ? all.filter(r => r.passed).length : undefined }; }).reverse();
+  return { ok: true, me: { id: m.id, name: m.name, level: m.level }, canAward: atLeast_(m, "command"), canTrain: atLeast_(m, "fto"),
+    kudos: kudos.slice(0, 40), mineReceived: kudos.filter(k => k.toId === m.id).length, ribbons: awards.filter(a => a.type === "ribbon" && a.toId === m.id), recentAwards: awards.slice(0, 12), ootm: ootm,
+    sessions: sessions, checks: checks, people: builderPeople_().filter(p => p.i).map(p => ({ i: p.i, n: (p.cs ? p.cs + " | " : "") + p.n })), dm: dmOn_() };
+}
+function unitAct_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  const m = me_(acct), a = d.action, who = id => builderPeople_().find(p => p.i === str_(id));
+  if (a === "unitView") return unitView_(acct);
+  if (a === "unitKudos") {
+    const to = who(d.to), msg = clip_(str_(d.msg), 300); if (!to) return { ok: false, error: "Pick an officer from the roster." }; if (to.i === m.id) return { ok: false, error: "Kudos are for someone else 🙂" }; if (msg.length < 3) return { ok: false, error: "Say what they did." };
+    const ck = "kudo_" + m.id + "_" + to.i, c = CacheService.getScriptCache(); if (c.get(ck)) return { ok: false, error: "You just sent them kudos. Try again later." }; c.put(ck, "1", 3600);
+    withLock_(() => { tab_("Kudos", KUDOS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), "'" + m.id, cellSafe_(m.name), "'" + to.i, cellSafe_((to.cs ? to.cs + " | " : "") + to.n), cellSafe_(msg)]); return { ok: true }; });
+    dm_(to.i, "👏 **Kudos from " + m.name + "** on the LSPD MDT:\n> " + msg);
+    return unitView_(acct);
+  }
+  if (a === "unitAward") {
+    if (!atLeast_(m, "command")) return { ok: false, error: "Command staff give ribbons and Officer of the Month." };
+    const to = who(d.to); if (!to) return { ok: false, error: "Pick an officer from the roster." };
+    const type = d.type === "ootm" ? "ootm" : "ribbon", title = type === "ootm" ? "Officer of the Month · " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMMM yyyy") : clip_(str_(d.title), 60);
+    if (!title) return { ok: false, error: "Name the ribbon." };
+    withLock_(() => { tab_("Awards", AWARDS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), type, cellSafe_(title), clip_(str_(d.emoji) || (type === "ootm" ? "🏆" : "🎖️"), 8), "'" + to.i, cellSafe_((to.cs ? to.cs + " | " : "") + to.n), cellSafe_(m.name), cellSafe_(clip_(str_(d.note), 300))]); return { ok: true }; });
+    dm_(to.i, (type === "ootm" ? "🏆 **You're LSPD Officer of the Month!**" : "🎖️ **You've been awarded the " + title + " ribbon.**") + " — " + m.name + (str_(d.note) ? "\n> " + clip_(str_(d.note), 300) : ""));
+    try { CacheService.getScriptCache().remove("mdt_dept"); } catch (e) {}
+    return unitView_(acct);
+  }
+  if (a === "unitSession") {
+    if (!atLeast_(m, "fto")) return { ok: false, error: "FTOs and up post training sessions." };
+    const when = Date.parse(str_(d.when)), topic = clip_(str_(d.topic), 120); if (!when || when < Date.now() - 3600e3) return { ok: false, error: "Pick a date and time in the future." }; if (!topic) return { ok: false, error: "What's the training?" };
+    withLock_(() => { tab_("Training Sessions", SESS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), new Date(when), cellSafe_(topic), "'" + m.id, cellSafe_(m.name), Math.max(0, Math.min(50, Number(d.slots) || 0)), "[]", false, cellSafe_(clip_(str_(d.details), 600))]); return { ok: true }; });
+    return unitView_(acct);
+  }
+  if (a === "unitJoin" || a === "unitSessionClose") {
+    return withLock_(() => {
+      const x = rows_("Training Sessions", SESS_).find(y => str_(y.r[0]) === str_(d.id)); if (!x) return { ok: false, error: "That session is gone." };
+      const sh = tab_("Training Sessions", SESS_);
+      if (a === "unitSessionClose") { if (str_(x.r[4]).replace(/^'/, "") !== m.id && !atLeast_(m, "command")) return { ok: false, error: "Only the host or command can close it." }; sh.getRange(x.row, 9).setValue(true); return unitView_(acct); }
+      let su = []; try { su = JSON.parse(str_(x.r[7]) || "[]"); } catch (e) {}
+      if (d.leave) su = su.filter(y => y.i !== m.id);
+      else { if (su.some(y => y.i === m.id)) return unitView_(acct); if (Number(x.r[6]) > 0 && su.length >= Number(x.r[6])) return { ok: false, error: "That session is full." }; su.push({ i: m.id, n: (m.cs ? m.cs + " | " : "") + m.name }); }
+      sh.getRange(x.row, 8).setValue(JSON.stringify(su));
+      if (!d.leave) dm_(str_(x.r[4]).replace(/^'/, ""), "📋 " + m.name + " signed up for your training: **" + str_(x.r[3]) + "**");
+      return unitView_(acct);
+    });
+  }
+  if (a === "unitCheckSave") {
+    if (!atLeast_(m, "fto")) return { ok: false, error: "FTOs and up write knowledge checks." };
+    const title = clip_(str_(d.title), 100), qs = (Array.isArray(d.questions) ? d.questions : []).slice(0, 30).map(q => ({ q: clip_(str_(q.q), 300), options: (Array.isArray(q.options) ? q.options : []).map(o => clip_(str_(o), 160)).filter(Boolean).slice(0, 6), answer: Number(q.answer) || 0 }))
+      .filter(q => q.q && q.options.length >= 2 && q.answer >= 0 && q.answer < q.options.length);
+    if (!title || !qs.length) return { ok: false, error: "Give it a title and at least one question with 2+ answers." };
+    withLock_(() => { tab_("Knowledge Checks", CHECKS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), cellSafe_(title), cellSafe_(m.name), JSON.stringify(qs), Math.max(1, Math.min(100, Number(d.pass) || 80)), false]); return { ok: true }; });
+    return unitView_(acct);
+  }
+  if (a === "unitCheckTake") {
+    const x = rows_("Knowledge Checks", CHECKS_).find(y => str_(y.r[0]) === str_(d.id)); if (!x) return { ok: false, error: "That check is gone." };
+    let qs = []; try { qs = JSON.parse(str_(x.r[4]) || "[]"); } catch (e) {}
+    const ans = Array.isArray(d.answers) ? d.answers : [], score = qs.reduce((n, q, i) => n + (Number(ans[i]) === q.answer ? 1 : 0), 0), passed = score / Math.max(1, qs.length) * 100 >= (Number(x.r[5]) || 80);
+    withLock_(() => { tab_("Check Results", RESULTS_).appendRow([str_(x.r[0]), new Date(), "'" + m.id, cellSafe_(m.name), score, qs.length, passed]); return { ok: true }; });
+    return Object.assign(unitView_(acct), { result: { score: score, of: qs.length, passed: passed, correct: qs.map(q => q.answer) } });
+  }
+  if (a === "unitCheckClose") {
+    if (!atLeast_(m, "fto")) return { ok: false, error: "FTOs and up manage knowledge checks." };
+    const x = rows_("Knowledge Checks", CHECKS_).find(y => str_(y.r[0]) === str_(d.id)); if (x) tab_("Knowledge Checks", CHECKS_).getRange(x.row, 7).setValue(true);
+    return unitView_(acct);
+  }
+  return { ok: false, error: "Unknown action." };
+}
+// ---- weekly digest to Discord (Monday morning): reports, top officers, grades, kudos, Officer of the Month ----
+function weeklyDigest() { try { digestPost_(false); } catch (e) {} }
+function digestPost_(test) {
+  const url = PROPS_.getProperty("DIGEST_WEBHOOK_URL"); if (!url) return { ok: false, error: "Add the digest webhook first." };
+  if (!test && PROPS_.getProperty("DIGEST_ON") !== "1") return { ok: false, error: "Digest is off." };
+  const rows = actRows_(), now = Date.now(), wk = rows.filter(r => now - r.at < 7 * 864e5), cnt = {};
+  wk.forEach(r => { const p = (r.people || [])[0]; if (p) cnt[p.n] = (cnt[p.n] || 0) + 1; });
+  const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 5);
+  const graded = wk.filter(r => GRADE_PTS_[str_(r.grade).toUpperCase()] != null), avg = graded.length ? graded.reduce((t, r) => t + GRADE_PTS_[r.grade.toUpperCase()], 0) / graded.length : null;
+  const kud = rows_("Kudos", KUDOS_).filter(x => isDate_(x.r[1]) && now - x.r[1].getTime() < 7 * 864e5).length;
+  const aw = rows_("Awards", AWARDS_).map(x => ({ type: str_(x.r[2]), to: str_(x.r[6]), at: isDate_(x.r[1]) ? x.r[1].getTime() : 0 })).filter(x => x.type === "ootm").pop();
+  const medals = ["🥇", "🥈", "🥉", "4.", "5."];
+  const fields = [{ name: "📄 Reports filed", value: "**" + wk.length + "** this week", inline: true }, { name: "🏅 Average grade", value: avg == null ? "—" : "**" + avg.toFixed(1) + "** / 4", inline: true }, { name: "👏 Kudos given", value: "**" + kud + "**", inline: true }];
+  if (top.length) fields.push({ name: "Top reporters", value: top.map((n, i) => medals[i] + " " + n + " — " + cnt[n]).join("\n"), inline: false });
+  if (aw) fields.push({ name: "🏆 Officer of the Month", value: aw.to, inline: false });
+  const r = discordPost_(url, { embeds: [{ title: "LSPD weekly digest" + (test ? " (test)" : ""), description: "Week ending " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE d MMM yyyy"), color: 0x3f7fff, fields: fields }], allowed_mentions: { parse: [] } }, null);
+  return r.ok ? { ok: true } : { ok: false, error: r.error || "Discord refused the post." };
+}
+function digestTrigger_(on) {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "weeklyDigest").forEach(t => ScriptApp.deleteTrigger(t));
+  if (on) ScriptApp.newTrigger("weeklyDigest").timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(9).create();
 }
 
 // =====================================================================
@@ -3024,6 +3155,7 @@ function handleAdmin_(d) {
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
   if (a === "builderLog") return builderLog_(d);
+  if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckTake|CheckClose)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
   if (a === "recordsSearch") return recordsSearch_(d);
   if (a === "quickRef") return quickRef_(d);
@@ -3120,6 +3252,18 @@ function handleAdmin_(d) {
       });
     }
     case "builderStatus": return { ok: true, builder: builderStatus_() };
+    case "extrasStatus": return { ok: true, dm: { on: PROPS_.getProperty("DM_ON") === "1", hasToken: !!PROPS_.getProperty("BOT_TOKEN") }, digest: { on: PROPS_.getProperty("DIGEST_ON") === "1", hasHook: !!PROPS_.getProperty("DIGEST_WEBHOOK_URL") } };
+    case "extrasSetup": {        // owner: weekly digest webhook/switch, Discord DM bot token/switch
+      ownerOnly();
+      if (d.digestHook != null && str_(d.digestHook)) { if (!/^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\//.test(str_(d.digestHook))) throw new Error("That isn't a Discord webhook link."); PROPS_.setProperty("DIGEST_WEBHOOK_URL", str_(d.digestHook)); }
+      if (d.digestOn != null) { PROPS_.setProperty("DIGEST_ON", d.digestOn ? "1" : ""); digestTrigger_(!!d.digestOn); }
+      if (d.botToken != null && str_(d.botToken)) PROPS_.setProperty("BOT_TOKEN", str_(d.botToken));
+      if (d.dmOn != null) PROPS_.setProperty("DM_ON", d.dmOn ? "1" : "");
+      if (d.clearBot) { PROPS_.deleteProperty("BOT_TOKEN"); PROPS_.setProperty("DM_ON", ""); }
+      logAdmin_(me.username, "extras", "digest " + (PROPS_.getProperty("DIGEST_ON") ? "on" : "off") + " · DMs " + (PROPS_.getProperty("DM_ON") ? "on" : "off"));
+      return { ok: true, dm: { on: PROPS_.getProperty("DM_ON") === "1", hasToken: !!PROPS_.getProperty("BOT_TOKEN") }, digest: { on: PROPS_.getProperty("DIGEST_ON") === "1", hasHook: !!PROPS_.getProperty("DIGEST_WEBHOOK_URL") } };
+    }
+    case "digestTest": { ownerOnly(); return digestPost_(true); }
     case "builderSetup": {
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");
       return builderSetup_(me, d.on == null ? null : !!d.on);

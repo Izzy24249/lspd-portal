@@ -273,3 +273,16 @@ mark{background:rgba(240,180,60,.35);color:#fff;padding:0 1px}
 .cls.c-felony{color:#ffb3b5;border-color:rgba(255,90,95,.5)}.cls.c-misdemeanor{color:#f6d488;border-color:rgba(240,180,60,.5)}.cls.c-infraction,.cls.c-citation{color:#a6f0cb;border-color:rgba(58,209,138,.5)}
 @media(max-width:760px){.refq{min-width:0;width:100%}.kv.full{grid-template-columns:1fr}}
 .pc td:nth-child(3),.pc td:nth-child(4){white-space:nowrap}
+
+/* phase 7: unit life */
+.ootm{display:flex;gap:16px;align-items:center;padding:14px 18px;margin-bottom:16px;border:1px solid rgba(240,180,60,.5);background:linear-gradient(90deg,rgba(240,180,60,.16),rgba(240,180,60,.03));text-decoration:none}
+.ootm span{font-size:34px}.ootm small{display:block;font:700 11px "Barlow Condensed",sans-serif;letter-spacing:.18em;color:#f6d488;text-transform:uppercase}.ootm b{font:700 24px "Barlow Condensed",sans-serif;letter-spacing:.03em}.ootm p{color:#e8dcc0;font-size:13px;margin-top:2px}
+.ootm.mini{padding:9px 14px;margin:-6px 0 16px}.ootm.mini span{font-size:24px}.ootm.mini b{font-size:18px}
+.ribbons{display:flex;gap:8px;flex-wrap:wrap}.ribbons span{display:inline-flex;gap:6px;align-items:center;padding:5px 10px;border:1px solid rgba(143,178,255,.4);background:rgba(63,127,255,.1);font:600 12.5px Inter,sans-serif}.ribbons i{font-style:normal}
+.kudo{padding:10px 0;border-bottom:1px solid var(--hair)}.kudo:last-child{border-bottom:0}.kudo b{font-weight:600}.kudo p{color:#cdd6e4;font-size:13.5px;margin:2px 0}.kudo small{color:var(--mute);font-size:11.5px}
+.kudo.me b{color:#a6f0cb}
+.md-box select{background:#0a0f17;border:1px solid var(--hair2);color:var(--tx);padding:10px 12px;font:14px Inter,sans-serif;text-transform:none;letter-spacing:0}
+.qq{border:1px solid var(--hair2);padding:10px 12px;display:grid;gap:6px}.qq legend{padding:0 6px;font-weight:600}
+.qo{display:flex!important;gap:8px;align-items:center;color:var(--tx)!important;font:14px Inter,sans-serif!important;letter-spacing:0!important;text-transform:none!important;cursor:pointer}
+.qscore{font:700 42px "Barlow Condensed",sans-serif}
+.qr{padding:8px 0;border-bottom:1px solid var(--hair)}.qr small{display:block;font-size:12.5px;color:var(--mute)}.qr.ok b{color:#a6f0cb}.qr.no b{color:#ffb3b5}

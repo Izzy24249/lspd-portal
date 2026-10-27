@@ -31,12 +31,13 @@
     $("uCs").textContent = p.callsign || "----"; $("uName").textContent = who(p).toUpperCase();
     $("me").innerHTML = 'Signed on as <b>' + esc(p.callsign || "—") + "</b> · " + esc(who(p)) + '<br><a href="signon.html?out=1">Sign off (10-7)</a>';
     const sop = (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; $("sopLink").href = sop;
+    const nt = UNIT && UNIT.sessions ? UNIT.sessions.filter(x => !x.mine && !x.full).length + (UNIT.checks || []).filter(c => !c.best).length : 0; $("nTrain").textContent = nt || "";
     const nb = (DATA && DATA.board && DATA.board.notices || []).length; $("nBolo").textContent = nb || ""; $("nBolo").className = nb ? "new" : "";
     if (DATA && DATA.fleet) { $("nFleet").textContent = DATA.fleet.vehicles.filter(v => v.allowed).length || ""; $("nUni").textContent = (DATA.fleet.uniforms[SEX] || []).filter(u => u.yours).length || ""; }
   }
 
   // ---------- router ----------
-  const VIEWS = ["home", "fleet", "uniforms", "records", "reference"];
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training"];
   function go(v) { VIEW = VIEWS.indexOf(v) >= 0 ? v : "home"; if (location.hash.slice(1) !== VIEW) history.replaceState(null, "", "#" + VIEW); draw(); window.scrollTo(0, 0); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
   addEventListener("hashchange", () => go(location.hash.slice(1)));
@@ -52,7 +53,8 @@
     drawStrip();
     const m = $("main");
     if (!DATA) { m.innerHTML = '<div class="boot">ESTABLISHING LINK…</div>'; return; }
-    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : homeHTML()) + "</div>";
+    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : homeHTML()) + "</div>";
+    if ((VIEW === "unit" || VIEW === "training") && !UNIT) loadUnit();
     if (VIEW === "reference" && !REF) loadRef();
     if (VIEW === "records") { const q = $("recQ"); if (q && !matchMedia("(max-width:760px)").matches) q.focus(); }
     drawTicker();
@@ -77,6 +79,8 @@
     const waiting = mine.filter(r => !r.grade).length;
     let h = '<div class="hello"><div><h1>' + esc(greet()) + ", " + esc(last(p.name) || "Officer") + '. <span>' + esc(trainee ? "Welcome to the academy." : "Ready when you are.") + "</span></h1>" +
       '<p>Signed on as <b>' + esc(p.callsign || "—") + "</b> · " + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · " + waiting + " waiting on a grade" : "") : "") + '</p></div><a class="file" href="index.html">FILE A REPORT <kbd>F</kbd></a></div>';
+    if (UNIT && UNIT.ootm) h += '<a class="ootm mini" data-go="unit"><span>🏆</span><div><small>' + esc(UNIT.ootm.title) + "</small><b>" + esc(UNIT.ootm.to) + "</b></div></a>";
+    if (UNIT && (UNIT.ribbons || []).length) h += '<div class="ribbons" style="margin:-8px 0 16px">' + UNIT.ribbons.map(r => '<span title="' + esc(r.title) + '"><i>' + esc(r.emoji) + "</i>" + esc(r.title) + "</span>").join("") + "</div>";
     const NB = B.notices || [];
     if (NB.length) h += '<section class="bolos">' + NB.slice(0, 3).map(n => '<a class="bolo t-' + esc(n.type.toLowerCase()) + '" data-go="records"><b>' + esc(n.type.toUpperCase()) + "</b><span>" + esc(n.title) + "</span><small>" + esc(n.from) + " · " + ago(n.at) + " ago</small></a>").join("") + (NB.length > 3 ? '<a class="bolo more" data-go="records">+' + (NB.length - 3) + " more</a>" : "") + "</section>";
     // briefing | path
@@ -170,6 +174,51 @@
     return h;
   }
 
+  // ---------- unit life: kudos, awards, training, knowledge checks ----------
+  let UNIT = LS.json("mdt:unit"), TAKING = null;
+  async function loadUnit() { const r = await Portal.post({ action: "unitView", session: SESSION }).catch(() => null); if (r && r.ok) { UNIT = r; LS.set("mdt:unit", JSON.stringify(r)); } else if (!UNIT) UNIT = { error: (r && r.error) || "Couldn't load." }; if (VIEW === "unit" || VIEW === "training" || VIEW === "home") draw(); }
+  async function unit(action, data, msg) {
+    const r = await Portal.post(Object.assign({ action: action, session: SESSION }, data)).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
+    if (r.ok) { UNIT = r; LS.set("mdt:unit", JSON.stringify(r)); if (msg) toast(msg); draw(); } else toast(r.error || "Something went wrong.");
+    return r;
+  }
+  const dt = t => new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  function peopleOpts() { return (UNIT.people || []).map(p => '<option value="' + esc(p.i) + '">' + esc(p.n) + "</option>").join(""); }
+  function unitHTML() {
+    if (!UNIT) return '<div class="boot">LOADING…</div>'; if (UNIT.error) return '<div class="empty">' + esc(UNIT.error) + "</div>";
+    const U = UNIT;
+    let h = '<div class="h2"><div><h1>KUDOS &amp; AWARDS</h1><p>Thank someone for good work. Command hands out ribbons and Officer of the Month.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-kudo>👏 GIVE KUDOS</button>' + (U.canAward ? '<button class="btn ghost" data-award>🎖️ AWARD</button>' : "") + "</div></div>";
+    if (U.ootm) h += '<section class="ootm"><span>🏆</span><div><small>' + esc(U.ootm.title) + "</small><b>" + esc(U.ootm.to) + "</b>" + (U.ootm.note ? "<p>" + esc(U.ootm.note) + "</p>" : "") + "</div></section>";
+    if ((U.ribbons || []).length) h += '<div class="sect"><span class="lbl">Your ribbons</span></div><div class="ribbons">' + U.ribbons.map(r => '<span title="' + esc(r.note || "") + '"><i>' + esc(r.emoji) + "</i>" + esc(r.title) + "</span>").join("") + "</div>";
+    h += '<div class="grid" style="margin-top:18px;align-items:start"><section class="pane"><div class="ph"><span class="lbl">Kudos wall</span><span class="lbl">' + (U.mineReceived ? "You've received " + U.mineReceived : "") + "</span></div>" +
+      ((U.kudos || []).length ? U.kudos.map(k => '<div class="kudo' + (k.toId === U.me.id ? " me" : "") + '"><b>' + esc(k.to) + "</b><p>“" + esc(k.msg) + '”</p><small>from ' + esc(k.from) + " · " + ago(k.at) + " ago</small></div>").join("") : '<p style="color:var(--mute)">No kudos yet. Be the first.</p>') + "</section>" +
+      '<section class="pane"><div class="ph"><span class="lbl">Recent awards</span></div>' + ((U.recentAwards || []).length ? U.recentAwards.map(a => '<div class="need"><span class="cs" style="font-size:16px">' + esc(a.emoji) + "</span><div><b>" + esc(a.to) + "</b><small>" + esc(a.title) + " · " + esc(a.by) + "</small></div><span></span></div>").join("") : '<p style="color:var(--mute)">None yet.</p>') + "</section></div>";
+    return h;
+  }
+  function trainHTML() {
+    if (!UNIT) return '<div class="boot">LOADING…</div>'; if (UNIT.error) return '<div class="empty">' + esc(UNIT.error) + "</div>";
+    const U = UNIT;
+    let h = '<div class="h2"><div><h1>TRAINING</h1><p>Sign up for sessions with an FTO and take knowledge checks.</p></div>' + (U.canTrain ? '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-newsess>+ SESSION</button><button class="btn ghost" data-newcheck>+ KNOWLEDGE CHECK</button></div>' : "") + "</div>";
+    h += '<div class="sect"><span class="lbl">Upcoming sessions · ' + (U.sessions || []).length + "</span></div>";
+    h += (U.sessions || []).length ? '<div class="cards">' + U.sessions.map(x => '<div class="card"><div class="bd"><span class="rk ' + (x.mine ? "" : x.full ? "no" : "lo") + '" style="position:static;justify-self:start">' + (x.mine ? "✓ YOU'RE IN" : x.full ? "FULL" : "OPEN") + '</span><b class="bt">' + esc(x.topic) + "</b><dl class=\"kv\"><dt>When</dt><dd>" + esc(dt(x.when)) + "</dd><dt>Host</dt><dd>" + esc(x.host) + "</dd><dt>Spots</dt><dd>" + x.signups.length + (x.slots ? " / " + x.slots : "") + "</dd></dl>" +
+      (x.details ? '<p class="bdx">' + esc(x.details) + "</p>" : "") + (x.canManage && x.signups.length ? '<small class="bm">' + x.signups.map(y => esc(y.n)).join(" · ") + "</small>" : "") +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' + (x.mine ? '<button class="btn ghost" data-join="' + esc(x.id) + '" data-leave="1">LEAVE</button>' : x.full ? "" : '<button class="btn" data-join="' + esc(x.id) + '">SIGN UP</button>') + (x.canManage ? '<button class="btn ghost" data-sclose="' + esc(x.id) + '">CLOSE</button>' : "") + "</div></div></div>").join("") + "</div>" : '<div class="empty">No sessions scheduled.' + (U.canTrain ? " Post one with + SESSION." : "") + "</div>";
+    h += '<div class="sect"><span class="lbl">Knowledge checks · ' + (U.checks || []).length + "</span></div>";
+    h += (U.checks || []).length ? '<div class="cards">' + U.checks.map(c => '<div class="card"><div class="bd"><span class="rk ' + (c.best && c.best.passed ? "" : "lo") + '" style="position:static;justify-self:start">' + (c.best ? (c.best.passed ? "✓ PASSED " : "LAST ") + c.best.score + "/" + c.best.of : "NOT TAKEN") + '</span><b class="bt">' + esc(c.title) + '</b><small class="bm">' + c.questions.length + " questions · pass at " + c.pass + "% · by " + esc(c.by) + (c.takers != null ? " · " + c.takers + " attempts, " + c.passedN + " passed" : "") + "</small>" +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-take="' + esc(c.id) + '">' + (c.best ? "RETAKE" : "START") + "</button>" + (U.canTrain ? '<button class="btn ghost" data-cclose="' + esc(c.id) + '">CLOSE</button>' : "") + "</div></div></div>").join("") + "</div>" : '<div class="empty">No knowledge checks right now.</div>';
+    return h;
+  }
+  function takeCheck(c) {
+    const m = modal("<h3>" + esc(c.title) + '</h3><form id="qz">' + c.questions.map((q, i) => '<fieldset class="qq"><legend>' + (i + 1) + ". " + esc(q.q) + "</legend>" + q.options.map((o, j) => '<label class="qo"><input type="radio" name="q' + i + '" value="' + j + '"> ' + esc(o) + "</label>").join("") + "</fieldset>").join("") +
+      '<div class="md-act"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn" type="submit">SUBMIT</button></div></form>');
+    m.querySelector("#qz").onsubmit = async ev => { ev.preventDefault();
+      const ans = c.questions.map((q, i) => { const x = m.querySelector('input[name="q' + i + '"]:checked'); return x ? +x.value : -1; });
+      if (ans.some(a => a < 0)) { toast("Answer every question."); return; }
+      const r = await unit("unitCheckTake", { id: c.id, answers: ans });
+      if (r.ok && r.result) { m.hidden = false; const R = r.result; modal('<h3>' + (R.passed ? "✓ Passed" : "Not quite") + '</h3><p class="qscore">' + R.score + " / " + R.of + "</p>" + c.questions.map((q, i) => '<div class="qr ' + (ans[i] === R.correct[i] ? "ok" : "no") + '"><b>' + (i + 1) + ". " + esc(q.q) + "</b><small>" + (ans[i] === R.correct[i] ? "✓ " : "✗ Your answer: " + esc(q.options[ans[i]]) + " · Correct: ") + esc(q.options[R.correct[i]]) + "</small></div>").join("") + '<div class="md-act"><button class="btn" data-close>Done</button></div>'); }
+    };
+  }
+
   // ---------- fleet ----------
   const CAR = '<svg class="ph-car" viewBox="0 0 120 50"><path d="M8 38v-9l10-12h40l16 9h24l12 6v6H8z"/><circle cx="30" cy="38" r="7"/><circle cx="92" cy="38" r="7"/><path d="M22 18h34v9H14"/></svg>';
   function chips(req, opt) {
@@ -248,6 +297,20 @@
         if (r.ok) { m.hidden = true; toast("Posted to every MDT."); load(); } else { b.disabled = false; toast(r.error || "Couldn't post."); } };
       return;
     }
+    if (e.target.closest("[data-kudo]")) { const m = modal('<h3>👏 Give kudos</h3><label>Officer<select id="kTo"><option value="">Pick from the roster…</option>' + peopleOpts() + '</select></label><label>What did they do?<textarea id="kMsg" rows="4" maxlength="300" placeholder="Great pursuit call-outs on Route 68 last night."></textarea></label>' + (UNIT.dm ? '<p class="md-note">They also get a Discord DM.</p>' : "") + '<div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="kGo">SEND</button></div>');
+      m.querySelector("#kGo").onclick = async () => { const r = await unit("unitKudos", { to: m.querySelector("#kTo").value, msg: m.querySelector("#kMsg").value }, "Kudos sent 👏"); if (r.ok) m.hidden = true; }; return; }
+    if (e.target.closest("[data-award]")) { const m = modal('<h3>🎖️ Award</h3><div class="seg" id="aType"><button type="button" class="on" data-t="ribbon">RIBBON</button><button type="button" data-t="ootm">OFFICER OF THE MONTH</button></div><label>Officer<select id="aTo"><option value="">Pick from the roster…</option>' + peopleOpts() + '</select></label><label id="aTL">Ribbon name<input id="aTitle" maxlength="60" placeholder="Distinguished Service"></label><label id="aEL">Emoji<input id="aEmoji" maxlength="4" value="🎖️"></label><label>Note (optional)<textarea id="aNote" rows="3" maxlength="300"></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="aGo">AWARD</button></div>');
+      let type = "ribbon"; m.querySelector("#aType").onclick = ev => { const b = ev.target.closest("[data-t]"); if (!b) return; type = b.dataset.t; m.querySelectorAll("#aType button").forEach(x => x.classList.toggle("on", x === b)); m.querySelector("#aTL").hidden = m.querySelector("#aEL").hidden = type === "ootm"; };
+      m.querySelector("#aGo").onclick = async () => { const r = await unit("unitAward", { type: type, to: m.querySelector("#aTo").value, title: m.querySelector("#aTitle").value, emoji: m.querySelector("#aEmoji").value, note: m.querySelector("#aNote").value }, "Awarded 🎖️"); if (r.ok) m.hidden = true; }; return; }
+    if (e.target.closest("[data-newsess]")) { const m = modal('<h3>Post a training session</h3><label>Training<input id="sTopic" maxlength="120" placeholder="Felony stops & radio procedure"></label><label>When<input id="sWhen" type="datetime-local"></label><label>Spots (0 = no limit)<input id="sSlots" type="number" min="0" max="50" value="4"></label><label>Details (optional)<textarea id="sDet" rows="3" maxlength="600" placeholder="Meet at Mission Row garage."></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="sGo">POST</button></div>');
+      m.querySelector("#sGo").onclick = async () => { const w = m.querySelector("#sWhen").value; const r = await unit("unitSession", { topic: m.querySelector("#sTopic").value, when: w ? new Date(w).toISOString() : "", slots: m.querySelector("#sSlots").value, details: m.querySelector("#sDet").value }, "Session posted."); if (r.ok) m.hidden = true; }; return; }
+    if (e.target.closest("[data-newcheck]")) { const m = modal('<h3>New knowledge check</h3><label>Title<input id="cTitle" maxlength="100" placeholder="10-codes basics"></label><label>Pass mark (%)<input id="cPass" type="number" min="1" max="100" value="80"></label><label>Questions<textarea id="cQs" rows="10" placeholder="One question per block, blank line between blocks. Mark the right answer with *.&#10;&#10;What does 10-8 mean?&#10;*In service&#10;Out of service&#10;Busy&#10;&#10;Which code is officer down?&#10;10-4&#10;*10-99"></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="cGo">SAVE</button></div>');
+      m.querySelector("#cGo").onclick = async () => { const qs = m.querySelector("#cQs").value.split(/\n\s*\n/).map(b => b.split("\n").map(x => x.trim()).filter(Boolean)).filter(b => b.length >= 3).map(b => { const opts = b.slice(1); const a = opts.findIndex(o => o.charAt(0) === "*"); return { q: b[0], options: opts.map(o => o.replace(/^\*\s*/, "")), answer: Math.max(0, a) }; });
+        const r = await unit("unitCheckSave", { title: m.querySelector("#cTitle").value, pass: m.querySelector("#cPass").value, questions: qs }, "Knowledge check saved."); if (r.ok) m.hidden = true; }; return; }
+    const jn = e.target.closest("[data-join]"); if (jn) { unit("unitJoin", { id: jn.getAttribute("data-join"), leave: !!jn.getAttribute("data-leave") }, jn.getAttribute("data-leave") ? "You left the session." : "You're signed up."); return; }
+    const sc = e.target.closest("[data-sclose]"); if (sc) { unit("unitSessionClose", { id: sc.getAttribute("data-sclose") }, "Session closed."); return; }
+    const tk = e.target.closest("[data-take]"); if (tk) { takeCheck(UNIT.checks.find(c => c.id === tk.getAttribute("data-take"))); return; }
+    const cc = e.target.closest("[data-cclose]"); if (cc) { unit("unitCheckClose", { id: cc.getAttribute("data-cclose") }, "Check closed."); return; }
     const ak = e.target.closest("[data-ack]"); if (ak) { ak.disabled = true; Portal.post({ action: "mdtBriefAck", session: SESSION, id: ak.getAttribute("data-ack") }).then(r => { if (r.ok) { DATA.board.briefing.acked = true; if (DATA.board.briefing.ackCount != null) DATA.board.briefing.ackCount++; draw(); toast("Acknowledged. Have a safe shift."); } else { ak.disabled = false; toast(r.error || "Couldn't acknowledge."); } }); return; }
     if (e.target.closest("[data-past]")) { const P = (DATA.board.past || []); modal('<h3>Past briefings</h3>' + (P.length ? P.map(b => '<div class="pb"><b>' + esc(b.re) + "</b><small>" + esc(new Date(b.at).toLocaleDateString()) + " · " + esc(b.from) + "</small><p>" + esc(b.body).replace(/\n/g, "<br>") + "</p></div>").join("") : "<p>None yet.</p>") + '<div class="md-act"><button class="btn ghost" data-close>Close</button></div>'); return; }
     if (e.target.closest("[data-brief]")) {
@@ -269,7 +332,7 @@
     } catch (e) { if (!DATA) $("main").innerHTML = '<div class="boot">LINK FAILED · ' + esc(e.message) + ' · <a href="" style="color:#8fb2ff">retry</a></div>'; else toast("Showing saved data: " + e.message); }
   }
   VIEW = VIEWS.indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : "home";
-  draw(); load();
+  draw(); load(); loadUnit();
   setInterval(() => { if (!document.hidden) load(); }, 3 * 60e3);
   document.addEventListener("submit", e => { if (e.target.id === "recForm") { e.preventDefault(); const q = $("recQ").value.trim(); if (q.length >= 2) runSearch(q); else toast("Type at least 2 characters."); } });
   document.addEventListener("input", e => { if (e.target.id === "refQ") { REF_Q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("refQ"); n.focus(); n.setSelectionRange(pos, pos); } });

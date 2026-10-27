@@ -1667,7 +1667,7 @@ function pageAccounts(page) {
   const box = h("div", {}, h("div", { class: "sec empty-note", text: "Loading accounts…" }));
   page.append(box);
   const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; VOICE = r.voice || null; SIGNON = r.signon || null; DIVLIST = r.divisionList || []; });
-  load.then(() => { box.innerHTML = ""; if (["owner", "admin"].includes(ME.role)) box.append(signonSec()); drawAccounts(box); if (ME.role === "owner") box.append(discordSec(), voiceSec()); })
+  load.then(() => { box.innerHTML = ""; if (["owner", "admin"].includes(ME.role)) box.append(signonSec()); drawAccounts(box); if (ME.role === "owner") box.append(discordSec(), voiceSec(), extrasSec()); })
     .catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 55 ? "Paste the new WebApp.gs (version 55 or newer) and deploy a new version to use officer accounts." : e.message })); });
 }
 function drawAccounts(box) {
@@ -1823,6 +1823,31 @@ function voiceSec() {
         catch (err) { toast(err.message, "bad"); }
         e.target.disabled = false;
       } }, "▶ Play test"))));
+  return sec;
+}
+
+/* ---------------- WEEKLY DIGEST + DISCORD DMs (owner) ---------------- */
+function extrasSec() {
+  const sec = h("div", { class: "sec", style: "display:grid;gap:12px" }, h("div", { class: "empty-note", text: "Loading…" }));
+  api("extrasStatus", {}).then(st => {
+    const hook = h("input", { type: "password", autocomplete: "off", placeholder: st.digest.hasHook ? "Saved — leave blank to keep it" : "Discord webhook link for the digest channel" });
+    const dOn = h("input", { type: "checkbox" }); dOn.checked = st.digest.on;
+    const tok = h("input", { type: "password", autocomplete: "off", placeholder: st.dm.hasToken ? "Saved — leave blank to keep it" : "Bot token (only with the bot owner's permission)" });
+    const mOn = h("input", { type: "checkbox" }); mOn.checked = st.dm.on;
+    const save = async (data, msg) => { try { const r = await api("extrasSetup", data); toast(msg, "ok"); sec.replaceWith(extrasSec()); } catch (e) { toast(e.message, "bad"); } };
+    sec.innerHTML = "";
+    sec.append(h("h3", { text: "Weekly digest (Discord)" }),
+      h("p", { class: "help", text: "Every Monday at 9 AM a summary is posted to a Discord channel: reports filed, average grade, kudos, top reporters and Officer of the Month. The webhook link is stored in Apps Script only, never on GitHub or in chat." }),
+      h("div", { class: "g2" }, field("Digest webhook link", hook), h("label", { style: "display:flex;gap:8px;align-items:flex-end" }, dOn, h("span", { text: "Post the digest every Monday" }))),
+      h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, h("button", { class: "btn primary sm", onclick: () => save({ digestHook: hook.value.trim(), digestOn: dOn.checked }, "Digest settings saved.") }, "Save digest"),
+        h("button", { class: "btn ghost sm", onclick: async () => { try { await api("digestTest", {}); toast("Test digest posted.", "ok"); } catch (e) { toast(e.message, "bad"); } } }, "Send a test now")),
+      h("h3", { text: "Discord DMs to officers", style: "margin-top:10px" }),
+      h("p", { class: "help", text: "Built but OFF. When switched on (with a bot token from your server's bot owner), officers get a private Discord message when their report is graded or returned, when they receive kudos or an award, and FTOs when someone signs up for their training. Only turn this on once the bot owner says yes." }),
+      h("div", { class: "help", text: "Status: " + (st.dm.on && st.dm.hasToken ? "ON ✓" : st.dm.hasToken ? "token saved, switched off" : "off (no bot token)") }),
+      h("div", { class: "g2" }, field("Bot token", tok), h("label", { style: "display:flex;gap:8px;align-items:flex-end" }, mOn, h("span", { text: "Send DMs" }))),
+      h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, h("button", { class: "btn primary sm", onclick: () => save({ botToken: tok.value.trim(), dmOn: mOn.checked }, "DM settings saved.") }, "Save DMs"),
+        st.dm.hasToken ? h("button", { class: "btn danger sm", onclick: () => { if (confirm("Remove the bot token? DMs stop.")) save({ clearBot: true }, "Bot token removed."); } }, "Remove token") : null));
+  }).catch(e => { sec.innerHTML = ""; sec.append(h("div", { class: "help", text: BACKEND_HAVE < 73 ? "Paste WebApp.gs version 73+ to set up the weekly digest and DMs." : e.message })); });
   return sec;
 }
 
