@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 56;
+const BACKEND_VERSION = 57;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2322,7 +2322,8 @@ function eleven_(clip) {
   const code = r.getResponseCode();
   if (code !== 200) {
     let msg = "", st = ""; try { const j = JSON.parse(r.getContentText()); st = str_(j.detail && j.detail.status); msg = (j.detail && j.detail.message) || j.message || ""; } catch (e) {}
-    VOICE_ERR_.v = /quota|credit|limit/i.test(st + " " + msg) ? "Out of ElevenLabs characters for this month." : code === 401 ? "ElevenLabs refused the API key (check it has Text to Speech access)." : "ElevenLabs error " + code + (msg ? ": " + msg : "") + ".";
+    const why = (st ? "[" + st + "] " : "") + (msg || ""), quota = /quota_exceeded|insufficient|credits? (remaining|left)|character limit/i.test(why);
+    VOICE_ERR_.v = (quota ? "ElevenLabs says this key is out of credits. If your account still has characters, the key itself may have a credit limit set (ElevenLabs → Developers → API Keys → edit the key)." : code === 401 ? "ElevenLabs refused the request." : "ElevenLabs error " + code + ".") + (why ? " ElevenLabs said: " + clip_(why, 300) : "");
     return "";
   }
   return Utilities.base64Encode(r.getBlob().getBytes());
