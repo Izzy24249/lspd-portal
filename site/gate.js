@@ -7,7 +7,7 @@
   function signedOn() { return !!read("lspd_sess", "") && Date.now() - Number(read("lspd_seen_at", 0)) < HOURS * 3600e3; }
   function go() {
     var here = location.pathname.split("/").pop() + location.search + location.hash;
-    location.replace("signon.html" + (here && !/^index(\.html)?$/.test(location.pathname.split("/").pop()) ? "?next=" + encodeURIComponent(here) : ""));
+    location.replace("signon.html" + (here && !/^(index)?(\.html)?$/.test(location.pathname.split("/").pop()) ? "?next=" + encodeURIComponent(here) : ""));
   }
   function check() {
     var g = null; try { g = JSON.parse(read("lspd_gate", "null")); } catch (e) {}

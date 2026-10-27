@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<script src="gate.js?v=1"></script>
+<script src="lock.js?v=1"></script>
+<title>LSPD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="portal.css?v=202610200937">
+</head>
+<body>
+<div class="lightbar"></div>
+
+<header class="top">
+  <div class="top-in">
+    <a class="brand" onclick="go('home')">
+      <img class="brand-logo" id="brandLogo" src="img/lspd-patch.png" alt="LSPD">
+      <div><b id="brandName">LSPD</b><small id="brandSub">LOS SANTOS POLICE DEPT.</small></div>
+    </a>
+    <div class="spacer"></div>
+    <a class="pill myrep" href="division.html" data-need-division hidden title="Your divisions: activity, grading and officers">🛡 Division Command</a>
+    <a class="pill myrep" href="myreports.html" title="Your reports and the grades they got">📋 My reports<i id="myBadge" hidden></i></a>
+    <div class="pill"><span class="dot"></span> Records Portal</div>
+  </div>
+</header>
+
+<main>
+  <!-- HOME -->
+  <section class="view active" id="view-home">
+    <div class="hero">
+      <img class="hero-logo" id="heroLogo" src="img/lspd-patch.png" alt="">
+      <span class="tag" id="heroTag">OFFICIAL FORMS PORTAL</span>
+      <h1 id="heroName">LSPD</h1>
+      <p id="heroText">Select a form below to file an official record to Discord.</p>
+    </div>
+    <div class="maint" id="maint" style="display:none"></div>
+    <div class="announce" id="announce" style="display:none"></div>
+    <div class="stale" id="stale" style="display:none"></div>
+    <div id="formGrid"><div class="loading">Loading forms…</div></div>
+    <div id="programs"></div>
+  </section>
+
+  <!-- SGT PROMOTION TRACKER -->
+  <section class="view" id="view-promo">
+    <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; Training Progression &nbsp;/&nbsp; <span id="promoCrumb">CPL → SGT</span></div>
+    <div id="promoMount"><div class="loading">Loading tracker…</div></div>
+  </section>
+
+  <!-- ANY FORM -->
+  <section class="view" id="view-form">
+    <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; <span id="formCrumb"></span></div>
+    <div class="maint" id="formMaint" style="display:none"></div>
+    <form id="theForm" novalidate autocomplete="off">
+      <div id="formMount"></div>
+      <div class="actions">
+        <span id="draftStatus" class="draftstat"></span>
+        <button type="button" class="btn ghost" id="copyBtn" style="display:none">Copy as Text</button>
+        <button type="button" class="btn ghost" id="clearBtn">Clear Form</button>
+        <button type="submit" class="btn primary" id="submitBtn">Submit</button>
+      </div>
+    </form>
+  </section>
+  <footer id="footer">LOS SANTOS POLICE DEPARTMENT · INTERNAL USE ONLY</footer>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="forms.js?v=202610200937"></script>
+<script>
+const $ = id => document.getElementById(id);
+const CFG_KEY = "lspd_portal_cfg";
+let CONFIG = null, current = null, ctrl = null;
+
+function toast(msg, type){
+  const t = $("toast"); t.textContent = msg; t.className = "toast show " + (type||"");
+  clearTimeout(toast._t); toast._t = setTimeout(()=> t.className="toast", 4800);
+}
+function draftStatus(msg){ const el = $("draftStatus"); el.textContent = msg; el.classList.toggle("on", !!msg); }
+
+/* ---------- routing ---------- */
+function go(view){
+  const isProg = /^promo(:[a-z0-9-]+)?$/.test(view);
+  if(isProg){ PID = view.split(":")[1] || "cpl"; if(!(CONFIG && progList().some(p => p.id === PID))) view = "home"; }
+  const prog = /^promo(:[a-z0-9-]+)?$/.test(view);
+  if(view !== "home" && !prog && !openForm(view)) view = "home";
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  $(view === "home" ? "view-home" : prog ? "view-promo" : "view-form").classList.add("active");
+  if(prog){ promoOpen = new Set(); promoQuery = ""; promoFilter = "all"; loadPromo(); }
+  if(view === "home"){ if(ctrl) ctrl.saveDraft(); current = null; }
+  history.replaceState(null, "", view === "home" ? location.pathname : "#" + view);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+window.addEventListener("hashchange", ()=>{ const h = location.hash.slice(1); if(h && h !== (current && current.id)) go(h); });
+
+/* ---------- home ---------- */
+// level-limited forms (Admin → Permissions): shown to signed-on officers at that level and up
+const LEVEL_ORDER = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
+function canFile(f) {
+  if (!f.minLevel) return true;
+  let p = null, s = ""; try { p = JSON.parse(localStorage.getItem("lspd_prof") || "null"); s = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
+  return !!(s && p && LEVEL_ORDER.indexOf(p.level) >= LEVEL_ORDER.indexOf(f.minLevel));
+}
+function renderHome(){
+  const s = CONFIG.settings || {};
+  document.title = s.portalName || "LSPD";
+  $("brandName").textContent = $("heroName").textContent = s.portalName || "LSPD";
+  $("brandSub").textContent = s.portalSub || "";
+  $("heroTag").textContent = s.heroTag || "";
+  $("heroTag").style.display = s.heroTag ? "" : "none";
+  $("heroText").textContent = s.heroText || "";
+  const logo = s.heroLogo == null ? "img/lspd-patch.png" : s.heroLogo;
+  $("heroLogo").style.display = logo ? "" : "none";
+  if (logo && $("heroLogo").getAttribute("src") !== logo) $("heroLogo").src = logo;
+  const brand = logo || "img/lspd-patch.png";   // header icon follows the home page logo
+  if ($("brandLogo").getAttribute("src") !== brand) $("brandLogo").src = brand;
+  $("footer").textContent = s.footer || "";
+  const ann = s.announcement || {};
+  $("announce").style.display = ann.text ? "" : "none";
+  $("announce").className = "announce " + (ann.style || "info");
+  $("announce").textContent = ann.text || "";
+  const m = s.maintenance || {};
+  ["maint","formMaint"].forEach(id => { $(id).style.display = m.on ? "" : "none"; $(id).textContent = "🛠️ " + (m.message || "Maintenance in progress."); });
+
+  const forms = (CONFIG.forms || []).filter(f => (f.status === "live" || f.status === "soon") && canFile(f));
+  // forms are grouped by their "Home page section" (set in the admin builder); order follows the form list
+  const groups = [];
+  forms.forEach(f => {
+    const name = String(f.section || "").trim() || "Reports";
+    let g = groups.find(x => x.name.toLowerCase() === name.toLowerCase());
+    if(!g) groups.push(g = { name: name, forms: [] });
+    g.forms.push(f);
+  });
+  const card = f => {
+    const live = f.status === "live";
+    if (live && f.cidApp) return `<a class="card cid-card" href="cid.html">
+      <div class="ico">${Portal.esc(f.icon||"🗂️")}</div>
+      <h3>${Portal.esc(f.title)}</h3><p>${Portal.esc(f.description||"")}</p>
+      <div class="go">OPEN CASE BUILDER →</div></a>`;   // the CID case builder has its own page
+    return `<div class="card ${live?"":"soon"}" ${live?`data-open="${Portal.esc(f.id)}"`:""}>
+      <div class="ico">${Portal.esc(f.icon||"📄")}</div>
+      <h3>${Portal.esc(f.title)}</h3><p>${Portal.esc(f.description||"")}</p>
+      <div class="go">${live?"OPEN FORM →":"COMING SOON"}</div></div>`;
+  };
+  const icon = n => /train|academy|fto|school|course/i.test(n) ? "🎓" : /report|record/i.test(n) ? "📁" : /division|unit/i.test(n) ? "🛡️" : "📋";
+  $("formGrid").innerHTML = forms.length ? groups.map(g => `<section class="fsec ${/train|academy|fto/i.test(g.name) ? "training" : ""}">
+      ${groups.length > 1 ? `<div class="fsec-head"><span class="fsec-ico">${icon(g.name)}</span><h2>${Portal.esc(g.name)}</h2><span class="fsec-n">${g.forms.length}</span></div>` : ""}
+      <div class="grid">${g.forms.map(card).join("")}</div></section>`).join("") : '<div class="loading">No forms are published yet.</div>';
+  renderPrograms();
+}
+
+/* ---------- Training progression (one page per program: CPL → SGT, Onboarding, …) ---------- */
+function progList(){
+  const st = CONFIG.settings || {};
+  const all = [Object.assign({ noun: "Corporal" }, st.promo || {}, { id: "cpl" })].concat(Array.isArray(st.programs) ? st.programs : []);
+  return all.filter(p => p && p.on !== false && (p.id !== "cpl" || st.promo));
+}
+function promoOn(){ return progList().length > 0; }
+let PROMOS = {}, PROMO_T = {}, PROMO_LIVE = {}, PID = "cpl", promoFilter = "all", promoQuery = "";
+const progIcon = p => p.id === "cpl" ? "🎖️" : p.id === "onboard" ? "🧭" : "📋";
+function renderPrograms(){
+  const list = progList();
+  if(!list.length){ $("programs").innerHTML = ""; return; }
+  const tiles = list.map(p => {
+    const d = PROMOS[p.id], st = d && d.candidates, ready = st ? st.filter(c => c.complete).length : 0, noun = (d && d.noun) || p.noun || "person";
+    const late = st ? st.filter(c => c.deadline && !c.complete && c.deadline.state === "over").length : 0, soon = st ? st.filter(c => c.deadline && !c.complete && c.deadline.state === "warn").length : 0;
+    return { go: p.id === "cpl" ? "promo" : "promo:" + p.id, icon: progIcon(p), title: p.title || p.id, count: st ? st.length : null, alert: late ? "over" : soon ? "warn" : "",
+      sub: st ? st.length + " " + noun.toLowerCase() + (st.length === 1 ? "" : "s") + " · " + ready + " complete" : "View progress" };
+  });
+  $("programs").innerHTML = `<section class="fsec progsec"><div class="fsec-head"><span class="fsec-ico">📈</span><h2>Training Progression</h2></div>
+    <div class="prog-bubbles">${tiles.map(t => `<a class="prog-bubble" onclick="go('${t.go}')"><span class="pb-ico">${t.icon}</span><b>${Portal.esc(t.title)}</b><small class="pb-status">${t.alert ? `<i class="pb-alert ${t.alert}"></i>` : ""}${Portal.esc(t.sub)}</small><span class="pb-go">VIEW →</span></a>`).join("")}</div></section>`;
+  list.forEach(p => { if(Date.now() - (PROMO_T[p.id] || 0) > 60000) fetchPromo(p.id).then(renderPrograms).catch(()=>{}); });
+}
+// last loaded copy of each progression page, so it opens instantly and refreshes behind the scenes
+try { PROMOS = JSON.parse(localStorage.getItem("lspd_promos") || "{}") || {}; } catch (e) { PROMOS = {}; }
+async function fetchPromo(pid){
+  pid = pid || PID; PROMO_T[pid] = Date.now();
+  const ac = typeof AbortController === "function" ? new AbortController() : null, timer = ac && setTimeout(() => ac.abort(), 30000);
+  let res;
+  try { res = await fetch(Portal.ENDPOINT + "?action=promo&p=" + encodeURIComponent(pid) + "&t=" + Date.now(), ac ? { signal: ac.signal } : undefined); }
+  catch (e) { throw new Error(e.name === "AbortError" ? "Google took too long to answer (30s)." : e.message); }
+  finally { if (timer) clearTimeout(timer); }
+  const data = await res.json();
+  if(!data.ok) throw new Error(data.error || "Could not load the tracker");
+  PROMOS[pid] = data.promo; PROMO_LIVE[pid] = 1;
+  try { localStorage.setItem("lspd_promos", JSON.stringify(PROMOS)); } catch (e) {}
+  return data.promo;
+}
+function loadPromo(){
+  const p = progList().find(x => x.id === PID) || {};
+  $("promoCrumb").textContent = p.title || "Progression";
+  const have = PROMOS[PID] && PROMOS[PID].candidates;
+  if(have) drawPromo(); else $("promoMount").innerHTML = '<div class="loading">Loading…</div>';
+  const want = PID;
+  fetchPromo(want).then(() => { if(PID === want) drawPromo(); }).catch(e => {
+    if(PID !== want) return;
+    if(!PROMOS[want]) $("promoMount").innerHTML = '<div class="loading">Could not load this page. ' + Portal.esc(e.message) + '<br><button class="btn ghost" style="margin-top:12px" onclick="loadPromo()">Try again</button></div>';
+    else if(!(SNAP_AT && Date.now() - SNAP_AT < 6 * 3600e3)) { const u = document.querySelector(".promo-upd"); if(u) u.insertAdjacentHTML("afterbegin", '<span style="color:#fcd34d">Showing the last saved copy (' + Portal.esc(e.message) + '). </span>'); }
+  });
+}
+let promoOpen = new Set();
+// list order: callsign (default), progress, or deadline — remembered per browser
+let promoSort = "callsign"; try { promoSort = localStorage.getItem("lspd_prog_sort") || "callsign"; } catch (e) {}
+const byCall = (a, b) => (a.callsign || "~").localeCompare(b.callsign || "~", undefined, {numeric:true}) || a.name.localeCompare(b.name);
+function progSort(list, how){
+  const l = list.slice();
+  if (how === "progress") return l.sort((a, b) => (b.complete - a.complete) || (b.done - a.done) || byCall(a, b));
+  if (how === "deadline") { const k = c => !c.deadline || c.complete ? 1e6 : c.deadline.left; return l.sort((a, b) => k(a) - k(b) || byCall(a, b)); }
+  return l.sort(byCall);
+}
+function drawPromo(){
+  const P = PROMOS[PID], E = Portal.esc;
+  if(!P) return;
+  const noun = P.noun || "Person", nouns = noun + (/s$/i.test(noun) ? "" : "s");
+  if(!P.on){ $("promoMount").innerHTML = '<div class="loading">The tracker is turned off.</div>'; return; }
+  const T = P.tasks || [];
+  const C = progSort(P.candidates || [], promoSort);
+  const ready = C.filter(c => c.complete).length;
+  const avg = C.length ? Math.round(C.reduce((n,c) => n + c.done / Math.max(1,c.total), 0) / C.length * 100) : 0;
+  const q = promoQuery.toLowerCase();
+  const shown = C.filter(c => (promoFilter === "all" || (promoFilter === "ready" ? c.complete : !c.complete)) && (!q || (c.callsign + " " + c.name).toLowerCase().includes(q)));
+  const fmtD = d => d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric"}) : "";
+  const short = t => t.title.replace(/Global Operation Manual/i, "GOM").replace(/^(Witness|Lead|Complete|Do)\s+(a|an)?\s*/i, m => m.split(" ")[0] + " ");
+  const cell = (c, t) => {
+    const s = c.tasks[t.id] || {count:0, need:t.need};
+    if (s.excused) return `<span class="pb-c ex" title="Excused">EX</span>`;
+    if (s.done) return `<span class="pb-c ok" title="Done">✓</span>`;
+    if (s.locked) return `<span class="pb-c lk" title="Locked until the other requirements and time in grade are done"><svg viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3.5" y="7" width="9" height="7" rx="1.5" fill="currentColor"/></svg></span>`;
+    if (!s.count) return `<span class="pb-c zero" title="Not started">·</span>`;
+    return `<span class="pb-c part" title="${s.count} of ${s.need}"><i style="--p:${Math.round(s.count / s.need * 100)}%"></i>${s.count}/${s.need}</span>`;
+  };
+  const detail = c => `<div class="pb-detail">${c.deadline ? `<div class="pd-dl st-${c.complete ? "done" : c.deadline.state}">${c.complete ? "✓ All requirements completed." : c.deadline.state === "over" ? "Out of time: the deadline was " + E(fmtDl(c.deadline.date)) + "." : "Deadline " + E(fmtDl(c.deadline.date)) + " · " + c.deadline.left + " day" + (c.deadline.left === 1 ? "" : "s") + " left"}${c.deadline.extended && !c.complete ? " (extended " + ((P.ext && P.ext.days) || "") + " days after Basic Training)" : ""}</div>` : ""}${T.map((t, i) => {
+    const s = c.tasks[t.id] || {count:0, need:t.need, items:[]};
+    const st = s.excused ? "Excused" : s.done ? "Complete" : s.locked ? "Locked" : s.count + " of " + s.need;
+    return `<div class="pd-item ${s.done ? "ok" : ""}"><div class="pd-h"><span class="pd-n">${i + 1}</span><b>${E(t.title)}</b><em>${st}</em></div>
+      ${t.freshDays ? `<p class="pd-fresh">Only the last ${t.freshDays} days count.</p>` : ""}
+      ${s.items.length ? `<ul>${s.items.map(x => `<li class="${x.expired ? "old" : ""}${x.failed ? " failed" : ""}">${E(fmtD(x.date))} · ${E(x.source)}${x.report ? ` <code>${E(x.report)}</code>` : ""}${x.failed ? ` <b class="fail-tag">— ${E(x.failed)}</b>` : ""}${x.count > 1 ? " ×" + x.count : ""}${x.expired ? ` <em>older than ${t.freshDays} days · not counted</em>` : ""}</li>`).join("")}</ul>`
+        : `<p>${s.locked && !s.done ? "Unlocks after every other requirement" + (P.tigDays ? " and " + P.tigDays + " days TIG" : "") + "." : "Nothing logged yet."}</p>`}</div>`;
+  }).join("")}</div>`;
+  const fmtDl = d => d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric"}) : "";
+  const dlChip = c => { const d = c.deadline; if (!d || d.state === "done") return "";
+    const txt = d.state === "over" ? "Out of time" : d.left === 1 ? "1 day left" : d.left + " days left";
+    return `<span class="dl st-${d.state}" title="Deadline ${E(fmtDl(d.date))}${d.extended ? " (extended after Basic Training)" : ""}">${txt}${d.extended ? '<i class="ext">+' + ((P.ext && P.ext.days) || "") + 'd</i>' : ""}</span>`; };
+  const tigTxt = c => P.id === "cpl" || !P.tigLabel ? (c.tig == null ? "TIG —" : "TIG " + c.tig + "d") : (c.tig == null ? "Joined —" : "Joined " + (c.tig === 0 ? "today" : c.tig + "d ago"));
+  $("promoMount").innerHTML = `
+    <header class="pb-head">
+      <div class="pb-title">
+        <div class="pb-rank" aria-hidden="true">${P.id !== "cpl" ? `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M24.5 15.5l-3 6-6 3 3-6z" fill="var(--gold)"/></svg>` : `<svg viewBox="0 0 40 40"><path d="M8 14l12-7 12 7M8 21l12-7 12 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M8 28l12-7 12 7" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 5" opacity=".9"/></svg>`}</div>
+        <div><span class="pb-kick">Training Progression</span><h1>${E(P.title)}</h1>${P.subtitle ? `<p>${E(P.subtitle)}</p>` : ""}</div>
+      </div>
+      <dl class="pb-stats"><div><dt>${E(nouns)}</dt><dd>${C.length}</dd></div><div><dt>${P.id === "cpl" ? "Ready" : "Complete"}</dt><dd class="g">${ready}</dd></div><div><dt>Average</dt><dd>${avg}%</dd></div></dl>
+    </header>
+    <div class="pb-tools"><input id="promoQ" placeholder="Search callsign or name" value="${E(promoQuery)}">
+      <label class="pb-sort">Order <select id="promoSort">${[["callsign","Callsign"],["progress","Progress"]].concat(P.deadlineDays ? [["deadline","Days left"]] : []).map(([k,l]) => `<option value="${k}" ${promoSort===k?"selected":""}>${l}</option>`).join("")}</select></label>
+      <div class="seg">${[["all","All"],["prog","In progress"],["ready", P.id === "cpl" ? "Ready" : "Complete"]].map(([k,l]) => `<button data-pf="${k}" class="${promoFilter===k?"on":""}">${l}</button>`).join("")}</div></div>
+    ${P.error ? `<div class="maint">${E(P.error)}</div>` : ""}
+    <div class="pb-board" style="--cols:${T.length}">
+      <div class="pb-row pb-th"><span class="pb-who">${E(noun)}</span>${T.map((t, i) => `<span class="pb-task" title="${E(t.title)} (×${t.need})"><b>${i + 1}</b><small>${E(short(t))}</small></span>`).join("")}<span class="pb-prog">Progress</span></div>
+      ${shown.length ? shown.map(c => {
+        const k = c.callsign || c.name, open = promoOpen.has(k);
+        const ds = c.deadline && !c.complete ? c.deadline.state : "";
+        return `<div class="pb-item ${c.complete ? "ready" : ""} ${ds === "over" ? "dl-over" : ds === "warn" ? "dl-warn" : ""} ${open ? "open" : ""}">
+          <button class="pb-row" data-row="${E(k)}" aria-expanded="${open}">
+            <span class="pb-who">${c.callsign ? `<code>${E(c.callsign)}</code>` : ""}<span class="nm">${E(c.name)}</span>${P.tigDays || P.showTig ? `<span class="tg ${c.tigOk || !P.tigDays ? "ok" : ""}" title="${c.since ? E(c.since) : ""}">${tigTxt(c)}</span>` : ""}</span>
+            ${T.map((t, i) => `<span class="pb-cell" data-n="${i + 1}">${cell(c, t)}</span>`).join("")}
+            <span class="pb-prog">${dlChip(c)}${c.complete ? `<span class="rd">${P.id === "cpl" ? "Ready" : "Done"}</span>` : ""}<span class="bar"><i style="width:${Math.round(c.done / Math.max(1,c.total) * 100)}%"></i></span><b>${c.done}/${c.total}</b></span>
+          </button>${open ? detail(c) : ""}</div>`;
+      }).join("") : `<div class="pb-empty">${C.length ? "No one matches." : "No " + nouns.toLowerCase() + " found on the roster tab."}</div>`}
+    </div>
+    <ol class="pb-legend">${T.map(t => `<li><span>${E(t.title)}</span><b>×${t.need}</b>${t.freshDays ? `<small>in the last ${t.freshDays} days</small>` : ""}${t.final ? "<em>final</em>" : ""}</li>`).join("")}</ol>
+    <p class="promo-upd">${P.tigDays ? `Final step requires ${P.tigDays} days time in grade. ` : ""}${P.deadlineDays ? `Requirements must be finished within ${P.deadlineDays} days of joining${P.ext ? ` (finishing Basic Training in the last ${P.ext.window} days gives ${P.ext.days} more days for the ride-along)` : ""}. ` : ""}Updates when a report is filed · checked ${new Date(P.updated || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}</p>`;
+  const qi = $("promoQ"); qi.oninput = () => { promoQuery = qi.value; const pos = qi.selectionStart; drawPromo(); const n = $("promoQ"); n.focus(); n.setSelectionRange(pos, pos); };
+  document.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => { promoFilter = b.dataset.pf; drawPromo(); });
+  $("promoSort").onchange = e => { promoSort = e.target.value; try { localStorage.setItem("lspd_prog_sort", promoSort); } catch (x) {} drawPromo(); };
+  document.querySelectorAll("[data-row]").forEach(b => b.onclick = () => { const k = b.dataset.row; promoOpen.has(k) ? promoOpen.delete(k) : promoOpen.add(k); drawPromo(); });
+}
+$("formGrid").addEventListener("click", e => { const c = e.target.closest("[data-open]"); if(c) go(c.dataset.open); });
+
+/* ---------- form ---------- */
+function openForm(id){
+  const f = CONFIG && (CONFIG.forms || []).find(x => x.id === id && x.status === "live");
+  if(!f) return false;
+  if(!canFile(f)) {   // limited to a level: sign on first (already signed on = not their level)
+    let signed = ""; try { signed = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
+    if(!signed) location.href = "signon.html?next=" + encodeURIComponent("forms.html#" + id);
+    return false;
+  }
+  if(current && current.id === id && JSON.stringify(current) === JSON.stringify(f)) return true;
+  if(ctrl) ctrl.saveDraft();
+  current = f;
+  $("formCrumb").textContent = f.title;
+  $("submitBtn").textContent = f.submitLabel || "Submit to Discord";
+  $("copyBtn").style.display = f.copyText ? "" : "none";
+  draftStatus("");
+  ctrl = Portal.render(f, $("formMount"), { draft: true, onStatus: draftStatus });
+  const t = ctrl.restoreDraft();
+  if(t) toast("Restored your unsaved draft from " + new Date(t).toLocaleString(), "ok");
+  return true;
+}
+
+$("clearBtn").onclick = ()=>{ if(confirm("Clear everything on this form?")) ctrl.clear(); };
+$("copyBtn").onclick = async ()=>{
+  const text = ctrl.toText();
+  try{ await navigator.clipboard.writeText(text); toast("Copied as plain text.","ok"); }
+  catch(e){
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); toast("Copied as plain text.","ok"); }catch(_){ toast("Copy blocked by the browser.","bad"); }
+    ta.remove();
+  }
+};
+$("theForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const problem = ctrl.validate();
+  if(problem){ toast("Missing Info: " + problem, "bad"); return; }
+  const btn = $("submitBtn"), label = btn.textContent;
+  btn.disabled = true; btn.textContent = "Sending…";
+  try{
+    const data = await Portal.post(ctrl.collect());
+    if(data.ok){
+      if(data.logId) MyReports.add({ id: data.logId, form: current.id, title: current.title, icon: current.icon || "", at: Date.now() });
+      toast(data.warning ? "Posted, with a warning: " + data.warning : "Success: " + current.title + " posted to Discord!", data.warning ? "bad" : "ok");
+      ctrl.clear();
+    } else toast("Error: " + (data.error || "Unknown error"), "bad");
+  }catch(err){
+    toast("Failed to send: " + err.message, "bad");
+  }finally{
+    btn.disabled = false; btn.textContent = label;
+  }
+});
+window.addEventListener("beforeunload", ()=>{ if(ctrl && current) ctrl.saveDraft(); });
+
+/* ---------- my reports: the reports filed from this browser, and the grades they got ---------- */
+const MyReports = (()=>{
+  const K = "lspd_my_reports", N = "lspd_my_notified", get = (k, d) => { try{ return JSON.parse(localStorage.getItem(k) || "null") || d; }catch(e){ return d; } }, set = (k, v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+  return {
+    add(r){ const l = get(K, []).filter(x => x.id !== r.id); l.unshift(r); set(K, l.slice(0, 300)); },
+    async check(){
+      const l = get(K, []); if(!l.length) return;
+      try{
+        const res = await Portal.post({ action: "divMine", ids: l.map(x => x.id) }); if(!res.ok) return;
+        const told = get(N, {}), seen = get("lspd_my_seen", {});
+        const graded = (res.reports || []).filter(r => r.grade);
+        const fresh = graded.filter(r => told[r.id] !== r.grade + r.gradedAt);
+        fresh.slice(0, 2).forEach((r, i) => setTimeout(() => toast("📋 Your " + (r.title || r.formTitle) + " was graded " + r.grade + (r.gradedBy ? " by " + r.gradedBy : "") + ". Open My reports to read it.", "ok"), 900 + i * 4800));
+        graded.forEach(r => told[r.id] = r.grade + r.gradedAt); set(N, told);
+        const unread = graded.filter(r => seen[r.id] !== r.grade + r.gradedAt).length;
+        const b = $("myBadge"); if(b){ b.hidden = !unread; b.textContent = unread; }
+      }catch(e){}
+    }
+  };
+})();
+setTimeout(() => MyReports.check(), 1500);
+
+/* ---------- boot: show cached forms instantly, then refresh from Google ---------- */
+function apply(cfg){
+  CONFIG = cfg;
+  if (Portal.setRoster) Portal.setRoster(cfg.roster || []);
+  if (Portal.setRosters) Portal.setRosters(cfg.rosters || {});
+  renderHome();
+  const h = location.hash.slice(1);
+  if(h) go(h);
+  else if(current) openForm(current.id);
+}
+// 1) this browser's last copy  2) the site's own copy (data/portal.json, instant)  3) Google, live, in the background
+let LIVE = false, SNAP_AT = 0;
+function useCfg(cfg){
+  const changed = !CONFIG || CONFIG.version !== cfg.version;
+  const rosterChanged = !CONFIG || JSON.stringify([CONFIG.roster || [], CONFIG.rosters || {}]) !== JSON.stringify([cfg.roster || [], cfg.rosters || {}]);
+  try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
+  if(changed) apply(cfg);
+  else if(rosterChanged){ CONFIG = cfg; if (Portal.setRoster) Portal.setRoster(cfg.roster || []); if (Portal.setRosters) Portal.setRosters(cfg.rosters || {}); }   // fresh roster, no form reload needed
+}
+try{ const c = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); if(c) apply(c); }catch(e){}
+const snapReady = fetch("data/portal.json?t=" + Date.now(), { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(snap => {
+  if(!snap || !snap.config) return;
+  SNAP_AT = Date.parse(snap.published) || 0;
+  Object.keys(snap.promo || {}).forEach(pid => { if(!PROMO_LIVE[pid]) PROMOS[pid] = snap.promo[pid]; });
+  try { localStorage.setItem("lspd_promos", JSON.stringify(PROMOS)); } catch (e) {}
+  if(!LIVE && !(CONFIG && CONFIG.version > snap.config.version)) useCfg(snap.config);
+  else if(CONFIG) renderPrograms();
+  if(/^#promo/.test(location.hash) && PROMOS[PID] && PROMOS[PID].candidates && typeof drawPromo === "function") drawPromo();
+  $("stale").style.display = "none";
+}).catch(() => {});
+Portal.loadConfig().then(cfg => { LIVE = true; useCfg(cfg); $("stale").style.display = "none"; }).catch(async err => {
+  await snapReady;
+  const fresh = SNAP_AT && Date.now() - SNAP_AT < 6 * 3600e3;
+  if(CONFIG && !fresh){ $("stale").style.display = ""; $("stale").innerHTML = "⚠️ Couldn't reach the server, so this is the last saved copy. Submitting may not work right now. <a onclick=\"location.reload()\">Try again</a><small>" + Portal.esc(err.message) + "</small>"; }
+  if(!CONFIG) $("formGrid").innerHTML = '<div class="loading">Could not load forms. Check your connection and refresh.<br><small>' + Portal.esc(err.message) + '</small></div>';
+});
+</script>
+</body>
+</html>

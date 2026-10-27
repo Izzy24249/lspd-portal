@@ -46,7 +46,7 @@
     try { localStorage.removeItem(TK); sessionStorage.removeItem(TK); Object.keys(localStorage).filter(k => k.indexOf("dc:data:") === 0).forEach(k => localStorage.removeItem(k)); } catch (e) {}
     showLogin();
   }
-  $("outBtn").onclick = () => { if (OFFICER()) location.href = "index.html"; else signOut(false); };
+  $("outBtn").onclick = () => { if (OFFICER()) location.href = "mdt.html"; else signOut(false); };
 
   // ---------------- data ----------------
   // Each division's last data is kept (in memory and in this browser), so switching shows it instantly;

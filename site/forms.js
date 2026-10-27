@@ -1,5 +1,5 @@
 /* =====================================================================
-   LSPD Portal - shared form renderer (used by index.html and admin.html)
+   LSPD Portal - shared form renderer (used by forms.html and admin.html)
    Draws any form definition from the admin portal in the Excel-sheet style.
    ===================================================================== */
 window.Portal = (function () {

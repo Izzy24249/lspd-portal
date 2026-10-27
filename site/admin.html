@@ -361,7 +361,7 @@
 <div class="lightbar"></div>
 <header class="top">
   <div class="top-in" style="max-width:1500px">
-    <a class="brand" href="index.html">
+    <a class="brand" href="forms.html">
       <img class="brand-logo" id="brandLogo" src="img/lspd-patch.png" alt="LSPD">
       <div><b>LSPD</b><small>COMMAND TERMINAL · ADMINISTRATION</small></div>
     </a>
@@ -818,7 +818,7 @@ function pageEditor(page) {
     field("Card description (home page)", bind(form, "description", { type: "textarea", rows: 2 })),
     h("div", { class: "g2" },
       field("Status", bind(form, "status", { type: "select", structural: true, options: [["live", "Live: officers can submit"], ["soon", "Coming soon card"], ["hidden", "Hidden"]] })),
-      field("Form ID", idInput, "Used in the link (index.html#" + form.id + ") and the sheet. Avoid changing once live.")),
+      field("Form ID", idInput, "Used in the link (forms.html#" + form.id + ") and the sheet. Avoid changing once live.")),
     h("div", { class: "g2" }, field("Submit button text", bind(form, "submitLabel", { max: 60 })), h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(form, "copyText", "Show “Copy as Text” button"))),
     (() => { const inp = bind(form, "section", { placeholder: "Reports", max: 40 }); inp.setAttribute("list", "sectionList");
       const names = [...new Set(["Reports", "Training"].concat(CFG.forms.map(f => String(f.section || "").trim()).filter(Boolean)))];
@@ -2046,7 +2046,7 @@ function pagePromo(page) {
   const progs = PROMO_PROGS || [{ id: "cpl", title: "CPL → SGT" }];
   const cur = progs.find(x => x.id === PROMO_PID) || progs[0];
   page.append(head("Training Progression", "People are read from the roster automatically. Reports check off their requirements; you can add, remove or excuse anything here. Completions save straight away; Setup needs Save & publish.",
-    h("a", { class: "btn ghost sm", href: "index.html#" + (PROMO_PID === "cpl" ? "promo" : "promo:" + PROMO_PID), target: "_blank" }, "Open public page ↗"),
+    h("a", { class: "btn ghost sm", href: "forms.html#" + (PROMO_PID === "cpl" ? "promo" : "promo:" + PROMO_PID), target: "_blank" }, "Open public page ↗"),
     h("button", { class: "btn ghost sm", onclick: () => { PROMO_ADMIN = null; PROMO_PROGS = null; renderPage(true); } }, "Refresh")));
   // program switcher
   const local = (CFG.settings.programs || []).filter(x => !progs.some(y => y.id === x.id)).map(x => ({ id: x.id, title: x.title + " (unsaved)" }));

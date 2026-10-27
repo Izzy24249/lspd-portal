@@ -374,7 +374,7 @@ body.is-demo{padding-top:52px}
       "<h2>Sign on to the MDT</h2><p class=\"sub\">First time on this device? Confirm who you are with Discord. You only do this once per device. After that it's just your 4-digit PIN.</p>" +
       '<button class="btn disc" id="goDisc" type="button">' + DISCORD_SVG + "Sign in with Discord</button>" +
       '<div class="msg' + (info ? " info" : "") + '" id="msg"' + (msg ? "" : " hidden") + ">" + esc(msg || "") + "</div>" +
-      '<div class="links"><span>Your Discord ID must be on the LSPD roster.</span>' + (GATE.required ? "" : '<a href="index.html">Back to the portal</a>') + '</div>');
+      '<div class="links"><span>Your Discord ID must be on the LSPD roster.</span>' + (GATE.required ? "" : '<a href="forms.html">Open the forms portal ›</a>') + '</div>');
     $("goDisc").onclick = async () => {
       SFX.squelch();
       const b = $("goDisc"); b.disabled = true; b.lastChild.textContent = "Opening Discord…";
