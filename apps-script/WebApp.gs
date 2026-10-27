@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 49;
+const BACKEND_VERSION = 50;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -437,10 +437,13 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
   const checkHidden = shown.length - hr <= 400;      // per-row hidden checks are slow; skip them on very long tabs
   for (let i = hr + 1; i < shown.length; i++) {
     const filled = shown[i].filter(c => str_(c)).length;
-    if (filled === 1 && !(idCol >= 0 && str_(shown[i][idCol]))) {           // section heading row
+    const noId = !(idCol >= 0 && str_(shown[i][idCol])), noCall = !(callCol >= 0 && callKey_(shown[i][callCol]));
+    if (filled >= 1 && filled <= 2 && noId && noCall) {           // section heading row ("COMMANDING PILOTS", "Senior Pilots (4)", "Trainees")
       const t = str_(shown[i].find(c => str_(c)));
-      const heading = isOut(t) || (/[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t)) || /member|roster|division|section|command|staff|personnel|active/i.test(t);
-      if (heading) { inOutSection = isOut(t); if (!inOutSection) section = clip_(t, 60); continue; }
+      const loud = /[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t);
+      const heading = isOut(t) || loud || /member|roster|division|section|command|staff|personnel|active/i.test(t) ||
+        (/[A-Za-z]{3}/.test(t) && !/\|/.test(t) && callCol >= 0);   // a lone label on a roster that keeps callsigns in their own column
+      if (heading) { inOutSection = isOut(t); if (!inOutSection) section = clip_(t.replace(/\s*[([]\s*\d+\s*[)\]]\s*$/, "").replace(/\s*[-–:]\s*\d+\s*$/, ""), 60); continue; }
     }
     if (!filled) continue;
     const why = inOutSection || statusCols.some(c => isOut(shown[i][c])) ||
