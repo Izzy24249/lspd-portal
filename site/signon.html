@@ -130,6 +130,9 @@ body.is-demo{padding-top:52px}
     // Realistic hardware sounds, all made in code (no files): fan spin-up, mains hum, drive seeks,
     // relay clicks, packet hiss, key clicks. No musical tones except one soft PC-speaker beep.
     let ctx = null, on = store.get("lspd_sound") !== "off", nbuf = null, amb = null;
+    const SFX_LEVEL = 1.8;   // computer sounds loudness (1 = original)
+    let master = null;
+    function bus(c) { if (!master) { master = c.createGain(); master.gain.value = SFX_LEVEL; const lim = c.createDynamicsCompressor(); lim.threshold.value = -6; lim.ratio.value = 12; master.connect(lim).connect(c.destination); } return master; }
     function ac() {
       if (!on) return null;
       try { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); } catch (e) { return null; }
@@ -142,13 +145,13 @@ body.is-demo{padding-top:52px}
       const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
       s.buffer = noiseBuf(c); f.type = type || "bandpass"; f.frequency.value = freq || 2000; f.Q.value = q || 1;
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.05, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      s.connect(f).connect(g).connect(c.destination); s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.02);
+      s.connect(f).connect(g).connect(bus(c)); s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.02);
     }
     function beep(f, dur, vol, at) {                   // plain sine, soft attack: PC speaker / system confirm
       const c = ac(); if (!c) return; const t = c.currentTime + (at || 0);
       const o = c.createOscillator(), g = c.createGain(); o.type = "sine"; o.frequency.value = f;
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.setValueAtTime(vol, t + dur - 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
+      o.connect(g).connect(bus(c)); o.start(t); o.stop(t + dur + 0.02);
     }
     const click = (at, v) => { burst(0.012, v || 0.09, 3800, "highpass", at, 0.7); burst(0.03, (v || 0.09) * 0.5, 900, "bandpass", at, 2); };   // relay / switch
     const seek = (at, v) => { burst(0.018, v || 0.05, 2600, "bandpass", at, 3); burst(0.012, (v || 0.05) * 0.7, 1400, "bandpass", (at || 0) + 0.03 + Math.random() * 0.03, 4); };   // hard-drive head
@@ -156,7 +159,7 @@ body.is-demo{padding-top:52px}
       const c = ac(); if (!c) return; const t = c.currentTime + (at || 0);
       const o = c.createOscillator(), g = c.createGain(); o.type = "square"; o.frequency.value = f;
       g.gain.setValueAtTime(vol, t); g.gain.setValueAtTime(vol, t + dur - 0.005); g.gain.linearRampToValueAtTime(0, t + dur);
-      o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.01);
+      o.connect(g).connect(bus(c)); o.start(t); o.stop(t + dur + 0.01);
     }
     function press() {                                 // chunky tower power button: push… release
       burst(0.07, 0.22, 260, "lowpass", 0, 0.8); burst(0.012, 0.12, 3200, "highpass", 0, 0.7);
@@ -167,7 +170,7 @@ body.is-demo{padding-top:52px}
       burst(0.18, 0.2, 140, "lowpass", at, 1);
       [60, 120, 180].forEach((f, i) => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = f;
         g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime([0.12, 0.05, 0.025][i], t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
-        o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.95); });
+        o.connect(g).connect(bus(c)); o.start(t); o.stop(t + 0.95); });
     }
     function floppy(at) {                              // floppy drive: stepper motor brrt-brrt + head clacks
       at = at || 0;
@@ -189,11 +192,11 @@ body.is-demo{padding-top:52px}
       lp.frequency.setValueAtTime(120, t); lp.frequency.exponentialRampToValueAtTime(1300, t + 1.4); lp.frequency.exponentialRampToValueAtTime(650, t + 2.6);
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.11, t + 1.2); g.gain.exponentialRampToValueAtTime(0.045, t + 2.8);
       hum.frequency.value = 60; hum2.frequency.value = 120; hg.gain.setValueAtTime(0.0001, t); hg.gain.exponentialRampToValueAtTime(0.02, t + 0.4);
-      s.connect(lp).connect(g).connect(c.destination); hum.connect(hg); hum2.connect(hg); hg.connect(c.destination);
+      s.connect(lp).connect(g).connect(bus(c)); hum.connect(hg); hum2.connect(hg); hg.connect(bus(c));
       const sp = c.createOscillator(), sg = c.createGain(); sp.type = "triangle";
       sp.frequency.setValueAtTime(70, t); sp.frequency.exponentialRampToValueAtTime(390, t + 3);    // hard drive platters spinning up
       sg.gain.setValueAtTime(0.0001, t); sg.gain.exponentialRampToValueAtTime(0.014, t + 0.6); sg.gain.exponentialRampToValueAtTime(0.006, t + 4);
-      sp.connect(sg).connect(c.destination);
+      sp.connect(sg).connect(bus(c));
       s.start(t); hum.start(t); hum2.start(t); sp.start(t); amb = { s, g, hg, hum, hum2, sp, sg };
     }
     function settle() {                                // fan winds down to idle, hum fades
