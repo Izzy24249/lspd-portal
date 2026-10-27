@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 61;
+const BACKEND_VERSION = 62;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2154,8 +2154,10 @@ const PERSONNEL_TAB_ = "LSPD Personnel Roster", ONBOARD_TAB_ = "LSPD Onboarding 
 function rosterTabByName_(name) {
   try { const want = name.toLowerCase(), sh = rosterBook_().getSheets().find(x => x.getName().trim().toLowerCase() === want); return sh ? sh.getSheetId() : null; } catch (e) { return null; }
 }
+// roster tags stuck to the end of a name ("F. DuzenRM", "F. Duzen RM") aren't part of the name
+function cleanName_(n) { return str_(n).replace(/([a-z'])RM\b/g, "$1").replace(/\s+RM\b/g, "").trim(); }
 function rosterPerson_(id) {
-  const split = n => { const cs = n.indexOf("|") !== -1 ? n.split("|")[0].trim() : ""; return { callsign: cs, name: cs ? n.split("|").slice(1).join("|").trim() : n }; };
+  const split = n => { const cs = n.indexOf("|") !== -1 ? n.split("|")[0].trim() : ""; return { callsign: cs, name: cleanName_(cs ? n.split("|").slice(1).join("|").trim() : n) }; };
   let hit = null, trainee = false;
   const fromTab = (name, isTrainee) => { if (hit) return; const tid = rosterTabByName_(name); if (tid == null) return;
     try { const p = (getRosterTab_(tid, false, [], false, true).people || []).find(x => x.id === id); if (p) { hit = Object.assign(split(p.name), { rank: p.extra || "" }); trainee = isTrainee; } } catch (e) {} };
@@ -2163,7 +2165,7 @@ function rosterPerson_(id) {
   fromTab(ONBOARD_TAB_, true);
   if (hit) return Object.assign(hit, { trainee: trainee });
   try { const p = (getRoster_(false).people || []).find(x => x.id === id); if (p) hit = Object.assign(split(p.name), { rank: p.extra || "" }); } catch (e) {}
-  try { programs_().forEach(pc => { if (!pc.on) return; const c = promoCandidates_(false, pc.id).list.find(x => x.id === id); if (c) { if (!hit) hit = { callsign: c.callsign, name: c.name, rank: "" }; if (/onboard|recruit|cadet|trainee|probation/i.test(pc.id + " " + pc.title + " " + (pc.rosterTabName || ""))) trainee = true; } }); } catch (e) {}
+  try { programs_().forEach(pc => { if (!pc.on) return; const c = promoCandidates_(false, pc.id).list.find(x => x.id === id); if (c) { if (!hit) hit = { callsign: c.callsign, name: cleanName_(c.name), rank: "" }; if (/onboard|recruit|cadet|trainee|probation/i.test(pc.id + " " + pc.title + " " + (pc.rosterTabName || ""))) trainee = true; } }); } catch (e) {}
   return hit ? Object.assign(hit, { trainee: trainee }) : null;
 }
 function acctLevel_(acct, person) {
@@ -2289,7 +2291,7 @@ function voiceTitle_(rank) {
   return "";
 }
 function voiceLast_(n) {
-  n = str_(n).replace(/["“”'(\[].*?["“”')\]]/g, " ").trim();
+  n = cleanName_(n).replace(/["“”'(\[].*?["“”')\]]/g, " ").trim();
   if (n.indexOf(",") > 0) return n.split(",")[0].trim().split(/\s+/).pop();
   const parts = n.split(/\s+/).filter(w => !/^(jr|sr|ii|iii|iv)\.?$/i.test(w) && !/^[A-Za-z]\.?$/.test(w));
   return parts.length ? parts[parts.length - 1] : n;
