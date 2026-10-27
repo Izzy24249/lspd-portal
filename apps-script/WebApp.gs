@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 68;
+const BACKEND_VERSION = 69;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2406,10 +2406,97 @@ function myPaths_(person) {
   } catch (e) {}
   return out;
 }
+// ---- MDT home board: shift briefing (roll call), my reports, department pulse, trainer "needs you", live ticker ----
+const BRIEF_SHEET_ = "Briefings", BRIEF_HEAD_ = ["ID", "Posted", "From", "To", "RE", "Body", "Acknowledged (Discord IDs)"];
+function briefSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(BRIEF_SHEET_);
+  if (!sh) { sh = ss.insertSheet(BRIEF_SHEET_); sh.appendRow(BRIEF_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, BRIEF_HEAD_.length).setFontWeight("bold"); }
+  return sh;
+}
+function briefAll_() {
+  const sh = briefSheet_(), n = sh.getLastRow(); if (n < 2) return [];
+  return sh.getRange(2, 1, n - 1, 7).getValues().map((r, i) => { let acks = []; try { acks = JSON.parse(str_(r[6]) || "[]"); } catch (e) {}
+    return { row: i + 2, id: str_(r[0]), at: isDate_(r[1]) ? r[1].getTime() : 0, from: str_(r[2]), to: str_(r[3]), re: str_(r[4]), body: str_(r[5]), acks: acks }; }).filter(b => b.id).reverse();
+}
+const GRADE_PTS_ = { "A+": 4.3, A: 4, "A-": 3.7, "B+": 3.3, B: 3, "B-": 2.7, "C+": 2.3, C: 2, "C-": 1.7, D: 1, F: 0 };
+function mdtDept_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get("mdt_dept"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const rows = actRows_(), forms = {}; getConfig_().forms.forEach(f => forms[f.id] = f.title);
+  const now = Date.now(), day = 864e5, start = new Date(); start.setHours(0, 0, 0, 0);
+  const wk = rows.filter(r => now - r.at < 7 * day), prev = rows.filter(r => now - r.at >= 7 * day && now - r.at < 14 * day);
+  const active = {}; wk.forEach(r => (r.people || []).forEach(p => { if (p.i) active[p.i] = 1; }));
+  const graded = rows.filter(r => r.grade && now - r.at < 30 * day && GRADE_PTS_[r.grade.toUpperCase()] != null);
+  const avg = graded.length ? graded.reduce((t, r) => t + GRADE_PTS_[r.grade.toUpperCase()], 0) / graded.length : null;
+  const letter = avg == null ? "—" : avg >= 3.85 ? "A" : avg >= 3.5 ? "A-" : avg >= 3.15 ? "B+" : avg >= 2.85 ? "B" : avg >= 2.5 ? "B-" : avg >= 2.15 ? "C+" : avg >= 1.85 ? "C" : avg >= 1.5 ? "C-" : avg >= 0.5 ? "D" : "F";
+  const days = []; for (let i = 6; i >= 0; i--) { const a = start.getTime() - i * day, b = a + day; days.push({ d: new Date(a).toLocaleDateString("en-US", { weekday: "narrow" }), n: rows.filter(r => r.at >= a && r.at < b).length }); }
+  let trainees = 0; try { const tid = rosterTabByName_(ONBOARD_TAB_); if (tid != null) trainees = (getRosterTab_(tid, false, [], false, true).people || []).length; } catch (e) {}
+  const who = r => { const p = (r.people || [])[0]; return p ? clip_(p.n, 40) : "An officer"; };
+  const tick = [];
+  rows.slice(-25).forEach(r => { tick.push({ at: r.at, t: who(r) + " filed " + (forms[r.form] || r.form) }); if (r.grade && r.gradedAt) tick.push({ at: r.gradedAt, t: (r.gradedBy || "Command") + " graded " + (r.no || forms[r.form] || "a report") + " " + r.grade }); });
+  tick.sort((a, b) => b.at - a.at);
+  const out = { week: wk.length, delta: wk.length - prev.length, active: Object.keys(active).length, avg: letter, trainees: trainees, days: days, ticker: tick.slice(0, 12) };
+  cache.put("mdt_dept", JSON.stringify(out), 120);
+  return out;
+}
+function mdtMine_(acct, person) {
+  const forms = {}; getConfig_().forms.forEach(f => forms[f.id] = f);
+  const nk = person && person.name ? nameKey_(person.name) : "";
+  return actRows_().filter(r => (r.people || []).some(p => (p.i && p.i === acct.id) || (!p.i && nk && nameKey_(p.n) === nk)))
+    .sort((a, b) => b.at - a.at).slice(0, 6).map(r => ({ id: r.id, at: r.at, formTitle: forms[r.form] ? forms[r.form].title : r.form, icon: forms[r.form] ? forms[r.form].icon || "📄" : "📄", no: r.no, title: r.title,
+      grade: r.grade, gradedBy: r.gradedBy, comments: clip_(r.comments, 160), tagged: !!((r.people || [])[0] && (r.people[0].i ? r.people[0].i !== acct.id : nameKey_(r.people[0].n) !== nk)) }));
+}
+// trainers (FTO and up): trainees who need something — overdue, close to the deadline, or ready for their final evaluation
+function mdtNeeds_() {
+  const out = [];
+  try {
+    programs_().forEach(pc => {
+      if (!pc.on || !/onboard|recruit|cadet|trainee|probation|academy/i.test(pc.id + " " + pc.title + " " + (pc.rosterTabName || ""))) return;
+      const v = promoView_(false, pc.id);
+      (v.candidates || []).forEach(c => {
+        if (c.complete) return;
+        const finals = (v.tasks || []).filter(t => t.final), ready = finals.some(t => c.tasks[t.id] && !c.tasks[t.id].done && !c.tasks[t.id].locked);
+        const open = (v.tasks || []).filter(t => !t.final && !(c.tasks[t.id] || {}).done);
+        let why = "", hot = false, act = "";
+        if (c.deadline && c.deadline.state === "over") { why = "Deadline passed · " + c.done + " of " + c.total + " done"; hot = true; act = "REVIEW"; }
+        else if (ready) { why = "Ready for final evaluation"; act = "FINAL"; }
+        else if (c.deadline && c.deadline.state === "warn") { why = c.deadline.left + " days left · " + (open[0] ? "needs " + open[0].title : c.done + " of " + c.total + " done"); hot = true; act = "HELP"; }
+        else if (open.length) { const t = open[0], x = c.tasks[t.id] || {}; why = "Next: " + t.title + (t.need > 1 ? " (" + (x.count || 0) + "/" + t.need + ")" : ""); act = "TRAIN"; }
+        if (why) out.push({ callsign: c.callsign, name: c.name, why: why, hot: hot, act: act, program: v.title, order: hot ? 0 : ready ? 1 : 2 });
+      });
+    });
+  } catch (e) {}
+  return out.sort((a, b) => a.order - b.order).slice(0, 8);
+}
+function mdtBoard_(acct, prof, person) {
+  const lv = LEVELS_.indexOf(prof.level), briefs = briefAll_(), b = briefs[0] || null;
+  return {
+    briefing: b ? { id: b.id, at: b.at, from: b.from, to: b.to, re: b.re, body: b.body, acked: b.acks.indexOf(acct.id) !== -1, ackCount: lv >= LEVELS_.indexOf("command") ? b.acks.length : undefined } : null,
+    past: briefs.slice(1, 6).map(x => ({ id: x.id, at: x.at, from: x.from, re: x.re, body: x.body })),
+    canBrief: lv >= LEVELS_.indexOf("command"),
+    mine: mdtMine_(acct, person), dept: mdtDept_(),
+    needs: lv >= LEVELS_.indexOf("fto") ? mdtNeeds_() : null
+  };
+}
+function mdtBrief_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  const prof = acctProfile_(acct);
+  if (d.action === "mdtBriefAck") {
+    return withLock_(() => { const b = briefAll_().find(x => x.id === str_(d.id)); if (!b) return { ok: false, error: "That briefing is gone." };
+      if (b.acks.indexOf(acct.id) === -1) { b.acks.push(acct.id); briefSheet_().getRange(b.row, 7).setValue(JSON.stringify(b.acks)); }
+      return { ok: true }; });
+  }
+  if (LEVELS_.indexOf(prof.level) < LEVELS_.indexOf("command")) return { ok: false, error: "Only command staff can post the shift briefing." };
+  const re = clip_(str_(d.re), 120), body = clip_(str_(d.body), 3000), to = clip_(str_(d.to) || "All sworn personnel", 120);
+  if (!re || !body) return { ok: false, error: "Add a subject and the briefing text." };
+  const from = ((prof.title || "") + " " + voiceLast_(prof.name || "")).trim() + (prof.callsign ? " (" + prof.callsign + ")" : "");
+  withLock_(() => { briefSheet_().appendRow([Utilities.getUuid().slice(0, 8), new Date(), cellSafe_(from), cellSafe_(to), cellSafe_(re), cellSafe_(body), "[]"]); return { ok: true }; });
+  return { ok: true };
+}
+
 function officerHome_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
   const person = rosterPerson_(acct.id), prof = acctProfile_(acct), s = getConfig_().settings || {};
-  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding) };
+  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding), board: mdtBoard_(acct, prof, person) };
 }
 
 // =====================================================================
@@ -2793,6 +2880,7 @@ function handleAdmin_(d) {
   if (/^acct(DiscordUrl|Discord|SetPin|Pin|Me|Out)$/.test(a)) return acctHandle_(d);
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
+  if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
 
   if (d.session && /^div(View|Report|Grade)$/.test(a)) return divOfficer_(d);
 

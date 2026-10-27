@@ -39,30 +39,59 @@
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
   addEventListener("hashchange", () => go(location.hash.slice(1)));
 
+  function drawTicker() {
+    const t = $("ticker"), list = (DATA && DATA.board && DATA.board.dept && DATA.board.dept.ticker) || [];
+    if (!list.length) { t.hidden = true; return; }
+    t.hidden = false; t.innerHTML = '<div class="live"><i></i>LIVE</div><div class="tk-run">' + list.concat(list).map(x => "<span>" + esc(x.t) + " · " + ago(x.at) + "</span>").join("") + "</div>";
+  }
+  function modal(html) { const m = $("modal"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
   function draw() {
     document.querySelectorAll("[data-go]").forEach(a => a.classList.toggle("on", a.getAttribute("data-go") === VIEW));
     drawStrip();
     const m = $("main");
     if (!DATA) { m.innerHTML = '<div class="boot">ESTABLISHING LINK…</div>'; return; }
     m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : homeHTML()) + "</div>";
+    drawTicker();
   }
 
   // ---------- home ----------
   function greet() { const h = new Date().getHours(); return h < 5 ? "Evening" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening"; }
+  const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
+  const gcls = g => { const x = String(g || "").toUpperCase()[0]; return x === "A" ? "a" : x === "B" ? "b" : x === "C" ? "c" : x ? "c" : "w"; };
+  function memoHTML(b, B) {
+    if (!b) return '<div class="memo"><div class="mh"><span>LSPD · MEMORANDUM</span><span>' + esc(new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()) + "</span></div><p>No briefing posted for this shift. Check your division channels and stay safe out there.</p></div>";
+    const d = new Date(b.at);
+    return '<div class="memo"><div class="mh"><span>LSPD · MEMORANDUM</span><span>' + esc(d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()) + "</span></div>" +
+      "<dl><dt>TO:</dt><dd>" + esc(b.to) + "</dd><dt>FROM:</dt><dd>" + esc(b.from) + "</dd><dt>RE:</dt><dd>" + esc(b.re) + "</dd></dl>" +
+      esc(b.body).split(/\n{2,}/).map(x => "<p>" + x.replace(/\n/g, "<br>") + "</p>").join("") +
+      (b.acked ? '<span class="stamp">READ AT ROLL CALL</span>' : "") + "</div>" +
+      '<div class="ackrow">' + (b.acked ? '<span class="acked">✓ Acknowledged</span>' : '<button class="btn" data-ack="' + esc(b.id) + '">ACKNOWLEDGE · ROLL CALL</button>') +
+      (b.ackCount != null ? '<span class="lbl">' + b.ackCount + " acknowledged</span>" : "") + "</div>";
+  }
   function homeHTML() {
-    const p = DATA.profile || {}, f = DATA.fleet || {}, trainee = f.rank && f.rank.trainee;
+    const p = DATA.profile || {}, f = DATA.fleet || {}, B = DATA.board || {}, trainee = f.rank && f.rank.trainee, mine = B.mine || [];
+    const waiting = mine.filter(r => !r.grade).length;
     let h = '<div class="hello"><div><h1>' + esc(greet()) + ", " + esc(last(p.name) || "Officer") + '. <span>' + esc(trainee ? "Welcome to the academy." : "Ready when you are.") + "</span></h1>" +
-      '<p>Signed on as <b>' + esc(p.callsign || "—") + "</b> · " + esc(who(p)) + (f.rank && f.rank.known ? " · rank on file: <b>" + esc(f.rank.name) + "</b>" : "") + '</p></div><a class="file" href="index.html">FILE A REPORT</a></div>';
-    (DATA.paths || []).forEach(pa => { h += pathHTML(pa); });
-    if (!(DATA.paths || []).length) h += '<section class="pane pathx"><div class="ph"><span class="lbl">Training path</span></div><p style="color:var(--mute)">You\'re not in an active training or promotion program right now. When command adds you to one, your steps and progress show up here.</p></section>';
-    h += '<section class="pane"><div class="sop"><svg viewBox="0 0 24 24"><use href="#i-book"/></svg><div><b>Standard Operating Procedures</b><small>The LSPD SOP: policy, radio, pursuits, use of force. Read it before your first shift and keep it handy.</small></div><a class="btn" target="_blank" rel="noopener" href="' + esc(DATA.sop) + '">OPEN SOP ↗</a></div></section>';
-    h += '<div class="tiles">' +
-      tile("fleet", "i-car", "Fleet", (f.vehicles || []).filter(v => v.allowed).length + " vehicles approved for you") +
-      tile("uniforms", "i-shirt", "Uniforms", ((f.uniforms || {})[SEX] || []).filter(u => u.yours).length + " outfits for your rank") +
-      '<a class="tile" href="myreports.html"><svg><use href="#i-file"/></svg><b>My reports</b><small>Grades and feedback on what you filed</small></a>' +
-      '<a class="tile" href="index.html"><svg><use href="#i-clip"/></svg><b>File a report</b><small>Every LSPD form in one place</small></a>' +
-      '<a class="tile" href="division.html" data-need-division ' + ((p.divisions || []).length ? "" : "hidden") + '><svg><use href="#i-shield"/></svg><b>Division Command</b><small>Your divisions: activity and grading</small></a>' +
-      "</div>";
+      '<p>Signed on as <b>' + esc(p.callsign || "—") + "</b> · " + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · " + waiting + " waiting on a grade" : "") : "") + '</p></div><a class="file" href="index.html">FILE A REPORT <kbd>F</kbd></a></div>';
+    // briefing | path
+    h += '<div class="grid"><section class="pane"><div class="ph"><span class="lbl">Shift briefing</span>' + (B.canBrief ? '<a data-brief>Post briefing</a>' : (B.past || []).length ? '<a data-past>Past briefings</a>' : "") + "</div>" + memoHTML(B.briefing, B) + "</section>";
+    if ((DATA.paths || []).length) h += pathHTML(DATA.paths[0]);
+    else h += '<section class="pane"><div class="ph"><span class="lbl">Standard Operating Procedures</span></div><div class="sop"><svg viewBox="0 0 24 24"><use href="#i-book"/></svg><div><b>LSPD SOP</b><small>Policy, radio, pursuits, use of force. Keep it handy.</small></div><a class="btn" target="_blank" rel="noopener" href="' + esc(DATA.sop) + '">OPEN ↗</a></div>' +
+      '<div class="tiles" style="grid-template-columns:1fr 1fr">' + tile("fleet", "i-car", "Fleet", (f.vehicles || []).filter(v => v.allowed).length + " approved") + tile("uniforms", "i-shirt", "Uniforms", ((f.uniforms || {})[SEX] || []).filter(u => u.yours).length + " for your rank") + "</div></section>";
+    h += "</div>";
+    (DATA.paths || []).slice(1).forEach(pa => { h += '<div style="margin-top:18px">' + pathHTML(pa) + "</div>"; });
+    // reports | department | needs you / tiles
+    const D = B.dept || {};
+    h += '<div class="grid3"><section class="pane"><div class="ph"><span class="lbl">My reports</span><a href="myreports.html">All</a></div>' +
+      (mine.length ? mine.map(r => '<div class="rep"><div><b>' + esc((r.no ? r.no + " · " : "") + (r.title || r.formTitle)) + "</b><small>" + esc(r.formTitle) + (r.tagged ? " · you were tagged" : "") + " · " + (r.grade ? "graded by " + esc(r.gradedBy || "command") + (r.comments ? ' · "' + esc(r.comments) + '"' : "") : "filed " + ago(r.at) + " ago") + '</small></div><span class="gr ' + gcls(r.grade) + '">' + esc(r.grade || "…") + "</span></div>").join("")
+        : '<p style="color:var(--mute)">Nothing yet. Reports you file, or get tagged in, show up here with their grade.</p>') + "</section>";
+    h += '<section class="pane"><div class="ph"><span class="lbl">Department · this week</span></div><div class="big"><div><small>Reports filed</small><b>' + (D.week || 0) + "</b>" + (D.delta ? "<em" + (D.delta < 0 ? ' style="color:var(--red)"' : "") + ">" + (D.delta > 0 ? "▲ " : "▼ ") + Math.abs(D.delta) + "</em>" : "") + "</div><div><small>Officers active</small><b>" + (D.active || 0) + "</b></div><div><small>Avg. grade (30 days)</small><b>" + esc(D.avg || "—") + "</b></div><div><small>Trainees in program</small><b>" + (D.trainees || 0) + "</b></div></div>";
+    const mx = Math.max(1, ...(D.days || []).map(x => x.n));
+    h += '<div class="spark">' + (D.days || []).map((x, i, a) => '<i class="' + (i === a.length - 1 ? "t" : "") + '" style="height:' + Math.max(4, Math.round(x.n / mx * 100)) + '%" title="' + x.n + ' reports"></i>').join("") + '</div><div class="days">' + (D.days || []).map(x => "<span>" + esc(x.d) + "</span>").join("") + "</div></section>";
+    if (B.needs) h += '<section class="pane"><div class="ph"><span class="lbl">Needs you · FTO</span></div>' + (B.needs.length ? B.needs.map(n => '<div class="need"><span class="cs">' + esc(n.callsign || "—") + "</span><div><b>" + esc(n.name) + '</b><small class="' + (n.hot ? "hot" : "") + '">' + esc(n.why) + '</small></div><a href="index.html">' + esc(n.act) + "</a></div>").join("") : '<p style="color:var(--mute)">All trainees are on track.</p>') + "</section>";
+    else h += '<section class="pane"><div class="ph"><span class="lbl">Quick access</span></div><div class="tiles" style="grid-template-columns:1fr;margin-top:0">' + tile("fleet", "i-car", "Fleet", (f.vehicles || []).filter(v => v.allowed).length + " vehicles approved for you") + tile("uniforms", "i-shirt", "Uniforms", ((f.uniforms || {})[SEX] || []).filter(u => u.yours).length + " outfits for your rank") + "</div></section>";
+    h += "</div>";
+    if ((p.divisions || []).length) h += '<div class="tiles"><a class="tile" href="division.html"><svg><use href="#i-shield"/></svg><b>Division Command</b><small>Your divisions: activity, grading and officers</small></a></div>';
     return h;
   }
   function tile(go, icon, t, s) { return '<a class="tile" data-go="' + go + '"><svg><use href="#' + icon + '"/></svg><b>' + esc(t) + "</b><small>" + esc(s) + "</small></a>"; }
@@ -154,7 +183,15 @@
     const c = e.target.closest("[data-copy]"); if (c && !c.disabled) { copy(c.getAttribute("data-copy"), c.getAttribute("data-what") || "Code"); return; }
     const fa = e.target.closest("[data-fa]"); if (fa) { FLEET_ALL = fa.getAttribute("data-fa") === "1"; LS.set("mdt:fleetAll", FLEET_ALL ? "1" : ""); draw(); return; }
     const ua = e.target.closest("[data-ua]"); if (ua) { UNI_ALL = ua.getAttribute("data-ua") === "1"; LS.set("mdt:uniAll", UNI_ALL ? "1" : ""); draw(); return; }
-    const sx = e.target.closest("[data-sex]"); if (sx) { SEX = sx.getAttribute("data-sex"); LS.set("mdt:sex", SEX); draw(); }
+    const sx = e.target.closest("[data-sex]"); if (sx) { SEX = sx.getAttribute("data-sex"); LS.set("mdt:sex", SEX); draw(); return; }
+    const ak = e.target.closest("[data-ack]"); if (ak) { ak.disabled = true; Portal.post({ action: "mdtBriefAck", session: SESSION, id: ak.getAttribute("data-ack") }).then(r => { if (r.ok) { DATA.board.briefing.acked = true; if (DATA.board.briefing.ackCount != null) DATA.board.briefing.ackCount++; draw(); toast("Acknowledged. Have a safe shift."); } else { ak.disabled = false; toast(r.error || "Couldn't acknowledge."); } }); return; }
+    if (e.target.closest("[data-past]")) { const P = (DATA.board.past || []); modal('<h3>Past briefings</h3>' + (P.length ? P.map(b => '<div class="pb"><b>' + esc(b.re) + "</b><small>" + esc(new Date(b.at).toLocaleDateString()) + " · " + esc(b.from) + "</small><p>" + esc(b.body).replace(/\n/g, "<br>") + "</p></div>").join("") : "<p>None yet.</p>") + '<div class="md-act"><button class="btn ghost" data-close>Close</button></div>'); return; }
+    if (e.target.closest("[data-brief]")) {
+      const m = modal('<h3>Post the shift briefing</h3><label>To<input id="bTo" value="All sworn personnel"></label><label>Subject (RE)<input id="bRe" maxlength="120" placeholder="Paleto patrol & report deadlines"></label><label>Briefing<textarea id="bBody" rows="7" maxlength="3000" placeholder="What every unit needs to know this shift…"></textarea></label><p class="md-note">Shows on every officer\'s MDT home. Officers tap Acknowledge for roll call, and you\'ll see how many have read it.</p><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="bGo">POST BRIEFING</button></div>');
+      m.querySelector("#bGo").onclick = async () => { const b = m.querySelector("#bGo"); b.disabled = true;
+        const r = await Portal.post({ action: "mdtBriefPost", session: SESSION, to: m.querySelector("#bTo").value, re: m.querySelector("#bRe").value, body: m.querySelector("#bBody").value }).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
+        if (r.ok) { m.hidden = true; toast("Briefing posted."); load(); } else { b.disabled = false; toast(r.error || "Couldn't post."); } };
+    }
   });
 
   // ---------- data ----------
@@ -169,5 +206,6 @@
   }
   VIEW = ["home", "fleet", "uniforms"].indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : "home";
   draw(); load();
-  setInterval(() => { if (!document.hidden) load(); }, 5 * 60e3);
+  setInterval(() => { if (!document.hidden) load(); }, 3 * 60e3);
+  addEventListener("keydown", e => { if (e.key && e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey && !e.altKey && !/input|textarea|select/i.test((e.target.tagName || "")) && $("modal").hidden && !document.querySelector(".lk")) location.href = "index.html"; });
 })();

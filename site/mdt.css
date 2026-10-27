@@ -224,3 +224,22 @@ a{color:inherit}
 .btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 16px;background:var(--blue);color:#fff;text-decoration:none;font:700 13px "Barlow Condensed",sans-serif;letter-spacing:.14em;border:0;cursor:pointer}
 .btn.ghost{background:none;border:1px solid var(--hair2);color:var(--tx)}
 @media(max-width:760px){.cards{grid-template-columns:1fr}.h2 h1{font-size:28px}.sop{grid-template-columns:auto 1fr}.sop .btn{grid-column:1/-1}}
+
+/* phase 5: board */
+.ackrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap}
+.acked{color:var(--green);font:700 13px "Barlow Condensed",sans-serif;letter-spacing:.14em}
+.ph a[data-brief],.ph a[data-past]{cursor:pointer}
+.ticker .tk-run{display:flex;animation:tk 60s linear infinite}
+.ticker:hover .tk-run{animation-play-state:paused}
+@keyframes tk{to{transform:translateX(-50%)}}
+.main{padding-bottom:80px}
+.md{position:fixed;inset:0;z-index:60;background:rgba(5,8,13,.7);backdrop-filter:blur(6px);display:grid;place-items:center;padding:16px}
+.md-box{width:min(560px,100%);max-height:90vh;overflow:auto;background:linear-gradient(180deg,var(--steel2),var(--steel));border:1px solid var(--hair2);padding:20px 22px;display:grid;gap:12px}
+.md-box h3{font:700 22px "Barlow Condensed",sans-serif;letter-spacing:.08em}
+.md-box label{display:grid;gap:6px;color:var(--mute);font:600 12px "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase}
+.md-box input,.md-box textarea{background:#0a0f17;border:1px solid var(--hair2);color:var(--tx);padding:10px 12px;font:14px Inter,sans-serif;text-transform:none;letter-spacing:0}
+.md-box input:focus,.md-box textarea:focus{outline:none;border-color:var(--blue)}
+.md-note{color:var(--mute);font-size:12.5px}
+.md-act{display:flex;justify-content:flex-end;gap:8px}
+.pb{padding:10px 0;border-bottom:1px solid var(--hair)}.pb small{display:block;color:var(--mute);font-size:12px}.pb p{margin-top:6px;color:#cdd6e4;font-size:13.5px}
+.memo p+p{margin-top:9px}
