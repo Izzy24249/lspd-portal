@@ -1729,10 +1729,14 @@ async function playClips(keys, audio) {
   const c = playClips.c || (playClips.c = new C()); if (c.state === "suspended") await c.resume();
   const ab = b => { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
   const bufs = await Promise.all(keys.map(k => new Promise((res, rej) => { const p = c.decodeAudioData(ab(audio[k]), res, rej); if (p && p.then) p.then(res, rej); })));
-  const trim = buf => { const d = buf.getChannelData(0), pad = Math.floor(buf.sampleRate * 0.015); let a = 0, z = d.length - 1;
-    while (a < z && Math.abs(d[a]) < 0.012) a++; while (z > a && Math.abs(d[z]) < 0.012) z--; a = Math.max(0, a - pad); z = Math.min(d.length - 1, z + pad * 2);
-    const o = c.createBuffer(buf.numberOfChannels, z - a + 1, buf.sampleRate); for (let ch = 0; ch < buf.numberOfChannels; ch++) o.copyToChannel(buf.getChannelData(ch).subarray(a, z + 1), ch); return o; };
-  let t = c.currentTime + 0.08; const gaps = [0.07, 0.16, 0];
+  const trim = buf => { const d = buf.getChannelData(0), sr = buf.sampleRate; let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+    let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < peak * 0.04) a++; while (z > a && Math.abs(d[z]) < peak * 0.006) z--;
+    a = Math.max(0, a - Math.floor(sr * 0.03)); z = Math.min(d.length - 1, z + Math.floor(sr * 0.12));
+    const o = c.createBuffer(buf.numberOfChannels, z - a + 1, sr), fi = Math.floor(sr * 0.008), fo = Math.floor(sr * 0.05);
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) { const seg = Float32Array.from(buf.getChannelData(ch).subarray(a, z + 1)), n = seg.length;
+      for (let i = 0; i < fi && i < n; i++) seg[i] *= i / fi; for (let i = 0; i < fo && i < n; i++) seg[n - 1 - i] *= i / fo; o.copyToChannel(seg, ch); }
+    return o; };
+  let t = c.currentTime + 0.08; const gaps = [0.16, 0.24, 0];
   bufs.map(trim).forEach((b, i) => { const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(t); t += b.duration + gaps[i]; });
 }
 function voiceSec() {
