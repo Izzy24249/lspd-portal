@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 65;
+const BACKEND_VERSION = 66;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2163,7 +2163,7 @@ function rosterPerson_(id) {
     try { const p = (getRosterTab_(tid, false, [RANK_COL_], false, true).people || []).find(x => x.id === id); if (p) { hit = Object.assign(split(p.name), { rank: str_(p.more && p.more[RANK_COL_]) || p.extra || "", section: p.sec || "" }); trainee = isTrainee; } } catch (e) {} };
   fromTab(PERSONNEL_TAB_, false);
   fromTab(ONBOARD_TAB_, true);
-  if (hit) return Object.assign(hit, { trainee: trainee });
+  if (hit) return Object.assign(hit, { trainee: trainee, onboarding: trainee });
   try { const p = (getRoster_(false).people || []).find(x => x.id === id); if (p) hit = Object.assign(split(p.name), { rank: p.extra || "" }); } catch (e) {}
   try { programs_().forEach(pc => { if (!pc.on) return; const c = promoCandidates_(false, pc.id).list.find(x => x.id === id); if (c) { if (!hit) hit = { callsign: c.callsign, name: cleanName_(c.name), rank: "" }; if (/onboard|recruit|cadet|trainee|probation/i.test(pc.id + " " + pc.title + " " + (pc.rosterTabName || ""))) trainee = true; } }); } catch (e) {}
   return hit ? Object.assign(hit, { trainee: trainee }) : null;
@@ -2296,7 +2296,11 @@ function voiceTitle_(rank) {
   if (pl !== r) for (let i = 0; i < T.length; i++) if (T[i][0].test(pl)) return T[i][1];
   return "";
 }
-function voiceTitleFor_(person) { return person ? (voiceTitle_(person.rank) || voiceTitle_(person.section)) : ""; }
+function voiceTitleFor_(person) {
+  if (!person) return "";
+  if (person.onboarding) return "Probationary Officer";     // everyone on the LSPD Onboarding Roster
+  return voiceTitle_(person.rank) || voiceTitle_(person.section);
+}
 function voiceLast_(n) {
   n = cleanName_(n).replace(/["“”'(\[].*?["“”')\]]/g, " ").trim();
   if (n.indexOf(",") > 0) return n.split(",")[0].trim().split(/\s+/).pop();
