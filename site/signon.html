@@ -498,7 +498,7 @@ body.is-demo{padding-top:52px}
           try {
             speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance(text), v = pick();
-            if (v) u.voice = v; u.lang = (v && v.lang) || "en-US"; u.rate = 0.98; u.pitch = 0.95; u.volume = 1;
+            if (v) u.voice = v; u.lang = (v && v.lang) || "en-US"; u.rate = 0.98; u.pitch = 0.95; u.volume = 0.7;
             const done = () => { clearTimeout(cap); res(); }, cap = setTimeout(res, 4500);
             u.onend = done; u.onerror = done;
             speechSynthesis.speak(u);
@@ -529,13 +529,14 @@ body.is-demo{padding-top:52px}
     function shapeClip(c, buf) {   // play the whole clip untouched (no end cut); trim only dead air before the first word; note where the voice ends
       const d = buf.getChannelData(0), sr = buf.sampleRate; let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
       let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < peak * 0.04) a++; while (z > a && Math.abs(d[z]) < peak * 0.004) z--;
-      a = Math.max(0, a - Math.floor(sr * 0.03)); const n = d.length - a, k = peak > 0 ? 0.8 / peak : 1;
+      a = Math.max(0, a - Math.floor(sr * 0.03)); const n = d.length - a, k = peak > 0 ? VOICE_LEVEL / peak : 1;
       const out = c.createBuffer(buf.numberOfChannels, n, sr);
       for (let ch = 0; ch < buf.numberOfChannels; ch++) { const seg = Float32Array.from(buf.getChannelData(ch).subarray(a)); for (let i = 0; i < n; i++) seg[i] *= k; out.copyToChannel(seg, ch); }
       return { buf: out, voiceEnd: (z - a) / sr };       // seconds from clip start to the end of the last word
     }
     // each clip finishes completely, then a fifth-of-a-second break before the next one
     const CLIP_BREAK = 0.2;
+    const VOICE_LEVEL = 0.55;   // greeting loudness (0–1); was 0.8
 
     async function play(when) {
       const c = SFX.ctx(); if (!c || !pending) return false;
