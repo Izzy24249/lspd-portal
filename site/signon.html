@@ -525,31 +525,32 @@ body.is-demo{padding-top:52px}
     }
     function ab(b64) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
     function decode(c, b64) { return new Promise((res, rej) => { try { const p = c.decodeAudioData(ab(b64), res, rej); if (p && p.then) p.then(res, rej); } catch (e) { rej(e); } }); }
-    function trim(c, buf) {                            // cut only the dead air ElevenLabs leaves at each end; keep the soft tail of the last word
+    function shapeClip(c, buf, tail, fade) {   // trim dead air; keep 'tail' s after the last word and ease it out over 'fade' s
       const d = buf.getChannelData(0), sr = buf.sampleRate; let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
-      const thA = peak * 0.04, thZ = peak * 0.006;
-      let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < thA) a++; while (z > a && Math.abs(d[z]) < thZ) z--;
-      a = Math.max(0, a - Math.floor(sr * 0.03)); z = Math.min(d.length - 1, z + Math.floor(sr * 0.12));
-      const out = c.createBuffer(buf.numberOfChannels, z - a + 1, sr), fi = Math.floor(sr * 0.008), fo = Math.floor(sr * 0.05);
+      let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < peak * 0.04) a++; while (z > a && Math.abs(d[z]) < peak * 0.006) z--;
+      a = Math.max(0, a - Math.floor(sr * 0.03)); const end = z + Math.floor(sr * tail), n = end - a + 1;
+      const out = c.createBuffer(buf.numberOfChannels, n, sr), fi = Math.floor(sr * 0.008), fo = Math.min(n, Math.floor(sr * fade)), k = peak > 0 ? 0.8 / peak : 1;
       for (let ch = 0; ch < buf.numberOfChannels; ch++) {
-        const seg = Float32Array.from(buf.getChannelData(ch).subarray(a, z + 1)), n = seg.length;
-        for (let i = 0; i < fi && i < n; i++) seg[i] *= i / fi;                 // soft in
-        for (let i = 0; i < fo && i < n; i++) seg[n - 1 - i] *= i / fo;         // soft out, no click
+        const src = buf.getChannelData(ch), seg = new Float32Array(n);
+        for (let i = 0; i < n; i++) seg[i] = (a + i < src.length ? src[a + i] : 0) * k;           // same loudness for every clip
+        for (let i = 0; i < fi; i++) seg[i] *= i / fi;
+        for (let i = 0; i < fo; i++) seg[n - fo + i] *= 0.5 + 0.5 * Math.cos(Math.PI * i / fo);    // smooth cosine fade-out
         out.copyToChannel(seg, ch);
       }
-      let pk = 0; for (let i = 0; i < out.getChannelData(0).length; i++) pk = Math.max(pk, Math.abs(out.getChannelData(0)[i]));
-      if (pk > 0) { const k = 0.8 / pk; for (let ch = 0; ch < out.numberOfChannels; ch++) { const x = out.getChannelData(ch); for (let i = 0; i < x.length; i++) x[i] *= k; } }   // same loudness for every clip
       return out;
     }
+    // greeting fades softly and the name rolls in as it fades; a full-stop pause before "You're signed on."
+    const CLIP_SHAPE = [[0.38, 0.32], [0.14, 0.06], [0.3, 0.22]], CLIP_JOIN = [-0.24, 0.24, 0];
+
     async function play(when) {
       const c = SFX.ctx(); if (!c || !pending) return false;
       const plan = await Promise.race([pending, new Promise(r => setTimeout(() => r(null), 2500))]); if (!plan) return false;
       const parts = [plan.greet[when], plan.name, plan.close].map(k => { try { return localStorage.getItem(LS + k); } catch (e) { return null; } });
       if (parts.some(x => !x)) return false;
       try {
-        const bufs = (await Promise.all(parts.map(b => decode(c, b)))).map(b => trim(c, b));
+        const bufs = (await Promise.all(parts.map(b => decode(c, b)))).map((b, i) => shapeClip(c, b, CLIP_SHAPE[i][0], CLIP_SHAPE[i][1]));
         const g = c.createGain(); g.gain.value = 1; g.connect(c.destination);
-        let t = c.currentTime + 0.08; const gaps = [0.16, 0.24, 0];   // comma pause after the greeting, full stop after the name
+        let t = c.currentTime + 0.08; const gaps = CLIP_JOIN;
         bufs.forEach((b, i) => { const src = c.createBufferSource(); src.buffer = b; src.connect(g); src.start(t); t += b.duration + gaps[i]; });
         await new Promise(r => setTimeout(r, (t - c.currentTime) * 1000 + 150));
         return true;

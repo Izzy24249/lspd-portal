@@ -1724,22 +1724,29 @@ function discordSec() {
 }
 
 // play the stitched test greeting (same trimming/joins as the sign-on page)
+function shapeClip(c, buf, tail, fade) {   // trim dead air; keep 'tail' s after the last word and ease it out over 'fade' s
+  const d = buf.getChannelData(0), sr = buf.sampleRate; let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+  let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < peak * 0.04) a++; while (z > a && Math.abs(d[z]) < peak * 0.006) z--;
+  a = Math.max(0, a - Math.floor(sr * 0.03)); const end = z + Math.floor(sr * tail), n = end - a + 1;
+  const out = c.createBuffer(buf.numberOfChannels, n, sr), fi = Math.floor(sr * 0.008), fo = Math.min(n, Math.floor(sr * fade)), k = peak > 0 ? 0.8 / peak : 1;
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const src = buf.getChannelData(ch), seg = new Float32Array(n);
+    for (let i = 0; i < n; i++) seg[i] = (a + i < src.length ? src[a + i] : 0) * k;           // same loudness for every clip
+    for (let i = 0; i < fi; i++) seg[i] *= i / fi;
+    for (let i = 0; i < fo; i++) seg[n - fo + i] *= 0.5 + 0.5 * Math.cos(Math.PI * i / fo);    // smooth cosine fade-out
+    out.copyToChannel(seg, ch);
+  }
+  return out;
+}
+// greeting fades softly and the name rolls in as it fades; a full-stop pause before "You're signed on."
+const CLIP_SHAPE = [[0.38, 0.32], [0.14, 0.06], [0.3, 0.22]], CLIP_JOIN = [-0.24, 0.24, 0];
 async function playClips(keys, audio) {
   const C = window.AudioContext || window.webkitAudioContext; if (!C) throw new Error("This browser can't play audio.");
   const c = playClips.c || (playClips.c = new C()); if (c.state === "suspended") await c.resume();
   const ab = b => { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
   const bufs = await Promise.all(keys.map(k => new Promise((res, rej) => { const p = c.decodeAudioData(ab(audio[k]), res, rej); if (p && p.then) p.then(res, rej); })));
-  const trim = buf => { const d = buf.getChannelData(0), sr = buf.sampleRate; let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
-    let a = 0, z = d.length - 1; while (a < z && Math.abs(d[a]) < peak * 0.04) a++; while (z > a && Math.abs(d[z]) < peak * 0.006) z--;
-    a = Math.max(0, a - Math.floor(sr * 0.03)); z = Math.min(d.length - 1, z + Math.floor(sr * 0.12));
-    const o = c.createBuffer(buf.numberOfChannels, z - a + 1, sr), fi = Math.floor(sr * 0.008), fo = Math.floor(sr * 0.05);
-    for (let ch = 0; ch < buf.numberOfChannels; ch++) { const seg = Float32Array.from(buf.getChannelData(ch).subarray(a, z + 1)), n = seg.length;
-      for (let i = 0; i < fi && i < n; i++) seg[i] *= i / fi; for (let i = 0; i < fo && i < n; i++) seg[n - 1 - i] *= i / fo; o.copyToChannel(seg, ch); }
-    let pk = 0; const x0 = o.getChannelData(0); for (let i = 0; i < x0.length; i++) pk = Math.max(pk, Math.abs(x0[i]));
-    if (pk > 0) for (let ch = 0; ch < o.numberOfChannels; ch++) { const x = o.getChannelData(ch); for (let i = 0; i < x.length; i++) x[i] *= 0.8 / pk; }
-    return o; };
-  let t = c.currentTime + 0.08; const gaps = [0.16, 0.24, 0];
-  bufs.map(trim).forEach((b, i) => { const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(t); t += b.duration + gaps[i]; });
+  let t = c.currentTime + 0.08; const gaps = CLIP_JOIN;
+  bufs.map((b, i) => shapeClip(c, b, CLIP_SHAPE[i][0], CLIP_SHAPE[i][1])).forEach((b, i) => { const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(t); t += b.duration + gaps[i]; });
 }
 function voiceSec() {
   const v = VOICE || {}, sec = h("div", { class: "sec", style: "display:grid;gap:12px" });
