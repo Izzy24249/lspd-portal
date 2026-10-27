@@ -81,6 +81,8 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(640px 
 .snd:hover{color:var(--tx)} .snd.off{opacity:.55}
 .power{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:152px;width:100%;border:0;background:none;color:var(--tx);cursor:pointer;font:700 15px "Barlow Condensed",sans-serif;letter-spacing:.24em}
 .power i{width:46px;height:46px;border:2px solid var(--blue);border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:20px;color:var(--blue);box-shadow:0 0 18px rgba(63,127,255,.45);animation:pulse 1.6s ease-in-out infinite}
+.power i svg{width:22px;height:22px;display:block;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.power:active i{transform:scale(.92)}
 .power small{font:500 11px "JetBrains Mono",monospace;letter-spacing:.08em;color:var(--dim)}
 .power:hover i{background:rgba(63,127,255,.15)}
 @keyframes pulse{50%{box-shadow:0 0 4px rgba(63,127,255,.2)}}
@@ -149,6 +151,36 @@ body.is-demo{padding-top:52px}
     }
     const click = (at, v) => { burst(0.012, v || 0.09, 3800, "highpass", at, 0.7); burst(0.03, (v || 0.09) * 0.5, 900, "bandpass", at, 2); };   // relay / switch
     const seek = (at, v) => { burst(0.018, v || 0.05, 2600, "bandpass", at, 3); burst(0.012, (v || 0.05) * 0.7, 1400, "bandpass", (at || 0) + 0.03 + Math.random() * 0.03, 4); };   // hard-drive head
+    function sq(f, dur, vol, at) {                     // PC speaker: a raw square wave
+      const c = ac(); if (!c) return; const t = c.currentTime + (at || 0);
+      const o = c.createOscillator(), g = c.createGain(); o.type = "square"; o.frequency.value = f;
+      g.gain.setValueAtTime(vol, t); g.gain.setValueAtTime(vol, t + dur - 0.005); g.gain.linearRampToValueAtTime(0, t + dur);
+      o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.01);
+    }
+    function press() {                                 // chunky tower power button: push… release
+      burst(0.07, 0.22, 260, "lowpass", 0, 0.8); burst(0.012, 0.12, 3200, "highpass", 0, 0.7);
+      burst(0.01, 0.07, 3600, "highpass", 0.11, 0.7); burst(0.04, 0.08, 500, "lowpass", 0.11, 1);
+    }
+    function degauss(at) {                             // CRT monitor coming on: THUNK + decaying hum
+      const c = ac(); if (!c) return; const t = c.currentTime + (at || 0);
+      burst(0.18, 0.2, 140, "lowpass", at, 1);
+      [60, 120, 180].forEach((f, i) => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime([0.12, 0.05, 0.025][i], t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+        o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.95); });
+    }
+    function floppy(at) {                              // floppy drive: stepper motor brrt-brrt + head clacks
+      at = at || 0;
+      for (let r = 0; r < 3; r++) for (let i = 0; i < 6; i++) { const tt = at + r * 0.26 + i * 0.03; sq(r === 1 ? 92 : 70, 0.018, 0.022, tt); burst(0.008, 0.04, 2200, "bandpass", tt, 2); }
+      burst(0.02, 0.07, 1500, "bandpass", at + 0.82, 3);
+    }
+    function dialup(at) {                              // modem: dial the relay, answer tone, handshake
+      at = at || 0; const c = ac(); if (!c) return;
+      const D = { 5: [770, 1336], 1: [697, 1209], 8: [852, 1336], 0: [941, 1336], 4: [770, 1209], 2: [697, 1336], 9: [852, 1477] };
+      "5550142".split("").forEach((d, i) => D[d].forEach(f => beep(f, 0.075, 0.02, at + i * 0.11)));
+      const a2 = at + 0.95; beep(2100, 0.38, 0.022, a2);
+      for (let i = 0; i < 6; i++) { beep(i % 2 ? 2400 : 1200, 0.07, 0.014, a2 + 0.42 + i * 0.08); burst(0.07, 0.02, 1800, "bandpass", a2 + 0.42 + i * 0.08, 0.8); }
+      burst(0.45, 0.03, 2000, "bandpass", a2 + 0.92, 0.6);
+    }
     function ambient() {                               // case fan spinning up + faint mains hum, held under the boot
       const c = ac(); if (!c || amb) return; const t = c.currentTime;
       const s = c.createBufferSource(), lp = c.createBiquadFilter(), g = c.createGain(), hum = c.createOscillator(), hum2 = c.createOscillator(), hg = c.createGain();
@@ -157,20 +189,28 @@ body.is-demo{padding-top:52px}
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.11, t + 1.2); g.gain.exponentialRampToValueAtTime(0.045, t + 2.8);
       hum.frequency.value = 60; hum2.frequency.value = 120; hg.gain.setValueAtTime(0.0001, t); hg.gain.exponentialRampToValueAtTime(0.02, t + 0.4);
       s.connect(lp).connect(g).connect(c.destination); hum.connect(hg); hum2.connect(hg); hg.connect(c.destination);
-      s.start(t); hum.start(t); hum2.start(t); amb = { s, g, hg, hum, hum2 };
+      const sp = c.createOscillator(), sg = c.createGain(); sp.type = "triangle";
+      sp.frequency.setValueAtTime(70, t); sp.frequency.exponentialRampToValueAtTime(390, t + 3);    // hard drive platters spinning up
+      sg.gain.setValueAtTime(0.0001, t); sg.gain.exponentialRampToValueAtTime(0.014, t + 0.6); sg.gain.exponentialRampToValueAtTime(0.006, t + 4);
+      sp.connect(sg).connect(c.destination);
+      s.start(t); hum.start(t); hum2.start(t); sp.start(t); amb = { s, g, hg, hum, hum2, sp, sg };
     }
     function settle() {                                // fan winds down to idle, hum fades
       const c = ctx; if (!c || !amb) return; const t = c.currentTime, a = amb; amb = null;
       a.g.gain.cancelScheduledValues(t); a.g.gain.setValueAtTime(a.g.gain.value || 0.04, t); a.g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
       a.hg.gain.cancelScheduledValues(t); a.hg.gain.setValueAtTime(a.hg.gain.value || 0.02, t); a.hg.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
-      [a.s, a.hum, a.hum2].forEach(n => n.stop(t + 1.7));
+      a.sg.gain.cancelScheduledValues(t); a.sg.gain.setValueAtTime(a.sg.gain.value || 0.006, t); a.sg.gain.exponentialRampToValueAtTime(0.0001, t + 1.4); a.sp.frequency.cancelScheduledValues(t); a.sp.frequency.setValueAtTime(a.sp.frequency.value || 390, t); a.sp.frequency.exponentialRampToValueAtTime(180, t + 1.5);
+      [a.s, a.hum, a.hum2, a.sp].forEach(n => n.stop(t + 1.7));
     }
     return {
       unlock() { ac(); },
       get on() { return on; },
       toggle() { on = !on; store.set("lspd_sound", on ? "" : "off"); if (!on) settle(); else this.key(); return on; },
       settle: settle,
-      power() { click(0, 0.14); ambient(); beep(1000, 0.16, 0.035, 1.1); for (let i = 0; i < 5; i++) seek(0.35 + i * 0.13 + Math.random() * 0.06); },
+      power() { press(); degauss(0.13); setTimeout(ambient, 120); for (let i = 0; i < 6; i++) seek(0.6 + i * 0.12 + Math.random() * 0.05); },
+      post() { sq(1000, 0.14, 0.03); },
+      floppy() { floppy(0); },
+      dialup() { dialup(0); },
       tick() { seek(0, 0.035); },
       ok() { },                                        // quiet: the drive/relay sounds carry the boot
       warn() { },
@@ -270,8 +310,8 @@ body.is-demo{padding-top:52px}
   function powerGate() {
     return new Promise(res => {
       $("skip").hidden = true;
-      term.innerHTML = '<button class="power" id="power" type="button"><i>⏻</i>POWER ON TERMINAL<small>tap or press any key</small></button>';
-      const go = e => { if (e && e.type === "keydown" && (e.ctrlKey || e.metaKey || e.altKey)) return; document.removeEventListener("keydown", go); SFX.unlock(); SFX.power(); term.innerHTML = ""; $("skip").hidden = false; setTimeout(res, 450); };
+      term.innerHTML = '<button class="power" id="power" type="button"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 6.8a7.5 7.5 0 1 0 10.8 0"/></svg></i>POWER ON TERMINAL<small>tap or press any key</small></button>';
+      const go = e => { if (e && e.type === "keydown" && (e.ctrlKey || e.metaKey || e.altKey)) return; document.removeEventListener("keydown", go); SFX.unlock(); SFX.power(); term.innerHTML = ""; $("skip").hidden = false; setTimeout(res, 150); };
       $("power").onclick = go; document.addEventListener("keydown", go);
     });
   }
@@ -280,13 +320,19 @@ body.is-demo{padding-top:52px}
     else await powerGate();
     let l;
     if (!seen) {                                         // the full cold boot, once per browser session
+      // 0 · hardware POST, 90s style
+      l = line("LSPD-MDT BIOS v4.2  (C) 1996 · POST ..........."); await sleep(520); SFX.post(); l.done("PASS"); progress(2);
+      l = await count("Memory test", 16384, "K", 14, 40); l.done("OK"); progress(4);
+      l = line("Drive A: 1.44MB ..............................."); SFX.floppy(); await sleep(900); l.done("OK");
+      l = line("Drive C: 540MB IDE ............................"); SFX.whir(); await sleep(360); l.done("OK"); progress(6);
       // 1 · secure network
       l = line("Network interface mdt0 ......................."); await sleep(380); l.done("UP"); progress(4);
       l = line("Scanning for LSPD relay nodes ................"); await stream(3, 50); l.done("3 FOUND", "w"); progress(8);
       for (const [nd, ms] of [["MR-01 Mission Row", 12], ["VB-02 Vespucci", 19], ["PB-03 Paleto Bay", 41]]) {
         l = line("  relay " + nd + " ".padEnd(24 - nd.length, ".")); await sleep(170); l.done(ms + "ms"); SFX.data();
       }
-      progress(14); linkState("SECURING", "amber");
+      l = line("Dialing secure relay MR-01 ...................."); SFX.dialup(); await sleep(1100); await stream(4, 90); l.done("CONNECT 28800"); progress(14);
+      linkState("SECURING", "amber");
       l = await scramble("Generating session key RSA-4096", keyId(), 18); SFX.lock(); l.done("OK"); progress(20);
       l = await scramble("Exchanging keys with MR-01  ", keyId(), 14); SFX.lock(); l.done("OK"); progress(26);
       l = await signal("Stabilizing AES-256 tunnel", 55); SFX.lock(); l.done("LOCKED"); progress(34);
