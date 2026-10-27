@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 57;
+const BACKEND_VERSION = 58;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2367,8 +2367,9 @@ function voiceVoices_() {
   const r = UrlFetchApp.fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": c.key }, muteHttpExceptions: true });
   if (r.getResponseCode() === 401) throw new Error("ElevenLabs refused the API key. Make sure the key has Voices (read) access.");
   if (r.getResponseCode() !== 200) throw new Error("ElevenLabs error " + r.getResponseCode() + ".");
-  const voices = (JSON.parse(r.getContentText()).voices || []).map(v => ({ id: str_(v.voice_id), name: str_(v.name), preview: str_(v.preview_url),
+  const voices = (JSON.parse(r.getContentText()).voices || []).map(v => ({ id: str_(v.voice_id), name: str_(v.name), preview: str_(v.preview_url), premade: str_(v.category) === "premade", category: str_(v.category),
     about: [v.labels && v.labels.gender, v.labels && v.labels.accent, v.labels && (v.labels.description || v.labels.descriptive), v.labels && (v.labels.use_case || v.labels.use_case)].filter(Boolean).join(" · ") }));
+  voices.sort((x, y) => (y.premade - x.premade) || x.name.localeCompare(y.name));
   return { voices: voices, usage: voiceUsage_(), voice: voiceStatus_() };
 }
 

@@ -1751,9 +1751,9 @@ function voiceSec() {
     try {
       if (key.value.trim()) { const r0 = await api("voiceSetup", { apiKey: key.value.trim() }); VOICE = r0.voice; key.value = ""; key.placeholder = "Saved — leave blank to keep it"; }
       const r = await api("voiceVoices", {}); VOICES = r.voices || []; showUsage(r.usage);
-      voiceSel.innerHTML = ""; VOICES.forEach(o => voiceSel.append(h("option", { value: o.id, text: o.name + (o.about ? " — " + o.about : "") })));
+      voiceSel.innerHTML = ""; VOICES.forEach(o => voiceSel.append(h("option", { value: o.id, text: (o.premade ? "✓ " : "$ ") + o.name + (o.about ? " — " + o.about : "") + (o.premade ? " · free plan OK" : " · library voice, needs a paid ElevenLabs plan") })));
       if (v.voiceId && VOICES.some(o => o.id === v.voiceId)) voiceSel.value = v.voiceId;
-      toast(VOICES.length + " voices loaded. Pick one and press ▶ to hear it.", "ok");
+      toast(VOICES.length + " voices loaded. ✓ voices work on the free plan; $ library voices need a paid ElevenLabs plan.", "ok");
     } catch (err) { toast(err.message, "bad"); }
     e.target.disabled = false;
   } }, v.hasKey ? "Load my voices" : "Save key & load voices");
