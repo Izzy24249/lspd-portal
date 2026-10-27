@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex">
 <title>LSPD Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="portal.css?v=202610200937">
 <style>
   main.adm{max-width:1500px;padding:24px 22px 120px}
@@ -316,6 +317,44 @@
   .lg-brand span{font-size:.62rem;letter-spacing:.24em;color:var(--gold);font-weight:800}
   .login .lg-brand h2{font-size:1.35rem;margin:2px 0 0}
 .hchip.failed{border-color:rgba(248,113,113,.45);color:#fca5a5;background:rgba(248,113,113,.08)}
+
+  /* ===== Command Terminal skin: the same patrol-computer look as the new portal ===== */
+  body.admin{--line:rgba(160,184,220,.14);--panel:#121925;--panel2:#18212f;background:#0b0f16;
+    background-image:radial-gradient(1200px 700px at 80% -20%,rgba(63,127,255,.11),transparent 60%),repeating-linear-gradient(0deg,rgba(255,255,255,.012) 0 1px,transparent 1px 3px);background-attachment:fixed}
+  body.admin .lightbar{height:2px;background:linear-gradient(90deg,transparent,#3f7fff,transparent);animation:none}
+  body.admin header.top{background:linear-gradient(180deg,#151d2b,#0f1520);border-bottom:1px solid rgba(160,184,220,.22);backdrop-filter:none}
+  body.admin .brand b{font:700 19px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em}
+  body.admin .brand small{font:600 10.5px/1.4 "Barlow Condensed",sans-serif;letter-spacing:.24em;margin-top:2px}
+  .ct-clock{text-align:right;padding:0 16px;border-left:1px solid var(--line);border-right:1px solid var(--line);margin-right:6px}
+  .ct-clock b{display:block;font:600 17px/1 "JetBrains Mono",monospace;letter-spacing:.04em}
+  .ct-clock small{display:block;margin-top:3px;font:600 10px "Barlow Condensed",sans-serif;letter-spacing:.18em;color:var(--muted)}
+  @media(max-width:700px){.ct-clock{display:none}}
+  body.admin h1,body.admin .head h2,body.admin .ph h2,body.admin main h2{font-family:"Barlow Condensed",sans-serif;letter-spacing:.04em}
+  body.admin .sec{border-radius:0;background:linear-gradient(180deg,#18212f,#121925);clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%)}
+  body.admin details.sec>summary,body.admin .sec>h3{font-family:"Barlow Condensed",sans-serif;font-weight:700;letter-spacing:.18em}
+  body.admin .kpi{border-radius:0;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%);background:linear-gradient(180deg,#18212f,#121925)}
+  body.admin .kpi small{font-family:"Barlow Condensed",sans-serif;letter-spacing:.18em;font-size:.68rem}
+  body.admin .kpi b{font:700 1.9rem/1.05 "Barlow Condensed",sans-serif}
+  body.admin nav.side{background:#0e141e;border:1px solid var(--line);padding:12px 10px;gap:2px;border-radius:0;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%)}
+  body.admin nav.side .ng{font:600 10.5px/1 "Barlow Condensed",sans-serif;letter-spacing:.2em;color:#5d6a80;padding:12px 10px 6px;display:flex;align-items:center;gap:8px}
+  body.admin nav.side .ng::after{content:"";flex:1;height:1px;background:var(--line)}
+  body.admin nav.side button{border-radius:0;padding:9px 12px;font-size:.88rem;position:relative}
+  body.admin nav.side button.on{background:rgba(63,127,255,.12);border:0;color:#fff}
+  body.admin nav.side button.on::before{content:"";position:absolute;left:-10px;top:6px;bottom:6px;width:3px;background:#3f7fff}
+  body.admin nav.side svg{stroke:#9fb1cf}
+  body.admin .btn{border-radius:0}
+  body.admin .btn.primary{background:#3f7fff;box-shadow:none;font-family:"Barlow Condensed",sans-serif;letter-spacing:.1em;font-size:.95rem;clip-path:polygon(0 0,100% 0,100% 70%,calc(100% - 8px) 100%,0 100%)}
+  body.admin .btn.sm{border-radius:0}
+  body.admin input,body.admin select,body.admin textarea{border-radius:0!important}
+  body.admin .badge,body.admin .rpill{border-radius:0;font-family:"Barlow Condensed",sans-serif;letter-spacing:.14em}
+  body.admin .pill{border-radius:0;font-family:"Barlow Condensed",sans-serif;letter-spacing:.16em}
+  body.admin .urow,body.admin .ab-row{border-radius:0}
+  body.admin .av{border-radius:0}
+  body.admin .pagehead{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:18px}
+  body.admin .pagehead h2{font:700 2rem/1 "Barlow Condensed",sans-serif;letter-spacing:.03em}
+  body.admin .ph-kicker{font:600 11px "Barlow Condensed",sans-serif;letter-spacing:.24em;color:#8fb2ff}
+  body.admin .login .sec{clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,0 100%)}
+  body.admin .savebar{border-radius:0;clip-path:polygon(0 0,100% 0,100% 100%,12px 100%,0 calc(100% - 12px))}
 </style>
 </head>
 <body class="admin">
@@ -324,9 +363,10 @@
   <div class="top-in" style="max-width:1500px">
     <a class="brand" href="index.html">
       <img class="brand-logo" id="brandLogo" src="img/lspd-patch.png" alt="LSPD">
-      <div><b>LSPD</b><small>MANAGE PORTAL</small></div>
+      <div><b>MISSION ROW PD</b><small>COMMAND TERMINAL · ADMINISTRATION</small></div>
     </a>
     <div class="spacer"></div>
+    <div class="ct-clock"><b id="ctClock">--:--:--</b><small id="ctDate"></small></div>
     <span class="syncing" id="syncing"><i></i>Syncing</span>
     <div class="who" id="who" style="display:none"><span>Signed in as <b id="whoName"></b> <span class="badge" id="whoRole"></span></span><button class="btn ghost sm" id="logoutBtn">Log out</button></div>
     <div class="pill admin" id="adminPill"><span class="dot" style="background:var(--gold);box-shadow:0 0 10px var(--gold)"></span> Admin</div>
@@ -337,7 +377,7 @@
   <!-- LOGIN -->
   <section id="loginView" class="login" style="display:none">
     <form class="sec" id="loginForm" autocomplete="on">
-      <div class="lg-brand"><img src="img/lspd-patch.png" alt=""><div><span>LSPD RECORDS</span><h2>Manage Portal</h2></div></div>
+      <div class="lg-brand"><img src="img/lspd-patch.png" alt=""><div><span>MISSION ROW PD</span><h2>Command Terminal</h2></div></div>
       <p>Sign in to manage forms, rosters, training and portal settings.</p>
       <label class="f"><span>Username</span><input type="text" id="lgUser" autocomplete="username" required></label>
       <label class="f"><span>Password</span><input type="password" id="lgPass" autocomplete="current-password" required></label>
@@ -2035,6 +2075,12 @@ if (TOKEN) {
   } else loadAll().catch(e => signedOut(e.message === "Failed to fetch" ? "Can't reach the server." : ""));
 }
 else signedOut("");
+</script>
+<script>
+(function () { const c = document.getElementById("ctClock"), d = document.getElementById("ctDate");
+  const t = () => { const n = new Date(); c.textContent = n.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+    const h = n.getHours(); d.textContent = n.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase() + " · " + (h >= 6 && h < 14 ? "DAY WATCH" : h >= 14 && h < 22 ? "EVENING WATCH" : "NIGHT WATCH"); };
+  t(); setInterval(t, 1000); })();
 </script>
 </body>
 </html>
