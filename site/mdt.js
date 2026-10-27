@@ -30,7 +30,7 @@
     const p = (DATA && DATA.profile) || LS.json("lspd_prof") || {};
     $("uCs").textContent = p.callsign || "----"; $("uName").textContent = who(p);
     $("uRank").textContent = (DATA && DATA.fleet && DATA.fleet.rank && (DATA.fleet.rank.known || DATA.fleet.rank.trainee)) ? DATA.fleet.rank.name : (p.level || "");
-    const sop = (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; $("sopLink").href = sop;
+    const sop = (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; $("sopLink").href = "#sop";
     const nt = UNIT && UNIT.sessions ? UNIT.sessions.filter(x => !x.mine && !x.full).length + (UNIT.checks || []).filter(c => !c.best).length : 0; $("nTrain").textContent = nt || "";
     const nb = (DATA && DATA.board && DATA.board.notices || []).length; $("nBolo").textContent = nb || ""; $("nBolo").className = nb ? "new" : "";
     if (DATA && DATA.fleet) { $("nFleet").textContent = DATA.fleet.vehicles.filter(v => v.allowed).length || ""; $("nUni").textContent = (DATA.fleet.uniforms[SEX] || []).filter(u => u.yours).length || ""; }
@@ -75,8 +75,8 @@
   addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "lspd:filed") { toast("✓ " + (e.data.title || "Report") + " filed"); blip(1400); setTimeout(load, 1500); } });
 
   // ---------- router ----------
-  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports"];
-  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code & 10-codes"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"] };
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop"];
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code & 10-codes"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
   function go(v) { VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
@@ -88,16 +88,23 @@
     t.hidden = false; t.innerHTML = '<div class="live"><i></i>LIVE</div><div class="tk-run">' + list.concat(list).map(x => "<span>" + esc(x.t) + " · " + ago(x.at) + "</span>").join("") + "</div>";
   }
   function modal(html) { const m = $("modal"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
-  function frameHTML(src, icon, title, sub) {
-    return '<div class="formview"><div class="fv-bar"><span class="fi">' + esc(icon) + "</span><div><b>" + esc(title) + "</b><small>" + esc(sub) + '</small></div><span class="sp"></span><a class="btn ghost" href="' + esc(src.replace(/[?&]embed=1/, "")) + '" target="_blank" rel="noopener" title="Open in its own tab">↗ <span class="only-d">FULL PAGE</span></a></div>' +
-      '<div class="fv-frame"><div class="fv-load boot"><i></i>LOADING REPORT…</div><iframe src="' + esc(src) + '" title="' + esc(title) + '" onload="this.previousElementSibling.style.opacity=0"></iframe></div></div>';
+  // the SOP as an embeddable page: Google Docs block /edit inside frames, /preview is the read-only view that allows it
+  function sopEmbed(u) {
+    const g = /^(https:\/\/docs\.google\.com\/(?:document|spreadsheets|presentation)\/d\/[\w-]+)/.exec(u || "");
+    if (g) { const tab = /[?&#]tab=([\w.]+)/.exec(u); return g[1] + "/preview" + (tab ? "?tab=" + tab[1] : ""); }
+    return u;
+  }
+  function sopUrl() { return (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; }
+  function frameHTML(src, icon, title, sub, full) {
+    return '<div class="formview"><div class="fv-bar"><span class="fi">' + esc(icon) + "</span><div><b>" + esc(title) + "</b><small>" + esc(sub) + '</small></div><span class="sp"></span><a class="btn ghost" href="' + esc(full || src.replace(/[?&]embed=1/, "")) + '" target="_blank" rel="noopener" title="Open in its own tab">↗ <span class="only-d">FULL PAGE</span></a></div>' +
+      '<div class="fv-frame"><div class="fv-load boot"><i></i>' + (full ? "LOADING SOP…" : "LOADING REPORT…") + '</div><iframe src="' + esc(src) + '" title="' + esc(title) + '" onload="this.previousElementSibling.style.opacity=0"></iframe></div></div>';
   }
   function draw() {
     const navKey = VIEW.indexOf("form:") === 0 ? "reports" : VIEW;
     document.querySelectorAll("[data-go]").forEach(a => a.classList.toggle("on", a.getAttribute("data-go") === navKey));
     document.querySelectorAll("[data-frame]").forEach(a => a.classList.toggle("on", "frame:" + a.getAttribute("data-frame") === VIEW));
     drawStrip();
-    const m = $("main"), framed = /^(form|frame):/.test(VIEW);
+    const m = $("main"), framed = /^(form|frame):/.test(VIEW) || VIEW === "sop";
     let t = TITLES[VIEW] || ["TERMINAL", "Dashboard"];
     if (VIEW.indexOf("form:") === 0) { const f = myForms().find(x => x.id === VIEW.slice(5)); t = ["REPORTS", f ? f.title : "Report"]; }
     if (VIEW.indexOf("frame:") === 0) { const a = document.querySelector('[data-frame="' + VIEW.slice(6) + '"]'); t = ["TERMINAL", a ? a.getAttribute("data-title") : "Page"]; }
@@ -111,7 +118,8 @@
         const f = myForms().find(x => x.id === VIEW.slice(5));
         if (!f) { m.__view = ""; m.innerHTML = '<div class="main-in"><div class="empty">That report isn\'t available to you.</div></div>'; return; }
         m.innerHTML = frameHTML(f.cid ? "cid.html?embed=1" : "forms.html?embed=1#" + f.id, f.icon, f.title, f.division ? f.division + " report" : (f.desc || "Filed straight to Discord and Division Command"));
-      } else m.innerHTML = frameHTML(VIEW.slice(6) + "?embed=1", "📋", t[1], "Your filed reports and their grades");
+      } else if (VIEW === "sop") m.innerHTML = frameHTML(sopEmbed(sopUrl()), "📘", "LSPD SOP", "Policy, radio, pursuits, use of force", sopUrl());
+      else m.innerHTML = frameHTML(VIEW.slice(6) + "?embed=1", "📋", t[1], "Your filed reports and their grades");
       $("ticker").hidden = true; return;
     }
     m.__view = "";
@@ -156,7 +164,7 @@
     // briefing | path
     h += '<div class="grid"><section class="pane"><div class="ph"><span class="lbl">Shift briefing</span>' + (B.canBrief ? '<a data-brief>Post briefing</a>' : (B.past || []).length ? '<a data-past>Past briefings</a>' : "") + "</div>" + memoHTML(B.briefing, B) + "</section>";
     if ((DATA.paths || []).length) h += pathHTML(DATA.paths[0]);
-    else h += '<section class="pane"><div class="ph"><span class="lbl">Standard Operating Procedures</span></div><div class="sop"><svg viewBox="0 0 24 24"><use href="#i-book"/></svg><div><b>LSPD SOP</b><small>Policy, radio, pursuits, use of force. Keep it handy.</small></div><a class="btn" target="_blank" rel="noopener" href="' + esc(DATA.sop) + '">OPEN ↗</a></div>' +
+    else h += '<section class="pane"><div class="ph"><span class="lbl">Standard Operating Procedures</span></div><div class="sop"><svg viewBox="0 0 24 24"><use href="#i-book"/></svg><div><b>LSPD SOP</b><small>Policy, radio, pursuits, use of force. Keep it handy.</small></div><a class="btn" data-go="sop" href="#sop">OPEN</a></div>' +
       '<div class="tiles" style="grid-template-columns:1fr 1fr">' + tile("fleet", "i-car", "Fleet", (f.vehicles || []).filter(v => v.allowed).length + " approved") + tile("uniforms", "i-shirt", "Uniforms", ((f.uniforms || {})[SEX] || []).filter(u => u.yours).length + " for your rank") + "</div></section>";
     h += "</div>";
     (DATA.paths || []).slice(1).forEach(pa => { h += '<div style="margin-top:18px">' + pathHTML(pa) + "</div>"; });
@@ -417,7 +425,7 @@
   function palItems(q) {
     q = q.toLowerCase().trim();
     const out = [], add = (grp, icon, title, sub, run, extra) => { const hay = (title + " " + (sub || "") + " " + (extra || "")).toLowerCase(); if (!q || hay.indexOf(q) !== -1) out.push({ grp, icon, title, sub, run }); };
-    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"]].forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
+    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["sop", "📘", "SOP"]].forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
     add("Go to", "📋", "My reports", "", () => go("frame:myreports.html"));
     myForms().filter(f => f.status === "live").forEach(f => add("File a report", f.icon, f.title, f.division ? f.division + " report" : "", () => go("form:" + f.id), f.section));
     ((DATA && DATA.board && DATA.board.notices) || []).forEach(n => add("BOLOs", "🚨", n.title, n.type + " · " + n.from, () => go("records"), n.details));
