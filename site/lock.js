@@ -118,7 +118,7 @@
     var pad = root.querySelector(".lk-pad");
     if (pad) pad.addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) press(b.getAttribute("data-k")); });
     var u = root.querySelector("[data-unlock]"); if (u) u.onclick = function () { click(); unlock(); };
-    var nm = root.querySelector("[data-notme]"); if (nm) nm.onclick = function () { LS.set("lspd_dev", ""); LS.set("lspd_prof", ""); signOutTo(); };
+    var nm = root.querySelector("[data-notme]"); if (nm) nm.onclick = function () { LS.set("lspd_dev", ""); LS.set("lspd_prof", ""); LS.set("lspd_pinv", ""); signOutTo(); };
   }
   function press(k) {
     if (busy || !root) return;
@@ -128,15 +128,37 @@
     paint();
     if (pin.length === 4) submit();
   }
+  // The PIN is checked right here on the device first (against a fingerprint saved at the last good sign-on),
+  // so unlocking is instant even when Google is slow to wake up. Only a PIN that doesn't match (a new or reset PIN)
+  // goes to the server, which keeps its own wrong-PIN limit.
+  function pinMark(p) {
+    var p0 = profile() || {};
+    if (!window.crypto || !crypto.subtle || !window.TextEncoder) return Promise.resolve("");
+    return crypto.subtle.digest("SHA-256", new TextEncoder().encode("lspd-pin|" + LS.get("lspd_dev") + "|" + (p0.discordId || "") + "|" + p))
+      .then(function (b) { return Array.prototype.map.call(new Uint8Array(b), function (x) { return ("0" + x.toString(16)).slice(-2); }).join(""); }).catch(function () { return ""; });
+  }
+  function remember(p) { return pinMark(p).then(function (h) { if (h) LS.set("lspd_pinv", h); }); }
   function submit() {
     busy = true; root.querySelector(".lk-pad").classList.add("busy");
-    var p = pin;
+    var p = pin, saved = LS.get("lspd_pinv");
+    pinMark(p).then(function (h) {
+      if (saved && h && h === saved) { LS.set("lspd_seen_at", String(Date.now())); click(1400); unlock(); return; }
+      if (saved && h) { fail("Wrong PIN."); server(p, true); return; }   // keep the keypad free; the server still gets a say (a new or reset PIN)
+      server(p);
+    });
+  }
+  function server(p, quiet) {
+    if (!quiet) msg("Checking your PIN with the server…");
+    var done = false, t = setTimeout(function () { if (done) return; done = true; if (!quiet) fail("The LSPD server is slow to answer. Try your PIN again."); }, 20000);
     Portal.post({ action: "acctPin", device: LS.get("lspd_dev"), pin: p }).then(function (r) {
-      if (r && r.ok) { LS.set("lspd_sess", r.session || ""); if (r.profile) LS.set("lspd_prof", JSON.stringify(r.profile)); LS.set("lspd_seen_at", String(Date.now())); click(1400); unlock(); return; }
+      if (done) return; done = true; clearTimeout(t);
+      if (!root) return;
+      if (quiet && !(r && r.ok) && !/Too many|Discord again|locked|signed out/i.test((r && r.error) || "")) return;
+      if (r && r.ok) { LS.set("lspd_sess", r.session || ""); if (r.profile) LS.set("lspd_prof", JSON.stringify(r.profile)); LS.set("lspd_seen_at", String(Date.now())); remember(p); click(1400); unlock(); return; }
       var e = (r && r.error) || "Couldn't unlock.";
       if (/Too many|0 tries|Discord again|locked|signed out/i.test(e)) { msg(e + " Signing you out…"); setTimeout(signOutTo, 1600); return; }
       fail(e);
-    }).catch(function () { fail("Couldn't reach the LSPD server. Try again."); });
+    }).catch(function () { if (done) return; done = true; clearTimeout(t); if (!quiet) fail("Couldn't reach the LSPD server. Try again."); });
   }
   function fail(t) {
     if (!root) return; busy = false; pin = ""; paint(); msg(t);
@@ -163,7 +185,7 @@
   addEventListener("storage", function (e) { if (e.key === "lspd_locked") { if (e.newValue === "1") show(); else hide(); } if (e.key === "lspd_prof") applyProfile(); });
   setInterval(function () { if (!EMBED && !isLocked() && idleFor() > IDLE_MS) lock(); }, 15000);
 
-  window.LSPDLock = { lock: lock, unlock: unlock, idleMs: IDLE_MS };
+  window.LSPDLock = { lock: lock, unlock: unlock, idleMs: IDLE_MS, remember: remember };
   if (EMBED) {
     addEventListener("keydown", function (e) { if (isLocked()) { e.preventDefault(); e.stopPropagation(); } }, true);
     addEventListener("storage", function (e) { if (e.key === "lspd_locked" && e.newValue === "1" && document.activeElement) try { document.activeElement.blur(); } catch (x) {} });

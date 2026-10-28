@@ -437,7 +437,7 @@ body.is-demo{padding-top:52px}
       }
       if (pin !== first) { first = ""; $("ct").textContent = "Create your PIN"; $("cs").textContent = "Those didn't match. Start again: pick 4 digits."; c.bad(); return; }
       const r = await api({ action: "acctSetPin", device: store.get(K.dev), pin: pin });
-      if (r.ok) { c.good(); return finish(r); }
+      if (r.ok) { c.good(); await pinMark(pin, r.profile); return finish(r); }
       msg.hidden = false; msg.textContent = r.error || "Couldn't save your PIN.";
       if (/Discord again/i.test(r.error || "")) { store.set(K.dev, ""); return setTimeout(() => screenDiscord(r.error), 900); }
       first = ""; $("ct").textContent = "Create your PIN"; c.bad();
@@ -445,6 +445,15 @@ body.is-demo{padding-top:52px}
     return ctl;
   }
 
+  // fingerprint of the PIN, so the 10-minute lock screen (lock.js) can unlock instantly on this device
+  async function pinMark(pin, prof) {
+    if (DEMO) return;
+    try {
+      const p = prof || store.json(K.prof) || {};
+      const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("lspd-pin|" + store.get(K.dev) + "|" + (p.discordId || "") + "|" + pin));
+      localStorage.setItem("lspd_pinv", Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, "0")).join(""));
+    } catch (e) {}
+  }
   function screenPin(profile, note) {
     progress(100);
     EVoice.prefetch(store.get(K.dev));
@@ -455,7 +464,7 @@ body.is-demo{padding-top:52px}
     makePad($("padHost"), async (pin, c) => {
       msg.hidden = true;
       const r = await api({ action: "acctPin", device: store.get(K.dev), pin: pin });
-      if (r.ok) { c.good(); return finish(r); }
+      if (r.ok) { c.good(); await pinMark(pin, r.profile); return finish(r); }
       if (r.needPin) return screenCreate(profile);
       msg.hidden = false; msg.textContent = r.error || "Couldn't sign on.";
       if (/Discord again/i.test(r.error || "")) { store.set(K.dev, ""); store.set(K.prof, ""); return setTimeout(() => screenDiscord(r.error), 900); }
