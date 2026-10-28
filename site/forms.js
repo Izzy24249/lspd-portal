@@ -416,7 +416,28 @@ window.Portal = (function () {
       if (b.type === "longtext") fieldDefs.push({ id: b.id, label: b.title, required: b.required, type: "longtext" });
     });
 
+    // the signed-on officer fills their own spot: the form's "me" field (admin can pick it with meField),
+    // otherwise the first single-officer box that isn't for someone else (trainee, witness, supervisor…)
+    function meField() {
+      if (form.meField === "none") return null;
+      const ofc = fieldDefs.filter(f => f.type === "officer");
+      return (form.meField && ofc.find(f => f.id === form.meField)) || ofc.find(f => !/trainee|witness|supervis|suspect|victim|subject|recruit|cadet|evaluat(ed|ee)/i.test(f.label || "")) || null;
+    }
+    let MEVAL = "";
+    function fillMe() {
+      let p = null; try { if (localStorage.getItem("lspd_sess")) p = JSON.parse(localStorage.getItem("lspd_prof") || "null"); } catch (e) {}
+      if (!p || !p.discordId) return;
+      const f = meField(); if (!f) return;
+      const hid = q(`[data-f="${CSS.escape(f.id)}"]`); if (!hid || hid.value) return;
+      const onTab = rosterItems(f.rosterDivisions, f).find(it => it.id === p.discordId);
+      if (fieldRoster(f) && !onTab) return;                       // a division box and they're not on that roster: leave it for them
+      const label = onTab ? onTab.label : [p.callsign, p.name].filter(Boolean).join(" | ");
+      if (!label) return;
+      hid.value = MEVAL = fmtOfc([{ name: label, id: p.discordId }]);
+      hid.dispatchEvent(new Event("change", { bubbles: true }));
+    }
     function setDefaults() {
+      fillMe();
       fieldDefs.forEach(f => { if (f.type === "date" && f.defaultToday) { const el = q(`[data-f="${CSS.escape(f.id)}"]`); if (el && !el.value) el.value = todayISO(); } });
       fieldDefs.forEach(f => { if (f.type === "select" && f.default) { const el = q(`[data-f="${CSS.escape(f.id)}"]`); if (el && !el.value) el.value = f.default; } });
     }
@@ -1313,6 +1334,7 @@ window.Portal = (function () {
     function isEmpty(d) {
       return !Object.keys(d.values).some(k => {
         const f = fieldDefs.find(x => x.id === k);
+        if (f && f.type === "officer" && MEVAL && d.values[k] === MEVAL) return false;   // just the auto-filled officer
         return d.values[k] && !(f && f.type === "date" && f.defaultToday);
       }) && !Object.values(d.checklists).some(c => Object.values(c).some(Boolean)) && !Object.values(d.repeaters).some(r => r.length);
     }
@@ -1398,7 +1420,7 @@ window.Portal = (function () {
     fillRows();
     setupTagBars();
     refresh();
-    return { collect, validate, clear, toText, restoreDraft, saveDraft: () => { clearTimeout(timer); saveDraft(); },
+    return { collect, validate, clear, toText, restoreDraft, fillMe, saveDraft: () => { clearTimeout(timer); saveDraft(); },
       load: d => { load(d || {}); READY = true; refresh(); },
       setValue: (id, v) => { const el = q(`[data-f="${CSS.escape(id)}"]`); if (el && el.value !== v) { el.value = v; el.classList.remove("err"); refresh(); } },
       getValue: id => { const el = q(`[data-f="${CSS.escape(id)}"]`); return el ? el.value : ""; },

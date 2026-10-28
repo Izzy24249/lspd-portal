@@ -300,7 +300,7 @@ function openForm(id){
   $("copyBtn").style.display = f.copyText ? "" : "none";
   draftStatus("");
   ctrl = Portal.render(f, $("formMount"), { draft: true, onStatus: draftStatus });
-  const t = ctrl.restoreDraft();
+  const t = ctrl.restoreDraft(); ctrl.fillMe();   // the signed-on officer goes in their own spot
   if(t) toast("Restored your unsaved draft from " + new Date(t).toLocaleString(), "ok");
   return true;
 }
