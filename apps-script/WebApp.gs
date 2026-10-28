@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 77;
+const BACKEND_VERSION = 78;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2671,6 +2671,100 @@ function promoReqParse_(fresh) {
   return out;
 }
 
+// ---- Promotion tracker: every officer's checklist for their current rank (requirements from the guidelines doc) ----
+// Ticks themselves:  time in grade (roster column G: a date or a day count)  ·  "N reports" (every report that credits the
+// officer since they reached their rank, division reports included).  Everything else is ticked by command.
+// Ticks live in the "Promotion Checks" tab; a promotion starts a fresh checklist (the rank is part of each key).
+const PCHK_SHEET_ = "Promotion Checks", PCHK_HEAD_ = ["Discord ID", "Officer", "Rank", "Key", "Requirement", "Checked by", "Checked at"], TIG_COL_ = "G";
+function pchkSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(PCHK_SHEET_);
+  if (!sh) { sh = ss.insertSheet(PCHK_SHEET_); sh.appendRow(PCHK_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, PCHK_HEAD_.length).setFontWeight("bold"); }
+  return sh;
+}
+function pchkAll_() {
+  const v = pchkSheet_().getDataRange().getValues(), out = {};
+  for (let i = 1; i < v.length; i++) { const id = str_(v[i][0]).replace(/^'/, ""), k = str_(v[i][3]); if (!id || !k) continue;
+    (out[id] = out[id] || {})[k] = { by: str_(v[i][5]), at: isDate_(v[i][6]) ? v[i][6].getTime() : 0, row: i + 1 }; }
+  return out;
+}
+function reqKey_(idx, t) { let h = 5381; const x = str_(t).toLowerCase().replace(/[^a-z0-9]/g, ""); for (let i = 0; i < x.length; i++) h = ((h * 33) ^ x.charCodeAt(i)) >>> 0; return idx + "-" + h.toString(36); }
+// what a requirement line asks for, when the portal can count it itself
+function reqAuto_(t) {
+  if (/time in grade|\btig\b/i.test(t)) { const m = /\((\d+)\)\s*days/i.exec(t) || /(\d+)\s*days/i.exec(t); if (m) return { type: "tig", need: Number(m[1]) }; }
+  const r = /\((\d+)\)\s*reports/i.exec(t) || /minimum of (\d+) reports/i.exec(t); if (r) return { type: "reports", need: Number(r[1]) };
+  return null;
+}
+function promoLadderKeys_() {
+  const L = promoReqParse_(false);
+  (L.ranks || []).forEach(r => r.reqs.forEach(q => { q.key = reqKey_(r.idx, q.t); const a = reqAuto_(q.t); if (a) q.auto = a; }));
+  return L;
+}
+// everyone on the Personnel and Onboarding rosters, with their rank, time in grade and report count
+function promoPeople_() {
+  const out = [], seen = {}, now = Date.now();
+  [[PERSONNEL_TAB_, false], [ONBOARD_TAB_, true]].forEach(pair => {
+    const tid = rosterTabByName_(pair[0]); if (tid == null) return;
+    let people = []; try { people = getRosterTab_(tid, false, [RANK_COL_, TIG_COL_], false, true).people || []; } catch (e) {}
+    people.forEach(p => {
+      if (!p.id || seen[p.id]) return; seen[p.id] = 1;
+      const cs = p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : "", name = cleanName_(cs ? p.name.split("|").slice(1).join("|").trim() : p.name);
+      const idx = pair[1] ? 0 : rankIndex_(str_(p.more && p.more[RANK_COL_]) || p.extra || "");
+      const raw = str_(p.more && p.more[TIG_COL_]).trim(); let since = 0;
+      if (/^\d{1,4}$/.test(raw)) since = now - Number(raw) * 864e5; else if (raw) { const d = new Date(raw); if (!isNaN(d)) since = d.getTime(); }
+      out.push({ id: p.id, callsign: cs, name: name, rank: str_(p.more && p.more[RANK_COL_]) || (pair[1] ? "Probationary Officer" : ""), idx: idx, trainee: pair[1], since: since });
+    });
+  });
+  // reports that credit each officer
+  const rows = actRows_(), byId = {};
+  rows.forEach(r => (r.people || []).forEach(x => { if (x.i) (byId[x.i] = byId[x.i] || []).push(r.at); }));
+  out.forEach(o => { const from = o.since || now - 28 * 864e5; o.reports = (byId[o.id] || []).filter(t => t >= from).length; o.tigDays = o.since ? Math.floor((now - o.since) / 864e5) : null; });
+  return out;
+}
+function promoEval_(o, rankReqs, checks) {
+  const mine = checks || {};
+  const items = (rankReqs ? rankReqs.reqs : []).map(q => {
+    const c = mine[q.key], a = q.auto; let have = null, auto = false;
+    if (a && a.type === "tig") { have = o.tigDays; auto = have != null && have >= a.need; }
+    if (a && a.type === "reports") { have = o.reports; auto = have >= a.need; }
+    return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
+  });
+  return { items: items, done: items.filter(x => x.done).length, total: items.length, ready: items.length > 0 && items.every(x => x.done) };
+}
+function promoBoard_() {
+  const L = promoLadderKeys_(), people = promoPeople_(), checks = pchkAll_();
+  const byIdx = {}; (L.ranks || []).forEach(r => byIdx[r.idx] = r);
+  const nextName = idx => { const n = (L.ranks || []).find(x => x.idx > idx); return n ? n.name : "High Command"; };
+  return { ok: true, error: L.error || "", doc: L.doc, ranks: (L.ranks || []).map(r => ({ idx: r.idx, label: r.label, name: r.name, next: nextName(r.idx), tig: r.tig, group: r.group })),
+    officers: people.filter(o => o.idx >= 0).map(o => Object.assign({ id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, trainee: o.trainee, tigDays: o.tigDays, reports: o.reports, listed: !!byIdx[o.idx] },
+      promoEval_(o, byIdx[o.idx], checks[o.id]))) };
+}
+function promoMine_(acct) {
+  try {
+    const L = promoLadderKeys_(), o = promoPeople_().find(x => x.id === acct.id); if (!o) return null;
+    const r = (L.ranks || []).find(x => x.idx === o.idx); if (!r) return null;
+    const e = promoEval_(o, r, pchkAll_()[acct.id]);
+    return { idx: o.idx, tigDays: o.tigDays, reports: o.reports, items: e.items.map(x => ({ key: x.key, done: x.done, auto: x.auto, need: x.need, have: x.have, by: x.manual ? x.by : "" })), ready: e.ready };
+  } catch (e) { return null; }
+}
+function promoTrack_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  const prof = acctProfile_(acct);
+  if (LEVELS_.indexOf(prof.level) < LEVELS_.indexOf("command")) return { ok: false, error: "The promotion tracker is for command staff." };
+  if (d.action === "promoCheck") {
+    const who = promoPeople_().find(x => x.id === str_(d.id)); if (!who) return { ok: false, error: "That officer isn't on the roster any more." };
+    const L = promoLadderKeys_(), r = (L.ranks || []).find(x => x.idx === who.idx), q = r && r.reqs.find(x => x.key === str_(d.key));
+    if (!q) return { ok: false, error: "That requirement changed in the guidelines doc. Refresh the tracker." };
+    const by = ((prof.title || "") + " " + voiceLast_(prof.name || "")).trim() + (prof.callsign ? " (" + prof.callsign + ")" : "");
+    withLock_(() => {
+      const sh = pchkSheet_(), have = (pchkAll_()[who.id] || {})[q.key];
+      if (d.on && !have) sh.appendRow(["'" + who.id, cellSafe_((who.callsign ? who.callsign + " | " : "") + who.name), cellSafe_(r.name), q.key, cellSafe_(q.t), cellSafe_(by), new Date()]);
+      if (!d.on && have) sh.deleteRow(have.row);
+      return { ok: true };
+    });
+  }
+  return promoBoard_();
+}
+
 // the officer's own progression (onboarding, promotion programs): tasks, counts, deadline
 function myPaths_(person) {
   const out = []; if (!person) return out;
@@ -2871,7 +2965,7 @@ function myForms_(acct, prof) {
 function officerHome_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
   const person = rosterPerson_(acct.id), prof = acctProfile_(acct), s = getConfig_().settings || {};
-  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding), board: mdtBoard_(acct, prof, person), forms: myForms_(acct, prof), ladder: (() => { try { return promoReqParse_(false); } catch (e) { return null; } })() };
+  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding), board: mdtBoard_(acct, prof, person), forms: myForms_(acct, prof), ladder: (() => { try { return promoReqParse_(false); } catch (e) { return null; } })(), promoMe: promoMine_(acct) };
 }
 
 // =====================================================================
@@ -3255,6 +3349,7 @@ function handleAdmin_(d) {
   if (/^acct(DiscordUrl|Discord|SetPin|Pin|Me|Out)$/.test(a)) return acctHandle_(d);
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
+  if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
   if (a === "builderLog") return builderLog_(d);
   if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckTake|CheckClose)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);

@@ -32,6 +32,7 @@
     $("uRank").textContent = (DATA && DATA.fleet && DATA.fleet.rank && (DATA.fleet.rank.known || DATA.fleet.rank.trainee)) ? DATA.fleet.rank.name : (p.level || "");
     const sop = (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; $("sopLink").href = "#sop";
     const nt = UNIT && UNIT.sessions ? UNIT.sessions.filter(x => !x.mine && !x.full).length + (UNIT.checks || []).filter(c => !c.best).length : 0; $("nTrain").textContent = nt || "";
+    document.querySelectorAll("[data-need-command]").forEach(a => a.hidden = !isCommand());
     const nb = (DATA && DATA.board && DATA.board.notices || []).length; $("nBolo").textContent = nb || ""; $("nBolo").className = nb ? "new" : "";
     if (DATA && DATA.fleet) { $("nFleet").textContent = DATA.fleet.vehicles.filter(v => v.allowed).length || ""; $("nUni").textContent = (DATA.fleet.uniforms[SEX] || []).filter(u => u.yours).length || ""; }
     drawFormsNav();
@@ -103,8 +104,8 @@
   addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "lspd:filed") { toast("✓ " + (e.data.title || "Report") + " filed"); blip(1400); setTimeout(load, 1500); } });
 
   // ---------- router ----------
-  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions"];
-  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"] };
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker"];
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["COMMAND", "Promotion tracker"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
   function go(v) { VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
@@ -160,7 +161,7 @@
       $("ticker").hidden = true; return;
     }
     m.__view = "";
-    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
+    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "tracker" ? trackHTML() : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
     if ((VIEW === "unit" || VIEW === "training") && !UNIT) loadUnit();
     if (VIEW === "reference" && !REF) loadRef();
     m.querySelectorAll("[data-count]").forEach(el => { const to = +el.dataset.count || 0, t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); });
@@ -396,12 +397,16 @@
   // ---------- promotions: every rank's requirements, from the LSPD Promotion Guidelines doc ----------
   // each rank's section is what an officer AT that rank needs for their next promotion
   let PROMO_OPEN = {};
-  function promoReqs(r) {
-    return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map(q => "<li><b>" + esc(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
-      (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
+  function promoReqs(r, marks) {
+    const mk = (i) => { const m = marks && marks[i]; if (!m) return ""; return '<span class="pr-mark ' + (m.done ? "ok" : "") + '">' + (m.done ? "✓ " : "") +
+      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
+    return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map((q, i) => '<li class="' + (marks && marks[i] && marks[i].done ? "ok" : "") + '"><b>' + esc(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
+      (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + mk(i) + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
   }
   function promoHTML() {
-    const L = DATA.ladder || {}, rk = (DATA.fleet || {}).rank || {}, mine = rk.known || rk.trainee ? rk.idx : -1;
+    const L = DATA.ladder || {}, PM = DATA.promoMe, rk0 = (DATA.fleet || {}).rank || {};
+    const rk = PM ? { idx: PM.idx, name: (L.ranks || []).concat([]).map(r => r).find(r => r.idx === PM.idx) ? (L.ranks.find(r => r.idx === PM.idx).name) : rk0.name, known: true, trainee: rk0.trainee } : rk0;
+    const mine = rk.known || rk.trainee ? rk.idx : -1;
     const ranks = L.ranks || [];
     let h = '<div class="h2"><div><h1>PROMOTIONS <span>· ' + esc(mine >= 0 ? (rk.trainee ? "Probationary Officer" : rk.name) : "rank not on file") + "</span></h1><p>Every rank's requirements from the LSPD Promotion Guidelines. Meeting them opens the door; High Command makes the final call.</p></div>" +
       (L.doc ? '<a class="btn ghost" href="' + esc(L.doc) + '" target="_blank" rel="noopener">FULL GUIDELINES ↗</a>' : "") + "</div>";
@@ -410,7 +415,9 @@
     const me = ranks.find(r => r.idx === mine), after = r => { const n = ranks.find(x => x.idx > r.idx); return n ? n.name : "High Command"; };
     if (me) {
       h += '<section class="pr-next"><div class="pr-kick">YOUR PROMOTION REQUIREMENTS' + (me.draft ? ' <span class="pr-draft">NOT FINAL YET</span>' : "") + '</div><div class="pr-path"><span>' + esc(me.label) + '</span><i>→</i><b>' + esc(after(me)) + "</b></div>" +
-        (me.tig ? '<div class="pr-tig">⏱ ' + me.tig + " days time in grade required</div>" : "") + promoReqs(me) +
+        (me.tig ? '<div class="pr-tig">⏱ ' + me.tig + " days time in grade required</div>" : "") +
+        (DATA.promoMe && DATA.promoMe.idx === me.idx ? '<div class="pr-prog"><i style="width:' + Math.round(DATA.promoMe.items.filter(x => x.done).length / Math.max(1, DATA.promoMe.items.length) * 100) + '%"></i></div><div class="pr-progt">' + DATA.promoMe.items.filter(x => x.done).length + " of " + DATA.promoMe.items.length + " done" + (DATA.promoMe.ready ? " · <b>Ready for review by High Command</b>" : "") + "</div>" : "") +
+        promoReqs(me, DATA.promoMe && DATA.promoMe.idx === me.idx ? DATA.promoMe.items : null) +
         ((DATA.paths || []).length ? '<a class="pr-track" data-go="home">Your tracked progress is on the dashboard →</a>' : "") + "</section>";
     } else if (mine >= 0) h += '<section class="pr-next top"><div class="pr-kick">YOUR RANK</div><div class="pr-path"><b>' + esc(rk.name) + '</b></div><p class="pr-none">The guidelines don\'t list requirements for your rank. Promotions from here are at High Command\'s discretion.</p></section>';
     else h += '<div class="pr-notes"><p>Your rank isn\'t in column B of the roster, so nothing is marked for you. Ask command to fix your roster entry.</p></div>';
@@ -426,6 +433,58 @@
     }).join("") + "</div>";
     return h;
   }
+  // ---------- promotion tracker (command): every officer's checklist for their current rank ----------
+  let TRACK = null, TRACK_Q = "", TRACK_RANK = "", TRACK_READY = false, TRACK_OPEN = {}, TRACK_BUSY = false;
+  const isCommand = () => { const lv = ((DATA && DATA.profile) || LS.json("lspd_prof") || {}).level; return ["command", "admin", "owner"].indexOf(lv) !== -1; };
+  async function loadTrack() { const r = await Portal.post({ action: "promoBoard", session: SESSION }).catch(() => ({ ok: false, error: "Couldn't reach the server." })); TRACK = r; if (VIEW === "tracker") draw(); }
+  function trackHTML() {
+    let h = '<div class="h2"><div><h1>PROMOTION TRACKER</h1><p>Every officer\'s checklist for their current rank, from the Promotion Guidelines. Time in grade and report counts tick themselves (division reports count); tick the rest when it\'s done.</p></div>' +
+      '<button class="btn ghost" data-trefresh>↻ REFRESH</button></div>';
+    if (!isCommand()) return h + '<div class="empty">The promotion tracker is for command staff.</div>';
+    if (!TRACK) { loadTrack(); return h + '<div class="boot"><i></i>LOADING THE TRACKER…</div>'; }
+    if (!TRACK.ok) return h + '<div class="empty">' + esc(TRACK.error || "Couldn't load the tracker.") + "</div>";
+    const all = TRACK.officers || [], listed = all.filter(o => o.listed), q = TRACK_Q.toLowerCase().trim();
+    const ready = listed.filter(o => o.ready).length, close = listed.filter(o => !o.ready && o.total && o.done / o.total >= .6).length;
+    h += '<div class="stats" style="margin-bottom:14px"><div class="stat"><small>Ready for promotion</small><b style="color:var(--green)">' + ready + "</b><em>every box ticked</em></div>" +
+      '<div class="stat a"><small>Almost there</small><b>' + close + "</b><em>60% or more done</em></div>" +
+      '<div class="stat"><small>Officers tracked</small><b>' + listed.length + "</b><em>" + (all.length - listed.length) + " with no listed requirements</em></div></div>";
+    h += '<div class="pen-bar"><label class="pen-search"><svg><use href="#i-search"/></svg><input id="trackQ" placeholder="Search callsign or name…" value="' + esc(TRACK_Q) + '" autocomplete="off"></label>' +
+      '<select class="tr-sel" id="trackRank"><option value="">All ranks</option>' + (TRACK.ranks || []).map(r => '<option value="' + r.idx + '"' + (String(r.idx) === TRACK_RANK ? " selected" : "") + ">" + esc(r.name) + "</option>").join("") + "</select>" +
+      '<div class="seg"><button data-tready="0" class="' + (TRACK_READY ? "" : "on") + '">Everyone</button><button data-tready="1" class="' + (TRACK_READY ? "on" : "") + '">Ready · ' + ready + "</button></div></div>";
+    const shown = listed.filter(o => (!q || (o.callsign + " " + o.name).toLowerCase().indexOf(q) !== -1) && (!TRACK_RANK || String(o.idx) === TRACK_RANK) && (!TRACK_READY || o.ready));
+    if (!shown.length) return h + '<div class="empty">No officers match.</div>';
+    (TRACK.ranks || []).slice().reverse().forEach(r => {
+      const list = shown.filter(o => o.idx === r.idx).sort((a, b) => b.ready - a.ready || (b.done / (b.total || 1)) - (a.done / (a.total || 1)) || (a.callsign || "~").localeCompare(b.callsign || "~", undefined, { numeric: true }));
+      if (!list.length) return;
+      h += '<div class="tr-head"><b>' + esc(r.label) + '</b><span>→ ' + esc(r.next) + (r.tig ? " · " + r.tig + " TIG" : "") + "</span><em>" + list.filter(o => o.ready).length + " / " + list.length + " ready</em></div>";
+      h += '<div class="tr-list">' + list.map(o => {
+        const pct = Math.round(o.done / Math.max(1, o.total) * 100), open = !!TRACK_OPEN[o.id];
+        return '<details class="tr-row' + (o.ready ? " ready" : "") + '" data-tid="' + esc(o.id) + '"' + (open ? " open" : "") + '><summary><span class="cs">' + esc(o.callsign || "—") + '</span><div class="nm"><b>' + esc(o.name) + "</b><small>" + esc(o.rank) +
+          (o.tigDays != null ? " · " + o.tigDays + " days in grade" : " · no TIG date") + " · " + o.reports + " report" + (o.reports === 1 ? "" : "s") + '</small></div><div class="tr-bar"><i style="width:' + pct + '%"></i></div><span class="tr-n">' + o.done + "/" + o.total + "</span>" +
+          (o.ready ? '<span class="tr-ready">READY</span>' : "") + "</summary><div class=\"tr-items\">" + o.items.map(it =>
+            '<button class="tr-it' + (it.done ? " on" : "") + '" data-tcheck="' + esc(o.id) + '|' + esc(it.key) + '|' + (it.manual ? "0" : "1") + '"' + (it.done && !it.manual ? ' title="Counted automatically"' : "") + '><span class="bx">' + (it.done ? "✓" : "") + "</span><span class=\"tx\">" + esc(it.t) +
+            "<small>" + (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)" : it.have + " / " + it.need + " days") + (it.done && !it.manual ? " · counted automatically" : "") :
+              it.auto === "reports" ? it.have + " / " + it.need + " reports since reaching this rank" + (it.done && !it.manual ? " · counted automatically" : "") : "") +
+            (it.manual ? (it.auto ? " · " : "") + "Signed off by " + esc(it.by) + (it.at ? " · " + new Date(it.at).toLocaleDateString() : "") : (!it.auto && !it.done ? "Tick when done" : "")) + "</small></span></button>").join("") + "</div></details>";
+      }).join("") + "</div>";
+    });
+    return h;
+  }
+  document.addEventListener("toggle", e => { const d = e.target; if (d && d.dataset && d.dataset.tid != null) TRACK_OPEN[d.dataset.tid] = d.open; }, true);
+  document.addEventListener("input", e => { if (e.target.id === "trackQ") { TRACK_Q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("trackQ"); n.focus(); n.setSelectionRange(pos, pos); } });
+  document.addEventListener("change", e => { if (e.target.id === "trackRank") { TRACK_RANK = e.target.value; draw(); } });
+  document.addEventListener("click", async e => {
+    const rd = e.target.closest("[data-tready]"); if (rd) { TRACK_READY = rd.dataset.tready === "1"; draw(); return; }
+    if (e.target.closest("[data-trefresh]")) { TRACK = null; draw(); return; }
+    const c = e.target.closest("[data-tcheck]"); if (!c || TRACK_BUSY) return;
+    const [id, key, turnOn] = c.dataset.tcheck.split("|"), it = ((TRACK.officers.find(o => o.id === id) || {}).items || []).find(x => x.key === key);
+    if (it && it.done && !it.manual) { toast("This one is counted automatically."); return; }
+    TRACK_BUSY = true; c.classList.add("busy"); blip(turnOn === "1" ? 1400 : 600);
+    const r = await Portal.post({ action: "promoCheck", session: SESSION, id: id, key: key, on: turnOn === "1" }).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
+    TRACK_BUSY = false;
+    if (r.ok) { TRACK = r; const o = r.officers.find(x => x.id === id); draw(); if (o && o.ready && turnOn === "1") toast("🎖️ " + o.name + " has every requirement for " + ((r.ranks.find(x => x.idx === o.idx) || {}).next || "promotion") + "."); }
+    else { c.classList.remove("busy"); toast(r.error || "Couldn't save that."); }
+  });
   document.addEventListener("toggle", e => { const d = e.target; if (d && d.dataset && d.dataset.prank != null) PROMO_OPEN[d.dataset.prank] = d.open; }, true);
   function fleetHTML() {
     const f = DATA.fleet || {}, rk = f.rank || {}, all = f.vehicles || [];
@@ -531,7 +590,7 @@
   function palItems(q) {
     q = q.toLowerCase().trim();
     const out = [], add = (grp, icon, title, sub, run, extra) => { const hay = (title + " " + (sub || "") + " " + (extra || "")).toLowerCase(); if (!q || hay.indexOf(q) !== -1) out.push({ grp, icon, title, sub, run }); };
-    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"]].forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
+    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"]].concat(isCommand() ? [["tracker", "✅", "Promotion tracker"]] : []).forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
     add("Go to", "📋", "My reports", "", () => go("frame:myreports.html"));
     myForms().filter(f => f.status === "live").forEach(f => add("File a report", f.icon, f.title, f.division ? f.division + " report" : "", () => go("form:" + f.id), f.section));
     ((DATA && DATA.board && DATA.board.notices) || []).forEach(n => add("BOLOs", "🚨", n.title, n.type + " · " + n.from, () => go("records"), n.details));
