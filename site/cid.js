@@ -23,6 +23,17 @@
   let CASES = LS.get(K.cases, []); if (!Array.isArray(CASES)) CASES = [];
   let PROFILE = LS.get(K.profile, null);
   if (PROFILE && (!PROFILE.name || typeof PROFILE !== "object")) PROFILE = null;
+  // inside the MDT terminal: the officer is already signed on, so fill in their details from the sign-on
+  const EMBED = document.documentElement.classList.contains("embed");
+  if (EMBED) {
+    let sp = null; try { sp = JSON.parse(localStorage.getItem("lspd_prof") || "null"); } catch (e) {}
+    if (sp && sp.discordId) {
+      const same = PROFILE && PROFILE.discordId === sp.discordId;
+      PROFILE = { name: sp.name || (same && PROFILE.name) || "", rank: same && PROFILE.rank ? PROFILE.rank : (RANKS.find(r => (sp.title || "").indexOf(r) !== -1) || "Detective"),
+        badge: same ? PROFILE.badge || "" : "", callsign: sp.callsign || (same && PROFILE.callsign) || "", discordId: sp.discordId };
+      LS.set(K.profile, PROFILE);
+    }
+  }
 
   function toast(msg, type) {
     const t = $("toast"); t.textContent = msg; t.className = "toast show " + (type || "");
@@ -432,6 +443,7 @@
       if (res.id) CUR.submissionId = res.id;
       if (res.logId) { CUR.logId = res.logId; CUR.review = null; }
       CUR.posted = Date.now(); saveCases(); drawPostBtns(); drawReview();
+      try { if (EMBED && !update) parent.postMessage({ type: "lspd:filed", form: FORM.id, title: FORM.title }, location.origin); } catch (x) {}
       toast(update ? "Edits saved and the Discord post updated" + (res.warning ? " (" + res.warning + ")" : "") : "Case file posted to Discord" + (res.warning ? " (" + res.warning + ")" : ""), res.warning ? "bad" : "ok");
     } catch (e) { toast(e.message || "Posting to Discord failed.", "bad"); }
     finally { btn.disabled = false; btn.textContent = label; drawPostBtns(); }
@@ -664,6 +676,6 @@
   $("saveDiscordBtn").onclick = () => send(true);
   addEventListener("beforeunload", () => { if (ctrl && CUR) { CUR.data = ctrl.collect(); saveCases(); } });
 
-  runIntro();
+  if (EMBED && PROFILE) { introDone = true; $("intro").hidden = true; } else runIntro();   // the terminal already did the boot and sign-on
   loadConfig();
 })();

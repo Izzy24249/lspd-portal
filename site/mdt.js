@@ -54,7 +54,8 @@
 
   // ---------- reports (forms) in the side panel ----------
   let FORM_Q = "";
-  function myForms() { return (DATA && DATA.forms) || SNAP_FORMS || []; }
+  // the CID Case File always opens in the CID case builder (cid.html)
+  function myForms() { return ((DATA && DATA.forms) || SNAP_FORMS || []).map(f => f.id === "cidcase" && !f.cid ? Object.assign({}, f, { cid: true }) : f); }
   // first visit on this device: list the reports straight away from the site's own copy of the forms (data/portal.json)
   // and the officer's sign-on profile; the live list from the server replaces it a moment later
   function snapForms() {
@@ -153,6 +154,7 @@
         const f = myForms().find(x => x.id === VIEW.slice(5));
         if (!f) { m.__view = ""; m.innerHTML = '<div class="main-in"><div class="empty">That report isn\'t available to you.</div></div>'; return; }
         m.innerHTML = frameHTML(f.cid ? "cid.html?embed=1" : "forms.html?embed=1#" + f.id, f.icon, f.title, f.division ? f.division + " report" : (f.desc || "Filed straight to Discord and Division Command"));
+        if (f.cid) { const bar = m.querySelector(".fv-bar"); if (bar) bar.remove(); }   // the case builder has its own header
       } else if (VIEW === "sop") m.innerHTML = frameHTML(sopEmbed(sopUrl()), "📘", "LSPD SOP", "Policy, radio, pursuits, use of force", sopUrl());
       else m.innerHTML = frameHTML(VIEW.slice(6) + "?embed=1", "📋", t[1], "Your filed reports and their grades");
       $("ticker").hidden = true; return;

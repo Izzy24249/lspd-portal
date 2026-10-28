@@ -140,7 +140,7 @@ function renderHome(){
   });
   const card = f => {
     const live = f.status === "live";
-    if (live && f.cidApp) return `<a class="card cid-card" href="cid.html">
+    if (live && (f.cidApp || f.id === "cidcase")) return `<a class="card cid-card" href="cid.html">
       <div class="ico">${Portal.esc(f.icon||"🗂️")}</div>
       <h3>${Portal.esc(f.title)}</h3><p>${Portal.esc(f.description||"")}</p>
       <div class="go">OPEN CASE BUILDER →</div></a>`;   // the CID case builder has its own page

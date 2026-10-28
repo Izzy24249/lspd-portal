@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 75;
+const BACKEND_VERSION = 76;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -773,7 +773,7 @@ function handleSubmit_(d) {
     if (!r.tag) return;
     if (ruleMatches_(r, values, repeaters)) tags.push(r.tag);
   });
-  const cidX = d.cid && form.cidApp ? cidPrep_(form, d.cid) : null;            // the stand-alone CID case builder page
+  const cidX = d.cid && isCidApp_(form) ? cidPrep_(form, d.cid) : null;            // the stand-alone CID case builder page
   if (cidX && cidX.error) return { ok: false, error: cidX.error };
   if (cidX) tags = tags.concat(cidX.tags);
   tags = tags.map(str_).filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 5);
@@ -2806,9 +2806,11 @@ function formAllowed_(form, acct, prof) {
   }
   return true;
 }
+// the CID Case File is always posted from the CID case builder page (also when the admin toggle is off)
+function isCidApp_(f) { return !!(f && (f.cidApp || f.id === "cidcase")); }
 function myForms_(acct, prof) {
   return getConfig_().forms.filter(f => (f.status === "live" || f.status === "soon") && formAllowed_(f, acct, prof))
-    .map(f => ({ id: f.id, title: f.title, icon: f.icon || "📄", status: f.status, section: f.section || "", desc: clip_(str_(f.desc || f.subtitle), 140), cid: !!f.cidApp, division: (f.accessTabs || []).map(t => t.name).join(", ") }));
+    .map(f => ({ id: f.id, title: f.title, icon: f.icon || "📄", status: f.status, section: f.section || "", desc: clip_(str_(f.desc || f.subtitle), 140), cid: isCidApp_(f), division: (f.accessTabs || []).map(t => t.name).join(", ") }));
 }
 function officerHome_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };

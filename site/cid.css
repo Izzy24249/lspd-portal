@@ -228,3 +228,8 @@ table .ci-tagchip{color:#334D6E;border-color:#8a9ab3} table .ci-tagslbl{color:#3
   .ci-paper{overflow:visible;box-shadow:none}
   .ci-paper-head{position:static;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+/* inside the MDT terminal */
+.embed .ci-brand{pointer-events:none}
+.embed .ci-tools a[href="myreports.html"]{display:none}
+.embed body.cidapp{background-attachment:scroll}
