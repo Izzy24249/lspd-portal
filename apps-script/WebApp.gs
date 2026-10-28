@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 76;
+const BACKEND_VERSION = 77;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2615,6 +2615,62 @@ function fleetFor_(rank, trainee) {
     insignia: f.insignia, vehicleRules: f.vehicleRules, uniformRules: f.uniformRules, female: f.uniforms.female.length > 0
   };
 }
+// ---- Promotion requirements: read from the LSPD Promotion Guidelines Google Doc ----
+// Each rank heading in the doc (e.g. "Sergeant (SGT) - 14 TIG") is the officer's CURRENT rank; the lines under it are
+// what they need for their next promotion. "[Supervisor Team]" style lines are group names; lines starting with "-" are
+// details of the requirement above; "* = …" is a note for that rank. Reading stops at "Effective Date".
+const PROMO_DOC_DEFAULT_ = "https://docs.google.com/document/d/12H5Ihu6cAH3m3uaEdYuZfcgQlkiAyYq6PPbai1B4woE/edit";
+function promoDocId_(u) { const m = /\/document\/d\/([\w-]{20,})/.exec(str_(u)); return m ? m[1] : ""; }
+function promoDocUrl_() { return str_((getConfig_().settings || {}).promoDocUrl) || PROMO_DOC_DEFAULT_; }
+function promoLines_(docId) {
+  const body = DocumentApp.openById(docId).getBody(), out = [];
+  const n = body.getNumChildren();
+  for (let i = 0; i < n; i++) {
+    const el = body.getChild(i), t = el.getType();
+    if (t === DocumentApp.ElementType.PARAGRAPH || t === DocumentApp.ElementType.LIST_ITEM) {
+      const txt = el.asText().getText();
+      out.push((t === DocumentApp.ElementType.LIST_ITEM && el.asListItem().getNestingLevel() > 0 ? "- " : "") + txt);
+    } else if (t === DocumentApp.ElementType.TABLE) {
+      const tb = el.asTable(); for (let r = 0; r < tb.getNumRows(); r++) out.push(tb.getRow(r).getText().replace(/\n/g, " "));
+    }
+  }
+  return out;
+}
+function promoParseLines_(lines) {
+  const out = { ranks: [], notes: [] }; let group = "", cur = null, started = false;
+  const isHead = x => x.length < 160 && !/\bmust\b/i.test(x) && /\([A-Z0-9]{2,6}\)/.test(x) && rankIndex_(x) >= 0;
+  lines.map(x => str_(x).replace(/\s+/g, " ").trim()).forEach(x => {
+    if (!x || out.stop) return;
+    if (/^effective date/i.test(x)) { out.stop = true; return; }
+    const g = /^\[(.+)\]$/.exec(x); if (g) { group = clip_(g[1], 60); started = true; return; }
+    if (isHead(x)) {
+      started = true;
+      const i = rankIndex_(x.split(/\s[-–]\s/)[0]), tig = /(\d+)\s*TIG\b/i.exec(x);
+      cur = { idx: i, name: RANKS_[i], label: clip_(x.split(/\s[-–]\s/)[0].trim(), 80), group: group, tig: tig ? Number(tig[1]) : 0, draft: /not final/i.test(x), reqs: [], note: "" };
+      out.ranks.push(cur); return;
+    }
+    if (!started || !cur) { if (/unreachable|ticket|tag @/i.test(x)) out.notes.push(clip_(x, 400)); return; }
+    if (/^\*\s*=/.test(x)) { cur.note = clip_(x.replace(/^\*\s*=\s*/, "").replace(/^\((.*)\)$/, "$1"), 400); return; }
+    if (/^[-–•○]\s*/.test(x) || /^\(.*\)$/.test(x)) { const last = cur.reqs[cur.reqs.length - 1]; const d = x.replace(/^[-–•○]\s*/, "").replace(/\s*-\.?$/, "").trim(); if (last) last.d = clip_((last.d ? last.d + "\n" : "") + d, 900); else cur.reqs.push({ t: clip_(d, 400), d: "" }); return; }
+    const star = /^\*\s*/.test(x);
+    cur.reqs.push({ t: clip_(x.replace(/^\*\s*/, "").replace(/,$/, ""), 400), d: "", star: star });
+  });
+  delete out.stop;
+  // two headings for the same rank: keep them together
+  const byIdx = {}; out.ranks = out.ranks.filter(r => { if (byIdx[r.idx]) { byIdx[r.idx].reqs = byIdx[r.idx].reqs.concat(r.reqs); return false; } byIdx[r.idx] = r; return true; }).sort((x, y) => x.idx - y.idx);
+  return out;
+}
+function promoReqParse_(fresh) {
+  const cache = CacheService.getScriptCache(), ck = "promoreq_v2";
+  if (!fresh) { const hit = cache.get(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const url = promoDocUrl_(), id = promoDocId_(url);
+  let out;
+  try { out = promoParseLines_(promoLines_(id)); out.doc = url; out.title = ""; try { out.title = DocumentApp.openById(id).getName(); } catch (e) {} }
+  catch (e) { return { doc: url, ranks: [], notes: [], error: "Couldn't read the promotion guidelines doc: " + errMsg_(e) }; }
+  const js = JSON.stringify(out); if (js.length < 95000) cache.put(ck, js, 900);
+  return out;
+}
+
 // the officer's own progression (onboarding, promotion programs): tasks, counts, deadline
 function myPaths_(person) {
   const out = []; if (!person) return out;
@@ -2815,7 +2871,7 @@ function myForms_(acct, prof) {
 function officerHome_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
   const person = rosterPerson_(acct.id), prof = acctProfile_(acct), s = getConfig_().settings || {};
-  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding), board: mdtBoard_(acct, prof, person), forms: myForms_(acct, prof) };
+  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding), board: mdtBoard_(acct, prof, person), forms: myForms_(acct, prof), ladder: (() => { try { return promoReqParse_(false); } catch (e) { return null; } })() };
 }
 
 // =====================================================================
@@ -3282,7 +3338,15 @@ function handleAdmin_(d) {
     case "fleetAdmin": {         // owner/admin: every vehicle and outfit read from the sheet, with photo links
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can manage Fleet & Uniforms.");
       const f = fleetParse_(!!d.fresh), s = getConfig_().settings || {};
-      return { ok: true, fleet: f, photos: s.fleetPhotos || {}, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_ };
+      return { ok: true, fleet: f, photos: s.fleetPhotos || {}, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, ladder: (() => { try { return promoReqParse_(!!d.fresh); } catch (e) { return { tab: "", ranks: [], notes: [], error: errMsg_(e) }; } })() };
+    }
+    case "promoDocSet": {
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");
+      const u = str_(d.url); if (u && !promoDocId_(u)) throw new Error("Paste the Google Doc's link (docs.google.com/document/d/…).");
+      withLock_(() => { const cfg = getConfig_(); cfg.settings = cfg.settings || {}; cfg.settings.promoDocUrl = u; cfg.version = (Number(cfg.version) || 0) + 1; writeConfig_(cfg, me.username); return { ok: true }; });
+      logAdmin_(me.username, "promotion guidelines doc", u || "(default)");
+      try { CacheService.getScriptCache().remove("promoreq_v2"); } catch (e) {}
+      return { ok: true, ladder: promoReqParse_(true) };
     }
     case "fleetPhoto": case "sopSet": {
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");

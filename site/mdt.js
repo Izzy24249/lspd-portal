@@ -103,8 +103,8 @@
   addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "lspd:filed") { toast("✓ " + (e.data.title || "Report") + " filed"); blip(1400); setTimeout(load, 1500); } });
 
   // ---------- router ----------
-  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop"];
-  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"] };
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions"];
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
   function go(v) { VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
@@ -160,7 +160,7 @@
       $("ticker").hidden = true; return;
     }
     m.__view = "";
-    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
+    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
     if ((VIEW === "unit" || VIEW === "training") && !UNIT) loadUnit();
     if (VIEW === "reference" && !REF) loadRef();
     m.querySelectorAll("[data-count]").forEach(el => { const to = +el.dataset.count || 0, t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); });
@@ -393,6 +393,40 @@
     if (!r && !o) return "<dt>Extras</dt><dd>None</dd>";
     return '<dt>Extras</dt><dd class="ex">' + (r || []).map(n => '<i class="r">' + esc(n) + "</i>").join("") + (o || []).map(n => "<i>" + esc(n) + "</i>").join("") + "</dd>";
   }
+  // ---------- promotions: every rank's requirements, from the LSPD Promotion Guidelines doc ----------
+  // each rank's section is what an officer AT that rank needs for their next promotion
+  let PROMO_OPEN = {};
+  function promoReqs(r) {
+    return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map(q => "<li><b>" + esc(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
+      (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
+  }
+  function promoHTML() {
+    const L = DATA.ladder || {}, rk = (DATA.fleet || {}).rank || {}, mine = rk.known || rk.trainee ? rk.idx : -1;
+    const ranks = L.ranks || [];
+    let h = '<div class="h2"><div><h1>PROMOTIONS <span>· ' + esc(mine >= 0 ? (rk.trainee ? "Probationary Officer" : rk.name) : "rank not on file") + "</span></h1><p>Every rank's requirements from the LSPD Promotion Guidelines. Meeting them opens the door; High Command makes the final call.</p></div>" +
+      (L.doc ? '<a class="btn ghost" href="' + esc(L.doc) + '" target="_blank" rel="noopener">FULL GUIDELINES ↗</a>' : "") + "</div>";
+    if (L.error) return h + '<div class="empty">' + esc(L.error) + "</div>";
+    if (!ranks.length) return h + '<div class="empty">Promotion requirements aren\'t set up yet.</div>';
+    const me = ranks.find(r => r.idx === mine), after = r => { const n = ranks.find(x => x.idx > r.idx); return n ? n.name : "High Command"; };
+    if (me) {
+      h += '<section class="pr-next"><div class="pr-kick">YOUR PROMOTION REQUIREMENTS' + (me.draft ? ' <span class="pr-draft">NOT FINAL YET</span>' : "") + '</div><div class="pr-path"><span>' + esc(me.label) + '</span><i>→</i><b>' + esc(after(me)) + "</b></div>" +
+        (me.tig ? '<div class="pr-tig">⏱ ' + me.tig + " days time in grade required</div>" : "") + promoReqs(me) +
+        ((DATA.paths || []).length ? '<a class="pr-track" data-go="home">Your tracked progress is on the dashboard →</a>' : "") + "</section>";
+    } else if (mine >= 0) h += '<section class="pr-next top"><div class="pr-kick">YOUR RANK</div><div class="pr-path"><b>' + esc(rk.name) + '</b></div><p class="pr-none">The guidelines don\'t list requirements for your rank. Promotions from here are at High Command\'s discretion.</p></section>';
+    else h += '<div class="pr-notes"><p>Your rank isn\'t in column B of the roster, so nothing is marked for you. Ask command to fix your roster entry.</p></div>';
+    if ((L.notes || []).length) h += '<div class="pr-notes">' + L.notes.map(n => "<p>💬 " + esc(n) + "</p>").join("") + "</div>";
+    let grp = null;
+    h += '<div class="pr-ladder">' + ranks.map(r => {
+      const st = mine < 0 ? "" : r.idx < mine ? "done" : r.idx === mine ? "here" : "ahead";
+      const open = PROMO_OPEN[r.idx] != null ? PROMO_OPEN[r.idx] : false;
+      const g = r.group && r.group !== grp ? '<div class="pr-grp">' + esc(r.group) + "</div>" : ""; grp = r.group;
+      return g + '<details class="pr-rank ' + st + '" data-prank="' + r.idx + '"' + (open ? " open" : "") + '><summary><span class="pr-dot"></span><div><b>' + esc(r.label) + "</b><small>" +
+        (st === "done" ? "Passed" : st === "here" ? "You are here" : "To reach " + esc(after(r))) + (r.tig ? " · " + r.tig + " TIG" : "") + (r.draft ? " · not final" : "") + "</small></div>" +
+        "<em>" + r.reqs.length + "</em></summary>" + promoReqs(r) + "</details>";
+    }).join("") + "</div>";
+    return h;
+  }
+  document.addEventListener("toggle", e => { const d = e.target; if (d && d.dataset && d.dataset.prank != null) PROMO_OPEN[d.dataset.prank] = d.open; }, true);
   function fleetHTML() {
     const f = DATA.fleet || {}, rk = f.rank || {}, all = f.vehicles || [];
     const show = all.filter(v => FLEET_ALL || v.allowed);
@@ -497,7 +531,7 @@
   function palItems(q) {
     q = q.toLowerCase().trim();
     const out = [], add = (grp, icon, title, sub, run, extra) => { const hay = (title + " " + (sub || "") + " " + (extra || "")).toLowerCase(); if (!q || hay.indexOf(q) !== -1) out.push({ grp, icon, title, sub, run }); };
-    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["sop", "📘", "SOP"]].forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
+    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"]].forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
     add("Go to", "📋", "My reports", "", () => go("frame:myreports.html"));
     myForms().filter(f => f.status === "live").forEach(f => add("File a report", f.icon, f.title, f.division ? f.division + " report" : "", () => go("form:" + f.id), f.section));
     ((DATA && DATA.board && DATA.board.notices) || []).forEach(n => add("BOLOs", "🚨", n.title, n.type + " · " + n.from, () => go("records"), n.details));

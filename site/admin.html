@@ -1927,6 +1927,20 @@ function pageFleet(page) {
     const sop = h("input", { type: "text", value: FLEET.sop || "" });
     box.append(h("div", { class: "sec", style: "display:grid;gap:10px" }, h("h3", { text: "SOP link" }), h("p", { class: "help", text: "The Standard Operating Procedures button on every officer's MDT home." }),
       h("div", { class: "g2" }, field("SOP document link", sop), h("div", { style: "display:flex;align-items:flex-end" }, h("button", { class: "btn primary sm", onclick: async () => { try { const r = await api("sopSet", { url: sop.value.trim() }); FLEET.sop = r.sop; toast("SOP link saved.", "ok"); } catch (e) { toast(e.message, "bad"); } } }, "Save")))));
+    // promotion requirements: read from the LSPD Promotion Guidelines doc, shown on every officer's MDT under Promotions
+    { const L = FLEET.ladder;
+      const sec = h("div", { class: "sec", style: "display:grid;gap:10px" }, h("h3", { text: "Promotion requirements" + (L && L.title ? " · from \"" + L.title + "\"" : "") }),
+        h("p", { class: "help", text: "Officers see every rank's requirements on their MDT under Promotions, with their own rank's requirements up top. They're read from the Promotion Guidelines Google Doc: each rank heading (like \"Sergeant (SGT) - 14 TIG\") is the officer's current rank, and the lines under it are what they need for their next promotion. Edit the doc and the MDT updates within 15 minutes (or press Re-read the sheet above)." }));
+      if (!L) sec.append(h("p", { class: "help", text: "Paste the new WebApp.gs (version 77 or newer) and deploy a new version to use this." }));
+      else {
+        const doc = h("input", { type: "text", value: L.doc || "", placeholder: "https://docs.google.com/document/d/…" });
+        sec.append(h("div", { class: "g2" }, field("Promotion Guidelines doc link", doc), h("div", { style: "display:flex;align-items:flex-end;gap:8px" },
+          h("button", { class: "btn primary sm", onclick: async e => { e.target.disabled = true; try { const r = await api("promoDocSet", { url: doc.value.trim() }); FLEET.ladder = r.ladder; toast(r.ladder.error || "Saved. " + r.ladder.ranks.length + " ranks read from the doc.", r.ladder.error ? "bad" : "ok"); renderPage(true, true); } catch (x) { e.target.disabled = false; toast(x.message, "bad"); } } }, "Save link"),
+          L.doc ? h("a", { class: "btn ghost sm", href: L.doc, target: "_blank", rel: "noopener" }, "Open doc ↗") : null)));
+        if (L.error) sec.append(h("p", { class: "help", style: "color:#ffb3b5", text: L.error + " Make sure the doc is shared with the Google account that owns this script." }));
+        else sec.append(h("div", { class: "ulist" }, (L.ranks || []).map(r => h("div", { class: "urow", style: "grid-template-columns:1fr auto" }, h("div", { class: "who-t" }, h("b", { text: r.label + (r.tig ? " · " + r.tig + " TIG" : "") + (r.draft ? " · not final" : "") }), h("small", { text: (r.group ? r.group + " · " : "") + (r.reqs.length ? r.reqs.map(q => q.t).join(" · ").slice(0, 150) : "No requirements") })), h("span", { class: "rpill", text: String(r.reqs.length) })))));
+      }
+      box.append(sec); }
     const row = (key, title, sub, sheetPhoto, missing) => {
       const inp = h("input", { type: "text", value: photos[key] || "", placeholder: sheetPhoto ? "Using the =IMAGE() photo from the sheet" : "https://i.imgur.com/….png" });
       const prev = h("div", { style: "width:72px;height:48px;background:#05080d center/cover no-repeat;border:1px solid var(--line,rgba(255,255,255,.15));flex:none" + ((photos[key] || sheetPhoto) ? ";background-image:url('" + (photos[key] || sheetPhoto).replace(/'/g, "%27") + "')" : "") });
