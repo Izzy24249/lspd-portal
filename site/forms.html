@@ -93,7 +93,8 @@ function go(view){
   const isProg = /^promo(:[a-z0-9-]+)?$/.test(view);
   if(isProg){ PID = view.split(":")[1] || "cpl"; if(!(CONFIG && progList().some(p => p.id === PID))) view = "home"; }
   const prog = /^promo(:[a-z0-9-]+)?$/.test(view);
-  if(view !== "home" && !prog && !openForm(view)) view = "home";
+  if(view === "home" || prog) document.body.dataset.ftheme = "";
+  if(view !== "home" && !prog && !openForm(view)) { view = "home"; document.body.dataset.ftheme = ""; }
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   $(view === "home" ? "view-home" : prog ? "view-promo" : "view-form").classList.add("active");
   if(prog){ promoOpen = new Set(); promoQuery = ""; promoFilter = "all"; loadPromo(); }
@@ -306,6 +307,7 @@ function openForm(id){
   $("submitBtn").textContent = f.submitLabel || "Submit to Discord";
   $("copyBtn").style.display = f.copyText ? "" : "none";
   draftStatus("");
+  document.body.dataset.ftheme = f.theme || "";
   ctrl = Portal.render(f, $("formMount"), { draft: true, onStatus: draftStatus });
   // live report preview beside the form (forms with "preview": true)
   $("fpPrev").hidden = !f.preview; $("fpGrid").classList.toggle("on", !!f.preview); $("fpExample").hidden = !(f.example && f.preview);
