@@ -332,6 +332,8 @@ window.Portal = (function () {
       svg: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17h48M32 17v7"/><path d="M20 34c0-6 5-10 12-10h4c7 0 11 5 11 11v1c0 3-2 5-5 5H25c-3 0-5-3-5-7z" fill="currentColor" fill-opacity=".18"/><path d="M47 33h9l3-5M37 25v7h9M27 41l-3 7M40 41l3 7M19 48h30"/></svg>' },
     ciu: { kicker: "LOS SANTOS POLICE DEPARTMENT · CASE FILE", status: "CASE FILE OPEN",
       svg: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M32 5 54 13v16c0 15-9.5 25-22 30C19.5 54 10 44 10 29V13z" fill="currentColor" fill-opacity=".12"/><circle cx="29" cy="28" r="9"/><path d="m36 35 9 9"/></svg>' },
+    teu: { kicker: "LSPD · TRAFFIC ENFORCEMENT UNIT · FIELD REPORT BUILDER", status: "ON PATROL",
+      svg: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M26 8h12l12 44H14z" fill="currentColor" fill-opacity=".12"/><path d="M22.5 22h19M19.5 34h25M16.5 46h31"/><path d="M8 56h48"/></svg>' },
     cru: { kicker: "LSPD · CRISIS RESPONSE UNIT · TECHNICAL RESCUE", status: "RESCUE READY",
       svg: '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="21" fill="none" stroke="currentColor" stroke-width="10"/><g stroke="#fff" stroke-width="10" fill="none" stroke-dasharray="11 22" stroke-dashoffset="5.5"><circle cx="32" cy="32" r="21"/></g><circle cx="32" cy="32" r="26.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"/></svg>' }
   };
@@ -1170,12 +1172,21 @@ window.Portal = (function () {
           const t = el.value.trim(), digits = t.replace(/\D/g, "");
           const hit = ROSTER.find(p => p.id && p.id === digits);
           ofcAdd(el.dataset.ofcin, /^\d{15,21}$/.test(digits) && digits.length === t.replace(/\s/g, "").length ? { name: hit ? hit.name : "", id: digits } : { name: t, id: "" });
-          el.value = ""; PK.typed = false; pkRender();
+          el.value = ""; if (PK) { PK.typed = false; pkRender(); }
         } else pkClose();
       } else if (e.key === "Tab") pkClose();
     });
 
+    // blocks with "when": { field, is: [..] } only show (and only count) while that field has one of those values
+    function blockOn(b) {
+      if (!b || !b.when || !b.when.field) return true;
+      const el = q(`[data-f="${CSS.escape(b.when.field)}"]`), v = el ? el.value.trim() : "";
+      return (b.when.is || []).indexOf(v) !== -1;
+    }
+    function applyWhen() { blocks.forEach((b, i) => { if (!b.when) return; const el = root.querySelector(`[data-b="${i}"]`); if (el) el.style.display = blockOn(b) ? "" : "none"; }); }
+    const hiddenIds = () => { const ids = {}; blocks.forEach(b => { if (blockOn(b)) return; (b.fields || []).forEach(f => ids[f.id] = 1); if (b.id) ids[b.id] = 1; }); return ids; };
     function refresh() {
+      applyWhen();
       renderOfc();
       drawWhoBars();
       drawTags();
@@ -1315,6 +1326,8 @@ window.Portal = (function () {
           return o;
         }).filter(o => !b.startRows || Object.values(o).some(v => v));   // pre-filled blank rows aren't sent
       });
+      const hid = hiddenIds();                                        // sections that don't apply to the chosen report type aren't sent
+      Object.keys(hid).forEach(k => { if (k in values) values[k] = ""; if (k in reps) reps[k] = []; if (k in checklists) checklists[k] = {}; });
       return { form: form.id, values: values, checklists: checklists, repeaters: reps };
     }
 
@@ -1341,7 +1354,9 @@ window.Portal = (function () {
 
     function validate() {
       qa(".err").forEach(x => x.classList.remove("err"));
+      const hid = hiddenIds();
       for (const f of fieldDefs) {
+        if (hid[f.id]) continue;
         const el = q(`[data-f="${CSS.escape(f.id)}"]`);
         const v = el ? el.value.trim() : "";
         if (f.required && !v) { el.classList.add("err"); el.focus(); return (f.label || f.id).replace(/[:(].*$/, "").trim() + " is required."; }
@@ -1362,13 +1377,19 @@ window.Portal = (function () {
     }
 
     function toText() {
-      const d = collect(), L = [form.title.toUpperCase(), "=".repeat(Math.min(60, form.title.length + 8))];
+      const d = collect(), hid = hiddenIds();
+      const head = form.textHeader ? form.textHeader.replace(/\{(\w+)\}/g, (m, k) => { let v = d.values[k] || ""; const f = fieldDefs.find(x => x.id === k); if (v && f && f.type === "date") v = new Date(v + "T00:00").toLocaleDateString("en-US"); if (v && f && (f.type === "officer" || f.type === "officers")) v = v.replace(/\s*\(\d{15,21}\)/g, ""); return v || "[" + ((f && f.label) || k).replace(/[:(].*$/, "").trim().toUpperCase() + "]"; }) : "";
+      const L = head ? [head, ""] : [form.title.toUpperCase(), "=".repeat(Math.min(60, form.title.length + 8))];
       blocks.forEach(b => {
+        if (!blockOn(b)) return;
+        if (b.type === "text" && b.style === "heading") { L.push("", b.text.toUpperCase().replace(/:?$/, ":")); return; }
         if (b.type === "fields" || b.type === "strip") (b.fields || []).forEach(f => {
           if (f.type === "static") return;
           let v = d.values[f.id];
           if (v && f.type === "date") v = new Date(v + "T00:00").toLocaleDateString("en-US");
-          L.push((f.label || f.id).replace(/:\s*$/, "") + ": " + (v || "-"));
+          if (v && (f.type === "officer" || f.type === "officers")) v = v.replace(/\s*\(\d{15,21}\)/g, "");
+          if (hid[f.id] || (form.textSkipEmpty && !v)) return;
+          L.push((form.textUpper ? (f.label || f.id).toUpperCase() : (f.label || f.id)).replace(/:\s*$/, "") + ": " + (v || (form.textUpper ? "" : "-")));
         });
         if (b.type === "checklist") { L.push("", b.title + ":"); (b.items || []).forEach(it => L.push(`  [${d.checklists[b.id][it.topic] ? "X" : " "}] ${it.topic}`)); }
         if (b.type === "repeater") {

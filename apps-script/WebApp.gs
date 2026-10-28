@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 78;
+const BACKEND_VERSION = 79;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -644,12 +644,13 @@ function migrateLegacy_() {
 // =====================================================================
 // PUBLIC FORM SUBMISSION (schema-driven, works for every form)
 // =====================================================================
+function whenOn_(b, values) { return !b || !b.when || !b.when.field || (b.when.is || []).map(str_).indexOf(str_(values[b.when.field])) !== -1; }
 function handleSubmit_(d) {
   const cfg = getConfig_();
   const m = cfg.settings && cfg.settings.maintenance;
   if (m && m.on) return { ok: false, error: m.message || "The portal is in maintenance. Try again later." };
 
-  const form = cfg.forms.find(f => f.id === (d.form || "academy"));
+  let form = cfg.forms.find(f => f.id === (d.form || "academy"));
   if (!form || form.status !== "live") return { ok: false, error: "This form is not accepting submissions right now." };
   if (form.minLevel || (form.accessTabs || []).length) {   // restricted forms: the officer's sign-on decides
     const acct = officerSession_(d.session), lv = acct ? acctProfile_(acct).level : "";
@@ -661,6 +662,8 @@ function handleSubmit_(d) {
   const values = d.values || d;                 // (d itself = old-style flat payload)
   const checklists = d.checklists || {};
   const repeaters = d.repeaters || {};
+  // sections that only apply to some report types ("when": { field, is: [...] }): leave out the ones that don't apply
+  if ((form.blocks || []).some(b => b.when && b.when.field)) form = Object.assign({}, form, { blocks: form.blocks.filter(b => whenOn_(b, values)) });
 
   // an "officer" pick carries its Discord ID: copy it into the linked Discord ID field (tags, leaderboards, required checks)
   allFields_(form).forEach(f => {
@@ -3803,6 +3806,7 @@ function validateConfig_(c) {
     };
     (f.blocks || []).forEach((b, bi) => {
       if (BLOCK_TYPES.indexOf(b.type) === -1) throw new Error(f.title + ": unknown block type " + b.type);
+      if (b.when) { if (str_(b.when.field)) b.when = { field: str_(b.when.field), is: (Array.isArray(b.when.is) ? b.when.is : []).map(x => clip_(str_(x), 120)).filter(Boolean).slice(0, 20) }; else delete b.when; }
       if (b.type === "fields" || b.type === "strip") {
         const max = b.type === "fields" ? 2 : 4;
         if (!(b.fields || []).length || b.fields.length > max) throw new Error(f.title + ": block " + (bi + 1) + " must have 1-" + max + " fields.");

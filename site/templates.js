@@ -2785,5 +2785,3336 @@ window.PORTAL_TEMPLATES = [
     "followUp": true
    }
   ]
+ },
+ {
+  "theme": "teu",
+  "status": "hidden",
+  "copyText": true,
+  "preview": true,
+  "previewType": "teuType",
+  "textUpper": true,
+  "textHeader": "{teuOfficer} | {teuBadge} | {teuType} | {teuDate} | {teuDept}",
+  "webhookId": "",
+  "watermarkMode": "single",
+  "tags": {
+   "base": [],
+   "rules": []
+  },
+  "leaderboard": {
+   "enabled": false,
+   "countField": "",
+   "webhookId": "",
+   "messageId": "",
+   "title": "",
+   "heading": ""
+  },
+  "id": "teu",
+  "section": "Division reports",
+  "icon": "🚦",
+  "title": "TEU Field Report",
+  "description": "Traffic Enforcement Unit: traffic stops, impounds, pursuits, DUI, CVE inspections, incidents and bicycle patrol.",
+  "submitLabel": "Submit TEU Report",
+  "color": "#84cc16",
+  "embedTitle": "🚦 TEU · {teuType}",
+  "threadTitle": "{teuType} | {teuOfficer}",
+  "archiveSheet": "TEU Reports",
+  "discordStyle": "",
+  "discordEmoji": false,
+  "cidApp": false,
+  "forumTagOptions": [],
+  "hours": {
+   "on": false,
+   "dateField": "",
+   "startField": "",
+   "endField": "",
+   "people": []
+  },
+  "blocks": [
+   {
+    "type": "banner",
+    "title": "TEU :: REPORTS",
+    "subtitle": "Field Report Builder · Traffic Enforcement Unit"
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "teuType",
+      "label": "Report Type",
+      "type": "select",
+      "options": [
+       "Traffic Stop Report",
+       "Vehicle Impound Report",
+       "Vehicle Pursuit Report",
+       "DUI Investigation Report",
+       "CVE Inspection Report",
+       "Incident Report (Non-Arrest)",
+       "Bicycle Patrol Unit Report"
+      ],
+      "required": true,
+      "default": "Traffic Stop Report"
+     }
+    ]
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "teuRank",
+      "label": "Rank",
+      "type": "select",
+      "options": [
+       "TEU Command",
+       "TEU FTO",
+       "TEU Senior Officer",
+       "TEU Officer II",
+       "TEU Officer",
+       "TEU Probationary Officer",
+       "Honorary TEU Officer"
+      ],
+      "default": "TEU Officer"
+     },
+     {
+      "id": "teuBadge",
+      "label": "Badge #",
+      "type": "text",
+      "placeholder": "L-108"
+     },
+     {
+      "id": "teuDept",
+      "label": "Dept",
+      "type": "select",
+      "options": [
+       "LSPD",
+       "BCSO",
+       "SAHP"
+      ],
+      "default": "LSPD"
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "teuOfficer",
+      "label": "Officer Name",
+      "type": "officer",
+      "required": true
+     },
+     {
+      "id": "teuUnits",
+      "label": "Assisting Units",
+      "type": "officers",
+      "allowTyped": true
+     }
+    ]
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "teuDate",
+      "label": "Date",
+      "type": "date",
+      "defaultToday": true
+     },
+     {
+      "id": "teuTime",
+      "label": "Time",
+      "type": "time"
+     },
+     {
+      "id": "teuLoc",
+      "label": "Location",
+      "type": "text",
+      "placeholder": "Strawberry Avenue",
+      "required": true
+     }
+    ]
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "teuWeather",
+      "label": "Weather Conditions",
+      "type": "select",
+      "options": [
+       "Clear",
+       "Cloudy",
+       "Rain",
+       "Fog",
+       "Storm",
+       "Snow"
+      ],
+      "blank": true
+     },
+     {
+      "id": "teuRoad",
+      "label": "Road Conditions",
+      "type": "select",
+      "options": [
+       "Dry",
+       "Wet",
+       "Icy",
+       "Flooded",
+       "Under Construction"
+      ],
+      "blank": true
+     }
+    ]
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Driver Information",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "tsName",
+      "label": "Full Name",
+      "type": "text",
+      "placeholder": "Phil Cantoon",
+      "required": true
+     },
+     {
+      "id": "tsId",
+      "label": "State ID / DL #",
+      "type": "text",
+      "placeholder": "SA-1029384"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "tsDob",
+      "label": "Date of Birth",
+      "type": "date"
+     },
+     {
+      "id": "tsAddr",
+      "label": "Address",
+      "type": "text",
+      "placeholder": "14 Alta Street"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "tsLic",
+      "label": "License Status",
+      "type": "select",
+      "options": [
+       "Valid",
+       "Suspended",
+       "Revoked"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Vehicle Information",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "tsMake",
+      "label": "Make",
+      "type": "text",
+      "placeholder": "Bravado"
+     },
+     {
+      "id": "tsModel",
+      "label": "Model",
+      "type": "text",
+      "placeholder": "Buffalo"
+     },
+     {
+      "id": "tsColor",
+      "label": "Color",
+      "type": "select",
+      "options": [
+       "White",
+       "Black",
+       "Silver",
+       "Gray",
+       "Red",
+       "Blue",
+       "Green",
+       "Yellow",
+       "Orange",
+       "Brown",
+       "Beige",
+       "Gold",
+       "Purple",
+       "Maroon"
+      ],
+      "blank": true
+     },
+     {
+      "id": "tsPlate",
+      "label": "Plate Number",
+      "type": "text",
+      "placeholder": "6ABC123"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "tsReg",
+      "label": "Registration Status",
+      "type": "select",
+      "options": [
+       "Valid",
+       "Expired",
+       "Stolen"
+      ],
+      "blank": true
+     },
+     {
+      "id": "tsReason",
+      "label": "Reason for Stop",
+      "type": "select",
+      "options": [
+       "Speeding",
+       "Reckless Driving",
+       "Failure to Stop",
+       "Red Light Violation",
+       "Illegal U-Turn",
+       "Expired Registration",
+       "Equipment Violation",
+       "Suspended License",
+       "Other"
+      ],
+      "required": true,
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Radar / Lidar Details (if applicable)",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "tsPosted",
+      "label": "Posted Speed Limit",
+      "type": "text",
+      "placeholder": "50"
+     },
+     {
+      "id": "tsRecorded",
+      "label": "Recorded Speed",
+      "type": "text",
+      "placeholder": "74"
+     },
+     {
+      "id": "tsDevice",
+      "label": "Device Used",
+      "type": "text",
+      "placeholder": "Radar gun"
+     },
+     {
+      "id": "tsCal",
+      "label": "Calibration Status",
+      "type": "text",
+      "placeholder": "Current"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "longtext",
+    "id": "tsObs",
+    "title": "OFFICER OBSERVATIONS",
+    "maxLength": 2000,
+    "hint": "Driving behavior, demeanor, any admissions.",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "tsAction",
+      "label": "Action Taken",
+      "type": "select",
+      "options": [
+       "Verbal Warning",
+       "Written Warning",
+       "Citation Issued",
+       "Vehicle Impounded",
+       "Arrest Made"
+      ],
+      "required": true,
+      "blank": true
+     },
+     {
+      "id": "tsFine",
+      "label": "Fine Amount",
+      "type": "text",
+      "placeholder": "$250"
+     },
+     {
+      "id": "tsPoints",
+      "label": "Points Assigned",
+      "type": "text",
+      "placeholder": "2"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "tsCharges",
+    "title": "CHARGES / CITATIONS",
+    "addLabel": "+ Add Charge",
+    "totals": {
+     "on": true,
+     "col": "charge",
+     "countCol": "count"
+    },
+    "columns": [
+     {
+      "id": "charge",
+      "label": "Charge (type to search)",
+      "type": "search",
+      "options": [
+       "Driving a boat under the influence of alcohol or drugs (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violating boating safety regulations (Misdemeanor, 4 Months - $1,000 Fine)",
+       "No Wake Zone (Misdemeanor, $1,750 Fine)",
+       "Operating a vessel without the proper registration (Infraction, $250 Fine)",
+       "Speed Limits and Reckless Operation for a vessel (Infraction, $250 Fine)",
+       "Driving Without a Commercial Driver's License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Submit Vehicle to Inspection (Misdemeanor, 4 Months - $2,250 Fine)",
+       "Overweight Vehicle (Infraction, $250 Fine)",
+       "Defective Equipment (Infraction, $250 Fine)",
+       "Inadequate Safety Inspections (Infraction, $250 Fine)",
+       "Failure to Maintain Logbooks (Infraction, $250 Fine)",
+       "Improper Transport of Hazardous Materials (Infraction, $250 Fine)",
+       "Failure to Carry Proper Documentation (Infraction, $250 Fine)",
+       "Driving Without Proper Permits (Infraction, $250 Fine)",
+       "Hours of Service Violation (Infraction, $250 Fine)",
+       "Medical Certificate Violation (Infraction, $250 Fine)",
+       "Improper Load Securement (Infraction, $250 Fine)",
+       "Online Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Phishing (Felony, 7 Months - $3,000 Fine)",
+       "Unauthorized Access to Computer Systems (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Controlled Substances (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Drug Use (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Drug Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Driving Under Drug Influence (Felony, 7 Months - $3,000 Fine)",
+       "Cultivation of Illegal Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Drug Manufacturing (Felony, 7 Months - $3,000 Fine)",
+       "Prescription Fraud (Felony, 7 Months - $3,000 Fine)",
+       "Possession with Intent to Distribute (Felony, 7 Months - $3,000 Fine)",
+       "Operating a Drug House (Felony, 7 Months - $3,000 Fine)",
+       "Public Sale of Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Drug Paraphernalia (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Dumping (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Overfishing (Infraction, $250 Fine)",
+       "Illegal Logging (Felony, 7 Months - $3,000 Fine)",
+       "Endangered Species Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Mining (Felony, 7 Months - $3,000 Fine)",
+       "Poaching (Felony, 7 Months - $3,000 Fine)",
+       "Careless or Reckless Aircraft Operation (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Operating Without a Pilot Certificate (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Consuming Personal Alcohol Aboard an Aircraft (Misdemeanor, 5 Months - $2,500 Fine)",
+       "Boarding While Intoxicated (Misdemeanor, 5 Months - $1,500 Fine)",
+       "Undeclared Hazardous Materials (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Falsification of FAA Records (Felony, 10 Months - $2,500 Fine)",
+       "Violation of a Temporary Flight Restriction (Felony, 5 Months - $3,500 Fine)",
+       "Operating an Aircraft to Facilitate Drug Trafficking (Felony, 20 Months - $5,000 Fine)",
+       "Assault Aboard an Aircraft (Felony, 15 Months - $2,500 Fine)",
+       "Carrying a Weapon Aboard an Aircraft (Felony, 15 Months - $5,000 Fine)",
+       "Carrying an Explosive or Incendiary Device Aboard (Felony, 20 Months - $5,000 Fine)",
+       "Aircraft Hijacking (Felony, 20 Months - $5,000 Fine)",
+       "Criminal Transportation of Hazardous Materials (Felony, 15 Months - $2,500 Fine)",
+       "Failure to Declare an Item (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Importing Prohibited Agricultural Items (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare a Firearm (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare Prescription Medication (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Improper Entry (Felony, 15 Months - $5,000 Fine)",
+       "Illegal Re-entry (Felony, 20 Months - $5,000 Fine)",
+       "Alien Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Attempted Human Smuggling (Felony, 15 Months - $2,500 Fine)",
+       "Conspiracy to Commit Human Trafficking (Felony, 15 Months - $5,000 Fine)",
+       "Visa or Immigration-Document Fraud (Felony, 15 Months - $5,000 Fine)",
+       "Unlawful Transportation (Felony, 15 Months - $2,500 Fine)",
+       "Bringing a Person Through an Unauthorized Location (Felony, 15 Months - $3,500 Fine)",
+       "Passport Forgery or False Use (Felony, 15 Months - $2,500 Fine)",
+       "High-Speed Flight From an Immigration Checkpoint (Felony, 10 Months - $2,500 Fine)",
+       "Forcibly Resisting or Impeding a Federal Agent (Felony, 10 Months - $500 Fine)",
+       "Aggravated Assault on a Federal Agent (Felony, 15 Months - $2,000 Fine)",
+       "False Statements to a Federal Agent (Felony, 5 Months - $500 Fine)",
+       "Possession of Contraband at a Checkpoint (Felony, 10 Months - $1,000 Fine)",
+       "Alien Smuggling Discovered at a Checkpoint (Felony, 15 Months - $2,000 Fine)",
+       "False Customs Declaration (Felony, 10 Months - $2,500 Fine)",
+       "Smuggling Goods Into the United States (Felony, 10 Months - $1,000 Fine)",
+       "Undeclared Currency or Monetary Instruments (Felony, 15 Months - $2,000 Fine)",
+       "Illegal Importation of a Firearm (Felony, 7 Months - $1,000 Fine)",
+       "Firearm Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Drug Smuggling Through Concealment (Felony, 20 Months - $5,000 Fine)",
+       "Filing a False Police Report (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Arrest (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Appear in Court (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Report a Crime (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Providing False Identification (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violation Of Probation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "False 911 Call (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Without Violence (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Comply (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Obstruction (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Trespassing on Government Property (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Threats (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sightseeing at the Scene of an Emergency (Misdemeanor, 6 Months - $1,200 Fine)",
+       "Unlawful Assembly (Infraction, $250 Fine)",
+       "Littering (Infraction, $250 Fine)",
+       "Perjury (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Police Officer (Felony, 7 Months - $3,000 Fine)",
+       "Escaping Custody (Felony, 7 Months - $3,000 Fine)",
+       "Aiding and Abetting (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Peace Officer (Felony, 7 Months - $3,000 Fine)",
+       "Involuntary Manslaughter (Felony, 15 Months - $6,000 Fine)",
+       "Marked Bills (Felony, 9 Months - $3,000 Fine)",
+       "Vehicle Burglary (Felony, 7 Months - $3,000 Fine)",
+       "Grave Robbery (Felony, 15 Months - $3,000 Fine)",
+       "Vandalism (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Shoplifting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Petty Theft (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Possession of Stolen Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Graffiti (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Piracy (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Unauthorized Use of a Vehicle (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Illegal Squatting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Destruction of Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Trespassing (Infraction, $250 Fine)",
+       "Burglary (Felony, 11 Months - $6,000 Fine)",
+       "Arson (Felony, 14 Months - $10,000 Fine)",
+       "Credit Card Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Breaking and Entering (Felony, 5 Months - $3,000 Fine)",
+       "Identity Theft (Felony, 5 Months - $3,000 Fine)",
+       "Theft of Public Property (Felony, 5 Months - $3,000 Fine)",
+       "Extortion (Felony, 5 Months - $3,000 Fine)",
+       "Attempted Robbery (Felony, 8 Months - $3,000 Fine)",
+       "Disorderly Conduct (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Intoxication (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Indecent Exposure (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Mischief (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Aiding & Abetting (Misdemeanor) (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Identify (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Loitering (Infraction, $250 Fine)",
+       "Disturbing the Peace (Infraction, $250 Fine)",
+       "Illegal Protests (Infraction, $250 Fine)",
+       "Rioting (Felony, 7 Months - $3,000 Fine)",
+       "Bribery (Felony, 7 Months - $3,000 Fine)",
+       "Inciting a Riot (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Immigration (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Driving Without a License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Road Rage Incident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Attempted Grand Theft Auto (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Leaving the Scene of a Vehicle Accident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Careless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Operating a Vehicle with Suspended License (Misdemeanor)",
+       "Driving a Motorcycle Without a Motorcycle License (Misdemeanor, $500 Fine)",
+       "Speeding (Infraction, $250 Fine)",
+       "Running a Red Light (Infraction, $250 Fine)",
+       "Driving Without Insurance (Infraction, $250 Fine)",
+       "Failure to Yield (Infraction, $250 Fine)",
+       "Illegal U-Turn (Infraction, $250 Fine)",
+       "Driving Without Headlights (Infraction, $250 Fine)",
+       "Driving in the Wrong Direction (Infraction, $250 Fine)",
+       "Illegal Parking in Handicap Zones (Infraction, $250 Fine)",
+       "Excessive Window Tinting (Infraction, $250 Fine)",
+       "Failure to Maintain Lanes (Infraction, $250 Fine)",
+       "Unsafe Passing (Infraction, $250 Fine)",
+       "Failure to Yield to an Emergency Vehicle (Infraction, $250 Fine)",
+       "Obstructed License Plate (Infraction, $250 Fine)",
+       "Unsafe Hauling (Infraction, $250 Fine)",
+       "Parking in a Fire Zone (Infraction, $250 Fine)",
+       "Failure to Yield to a Traffic Device (Infraction, $250 Fine)",
+       "Improper Vehicle Safety Equipment (Infraction, $250 Fine)",
+       "Operating an Unroadworthy Vehicle on a Public Roadway (Infraction, $250 Fine)",
+       "Lighting Violation (Infraction, $250 Fine)",
+       "Improper Parking, Stopping, or Standing (Infraction, $250 Fine)",
+       "Unsafe Lane Changes (Infraction, $250 Fine)",
+       "Operating a Motorcycle Without a Helmet (Infraction, $250 Fine)",
+       "Impeding Traffic (Infraction, $250 Fine)",
+       "Using a Handheld Device While Driving (Infraction, $250 Fine)",
+       "Improper Use of Horn (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrian in Crosswalk (Infraction, $250 Fine)",
+       "Crossing a Double Yellow Line (Infraction, $250 Fine)",
+       "Passing on the Shoulder (Infraction, $250 Fine)",
+       "Towing Without a License (Infraction, $500 Fine)",
+       "Move Over Law (Infraction, $250 Fine)",
+       "Illegally Parked in a No Parking Zone (Infraction, $250 Fine)",
+       "Failure to Pay for Parking Meter (Infraction, $250 Fine)",
+       "Blocking a Driveway (Infraction, $250 Fine)",
+       "Blocking a Crosswalk (Infraction, $250 Fine)",
+       "Facing the Wrong Way (Infraction, $250 Fine)",
+       "Bus Stop Violation (Infraction, $250 Fine)",
+       "Blocking an Intersection (Infraction, $250 Fine)",
+       "Parking Within 15 Feet of a Fire Station Driveway (Infraction, $250 Fine)",
+       "Blocking Railroad Crossing (Infraction, $250 Fine)",
+       "Parking on a Sidewalk Median or Divider (Infraction, $250 Fine)",
+       "Unregistered Vehicle (Infraction, $250 Fine)",
+       "Towing Without a Valid Operator's License (Infraction, $500 Fine)",
+       "Failure to Signal (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrians (Infraction, $250 Fine)",
+       "Blocking Emergency Access Lanes (Infraction, $250 Fine)",
+       "Expired Insurance (Infraction, $250 Fine)",
+       "Fictitious Plate (Infraction, $250 Fine)",
+       "Prohibited Underglow Lighting (Infraction, $250 Fine)",
+       "Tailgating (Infraction, $250 Fine)",
+       "Plate Violation (Infraction, $250 Fine)",
+       "Operating a Vehicle While Using a Miscellaneous Object (Infraction, $500 Fine)",
+       "Occupying a Side of the Freeway (Infraction, $250 Fine)",
+       "Parking in an Alley Way (Infraction, $250 Fine)",
+       "Unlawful Riding in a Vehicle (Infraction, $500 Fine)",
+       "Driving Under the Influence (DUI) (Felony, 7 Months - $3,000 Fine)",
+       "Hit and Run (Felony, 7 Months - $3,000 Fine)",
+       "Street Racing (Felony, 7 Months - $3,000 Fine)",
+       "Fleeing/Attempting to Elude (Felony, 7 Months - $3,000 Fine)",
+       "Possession of a Stolen Vehicle (Felony, 7 Months - $3,000 Fine)",
+       "Felony Speeding (Felony, 9 Months - $6,000 Fine)",
+       "Grand Theft Auto (Felony, 7 Months - $6,000 Fine)",
+       "Assault (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Battery (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Reckless Endangerment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Stalking (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Robbery (Felony, 15 Months - $6,000 Fine)",
+       "Homicide (Felony, 18 Months - $10,000 Fine)",
+       "Domestic Violence (Felony, 15 Months - $6,000 Fine)",
+       "Kidnapping (Felony, 18 Months - $10,000 Fine)",
+       "Aggravated Assault (Felony, 18 Months - $10,000 Fine)",
+       "Terroristic Threats (Felony, 7 Months - $3,000 Fine)",
+       "Vehicular Manslaughter (Felony, 18 Months - $10,000 Fine)",
+       "Attempted Murder of a Government Official (Felony, 18 Months - $6,000 Fine)",
+       "Brandishing a Firearm in Public (Felony, 15 Months - $6,000 Fine)",
+       "Assault of a Peace Officer (Felony, 15 Months - $6,000 Fine)",
+       "Attempted Murder (Felony, 18 Months - $10,000 Fine)",
+       "Armed Robbery (Felony, 18 Months - $9,000 Fine)",
+       "Aggravated Battery (Felony, 15 Months - $6,000 Fine)",
+       "Battery on a Law Enforcement Officer (Felony, 15 Months - $6,000 Fine)",
+       "Second-Degree Murder (Felony, 15 Months - $6,000 Fine)",
+       "Capital Murder (Felony, 15 Months - $6,000 Fine)",
+       "Carjacking (Felony, 15 Months - $6,000 Fine)",
+       "Solicitation to Commit Murder (Felony, 9 Months - $10,000 Fine)",
+       "Obstructing Justice (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Assault Weapon (Felony, 7 Months - $2,250 Fine)",
+       "Brandishing a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Using a Weapon While Intoxicated (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Secure a Firearm (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Carrying a Loaded Firearm in Public (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Negligent Use of a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Possession of a Firearm Without a License (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Report Lost/Stolen Firearm (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Firearm in a Restricted Zone (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Carrying a Concealed Weapon Without Permit (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Sale of Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Unlawful Discharge of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Prohibited Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Weapon in a Restricted Area (Felony, 15 Months - $6,000 Fine)",
+       "Trafficking Illegal Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Modifying a Firearm Illegally (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Firearm Without a Serial Number (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Stolen Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Open Carry (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Firearm Discharge (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of Deadly Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Discharge of a Firearm in City Limits (Felony, 15 Months - $6,000 Fine)",
+       "Unserialized (\"Ghost\") Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Carrying Firearm While Masked (Felony, 15 Months - $6,000 Fine)",
+       "Undetectable Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Sale to Prohibited Person (Felony, 15 Months - $6,000 Fine)",
+       "Straw Purchase of Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of an Unregistered Firearm (Felony, 9 Months)",
+       "Illegal Transfer of a Firearm (Felony, 12 Months - $6,000 Fine)",
+       "Possession of Ammunition by a Felon (Felony, 9 Months - $4,000 Fine)",
+       "Possession of Explosive Device(s) (Felony, 18 Months - $8,000 Fine)",
+       "Carrying a Firearm While Being Underage (Felony, 9 Months - $2,000 Fine)",
+       "Possession of a Weapon in Commission of a Crime (Felony, 12 Months - $6,000 Fine)",
+       "Possession of an Illegal Firearm Modification (Felony, 12 Months - $1,200 Fine)",
+       "Embezzlement (Felony, 11 Months - $6,000 Fine)",
+       "Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Tax Evasion (Felony, 5 Months - $3,000 Fine)",
+       "Money Laundering (Felony, 5 Months - $3,000 Fine)",
+       "Insider Trading (Felony, 5 Months - $3,000 Fine)",
+       "Forgery (Felony, 5 Months - $3,000 Fine)",
+       "Cybercrime (Felony, 5 Months - $3,000 Fine)",
+       "Healthcare Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Ponzi Scheme (Felony, 5 Months - $3,000 Fine)",
+       "Counterfeiting (Felony, 5 Months - $3,000 Fine)",
+       "Corporate Espionage (Felony, 5 Months - $3,000 Fine)",
+       "Animal Abuse and Cruelty (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Possession of Illegally Taken Wildlife (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Importation of Restricted Animals (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Exceeding Daily Catch Limits (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Out of Season or in Protected Areas (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sale of Illegally Taken Fish (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Endangered Species Violation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Using Illegal Fishing Gear or Methods (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Without a License (Infraction, $250 Fine)"
+      ]
+     },
+     {
+      "id": "count",
+      "label": "Count",
+      "type": "text",
+      "placeholder": "1",
+      "width": "narrow"
+     }
+    ],
+    "check": {
+     "id": "",
+     "label": ""
+    },
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Traffic Stop Report"
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Vehicle Information",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Impound Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "imMake",
+      "label": "Make",
+      "type": "text",
+      "placeholder": "Declasse"
+     },
+     {
+      "id": "imModel",
+      "label": "Model",
+      "type": "text",
+      "placeholder": "Vigero"
+     },
+     {
+      "id": "imColor",
+      "label": "Color",
+      "type": "select",
+      "options": [
+       "White",
+       "Black",
+       "Silver",
+       "Gray",
+       "Red",
+       "Blue",
+       "Green",
+       "Yellow",
+       "Orange",
+       "Brown",
+       "Beige",
+       "Gold",
+       "Purple",
+       "Maroon"
+      ],
+      "blank": true
+     },
+     {
+      "id": "imPlate",
+      "label": "Plate",
+      "type": "text",
+      "placeholder": "8XYZ442",
+      "required": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Impound Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "imReason",
+      "label": "Reason for Impound",
+      "type": "select",
+      "options": [
+       "Arrest of Driver",
+       "Abandoned",
+       "Stolen",
+       "Evidence Hold",
+       "Illegal Parking",
+       "Street Racing",
+       "Reckless Driving",
+       "Other"
+      ],
+      "required": true,
+      "blank": true
+     },
+     {
+      "id": "imInv",
+      "label": "Inventory Search Completed",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Impound Report"
+     ]
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "imItems",
+    "title": "ITEMS FOUND",
+    "addLabel": "+ Add Item",
+    "columns": [
+     {
+      "id": "item",
+      "label": "Item",
+      "type": "text",
+      "placeholder": "Duffel bag"
+     },
+     {
+      "id": "where",
+      "label": "Where found / notes",
+      "type": "text",
+      "width": "wide"
+     }
+    ],
+    "check": {
+     "id": "",
+     "label": ""
+    },
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Impound Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "imLot",
+      "label": "Impound Lot Location",
+      "type": "text",
+      "placeholder": "Davis Impound"
+     },
+     {
+      "id": "imOwner",
+      "label": "Registered Owner Notified",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Impound Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "imStart",
+      "label": "Time Initiated",
+      "type": "time"
+     },
+     {
+      "id": "imEnd",
+      "label": "Time Terminated",
+      "type": "time"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Impound Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "puReason",
+      "label": "Reason for Pursuit",
+      "type": "text",
+      "placeholder": "Failure to yield after a traffic stop",
+      "required": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Suspect Vehicle",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "puVeh",
+      "label": "Make / Model",
+      "type": "text",
+      "placeholder": "Pegassi Zentorno"
+     },
+     {
+      "id": "puColor",
+      "label": "Color",
+      "type": "select",
+      "options": [
+       "White",
+       "Black",
+       "Silver",
+       "Gray",
+       "Red",
+       "Blue",
+       "Green",
+       "Yellow",
+       "Orange",
+       "Brown",
+       "Beige",
+       "Gold",
+       "Purple",
+       "Maroon"
+      ],
+      "blank": true
+     },
+     {
+      "id": "puPlate",
+      "label": "Plate",
+      "type": "text",
+      "placeholder": "4FAST44"
+     },
+     {
+      "id": "puOcc",
+      "label": "Occupants",
+      "type": "text",
+      "placeholder": "2"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Pursuit Details",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "puTop",
+      "label": "Top Speed",
+      "type": "text",
+      "placeholder": "140 mph"
+     },
+     {
+      "id": "puTraffic",
+      "label": "Traffic Conditions",
+      "type": "text",
+      "placeholder": "Moderate"
+     },
+     {
+      "id": "puStart",
+      "label": "Started",
+      "type": "time"
+     },
+     {
+      "id": "puEnd",
+      "label": "Ended",
+      "type": "time"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "puUnits",
+      "label": "Units Involved",
+      "type": "officers",
+      "allowTyped": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "checklist",
+    "id": "puTactics",
+    "title": "TACTICS USED",
+    "colTopic": "Item",
+    "colStandard": "",
+    "colCheck": "✓",
+    "items": [
+     {
+      "topic": "Pursuit Intervention (PIT)",
+      "standard": ""
+     },
+     {
+      "topic": "Spike Strips",
+      "standard": ""
+     },
+     {
+      "topic": "Rolling Roadblock",
+      "standard": ""
+     },
+     {
+      "topic": "Air Unit",
+      "standard": ""
+     },
+     {
+      "topic": "Terminated Due to Risk",
+      "standard": ""
+     }
+    ],
+    "display": "selected",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "puOutcome",
+      "label": "Outcome",
+      "type": "select",
+      "options": [
+       "Suspect Arrested",
+       "Suspect Escaped",
+       "Vehicle Disabled",
+       "Crash"
+      ],
+      "required": true,
+      "blank": true
+     },
+     {
+      "id": "puSup",
+      "label": "Supervisor Approval",
+      "type": "officer"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "puDamage",
+      "label": "Property Damage",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     },
+     {
+      "id": "puInj",
+      "label": "Injuries",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "longtext",
+    "id": "puNarr",
+    "title": "PURSUIT NARRATIVE",
+    "maxLength": 2000,
+    "hint": "Where it started, the route, why it ended.",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "puCharges",
+    "title": "CHARGES / CITATIONS",
+    "addLabel": "+ Add Charge",
+    "totals": {
+     "on": true,
+     "col": "charge",
+     "countCol": "count"
+    },
+    "columns": [
+     {
+      "id": "charge",
+      "label": "Charge (type to search)",
+      "type": "search",
+      "options": [
+       "Driving a boat under the influence of alcohol or drugs (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violating boating safety regulations (Misdemeanor, 4 Months - $1,000 Fine)",
+       "No Wake Zone (Misdemeanor, $1,750 Fine)",
+       "Operating a vessel without the proper registration (Infraction, $250 Fine)",
+       "Speed Limits and Reckless Operation for a vessel (Infraction, $250 Fine)",
+       "Driving Without a Commercial Driver's License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Submit Vehicle to Inspection (Misdemeanor, 4 Months - $2,250 Fine)",
+       "Overweight Vehicle (Infraction, $250 Fine)",
+       "Defective Equipment (Infraction, $250 Fine)",
+       "Inadequate Safety Inspections (Infraction, $250 Fine)",
+       "Failure to Maintain Logbooks (Infraction, $250 Fine)",
+       "Improper Transport of Hazardous Materials (Infraction, $250 Fine)",
+       "Failure to Carry Proper Documentation (Infraction, $250 Fine)",
+       "Driving Without Proper Permits (Infraction, $250 Fine)",
+       "Hours of Service Violation (Infraction, $250 Fine)",
+       "Medical Certificate Violation (Infraction, $250 Fine)",
+       "Improper Load Securement (Infraction, $250 Fine)",
+       "Online Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Phishing (Felony, 7 Months - $3,000 Fine)",
+       "Unauthorized Access to Computer Systems (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Controlled Substances (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Drug Use (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Drug Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Driving Under Drug Influence (Felony, 7 Months - $3,000 Fine)",
+       "Cultivation of Illegal Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Drug Manufacturing (Felony, 7 Months - $3,000 Fine)",
+       "Prescription Fraud (Felony, 7 Months - $3,000 Fine)",
+       "Possession with Intent to Distribute (Felony, 7 Months - $3,000 Fine)",
+       "Operating a Drug House (Felony, 7 Months - $3,000 Fine)",
+       "Public Sale of Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Drug Paraphernalia (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Dumping (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Overfishing (Infraction, $250 Fine)",
+       "Illegal Logging (Felony, 7 Months - $3,000 Fine)",
+       "Endangered Species Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Mining (Felony, 7 Months - $3,000 Fine)",
+       "Poaching (Felony, 7 Months - $3,000 Fine)",
+       "Careless or Reckless Aircraft Operation (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Operating Without a Pilot Certificate (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Consuming Personal Alcohol Aboard an Aircraft (Misdemeanor, 5 Months - $2,500 Fine)",
+       "Boarding While Intoxicated (Misdemeanor, 5 Months - $1,500 Fine)",
+       "Undeclared Hazardous Materials (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Falsification of FAA Records (Felony, 10 Months - $2,500 Fine)",
+       "Violation of a Temporary Flight Restriction (Felony, 5 Months - $3,500 Fine)",
+       "Operating an Aircraft to Facilitate Drug Trafficking (Felony, 20 Months - $5,000 Fine)",
+       "Assault Aboard an Aircraft (Felony, 15 Months - $2,500 Fine)",
+       "Carrying a Weapon Aboard an Aircraft (Felony, 15 Months - $5,000 Fine)",
+       "Carrying an Explosive or Incendiary Device Aboard (Felony, 20 Months - $5,000 Fine)",
+       "Aircraft Hijacking (Felony, 20 Months - $5,000 Fine)",
+       "Criminal Transportation of Hazardous Materials (Felony, 15 Months - $2,500 Fine)",
+       "Failure to Declare an Item (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Importing Prohibited Agricultural Items (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare a Firearm (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare Prescription Medication (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Improper Entry (Felony, 15 Months - $5,000 Fine)",
+       "Illegal Re-entry (Felony, 20 Months - $5,000 Fine)",
+       "Alien Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Attempted Human Smuggling (Felony, 15 Months - $2,500 Fine)",
+       "Conspiracy to Commit Human Trafficking (Felony, 15 Months - $5,000 Fine)",
+       "Visa or Immigration-Document Fraud (Felony, 15 Months - $5,000 Fine)",
+       "Unlawful Transportation (Felony, 15 Months - $2,500 Fine)",
+       "Bringing a Person Through an Unauthorized Location (Felony, 15 Months - $3,500 Fine)",
+       "Passport Forgery or False Use (Felony, 15 Months - $2,500 Fine)",
+       "High-Speed Flight From an Immigration Checkpoint (Felony, 10 Months - $2,500 Fine)",
+       "Forcibly Resisting or Impeding a Federal Agent (Felony, 10 Months - $500 Fine)",
+       "Aggravated Assault on a Federal Agent (Felony, 15 Months - $2,000 Fine)",
+       "False Statements to a Federal Agent (Felony, 5 Months - $500 Fine)",
+       "Possession of Contraband at a Checkpoint (Felony, 10 Months - $1,000 Fine)",
+       "Alien Smuggling Discovered at a Checkpoint (Felony, 15 Months - $2,000 Fine)",
+       "False Customs Declaration (Felony, 10 Months - $2,500 Fine)",
+       "Smuggling Goods Into the United States (Felony, 10 Months - $1,000 Fine)",
+       "Undeclared Currency or Monetary Instruments (Felony, 15 Months - $2,000 Fine)",
+       "Illegal Importation of a Firearm (Felony, 7 Months - $1,000 Fine)",
+       "Firearm Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Drug Smuggling Through Concealment (Felony, 20 Months - $5,000 Fine)",
+       "Filing a False Police Report (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Arrest (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Appear in Court (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Report a Crime (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Providing False Identification (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violation Of Probation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "False 911 Call (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Without Violence (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Comply (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Obstruction (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Trespassing on Government Property (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Threats (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sightseeing at the Scene of an Emergency (Misdemeanor, 6 Months - $1,200 Fine)",
+       "Unlawful Assembly (Infraction, $250 Fine)",
+       "Littering (Infraction, $250 Fine)",
+       "Perjury (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Police Officer (Felony, 7 Months - $3,000 Fine)",
+       "Escaping Custody (Felony, 7 Months - $3,000 Fine)",
+       "Aiding and Abetting (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Peace Officer (Felony, 7 Months - $3,000 Fine)",
+       "Involuntary Manslaughter (Felony, 15 Months - $6,000 Fine)",
+       "Marked Bills (Felony, 9 Months - $3,000 Fine)",
+       "Vehicle Burglary (Felony, 7 Months - $3,000 Fine)",
+       "Grave Robbery (Felony, 15 Months - $3,000 Fine)",
+       "Vandalism (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Shoplifting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Petty Theft (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Possession of Stolen Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Graffiti (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Piracy (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Unauthorized Use of a Vehicle (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Illegal Squatting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Destruction of Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Trespassing (Infraction, $250 Fine)",
+       "Burglary (Felony, 11 Months - $6,000 Fine)",
+       "Arson (Felony, 14 Months - $10,000 Fine)",
+       "Credit Card Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Breaking and Entering (Felony, 5 Months - $3,000 Fine)",
+       "Identity Theft (Felony, 5 Months - $3,000 Fine)",
+       "Theft of Public Property (Felony, 5 Months - $3,000 Fine)",
+       "Extortion (Felony, 5 Months - $3,000 Fine)",
+       "Attempted Robbery (Felony, 8 Months - $3,000 Fine)",
+       "Disorderly Conduct (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Intoxication (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Indecent Exposure (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Mischief (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Aiding & Abetting (Misdemeanor) (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Identify (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Loitering (Infraction, $250 Fine)",
+       "Disturbing the Peace (Infraction, $250 Fine)",
+       "Illegal Protests (Infraction, $250 Fine)",
+       "Rioting (Felony, 7 Months - $3,000 Fine)",
+       "Bribery (Felony, 7 Months - $3,000 Fine)",
+       "Inciting a Riot (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Immigration (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Driving Without a License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Road Rage Incident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Attempted Grand Theft Auto (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Leaving the Scene of a Vehicle Accident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Careless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Operating a Vehicle with Suspended License (Misdemeanor)",
+       "Driving a Motorcycle Without a Motorcycle License (Misdemeanor, $500 Fine)",
+       "Speeding (Infraction, $250 Fine)",
+       "Running a Red Light (Infraction, $250 Fine)",
+       "Driving Without Insurance (Infraction, $250 Fine)",
+       "Failure to Yield (Infraction, $250 Fine)",
+       "Illegal U-Turn (Infraction, $250 Fine)",
+       "Driving Without Headlights (Infraction, $250 Fine)",
+       "Driving in the Wrong Direction (Infraction, $250 Fine)",
+       "Illegal Parking in Handicap Zones (Infraction, $250 Fine)",
+       "Excessive Window Tinting (Infraction, $250 Fine)",
+       "Failure to Maintain Lanes (Infraction, $250 Fine)",
+       "Unsafe Passing (Infraction, $250 Fine)",
+       "Failure to Yield to an Emergency Vehicle (Infraction, $250 Fine)",
+       "Obstructed License Plate (Infraction, $250 Fine)",
+       "Unsafe Hauling (Infraction, $250 Fine)",
+       "Parking in a Fire Zone (Infraction, $250 Fine)",
+       "Failure to Yield to a Traffic Device (Infraction, $250 Fine)",
+       "Improper Vehicle Safety Equipment (Infraction, $250 Fine)",
+       "Operating an Unroadworthy Vehicle on a Public Roadway (Infraction, $250 Fine)",
+       "Lighting Violation (Infraction, $250 Fine)",
+       "Improper Parking, Stopping, or Standing (Infraction, $250 Fine)",
+       "Unsafe Lane Changes (Infraction, $250 Fine)",
+       "Operating a Motorcycle Without a Helmet (Infraction, $250 Fine)",
+       "Impeding Traffic (Infraction, $250 Fine)",
+       "Using a Handheld Device While Driving (Infraction, $250 Fine)",
+       "Improper Use of Horn (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrian in Crosswalk (Infraction, $250 Fine)",
+       "Crossing a Double Yellow Line (Infraction, $250 Fine)",
+       "Passing on the Shoulder (Infraction, $250 Fine)",
+       "Towing Without a License (Infraction, $500 Fine)",
+       "Move Over Law (Infraction, $250 Fine)",
+       "Illegally Parked in a No Parking Zone (Infraction, $250 Fine)",
+       "Failure to Pay for Parking Meter (Infraction, $250 Fine)",
+       "Blocking a Driveway (Infraction, $250 Fine)",
+       "Blocking a Crosswalk (Infraction, $250 Fine)",
+       "Facing the Wrong Way (Infraction, $250 Fine)",
+       "Bus Stop Violation (Infraction, $250 Fine)",
+       "Blocking an Intersection (Infraction, $250 Fine)",
+       "Parking Within 15 Feet of a Fire Station Driveway (Infraction, $250 Fine)",
+       "Blocking Railroad Crossing (Infraction, $250 Fine)",
+       "Parking on a Sidewalk Median or Divider (Infraction, $250 Fine)",
+       "Unregistered Vehicle (Infraction, $250 Fine)",
+       "Towing Without a Valid Operator's License (Infraction, $500 Fine)",
+       "Failure to Signal (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrians (Infraction, $250 Fine)",
+       "Blocking Emergency Access Lanes (Infraction, $250 Fine)",
+       "Expired Insurance (Infraction, $250 Fine)",
+       "Fictitious Plate (Infraction, $250 Fine)",
+       "Prohibited Underglow Lighting (Infraction, $250 Fine)",
+       "Tailgating (Infraction, $250 Fine)",
+       "Plate Violation (Infraction, $250 Fine)",
+       "Operating a Vehicle While Using a Miscellaneous Object (Infraction, $500 Fine)",
+       "Occupying a Side of the Freeway (Infraction, $250 Fine)",
+       "Parking in an Alley Way (Infraction, $250 Fine)",
+       "Unlawful Riding in a Vehicle (Infraction, $500 Fine)",
+       "Driving Under the Influence (DUI) (Felony, 7 Months - $3,000 Fine)",
+       "Hit and Run (Felony, 7 Months - $3,000 Fine)",
+       "Street Racing (Felony, 7 Months - $3,000 Fine)",
+       "Fleeing/Attempting to Elude (Felony, 7 Months - $3,000 Fine)",
+       "Possession of a Stolen Vehicle (Felony, 7 Months - $3,000 Fine)",
+       "Felony Speeding (Felony, 9 Months - $6,000 Fine)",
+       "Grand Theft Auto (Felony, 7 Months - $6,000 Fine)",
+       "Assault (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Battery (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Reckless Endangerment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Stalking (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Robbery (Felony, 15 Months - $6,000 Fine)",
+       "Homicide (Felony, 18 Months - $10,000 Fine)",
+       "Domestic Violence (Felony, 15 Months - $6,000 Fine)",
+       "Kidnapping (Felony, 18 Months - $10,000 Fine)",
+       "Aggravated Assault (Felony, 18 Months - $10,000 Fine)",
+       "Terroristic Threats (Felony, 7 Months - $3,000 Fine)",
+       "Vehicular Manslaughter (Felony, 18 Months - $10,000 Fine)",
+       "Attempted Murder of a Government Official (Felony, 18 Months - $6,000 Fine)",
+       "Brandishing a Firearm in Public (Felony, 15 Months - $6,000 Fine)",
+       "Assault of a Peace Officer (Felony, 15 Months - $6,000 Fine)",
+       "Attempted Murder (Felony, 18 Months - $10,000 Fine)",
+       "Armed Robbery (Felony, 18 Months - $9,000 Fine)",
+       "Aggravated Battery (Felony, 15 Months - $6,000 Fine)",
+       "Battery on a Law Enforcement Officer (Felony, 15 Months - $6,000 Fine)",
+       "Second-Degree Murder (Felony, 15 Months - $6,000 Fine)",
+       "Capital Murder (Felony, 15 Months - $6,000 Fine)",
+       "Carjacking (Felony, 15 Months - $6,000 Fine)",
+       "Solicitation to Commit Murder (Felony, 9 Months - $10,000 Fine)",
+       "Obstructing Justice (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Assault Weapon (Felony, 7 Months - $2,250 Fine)",
+       "Brandishing a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Using a Weapon While Intoxicated (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Secure a Firearm (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Carrying a Loaded Firearm in Public (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Negligent Use of a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Possession of a Firearm Without a License (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Report Lost/Stolen Firearm (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Firearm in a Restricted Zone (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Carrying a Concealed Weapon Without Permit (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Sale of Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Unlawful Discharge of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Prohibited Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Weapon in a Restricted Area (Felony, 15 Months - $6,000 Fine)",
+       "Trafficking Illegal Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Modifying a Firearm Illegally (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Firearm Without a Serial Number (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Stolen Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Open Carry (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Firearm Discharge (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of Deadly Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Discharge of a Firearm in City Limits (Felony, 15 Months - $6,000 Fine)",
+       "Unserialized (\"Ghost\") Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Carrying Firearm While Masked (Felony, 15 Months - $6,000 Fine)",
+       "Undetectable Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Sale to Prohibited Person (Felony, 15 Months - $6,000 Fine)",
+       "Straw Purchase of Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of an Unregistered Firearm (Felony, 9 Months)",
+       "Illegal Transfer of a Firearm (Felony, 12 Months - $6,000 Fine)",
+       "Possession of Ammunition by a Felon (Felony, 9 Months - $4,000 Fine)",
+       "Possession of Explosive Device(s) (Felony, 18 Months - $8,000 Fine)",
+       "Carrying a Firearm While Being Underage (Felony, 9 Months - $2,000 Fine)",
+       "Possession of a Weapon in Commission of a Crime (Felony, 12 Months - $6,000 Fine)",
+       "Possession of an Illegal Firearm Modification (Felony, 12 Months - $1,200 Fine)",
+       "Embezzlement (Felony, 11 Months - $6,000 Fine)",
+       "Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Tax Evasion (Felony, 5 Months - $3,000 Fine)",
+       "Money Laundering (Felony, 5 Months - $3,000 Fine)",
+       "Insider Trading (Felony, 5 Months - $3,000 Fine)",
+       "Forgery (Felony, 5 Months - $3,000 Fine)",
+       "Cybercrime (Felony, 5 Months - $3,000 Fine)",
+       "Healthcare Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Ponzi Scheme (Felony, 5 Months - $3,000 Fine)",
+       "Counterfeiting (Felony, 5 Months - $3,000 Fine)",
+       "Corporate Espionage (Felony, 5 Months - $3,000 Fine)",
+       "Animal Abuse and Cruelty (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Possession of Illegally Taken Wildlife (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Importation of Restricted Animals (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Exceeding Daily Catch Limits (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Out of Season or in Protected Areas (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sale of Illegally Taken Fish (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Endangered Species Violation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Using Illegal Fishing Gear or Methods (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Without a License (Infraction, $250 Fine)"
+      ]
+     },
+     {
+      "id": "count",
+      "label": "Count",
+      "type": "text",
+      "placeholder": "1",
+      "width": "narrow"
+     }
+    ],
+    "check": {
+     "id": "",
+     "label": ""
+    },
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Vehicle Pursuit Report"
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Driver Information",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "duName",
+      "label": "Name",
+      "type": "text",
+      "placeholder": "Trevor Phillips",
+      "required": true
+     },
+     {
+      "id": "duId",
+      "label": "State ID",
+      "type": "text",
+      "placeholder": "SA-5551234"
+     },
+     {
+      "id": "duDob",
+      "label": "DOB",
+      "type": "date"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "duMake",
+      "label": "Make",
+      "type": "text",
+      "placeholder": "Canis"
+     },
+     {
+      "id": "duModel",
+      "label": "Model",
+      "type": "text",
+      "placeholder": "Bodhi"
+     },
+     {
+      "id": "duPlate",
+      "label": "Plate",
+      "type": "text",
+      "placeholder": "2DRUNK2"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "checklist",
+    "id": "duObs",
+    "title": "INITIAL OBSERVATIONS",
+    "colTopic": "Item",
+    "colStandard": "",
+    "colCheck": "✓",
+    "items": [
+     {
+      "topic": "Odor of Alcohol",
+      "standard": ""
+     },
+     {
+      "topic": "Slurred Speech",
+      "standard": ""
+     },
+     {
+      "topic": "Bloodshot Eyes",
+      "standard": ""
+     },
+     {
+      "topic": "Unsteady Balance",
+      "standard": ""
+     },
+     {
+      "topic": "Admission of Drinking",
+      "standard": ""
+     }
+    ],
+    "display": "selected",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "checklist",
+    "id": "duFst",
+    "title": "FIELD SOBRIETY TESTS",
+    "colTopic": "Item",
+    "colStandard": "",
+    "colCheck": "✓",
+    "items": [
+     {
+      "topic": "Horizontal Gaze Nystagmus",
+      "standard": ""
+     },
+     {
+      "topic": "Walk and Turn",
+      "standard": ""
+     },
+     {
+      "topic": "One Leg Stand",
+      "standard": ""
+     }
+    ],
+    "display": "selected",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "duResult",
+      "label": "Test Result",
+      "type": "select",
+      "options": [
+       "Failed",
+       "Passed",
+       "Refused"
+      ],
+      "blank": true
+     },
+     {
+      "id": "duPbt",
+      "label": "Preliminary Breath Test",
+      "type": "text",
+      "placeholder": "Administered"
+     },
+     {
+      "id": "duBac",
+      "label": "BAC Reading",
+      "type": "text",
+      "placeholder": "0.14"
+     },
+     {
+      "id": "duRefused",
+      "label": "Refused",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "longtext",
+    "id": "duPc",
+    "title": "PROBABLE CAUSE STATEMENT",
+    "maxLength": 2000,
+    "hint": "What you saw, smelled and heard that gave you probable cause.",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "duArrest",
+      "label": "Arrest Made",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "required": true,
+      "blank": true
+     },
+     {
+      "id": "duDispo",
+      "label": "Vehicle Disposition",
+      "type": "select",
+      "options": [
+       "Released",
+       "Impounded"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "duCam",
+      "label": "Bodycam Active",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "duCharges",
+    "title": "CHARGES / CITATIONS",
+    "addLabel": "+ Add Charge",
+    "totals": {
+     "on": true,
+     "col": "charge",
+     "countCol": "count"
+    },
+    "columns": [
+     {
+      "id": "charge",
+      "label": "Charge (type to search)",
+      "type": "search",
+      "options": [
+       "Driving a boat under the influence of alcohol or drugs (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violating boating safety regulations (Misdemeanor, 4 Months - $1,000 Fine)",
+       "No Wake Zone (Misdemeanor, $1,750 Fine)",
+       "Operating a vessel without the proper registration (Infraction, $250 Fine)",
+       "Speed Limits and Reckless Operation for a vessel (Infraction, $250 Fine)",
+       "Driving Without a Commercial Driver's License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Submit Vehicle to Inspection (Misdemeanor, 4 Months - $2,250 Fine)",
+       "Overweight Vehicle (Infraction, $250 Fine)",
+       "Defective Equipment (Infraction, $250 Fine)",
+       "Inadequate Safety Inspections (Infraction, $250 Fine)",
+       "Failure to Maintain Logbooks (Infraction, $250 Fine)",
+       "Improper Transport of Hazardous Materials (Infraction, $250 Fine)",
+       "Failure to Carry Proper Documentation (Infraction, $250 Fine)",
+       "Driving Without Proper Permits (Infraction, $250 Fine)",
+       "Hours of Service Violation (Infraction, $250 Fine)",
+       "Medical Certificate Violation (Infraction, $250 Fine)",
+       "Improper Load Securement (Infraction, $250 Fine)",
+       "Online Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Phishing (Felony, 7 Months - $3,000 Fine)",
+       "Unauthorized Access to Computer Systems (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Controlled Substances (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Drug Use (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Drug Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Driving Under Drug Influence (Felony, 7 Months - $3,000 Fine)",
+       "Cultivation of Illegal Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Drug Manufacturing (Felony, 7 Months - $3,000 Fine)",
+       "Prescription Fraud (Felony, 7 Months - $3,000 Fine)",
+       "Possession with Intent to Distribute (Felony, 7 Months - $3,000 Fine)",
+       "Operating a Drug House (Felony, 7 Months - $3,000 Fine)",
+       "Public Sale of Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Drug Paraphernalia (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Dumping (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Overfishing (Infraction, $250 Fine)",
+       "Illegal Logging (Felony, 7 Months - $3,000 Fine)",
+       "Endangered Species Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Mining (Felony, 7 Months - $3,000 Fine)",
+       "Poaching (Felony, 7 Months - $3,000 Fine)",
+       "Careless or Reckless Aircraft Operation (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Operating Without a Pilot Certificate (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Consuming Personal Alcohol Aboard an Aircraft (Misdemeanor, 5 Months - $2,500 Fine)",
+       "Boarding While Intoxicated (Misdemeanor, 5 Months - $1,500 Fine)",
+       "Undeclared Hazardous Materials (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Falsification of FAA Records (Felony, 10 Months - $2,500 Fine)",
+       "Violation of a Temporary Flight Restriction (Felony, 5 Months - $3,500 Fine)",
+       "Operating an Aircraft to Facilitate Drug Trafficking (Felony, 20 Months - $5,000 Fine)",
+       "Assault Aboard an Aircraft (Felony, 15 Months - $2,500 Fine)",
+       "Carrying a Weapon Aboard an Aircraft (Felony, 15 Months - $5,000 Fine)",
+       "Carrying an Explosive or Incendiary Device Aboard (Felony, 20 Months - $5,000 Fine)",
+       "Aircraft Hijacking (Felony, 20 Months - $5,000 Fine)",
+       "Criminal Transportation of Hazardous Materials (Felony, 15 Months - $2,500 Fine)",
+       "Failure to Declare an Item (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Importing Prohibited Agricultural Items (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare a Firearm (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare Prescription Medication (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Improper Entry (Felony, 15 Months - $5,000 Fine)",
+       "Illegal Re-entry (Felony, 20 Months - $5,000 Fine)",
+       "Alien Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Attempted Human Smuggling (Felony, 15 Months - $2,500 Fine)",
+       "Conspiracy to Commit Human Trafficking (Felony, 15 Months - $5,000 Fine)",
+       "Visa or Immigration-Document Fraud (Felony, 15 Months - $5,000 Fine)",
+       "Unlawful Transportation (Felony, 15 Months - $2,500 Fine)",
+       "Bringing a Person Through an Unauthorized Location (Felony, 15 Months - $3,500 Fine)",
+       "Passport Forgery or False Use (Felony, 15 Months - $2,500 Fine)",
+       "High-Speed Flight From an Immigration Checkpoint (Felony, 10 Months - $2,500 Fine)",
+       "Forcibly Resisting or Impeding a Federal Agent (Felony, 10 Months - $500 Fine)",
+       "Aggravated Assault on a Federal Agent (Felony, 15 Months - $2,000 Fine)",
+       "False Statements to a Federal Agent (Felony, 5 Months - $500 Fine)",
+       "Possession of Contraband at a Checkpoint (Felony, 10 Months - $1,000 Fine)",
+       "Alien Smuggling Discovered at a Checkpoint (Felony, 15 Months - $2,000 Fine)",
+       "False Customs Declaration (Felony, 10 Months - $2,500 Fine)",
+       "Smuggling Goods Into the United States (Felony, 10 Months - $1,000 Fine)",
+       "Undeclared Currency or Monetary Instruments (Felony, 15 Months - $2,000 Fine)",
+       "Illegal Importation of a Firearm (Felony, 7 Months - $1,000 Fine)",
+       "Firearm Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Drug Smuggling Through Concealment (Felony, 20 Months - $5,000 Fine)",
+       "Filing a False Police Report (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Arrest (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Appear in Court (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Report a Crime (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Providing False Identification (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violation Of Probation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "False 911 Call (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Without Violence (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Comply (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Obstruction (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Trespassing on Government Property (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Threats (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sightseeing at the Scene of an Emergency (Misdemeanor, 6 Months - $1,200 Fine)",
+       "Unlawful Assembly (Infraction, $250 Fine)",
+       "Littering (Infraction, $250 Fine)",
+       "Perjury (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Police Officer (Felony, 7 Months - $3,000 Fine)",
+       "Escaping Custody (Felony, 7 Months - $3,000 Fine)",
+       "Aiding and Abetting (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Peace Officer (Felony, 7 Months - $3,000 Fine)",
+       "Involuntary Manslaughter (Felony, 15 Months - $6,000 Fine)",
+       "Marked Bills (Felony, 9 Months - $3,000 Fine)",
+       "Vehicle Burglary (Felony, 7 Months - $3,000 Fine)",
+       "Grave Robbery (Felony, 15 Months - $3,000 Fine)",
+       "Vandalism (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Shoplifting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Petty Theft (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Possession of Stolen Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Graffiti (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Piracy (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Unauthorized Use of a Vehicle (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Illegal Squatting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Destruction of Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Trespassing (Infraction, $250 Fine)",
+       "Burglary (Felony, 11 Months - $6,000 Fine)",
+       "Arson (Felony, 14 Months - $10,000 Fine)",
+       "Credit Card Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Breaking and Entering (Felony, 5 Months - $3,000 Fine)",
+       "Identity Theft (Felony, 5 Months - $3,000 Fine)",
+       "Theft of Public Property (Felony, 5 Months - $3,000 Fine)",
+       "Extortion (Felony, 5 Months - $3,000 Fine)",
+       "Attempted Robbery (Felony, 8 Months - $3,000 Fine)",
+       "Disorderly Conduct (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Intoxication (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Indecent Exposure (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Mischief (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Aiding & Abetting (Misdemeanor) (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Identify (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Loitering (Infraction, $250 Fine)",
+       "Disturbing the Peace (Infraction, $250 Fine)",
+       "Illegal Protests (Infraction, $250 Fine)",
+       "Rioting (Felony, 7 Months - $3,000 Fine)",
+       "Bribery (Felony, 7 Months - $3,000 Fine)",
+       "Inciting a Riot (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Immigration (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Driving Without a License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Road Rage Incident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Attempted Grand Theft Auto (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Leaving the Scene of a Vehicle Accident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Careless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Operating a Vehicle with Suspended License (Misdemeanor)",
+       "Driving a Motorcycle Without a Motorcycle License (Misdemeanor, $500 Fine)",
+       "Speeding (Infraction, $250 Fine)",
+       "Running a Red Light (Infraction, $250 Fine)",
+       "Driving Without Insurance (Infraction, $250 Fine)",
+       "Failure to Yield (Infraction, $250 Fine)",
+       "Illegal U-Turn (Infraction, $250 Fine)",
+       "Driving Without Headlights (Infraction, $250 Fine)",
+       "Driving in the Wrong Direction (Infraction, $250 Fine)",
+       "Illegal Parking in Handicap Zones (Infraction, $250 Fine)",
+       "Excessive Window Tinting (Infraction, $250 Fine)",
+       "Failure to Maintain Lanes (Infraction, $250 Fine)",
+       "Unsafe Passing (Infraction, $250 Fine)",
+       "Failure to Yield to an Emergency Vehicle (Infraction, $250 Fine)",
+       "Obstructed License Plate (Infraction, $250 Fine)",
+       "Unsafe Hauling (Infraction, $250 Fine)",
+       "Parking in a Fire Zone (Infraction, $250 Fine)",
+       "Failure to Yield to a Traffic Device (Infraction, $250 Fine)",
+       "Improper Vehicle Safety Equipment (Infraction, $250 Fine)",
+       "Operating an Unroadworthy Vehicle on a Public Roadway (Infraction, $250 Fine)",
+       "Lighting Violation (Infraction, $250 Fine)",
+       "Improper Parking, Stopping, or Standing (Infraction, $250 Fine)",
+       "Unsafe Lane Changes (Infraction, $250 Fine)",
+       "Operating a Motorcycle Without a Helmet (Infraction, $250 Fine)",
+       "Impeding Traffic (Infraction, $250 Fine)",
+       "Using a Handheld Device While Driving (Infraction, $250 Fine)",
+       "Improper Use of Horn (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrian in Crosswalk (Infraction, $250 Fine)",
+       "Crossing a Double Yellow Line (Infraction, $250 Fine)",
+       "Passing on the Shoulder (Infraction, $250 Fine)",
+       "Towing Without a License (Infraction, $500 Fine)",
+       "Move Over Law (Infraction, $250 Fine)",
+       "Illegally Parked in a No Parking Zone (Infraction, $250 Fine)",
+       "Failure to Pay for Parking Meter (Infraction, $250 Fine)",
+       "Blocking a Driveway (Infraction, $250 Fine)",
+       "Blocking a Crosswalk (Infraction, $250 Fine)",
+       "Facing the Wrong Way (Infraction, $250 Fine)",
+       "Bus Stop Violation (Infraction, $250 Fine)",
+       "Blocking an Intersection (Infraction, $250 Fine)",
+       "Parking Within 15 Feet of a Fire Station Driveway (Infraction, $250 Fine)",
+       "Blocking Railroad Crossing (Infraction, $250 Fine)",
+       "Parking on a Sidewalk Median or Divider (Infraction, $250 Fine)",
+       "Unregistered Vehicle (Infraction, $250 Fine)",
+       "Towing Without a Valid Operator's License (Infraction, $500 Fine)",
+       "Failure to Signal (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrians (Infraction, $250 Fine)",
+       "Blocking Emergency Access Lanes (Infraction, $250 Fine)",
+       "Expired Insurance (Infraction, $250 Fine)",
+       "Fictitious Plate (Infraction, $250 Fine)",
+       "Prohibited Underglow Lighting (Infraction, $250 Fine)",
+       "Tailgating (Infraction, $250 Fine)",
+       "Plate Violation (Infraction, $250 Fine)",
+       "Operating a Vehicle While Using a Miscellaneous Object (Infraction, $500 Fine)",
+       "Occupying a Side of the Freeway (Infraction, $250 Fine)",
+       "Parking in an Alley Way (Infraction, $250 Fine)",
+       "Unlawful Riding in a Vehicle (Infraction, $500 Fine)",
+       "Driving Under the Influence (DUI) (Felony, 7 Months - $3,000 Fine)",
+       "Hit and Run (Felony, 7 Months - $3,000 Fine)",
+       "Street Racing (Felony, 7 Months - $3,000 Fine)",
+       "Fleeing/Attempting to Elude (Felony, 7 Months - $3,000 Fine)",
+       "Possession of a Stolen Vehicle (Felony, 7 Months - $3,000 Fine)",
+       "Felony Speeding (Felony, 9 Months - $6,000 Fine)",
+       "Grand Theft Auto (Felony, 7 Months - $6,000 Fine)",
+       "Assault (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Battery (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Reckless Endangerment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Stalking (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Robbery (Felony, 15 Months - $6,000 Fine)",
+       "Homicide (Felony, 18 Months - $10,000 Fine)",
+       "Domestic Violence (Felony, 15 Months - $6,000 Fine)",
+       "Kidnapping (Felony, 18 Months - $10,000 Fine)",
+       "Aggravated Assault (Felony, 18 Months - $10,000 Fine)",
+       "Terroristic Threats (Felony, 7 Months - $3,000 Fine)",
+       "Vehicular Manslaughter (Felony, 18 Months - $10,000 Fine)",
+       "Attempted Murder of a Government Official (Felony, 18 Months - $6,000 Fine)",
+       "Brandishing a Firearm in Public (Felony, 15 Months - $6,000 Fine)",
+       "Assault of a Peace Officer (Felony, 15 Months - $6,000 Fine)",
+       "Attempted Murder (Felony, 18 Months - $10,000 Fine)",
+       "Armed Robbery (Felony, 18 Months - $9,000 Fine)",
+       "Aggravated Battery (Felony, 15 Months - $6,000 Fine)",
+       "Battery on a Law Enforcement Officer (Felony, 15 Months - $6,000 Fine)",
+       "Second-Degree Murder (Felony, 15 Months - $6,000 Fine)",
+       "Capital Murder (Felony, 15 Months - $6,000 Fine)",
+       "Carjacking (Felony, 15 Months - $6,000 Fine)",
+       "Solicitation to Commit Murder (Felony, 9 Months - $10,000 Fine)",
+       "Obstructing Justice (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Assault Weapon (Felony, 7 Months - $2,250 Fine)",
+       "Brandishing a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Using a Weapon While Intoxicated (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Secure a Firearm (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Carrying a Loaded Firearm in Public (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Negligent Use of a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Possession of a Firearm Without a License (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Report Lost/Stolen Firearm (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Firearm in a Restricted Zone (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Carrying a Concealed Weapon Without Permit (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Sale of Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Unlawful Discharge of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Prohibited Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Weapon in a Restricted Area (Felony, 15 Months - $6,000 Fine)",
+       "Trafficking Illegal Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Modifying a Firearm Illegally (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Firearm Without a Serial Number (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Stolen Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Open Carry (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Firearm Discharge (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of Deadly Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Discharge of a Firearm in City Limits (Felony, 15 Months - $6,000 Fine)",
+       "Unserialized (\"Ghost\") Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Carrying Firearm While Masked (Felony, 15 Months - $6,000 Fine)",
+       "Undetectable Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Sale to Prohibited Person (Felony, 15 Months - $6,000 Fine)",
+       "Straw Purchase of Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of an Unregistered Firearm (Felony, 9 Months)",
+       "Illegal Transfer of a Firearm (Felony, 12 Months - $6,000 Fine)",
+       "Possession of Ammunition by a Felon (Felony, 9 Months - $4,000 Fine)",
+       "Possession of Explosive Device(s) (Felony, 18 Months - $8,000 Fine)",
+       "Carrying a Firearm While Being Underage (Felony, 9 Months - $2,000 Fine)",
+       "Possession of a Weapon in Commission of a Crime (Felony, 12 Months - $6,000 Fine)",
+       "Possession of an Illegal Firearm Modification (Felony, 12 Months - $1,200 Fine)",
+       "Embezzlement (Felony, 11 Months - $6,000 Fine)",
+       "Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Tax Evasion (Felony, 5 Months - $3,000 Fine)",
+       "Money Laundering (Felony, 5 Months - $3,000 Fine)",
+       "Insider Trading (Felony, 5 Months - $3,000 Fine)",
+       "Forgery (Felony, 5 Months - $3,000 Fine)",
+       "Cybercrime (Felony, 5 Months - $3,000 Fine)",
+       "Healthcare Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Ponzi Scheme (Felony, 5 Months - $3,000 Fine)",
+       "Counterfeiting (Felony, 5 Months - $3,000 Fine)",
+       "Corporate Espionage (Felony, 5 Months - $3,000 Fine)",
+       "Animal Abuse and Cruelty (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Possession of Illegally Taken Wildlife (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Importation of Restricted Animals (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Exceeding Daily Catch Limits (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Out of Season or in Protected Areas (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sale of Illegally Taken Fish (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Endangered Species Violation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Using Illegal Fishing Gear or Methods (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Without a License (Infraction, $250 Fine)"
+      ]
+     },
+     {
+      "id": "count",
+      "label": "Count",
+      "type": "text",
+      "placeholder": "1",
+      "width": "narrow"
+     }
+    ],
+    "check": {
+     "id": "",
+     "label": ""
+    },
+    "when": {
+     "field": "teuType",
+     "is": [
+      "DUI Investigation Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "cvCert",
+      "label": "CVE Certification #",
+      "type": "text",
+      "placeholder": "CVE-2041"
+     },
+     {
+      "id": "cvCompany",
+      "label": "Company Name",
+      "type": "text",
+      "placeholder": "Post OP",
+      "required": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Commercial Vehicle Info",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "cvDriver",
+      "label": "Driver Name",
+      "type": "text",
+      "placeholder": "Ron Jakowski",
+      "required": true
+     },
+     {
+      "id": "cvId",
+      "label": "State ID",
+      "type": "text",
+      "placeholder": "SA-8812004"
+     },
+     {
+      "id": "cvClass",
+      "label": "License Class",
+      "type": "select",
+      "options": [
+       "Class A",
+       "Class B",
+       "Class C"
+      ],
+      "blank": true
+     },
+     {
+      "id": "cvMed",
+      "label": "Medical Card Valid",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "cvMake",
+      "label": "Make",
+      "type": "text",
+      "placeholder": "MTL"
+     },
+     {
+      "id": "cvModel",
+      "label": "Model",
+      "type": "text",
+      "placeholder": "Packer"
+     },
+     {
+      "id": "cvPlate",
+      "label": "Plate",
+      "type": "text",
+      "placeholder": "7TRK220"
+     },
+     {
+      "id": "cvTrailer",
+      "label": "Trailer #",
+      "type": "text",
+      "placeholder": "TR-4471"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "cvAxle",
+      "label": "Axle Count",
+      "type": "text",
+      "placeholder": "5"
+     },
+     {
+      "id": "cvLevel",
+      "label": "Inspection Level",
+      "type": "select",
+      "options": [
+       "Level I (Full Inspection)",
+       "Level II (Walkaround)",
+       "Level III (Driver/Docs Only)"
+      ],
+      "required": true,
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "cvGross",
+      "label": "Gross Weight",
+      "type": "text",
+      "placeholder": "82,000 lbs"
+     },
+     {
+      "id": "cvLimit",
+      "label": "Legal Limit",
+      "type": "text",
+      "placeholder": "80,000 lbs"
+     },
+     {
+      "id": "cvOver",
+      "label": "Overweight",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "checklist",
+    "id": "cvDocs",
+    "title": "DOCUMENTATION CHECK",
+    "colTopic": "Item",
+    "colStandard": "",
+    "colCheck": "✓",
+    "items": [
+     {
+      "topic": "Logbook",
+      "standard": ""
+     },
+     {
+      "topic": "Registration",
+      "standard": ""
+     },
+     {
+      "topic": "Bill of Lading",
+      "standard": ""
+     },
+     {
+      "topic": "Hazmat Endorsement",
+      "standard": ""
+     },
+     {
+      "topic": "Insurance",
+      "standard": ""
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "cvViol",
+    "title": "VIOLATIONS FOUND",
+    "addLabel": "+ Add Violation",
+    "columns": [
+     {
+      "id": "charge",
+      "label": "Violation (type to search)",
+      "type": "search",
+      "options": [
+       "Driving a boat under the influence of alcohol or drugs (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violating boating safety regulations (Misdemeanor, 4 Months - $1,000 Fine)",
+       "No Wake Zone (Misdemeanor, $1,750 Fine)",
+       "Operating a vessel without the proper registration (Infraction, $250 Fine)",
+       "Speed Limits and Reckless Operation for a vessel (Infraction, $250 Fine)",
+       "Driving Without a Commercial Driver's License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Submit Vehicle to Inspection (Misdemeanor, 4 Months - $2,250 Fine)",
+       "Overweight Vehicle (Infraction, $250 Fine)",
+       "Defective Equipment (Infraction, $250 Fine)",
+       "Inadequate Safety Inspections (Infraction, $250 Fine)",
+       "Failure to Maintain Logbooks (Infraction, $250 Fine)",
+       "Improper Transport of Hazardous Materials (Infraction, $250 Fine)",
+       "Failure to Carry Proper Documentation (Infraction, $250 Fine)",
+       "Driving Without Proper Permits (Infraction, $250 Fine)",
+       "Hours of Service Violation (Infraction, $250 Fine)",
+       "Medical Certificate Violation (Infraction, $250 Fine)",
+       "Improper Load Securement (Infraction, $250 Fine)",
+       "Online Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Phishing (Felony, 7 Months - $3,000 Fine)",
+       "Unauthorized Access to Computer Systems (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Controlled Substances (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Drug Use (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Drug Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Driving Under Drug Influence (Felony, 7 Months - $3,000 Fine)",
+       "Cultivation of Illegal Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Drug Manufacturing (Felony, 7 Months - $3,000 Fine)",
+       "Prescription Fraud (Felony, 7 Months - $3,000 Fine)",
+       "Possession with Intent to Distribute (Felony, 7 Months - $3,000 Fine)",
+       "Operating a Drug House (Felony, 7 Months - $3,000 Fine)",
+       "Public Sale of Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Drug Paraphernalia (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Dumping (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Overfishing (Infraction, $250 Fine)",
+       "Illegal Logging (Felony, 7 Months - $3,000 Fine)",
+       "Endangered Species Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Mining (Felony, 7 Months - $3,000 Fine)",
+       "Poaching (Felony, 7 Months - $3,000 Fine)",
+       "Careless or Reckless Aircraft Operation (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Operating Without a Pilot Certificate (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Consuming Personal Alcohol Aboard an Aircraft (Misdemeanor, 5 Months - $2,500 Fine)",
+       "Boarding While Intoxicated (Misdemeanor, 5 Months - $1,500 Fine)",
+       "Undeclared Hazardous Materials (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Falsification of FAA Records (Felony, 10 Months - $2,500 Fine)",
+       "Violation of a Temporary Flight Restriction (Felony, 5 Months - $3,500 Fine)",
+       "Operating an Aircraft to Facilitate Drug Trafficking (Felony, 20 Months - $5,000 Fine)",
+       "Assault Aboard an Aircraft (Felony, 15 Months - $2,500 Fine)",
+       "Carrying a Weapon Aboard an Aircraft (Felony, 15 Months - $5,000 Fine)",
+       "Carrying an Explosive or Incendiary Device Aboard (Felony, 20 Months - $5,000 Fine)",
+       "Aircraft Hijacking (Felony, 20 Months - $5,000 Fine)",
+       "Criminal Transportation of Hazardous Materials (Felony, 15 Months - $2,500 Fine)",
+       "Failure to Declare an Item (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Importing Prohibited Agricultural Items (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare a Firearm (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare Prescription Medication (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Improper Entry (Felony, 15 Months - $5,000 Fine)",
+       "Illegal Re-entry (Felony, 20 Months - $5,000 Fine)",
+       "Alien Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Attempted Human Smuggling (Felony, 15 Months - $2,500 Fine)",
+       "Conspiracy to Commit Human Trafficking (Felony, 15 Months - $5,000 Fine)",
+       "Visa or Immigration-Document Fraud (Felony, 15 Months - $5,000 Fine)",
+       "Unlawful Transportation (Felony, 15 Months - $2,500 Fine)",
+       "Bringing a Person Through an Unauthorized Location (Felony, 15 Months - $3,500 Fine)",
+       "Passport Forgery or False Use (Felony, 15 Months - $2,500 Fine)",
+       "High-Speed Flight From an Immigration Checkpoint (Felony, 10 Months - $2,500 Fine)",
+       "Forcibly Resisting or Impeding a Federal Agent (Felony, 10 Months - $500 Fine)",
+       "Aggravated Assault on a Federal Agent (Felony, 15 Months - $2,000 Fine)",
+       "False Statements to a Federal Agent (Felony, 5 Months - $500 Fine)",
+       "Possession of Contraband at a Checkpoint (Felony, 10 Months - $1,000 Fine)",
+       "Alien Smuggling Discovered at a Checkpoint (Felony, 15 Months - $2,000 Fine)",
+       "False Customs Declaration (Felony, 10 Months - $2,500 Fine)",
+       "Smuggling Goods Into the United States (Felony, 10 Months - $1,000 Fine)",
+       "Undeclared Currency or Monetary Instruments (Felony, 15 Months - $2,000 Fine)",
+       "Illegal Importation of a Firearm (Felony, 7 Months - $1,000 Fine)",
+       "Firearm Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Drug Smuggling Through Concealment (Felony, 20 Months - $5,000 Fine)",
+       "Filing a False Police Report (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Arrest (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Appear in Court (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Report a Crime (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Providing False Identification (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violation Of Probation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "False 911 Call (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Without Violence (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Comply (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Obstruction (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Trespassing on Government Property (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Threats (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sightseeing at the Scene of an Emergency (Misdemeanor, 6 Months - $1,200 Fine)",
+       "Unlawful Assembly (Infraction, $250 Fine)",
+       "Littering (Infraction, $250 Fine)",
+       "Perjury (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Police Officer (Felony, 7 Months - $3,000 Fine)",
+       "Escaping Custody (Felony, 7 Months - $3,000 Fine)",
+       "Aiding and Abetting (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Peace Officer (Felony, 7 Months - $3,000 Fine)",
+       "Involuntary Manslaughter (Felony, 15 Months - $6,000 Fine)",
+       "Marked Bills (Felony, 9 Months - $3,000 Fine)",
+       "Vehicle Burglary (Felony, 7 Months - $3,000 Fine)",
+       "Grave Robbery (Felony, 15 Months - $3,000 Fine)",
+       "Vandalism (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Shoplifting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Petty Theft (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Possession of Stolen Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Graffiti (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Piracy (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Unauthorized Use of a Vehicle (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Illegal Squatting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Destruction of Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Trespassing (Infraction, $250 Fine)",
+       "Burglary (Felony, 11 Months - $6,000 Fine)",
+       "Arson (Felony, 14 Months - $10,000 Fine)",
+       "Credit Card Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Breaking and Entering (Felony, 5 Months - $3,000 Fine)",
+       "Identity Theft (Felony, 5 Months - $3,000 Fine)",
+       "Theft of Public Property (Felony, 5 Months - $3,000 Fine)",
+       "Extortion (Felony, 5 Months - $3,000 Fine)",
+       "Attempted Robbery (Felony, 8 Months - $3,000 Fine)",
+       "Disorderly Conduct (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Intoxication (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Indecent Exposure (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Mischief (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Aiding & Abetting (Misdemeanor) (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Identify (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Loitering (Infraction, $250 Fine)",
+       "Disturbing the Peace (Infraction, $250 Fine)",
+       "Illegal Protests (Infraction, $250 Fine)",
+       "Rioting (Felony, 7 Months - $3,000 Fine)",
+       "Bribery (Felony, 7 Months - $3,000 Fine)",
+       "Inciting a Riot (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Immigration (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Driving Without a License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Road Rage Incident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Attempted Grand Theft Auto (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Leaving the Scene of a Vehicle Accident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Careless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Operating a Vehicle with Suspended License (Misdemeanor)",
+       "Driving a Motorcycle Without a Motorcycle License (Misdemeanor, $500 Fine)",
+       "Speeding (Infraction, $250 Fine)",
+       "Running a Red Light (Infraction, $250 Fine)",
+       "Driving Without Insurance (Infraction, $250 Fine)",
+       "Failure to Yield (Infraction, $250 Fine)",
+       "Illegal U-Turn (Infraction, $250 Fine)",
+       "Driving Without Headlights (Infraction, $250 Fine)",
+       "Driving in the Wrong Direction (Infraction, $250 Fine)",
+       "Illegal Parking in Handicap Zones (Infraction, $250 Fine)",
+       "Excessive Window Tinting (Infraction, $250 Fine)",
+       "Failure to Maintain Lanes (Infraction, $250 Fine)",
+       "Unsafe Passing (Infraction, $250 Fine)",
+       "Failure to Yield to an Emergency Vehicle (Infraction, $250 Fine)",
+       "Obstructed License Plate (Infraction, $250 Fine)",
+       "Unsafe Hauling (Infraction, $250 Fine)",
+       "Parking in a Fire Zone (Infraction, $250 Fine)",
+       "Failure to Yield to a Traffic Device (Infraction, $250 Fine)",
+       "Improper Vehicle Safety Equipment (Infraction, $250 Fine)",
+       "Operating an Unroadworthy Vehicle on a Public Roadway (Infraction, $250 Fine)",
+       "Lighting Violation (Infraction, $250 Fine)",
+       "Improper Parking, Stopping, or Standing (Infraction, $250 Fine)",
+       "Unsafe Lane Changes (Infraction, $250 Fine)",
+       "Operating a Motorcycle Without a Helmet (Infraction, $250 Fine)",
+       "Impeding Traffic (Infraction, $250 Fine)",
+       "Using a Handheld Device While Driving (Infraction, $250 Fine)",
+       "Improper Use of Horn (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrian in Crosswalk (Infraction, $250 Fine)",
+       "Crossing a Double Yellow Line (Infraction, $250 Fine)",
+       "Passing on the Shoulder (Infraction, $250 Fine)",
+       "Towing Without a License (Infraction, $500 Fine)",
+       "Move Over Law (Infraction, $250 Fine)",
+       "Illegally Parked in a No Parking Zone (Infraction, $250 Fine)",
+       "Failure to Pay for Parking Meter (Infraction, $250 Fine)",
+       "Blocking a Driveway (Infraction, $250 Fine)",
+       "Blocking a Crosswalk (Infraction, $250 Fine)",
+       "Facing the Wrong Way (Infraction, $250 Fine)",
+       "Bus Stop Violation (Infraction, $250 Fine)",
+       "Blocking an Intersection (Infraction, $250 Fine)",
+       "Parking Within 15 Feet of a Fire Station Driveway (Infraction, $250 Fine)",
+       "Blocking Railroad Crossing (Infraction, $250 Fine)",
+       "Parking on a Sidewalk Median or Divider (Infraction, $250 Fine)",
+       "Unregistered Vehicle (Infraction, $250 Fine)",
+       "Towing Without a Valid Operator's License (Infraction, $500 Fine)",
+       "Failure to Signal (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrians (Infraction, $250 Fine)",
+       "Blocking Emergency Access Lanes (Infraction, $250 Fine)",
+       "Expired Insurance (Infraction, $250 Fine)",
+       "Fictitious Plate (Infraction, $250 Fine)",
+       "Prohibited Underglow Lighting (Infraction, $250 Fine)",
+       "Tailgating (Infraction, $250 Fine)",
+       "Plate Violation (Infraction, $250 Fine)",
+       "Operating a Vehicle While Using a Miscellaneous Object (Infraction, $500 Fine)",
+       "Occupying a Side of the Freeway (Infraction, $250 Fine)",
+       "Parking in an Alley Way (Infraction, $250 Fine)",
+       "Unlawful Riding in a Vehicle (Infraction, $500 Fine)",
+       "Driving Under the Influence (DUI) (Felony, 7 Months - $3,000 Fine)",
+       "Hit and Run (Felony, 7 Months - $3,000 Fine)",
+       "Street Racing (Felony, 7 Months - $3,000 Fine)",
+       "Fleeing/Attempting to Elude (Felony, 7 Months - $3,000 Fine)",
+       "Possession of a Stolen Vehicle (Felony, 7 Months - $3,000 Fine)",
+       "Felony Speeding (Felony, 9 Months - $6,000 Fine)",
+       "Grand Theft Auto (Felony, 7 Months - $6,000 Fine)",
+       "Assault (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Battery (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Reckless Endangerment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Stalking (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Robbery (Felony, 15 Months - $6,000 Fine)",
+       "Homicide (Felony, 18 Months - $10,000 Fine)",
+       "Domestic Violence (Felony, 15 Months - $6,000 Fine)",
+       "Kidnapping (Felony, 18 Months - $10,000 Fine)",
+       "Aggravated Assault (Felony, 18 Months - $10,000 Fine)",
+       "Terroristic Threats (Felony, 7 Months - $3,000 Fine)",
+       "Vehicular Manslaughter (Felony, 18 Months - $10,000 Fine)",
+       "Attempted Murder of a Government Official (Felony, 18 Months - $6,000 Fine)",
+       "Brandishing a Firearm in Public (Felony, 15 Months - $6,000 Fine)",
+       "Assault of a Peace Officer (Felony, 15 Months - $6,000 Fine)",
+       "Attempted Murder (Felony, 18 Months - $10,000 Fine)",
+       "Armed Robbery (Felony, 18 Months - $9,000 Fine)",
+       "Aggravated Battery (Felony, 15 Months - $6,000 Fine)",
+       "Battery on a Law Enforcement Officer (Felony, 15 Months - $6,000 Fine)",
+       "Second-Degree Murder (Felony, 15 Months - $6,000 Fine)",
+       "Capital Murder (Felony, 15 Months - $6,000 Fine)",
+       "Carjacking (Felony, 15 Months - $6,000 Fine)",
+       "Solicitation to Commit Murder (Felony, 9 Months - $10,000 Fine)",
+       "Obstructing Justice (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Assault Weapon (Felony, 7 Months - $2,250 Fine)",
+       "Brandishing a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Using a Weapon While Intoxicated (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Secure a Firearm (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Carrying a Loaded Firearm in Public (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Negligent Use of a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Possession of a Firearm Without a License (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Report Lost/Stolen Firearm (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Firearm in a Restricted Zone (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Carrying a Concealed Weapon Without Permit (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Sale of Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Unlawful Discharge of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Prohibited Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Weapon in a Restricted Area (Felony, 15 Months - $6,000 Fine)",
+       "Trafficking Illegal Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Modifying a Firearm Illegally (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Firearm Without a Serial Number (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Stolen Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Open Carry (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Firearm Discharge (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of Deadly Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Discharge of a Firearm in City Limits (Felony, 15 Months - $6,000 Fine)",
+       "Unserialized (\"Ghost\") Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Carrying Firearm While Masked (Felony, 15 Months - $6,000 Fine)",
+       "Undetectable Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Sale to Prohibited Person (Felony, 15 Months - $6,000 Fine)",
+       "Straw Purchase of Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of an Unregistered Firearm (Felony, 9 Months)",
+       "Illegal Transfer of a Firearm (Felony, 12 Months - $6,000 Fine)",
+       "Possession of Ammunition by a Felon (Felony, 9 Months - $4,000 Fine)",
+       "Possession of Explosive Device(s) (Felony, 18 Months - $8,000 Fine)",
+       "Carrying a Firearm While Being Underage (Felony, 9 Months - $2,000 Fine)",
+       "Possession of a Weapon in Commission of a Crime (Felony, 12 Months - $6,000 Fine)",
+       "Possession of an Illegal Firearm Modification (Felony, 12 Months - $1,200 Fine)",
+       "Embezzlement (Felony, 11 Months - $6,000 Fine)",
+       "Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Tax Evasion (Felony, 5 Months - $3,000 Fine)",
+       "Money Laundering (Felony, 5 Months - $3,000 Fine)",
+       "Insider Trading (Felony, 5 Months - $3,000 Fine)",
+       "Forgery (Felony, 5 Months - $3,000 Fine)",
+       "Cybercrime (Felony, 5 Months - $3,000 Fine)",
+       "Healthcare Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Ponzi Scheme (Felony, 5 Months - $3,000 Fine)",
+       "Counterfeiting (Felony, 5 Months - $3,000 Fine)",
+       "Corporate Espionage (Felony, 5 Months - $3,000 Fine)",
+       "Animal Abuse and Cruelty (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Possession of Illegally Taken Wildlife (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Importation of Restricted Animals (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Exceeding Daily Catch Limits (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Out of Season or in Protected Areas (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sale of Illegally Taken Fish (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Endangered Species Violation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Using Illegal Fishing Gear or Methods (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Without a License (Infraction, $250 Fine)"
+      ]
+     },
+     {
+      "id": "notes",
+      "label": "Notes",
+      "type": "text",
+      "width": "wide"
+     }
+    ],
+    "check": {
+     "id": "",
+     "label": ""
+    },
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "cvAction",
+      "label": "Enforcement Action",
+      "type": "select",
+      "options": [
+       "Cleared",
+       "Citation Issued",
+       "Out of Service Order",
+       "Vehicle Impounded"
+      ],
+      "required": true,
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "longtext",
+    "id": "cvNotes",
+    "title": "NOTES",
+    "maxLength": 2000,
+    "when": {
+     "field": "teuType",
+     "is": [
+      "CVE Inspection Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "inCall",
+      "label": "Call Type",
+      "type": "text",
+      "placeholder": "Minor collision",
+      "required": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Incident Report (Non-Arrest)"
+     ]
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "inParties",
+    "title": "INVOLVED PARTIES",
+    "addLabel": "+ Add Party",
+    "columns": [
+     {
+      "id": "name",
+      "label": "Name",
+      "type": "text"
+     },
+     {
+      "id": "role",
+      "label": "Role",
+      "type": "select",
+      "blank": true,
+      "options": [
+       "Driver",
+       "Passenger",
+       "Victim",
+       "Witness",
+       "Complainant",
+       "Involved Party"
+      ]
+     },
+     {
+      "id": "sid",
+      "label": "State ID / contact",
+      "type": "text"
+     }
+    ],
+    "check": {
+     "id": "",
+     "label": ""
+    },
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Incident Report (Non-Arrest)"
+     ]
+    }
+   },
+   {
+    "type": "longtext",
+    "id": "inSummary",
+    "title": "SUMMARY OF INCIDENT",
+    "maxLength": 2000,
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Incident Report (Non-Arrest)"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "inInj",
+      "label": "Injuries Reported",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     },
+     {
+      "id": "inInjDesc",
+      "label": "If yes, describe",
+      "type": "text"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Incident Report (Non-Arrest)"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "inDmg",
+      "label": "Property Damage",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     },
+     {
+      "id": "inDmgDesc",
+      "label": "If yes, describe",
+      "type": "text"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Incident Report (Non-Arrest)"
+     ]
+    }
+   },
+   {
+    "type": "checklist",
+    "id": "inEvid",
+    "title": "EVIDENCE COLLECTED",
+    "colTopic": "Item",
+    "colStandard": "",
+    "colCheck": "✓",
+    "items": [
+     {
+      "topic": "Photos",
+      "standard": ""
+     },
+     {
+      "topic": "CCTV",
+      "standard": ""
+     },
+     {
+      "topic": "Shell Casings",
+      "standard": ""
+     },
+     {
+      "topic": "Weapon",
+      "standard": ""
+     }
+    ],
+    "display": "selected",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Incident Report (Non-Arrest)"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "inStatus",
+      "label": "Case Status",
+      "type": "select",
+      "options": [
+       "Active Investigation",
+       "Closed – No Further Action",
+       "Forwarded to Detectives"
+      ],
+      "required": true,
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Incident Report (Non-Arrest)"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "bpType",
+      "label": "Patrol Type",
+      "type": "select",
+      "options": [
+       "Directed Enforcement",
+       "Event Detail",
+       "Routine Patrol"
+      ],
+      "blank": true
+     },
+     {
+      "id": "bpUnit",
+      "label": "BPU Unit ID",
+      "type": "select",
+      "options": [
+       "Bicycle 1",
+       "Bicycle 2"
+      ],
+      "blank": true
+     },
+     {
+      "id": "bpInc",
+      "label": "Incident Type",
+      "type": "select",
+      "options": [
+       "Traffic Stop",
+       "Pedestrian Stop",
+       "Citation Issued",
+       "Handed off to Cruiser (Arrest/Transport)",
+       "Area Check / Resolved",
+       "Other"
+      ],
+      "required": true,
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Bicycle Patrol Unit Report"
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "style": "heading",
+    "text": "Vehicle / Subject Information",
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Bicycle Patrol Unit Report"
+     ]
+    }
+   },
+   {
+    "type": "strip",
+    "fields": [
+     {
+      "id": "bpName",
+      "label": "Full Name",
+      "type": "text"
+     },
+     {
+      "id": "bpId",
+      "label": "State ID",
+      "type": "text"
+     },
+     {
+      "id": "bpDob",
+      "label": "Date of Birth",
+      "type": "date"
+     },
+     {
+      "id": "bpLic",
+      "label": "License Status",
+      "type": "select",
+      "options": [
+       "Valid",
+       "Suspended",
+       "Revoked"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Bicycle Patrol Unit Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "bpBolo",
+      "label": "Vehicle / BOLO Info (if applicable)",
+      "type": "text"
+     },
+     {
+      "id": "bpReason",
+      "label": "Reason for Stop / Contact",
+      "type": "text"
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Bicycle Patrol Unit Report"
+     ]
+    }
+   },
+   {
+    "type": "fields",
+    "fields": [
+     {
+      "id": "bpAction",
+      "label": "Enforcement Action",
+      "type": "select",
+      "options": [
+       "Verbal Warning",
+       "Citation Issued",
+       "Handed off to Cruiser",
+       "Area Check / Resolved (No Action)"
+      ],
+      "blank": true
+     },
+     {
+      "id": "bpCam",
+      "label": "Bodycam Active",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "blank": true
+     }
+    ],
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Bicycle Patrol Unit Report"
+     ]
+    }
+   },
+   {
+    "type": "repeater",
+    "id": "bpCharges",
+    "title": "CHARGES / VIOLATIONS",
+    "addLabel": "+ Add Charge",
+    "totals": {
+     "on": true,
+     "col": "charge",
+     "countCol": "count"
+    },
+    "columns": [
+     {
+      "id": "charge",
+      "label": "Charge (type to search)",
+      "type": "search",
+      "options": [
+       "Driving a boat under the influence of alcohol or drugs (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violating boating safety regulations (Misdemeanor, 4 Months - $1,000 Fine)",
+       "No Wake Zone (Misdemeanor, $1,750 Fine)",
+       "Operating a vessel without the proper registration (Infraction, $250 Fine)",
+       "Speed Limits and Reckless Operation for a vessel (Infraction, $250 Fine)",
+       "Driving Without a Commercial Driver's License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Submit Vehicle to Inspection (Misdemeanor, 4 Months - $2,250 Fine)",
+       "Overweight Vehicle (Infraction, $250 Fine)",
+       "Defective Equipment (Infraction, $250 Fine)",
+       "Inadequate Safety Inspections (Infraction, $250 Fine)",
+       "Failure to Maintain Logbooks (Infraction, $250 Fine)",
+       "Improper Transport of Hazardous Materials (Infraction, $250 Fine)",
+       "Failure to Carry Proper Documentation (Infraction, $250 Fine)",
+       "Driving Without Proper Permits (Infraction, $250 Fine)",
+       "Hours of Service Violation (Infraction, $250 Fine)",
+       "Medical Certificate Violation (Infraction, $250 Fine)",
+       "Improper Load Securement (Infraction, $250 Fine)",
+       "Online Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Phishing (Felony, 7 Months - $3,000 Fine)",
+       "Unauthorized Access to Computer Systems (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Controlled Substances (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Drug Use (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Drug Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Driving Under Drug Influence (Felony, 7 Months - $3,000 Fine)",
+       "Cultivation of Illegal Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Drug Manufacturing (Felony, 7 Months - $3,000 Fine)",
+       "Prescription Fraud (Felony, 7 Months - $3,000 Fine)",
+       "Possession with Intent to Distribute (Felony, 7 Months - $3,000 Fine)",
+       "Operating a Drug House (Felony, 7 Months - $3,000 Fine)",
+       "Public Sale of Drugs (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Drug Paraphernalia (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Dumping (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Overfishing (Infraction, $250 Fine)",
+       "Illegal Logging (Felony, 7 Months - $3,000 Fine)",
+       "Endangered Species Trafficking (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Mining (Felony, 7 Months - $3,000 Fine)",
+       "Poaching (Felony, 7 Months - $3,000 Fine)",
+       "Careless or Reckless Aircraft Operation (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Operating Without a Pilot Certificate (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Consuming Personal Alcohol Aboard an Aircraft (Misdemeanor, 5 Months - $2,500 Fine)",
+       "Boarding While Intoxicated (Misdemeanor, 5 Months - $1,500 Fine)",
+       "Undeclared Hazardous Materials (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Falsification of FAA Records (Felony, 10 Months - $2,500 Fine)",
+       "Violation of a Temporary Flight Restriction (Felony, 5 Months - $3,500 Fine)",
+       "Operating an Aircraft to Facilitate Drug Trafficking (Felony, 20 Months - $5,000 Fine)",
+       "Assault Aboard an Aircraft (Felony, 15 Months - $2,500 Fine)",
+       "Carrying a Weapon Aboard an Aircraft (Felony, 15 Months - $5,000 Fine)",
+       "Carrying an Explosive or Incendiary Device Aboard (Felony, 20 Months - $5,000 Fine)",
+       "Aircraft Hijacking (Felony, 20 Months - $5,000 Fine)",
+       "Criminal Transportation of Hazardous Materials (Felony, 15 Months - $2,500 Fine)",
+       "Failure to Declare an Item (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Importing Prohibited Agricultural Items (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare a Firearm (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Failure to Declare Prescription Medication (Misdemeanor, 5 Months - $1,000 Fine)",
+       "Improper Entry (Felony, 15 Months - $5,000 Fine)",
+       "Illegal Re-entry (Felony, 20 Months - $5,000 Fine)",
+       "Alien Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Attempted Human Smuggling (Felony, 15 Months - $2,500 Fine)",
+       "Conspiracy to Commit Human Trafficking (Felony, 15 Months - $5,000 Fine)",
+       "Visa or Immigration-Document Fraud (Felony, 15 Months - $5,000 Fine)",
+       "Unlawful Transportation (Felony, 15 Months - $2,500 Fine)",
+       "Bringing a Person Through an Unauthorized Location (Felony, 15 Months - $3,500 Fine)",
+       "Passport Forgery or False Use (Felony, 15 Months - $2,500 Fine)",
+       "High-Speed Flight From an Immigration Checkpoint (Felony, 10 Months - $2,500 Fine)",
+       "Forcibly Resisting or Impeding a Federal Agent (Felony, 10 Months - $500 Fine)",
+       "Aggravated Assault on a Federal Agent (Felony, 15 Months - $2,000 Fine)",
+       "False Statements to a Federal Agent (Felony, 5 Months - $500 Fine)",
+       "Possession of Contraband at a Checkpoint (Felony, 10 Months - $1,000 Fine)",
+       "Alien Smuggling Discovered at a Checkpoint (Felony, 15 Months - $2,000 Fine)",
+       "False Customs Declaration (Felony, 10 Months - $2,500 Fine)",
+       "Smuggling Goods Into the United States (Felony, 10 Months - $1,000 Fine)",
+       "Undeclared Currency or Monetary Instruments (Felony, 15 Months - $2,000 Fine)",
+       "Illegal Importation of a Firearm (Felony, 7 Months - $1,000 Fine)",
+       "Firearm Smuggling (Felony, 15 Months - $5,000 Fine)",
+       "Drug Smuggling Through Concealment (Felony, 20 Months - $5,000 Fine)",
+       "Filing a False Police Report (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Arrest (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Appear in Court (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Report a Crime (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Providing False Identification (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Violation Of Probation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "False 911 Call (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Resisting Without Violence (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Comply (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Obstruction (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Trespassing on Government Property (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Threats (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sightseeing at the Scene of an Emergency (Misdemeanor, 6 Months - $1,200 Fine)",
+       "Unlawful Assembly (Infraction, $250 Fine)",
+       "Littering (Infraction, $250 Fine)",
+       "Perjury (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Police Officer (Felony, 7 Months - $3,000 Fine)",
+       "Escaping Custody (Felony, 7 Months - $3,000 Fine)",
+       "Aiding and Abetting (Felony, 7 Months - $3,000 Fine)",
+       "Impersonating a Peace Officer (Felony, 7 Months - $3,000 Fine)",
+       "Involuntary Manslaughter (Felony, 15 Months - $6,000 Fine)",
+       "Marked Bills (Felony, 9 Months - $3,000 Fine)",
+       "Vehicle Burglary (Felony, 7 Months - $3,000 Fine)",
+       "Grave Robbery (Felony, 15 Months - $3,000 Fine)",
+       "Vandalism (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Shoplifting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Petty Theft (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Possession of Stolen Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Graffiti (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Piracy (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Unauthorized Use of a Vehicle (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Illegal Squatting (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Destruction of Property (Misdemeanor, 3 Months - $1,000 Fine)",
+       "Trespassing (Infraction, $250 Fine)",
+       "Burglary (Felony, 11 Months - $6,000 Fine)",
+       "Arson (Felony, 14 Months - $10,000 Fine)",
+       "Credit Card Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Breaking and Entering (Felony, 5 Months - $3,000 Fine)",
+       "Identity Theft (Felony, 5 Months - $3,000 Fine)",
+       "Theft of Public Property (Felony, 5 Months - $3,000 Fine)",
+       "Extortion (Felony, 5 Months - $3,000 Fine)",
+       "Attempted Robbery (Felony, 8 Months - $3,000 Fine)",
+       "Disorderly Conduct (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Public Intoxication (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Indecent Exposure (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Criminal Mischief (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Harassment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Aiding & Abetting (Misdemeanor) (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Failure to Identify (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Loitering (Infraction, $250 Fine)",
+       "Disturbing the Peace (Infraction, $250 Fine)",
+       "Illegal Protests (Infraction, $250 Fine)",
+       "Rioting (Felony, 7 Months - $3,000 Fine)",
+       "Bribery (Felony, 7 Months - $3,000 Fine)",
+       "Inciting a Riot (Felony, 7 Months - $3,000 Fine)",
+       "Illegal Immigration (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Driving Without a License (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Road Rage Incident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Attempted Grand Theft Auto (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Leaving the Scene of a Vehicle Accident (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Careless Driving (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Operating a Vehicle with Suspended License (Misdemeanor)",
+       "Driving a Motorcycle Without a Motorcycle License (Misdemeanor, $500 Fine)",
+       "Speeding (Infraction, $250 Fine)",
+       "Running a Red Light (Infraction, $250 Fine)",
+       "Driving Without Insurance (Infraction, $250 Fine)",
+       "Failure to Yield (Infraction, $250 Fine)",
+       "Illegal U-Turn (Infraction, $250 Fine)",
+       "Driving Without Headlights (Infraction, $250 Fine)",
+       "Driving in the Wrong Direction (Infraction, $250 Fine)",
+       "Illegal Parking in Handicap Zones (Infraction, $250 Fine)",
+       "Excessive Window Tinting (Infraction, $250 Fine)",
+       "Failure to Maintain Lanes (Infraction, $250 Fine)",
+       "Unsafe Passing (Infraction, $250 Fine)",
+       "Failure to Yield to an Emergency Vehicle (Infraction, $250 Fine)",
+       "Obstructed License Plate (Infraction, $250 Fine)",
+       "Unsafe Hauling (Infraction, $250 Fine)",
+       "Parking in a Fire Zone (Infraction, $250 Fine)",
+       "Failure to Yield to a Traffic Device (Infraction, $250 Fine)",
+       "Improper Vehicle Safety Equipment (Infraction, $250 Fine)",
+       "Operating an Unroadworthy Vehicle on a Public Roadway (Infraction, $250 Fine)",
+       "Lighting Violation (Infraction, $250 Fine)",
+       "Improper Parking, Stopping, or Standing (Infraction, $250 Fine)",
+       "Unsafe Lane Changes (Infraction, $250 Fine)",
+       "Operating a Motorcycle Without a Helmet (Infraction, $250 Fine)",
+       "Impeding Traffic (Infraction, $250 Fine)",
+       "Using a Handheld Device While Driving (Infraction, $250 Fine)",
+       "Improper Use of Horn (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrian in Crosswalk (Infraction, $250 Fine)",
+       "Crossing a Double Yellow Line (Infraction, $250 Fine)",
+       "Passing on the Shoulder (Infraction, $250 Fine)",
+       "Towing Without a License (Infraction, $500 Fine)",
+       "Move Over Law (Infraction, $250 Fine)",
+       "Illegally Parked in a No Parking Zone (Infraction, $250 Fine)",
+       "Failure to Pay for Parking Meter (Infraction, $250 Fine)",
+       "Blocking a Driveway (Infraction, $250 Fine)",
+       "Blocking a Crosswalk (Infraction, $250 Fine)",
+       "Facing the Wrong Way (Infraction, $250 Fine)",
+       "Bus Stop Violation (Infraction, $250 Fine)",
+       "Blocking an Intersection (Infraction, $250 Fine)",
+       "Parking Within 15 Feet of a Fire Station Driveway (Infraction, $250 Fine)",
+       "Blocking Railroad Crossing (Infraction, $250 Fine)",
+       "Parking on a Sidewalk Median or Divider (Infraction, $250 Fine)",
+       "Unregistered Vehicle (Infraction, $250 Fine)",
+       "Towing Without a Valid Operator's License (Infraction, $500 Fine)",
+       "Failure to Signal (Infraction, $250 Fine)",
+       "Failure to Yield to Pedestrians (Infraction, $250 Fine)",
+       "Blocking Emergency Access Lanes (Infraction, $250 Fine)",
+       "Expired Insurance (Infraction, $250 Fine)",
+       "Fictitious Plate (Infraction, $250 Fine)",
+       "Prohibited Underglow Lighting (Infraction, $250 Fine)",
+       "Tailgating (Infraction, $250 Fine)",
+       "Plate Violation (Infraction, $250 Fine)",
+       "Operating a Vehicle While Using a Miscellaneous Object (Infraction, $500 Fine)",
+       "Occupying a Side of the Freeway (Infraction, $250 Fine)",
+       "Parking in an Alley Way (Infraction, $250 Fine)",
+       "Unlawful Riding in a Vehicle (Infraction, $500 Fine)",
+       "Driving Under the Influence (DUI) (Felony, 7 Months - $3,000 Fine)",
+       "Hit and Run (Felony, 7 Months - $3,000 Fine)",
+       "Street Racing (Felony, 7 Months - $3,000 Fine)",
+       "Fleeing/Attempting to Elude (Felony, 7 Months - $3,000 Fine)",
+       "Possession of a Stolen Vehicle (Felony, 7 Months - $3,000 Fine)",
+       "Felony Speeding (Felony, 9 Months - $6,000 Fine)",
+       "Grand Theft Auto (Felony, 7 Months - $6,000 Fine)",
+       "Assault (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Battery (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Reckless Endangerment (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Stalking (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Robbery (Felony, 15 Months - $6,000 Fine)",
+       "Homicide (Felony, 18 Months - $10,000 Fine)",
+       "Domestic Violence (Felony, 15 Months - $6,000 Fine)",
+       "Kidnapping (Felony, 18 Months - $10,000 Fine)",
+       "Aggravated Assault (Felony, 18 Months - $10,000 Fine)",
+       "Terroristic Threats (Felony, 7 Months - $3,000 Fine)",
+       "Vehicular Manslaughter (Felony, 18 Months - $10,000 Fine)",
+       "Attempted Murder of a Government Official (Felony, 18 Months - $6,000 Fine)",
+       "Brandishing a Firearm in Public (Felony, 15 Months - $6,000 Fine)",
+       "Assault of a Peace Officer (Felony, 15 Months - $6,000 Fine)",
+       "Attempted Murder (Felony, 18 Months - $10,000 Fine)",
+       "Armed Robbery (Felony, 18 Months - $9,000 Fine)",
+       "Aggravated Battery (Felony, 15 Months - $6,000 Fine)",
+       "Battery on a Law Enforcement Officer (Felony, 15 Months - $6,000 Fine)",
+       "Second-Degree Murder (Felony, 15 Months - $6,000 Fine)",
+       "Capital Murder (Felony, 15 Months - $6,000 Fine)",
+       "Carjacking (Felony, 15 Months - $6,000 Fine)",
+       "Solicitation to Commit Murder (Felony, 9 Months - $10,000 Fine)",
+       "Obstructing Justice (Felony, 7 Months - $3,000 Fine)",
+       "Possession of Assault Weapon (Felony, 7 Months - $2,250 Fine)",
+       "Brandishing a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Using a Weapon While Intoxicated (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Secure a Firearm (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Carrying a Loaded Firearm in Public (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Negligent Use of a Weapon (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Possession of a Firearm Without a License (Misdemeanor, 7 Months - $3,000 Fine)",
+       "Failure to Report Lost/Stolen Firearm (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Firearm in a Restricted Zone (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Carrying a Concealed Weapon Without Permit (Felony, 15 Months - $6,000 Fine)",
+       "Illegal Sale of Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Unlawful Discharge of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Prohibited Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Weapon in a Restricted Area (Felony, 15 Months - $6,000 Fine)",
+       "Trafficking Illegal Firearms (Felony, 15 Months - $6,000 Fine)",
+       "Modifying a Firearm Illegally (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Firearm Without a Serial Number (Felony, 15 Months - $6,000 Fine)",
+       "Possession of a Stolen Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of a Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Open Carry (Felony, 7 Months - $3,000 Fine)",
+       "Reckless Firearm Discharge (Felony, 15 Months - $6,000 Fine)",
+       "Felon in Possession of Deadly Weapon (Felony, 15 Months - $6,000 Fine)",
+       "Discharge of a Firearm in City Limits (Felony, 15 Months - $6,000 Fine)",
+       "Unserialized (\"Ghost\") Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Carrying Firearm While Masked (Felony, 15 Months - $6,000 Fine)",
+       "Undetectable Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Sale to Prohibited Person (Felony, 15 Months - $6,000 Fine)",
+       "Straw Purchase of Firearm (Felony, 15 Months - $6,000 Fine)",
+       "Possession of an Unregistered Firearm (Felony, 9 Months)",
+       "Illegal Transfer of a Firearm (Felony, 12 Months - $6,000 Fine)",
+       "Possession of Ammunition by a Felon (Felony, 9 Months - $4,000 Fine)",
+       "Possession of Explosive Device(s) (Felony, 18 Months - $8,000 Fine)",
+       "Carrying a Firearm While Being Underage (Felony, 9 Months - $2,000 Fine)",
+       "Possession of a Weapon in Commission of a Crime (Felony, 12 Months - $6,000 Fine)",
+       "Possession of an Illegal Firearm Modification (Felony, 12 Months - $1,200 Fine)",
+       "Embezzlement (Felony, 11 Months - $6,000 Fine)",
+       "Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Tax Evasion (Felony, 5 Months - $3,000 Fine)",
+       "Money Laundering (Felony, 5 Months - $3,000 Fine)",
+       "Insider Trading (Felony, 5 Months - $3,000 Fine)",
+       "Forgery (Felony, 5 Months - $3,000 Fine)",
+       "Cybercrime (Felony, 5 Months - $3,000 Fine)",
+       "Healthcare Fraud (Felony, 5 Months - $3,000 Fine)",
+       "Ponzi Scheme (Felony, 5 Months - $3,000 Fine)",
+       "Counterfeiting (Felony, 5 Months - $3,000 Fine)",
+       "Corporate Espionage (Felony, 5 Months - $3,000 Fine)",
+       "Animal Abuse and Cruelty (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Possession of Illegally Taken Wildlife (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Importation of Restricted Animals (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Exceeding Daily Catch Limits (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Out of Season or in Protected Areas (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Sale of Illegally Taken Fish (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Endangered Species Violation (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Using Illegal Fishing Gear or Methods (Misdemeanor, 4 Months - $1,000 Fine)",
+       "Hunting Without a License (Infraction, $250 Fine)"
+      ]
+     },
+     {
+      "id": "count",
+      "label": "Count",
+      "type": "text",
+      "placeholder": "1",
+      "width": "narrow"
+     }
+    ],
+    "check": {
+     "id": "",
+     "label": ""
+    },
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Bicycle Patrol Unit Report"
+     ]
+    }
+   },
+   {
+    "type": "longtext",
+    "id": "bpNotes",
+    "title": "NOTES",
+    "maxLength": 2000,
+    "when": {
+     "field": "teuType",
+     "is": [
+      "Bicycle Patrol Unit Report"
+     ]
+    }
+   }
+  ],
+  "example": {
+   "values": {
+    "teuType": "Traffic Stop Report",
+    "teuRank": "TEU Officer",
+    "teuBadge": "L-108",
+    "teuDept": "LSPD",
+    "teuTime": "14:30",
+    "teuLoc": "Strawberry Avenue & Davis",
+    "teuWeather": "Clear",
+    "teuRoad": "Dry",
+    "tsName": "Phil Cantoon",
+    "tsId": "SA-1029384",
+    "tsDob": "1991-04-12",
+    "tsAddr": "14 Alta Street",
+    "tsLic": "Valid",
+    "tsMake": "Bravado",
+    "tsModel": "Buffalo",
+    "tsColor": "Black",
+    "tsPlate": "6ABC123",
+    "tsReg": "Valid",
+    "tsReason": "Speeding",
+    "tsPosted": "50",
+    "tsRecorded": "74",
+    "tsDevice": "Radar gun",
+    "tsCal": "Current",
+    "tsObs": "Driver was cooperative and admitted to running late for work.",
+    "tsAction": "Citation Issued",
+    "tsFine": "$250",
+    "tsPoints": "2"
+   },
+   "repeaters": {
+    "tsCharges": [
+     {
+      "charge": "Speeding (Infraction, $250 Fine)",
+      "count": "1"
+     }
+    ]
+   }
+  }
  }
 ];

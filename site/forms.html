@@ -9,7 +9,7 @@
 <script src="gate.js?v=1"></script>
 <script src="lock.js?v=1"></script>
 <title>LSPD</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="portal.css?v=202610200937">
 </head>
 <body>
@@ -54,6 +54,7 @@
   <section class="view" id="view-form">
     <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; <span id="formCrumb"></span></div>
     <div class="maint" id="formMaint" style="display:none"></div>
+    <div class="fp-grid" id="fpGrid">
     <form id="theForm" novalidate autocomplete="off">
       <div id="formMount"></div>
       <div class="actions">
@@ -63,6 +64,12 @@
         <button type="submit" class="btn primary" id="submitBtn">Submit</button>
       </div>
     </form>
+    <aside class="fp-prev" id="fpPrev" hidden>
+      <div class="fp-top"><span class="fp-dot"></span>REPORT PREVIEW<em id="fpType"></em></div>
+      <pre id="fpText"></pre>
+      <div class="fp-acts"><button type="button" class="btn ghost" id="fpExample" hidden>Load example</button><button type="button" class="btn primary" id="fpCopy">Copy report</button></div>
+    </aside>
+    </div>
   </section>
   <footer id="footer">LOS SANTOS POLICE DEPARTMENT · INTERNAL USE ONLY</footer>
 </main>
@@ -300,12 +307,28 @@ function openForm(id){
   $("copyBtn").style.display = f.copyText ? "" : "none";
   draftStatus("");
   ctrl = Portal.render(f, $("formMount"), { draft: true, onStatus: draftStatus });
+  // live report preview beside the form (forms with "preview": true)
+  $("fpPrev").hidden = !f.preview; $("fpGrid").classList.toggle("on", !!f.preview); $("fpExample").hidden = !(f.example && f.preview);
   const t = ctrl.restoreDraft(); ctrl.fillMe();   // the signed-on officer goes in their own spot
+  setTimeout(drawPreview, 0);
   if(t) toast("Restored your unsaved draft from " + new Date(t).toLocaleString(), "ok");
   return true;
 }
 
-$("clearBtn").onclick = ()=>{ if(confirm("Clear everything on this form?")) ctrl.clear(); };
+function drawPreview(){
+  if(!ctrl || !current || !current.preview) return;
+  $("fpText").textContent = ctrl.toText();
+  const tf = current.previewType && ctrl.getValue(current.previewType); $("fpType").textContent = tf ? tf.toUpperCase() : "";
+}
+["input","change"].forEach(ev => $("formMount").addEventListener(ev, () => setTimeout(drawPreview, 0)));
+$("formMount").addEventListener("click", () => setTimeout(drawPreview, 60));
+$("fpCopy").onclick = async ()=>{
+  const text = ctrl.toText();
+  try{ await navigator.clipboard.writeText(text); toast("Report copied.","ok"); }
+  catch(e){ const r = document.createRange(); r.selectNodeContents($("fpText")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("Press Ctrl+C to copy the selected report.","bad"); }
+};
+$("fpExample").onclick = ()=>{ if(current && current.example){ ctrl.load(JSON.parse(JSON.stringify(current.example))); ctrl.fillMe(); drawPreview(); toast("Example loaded. Clear Form when you're done looking.","ok"); } };
+$("clearBtn").onclick = ()=>{ if(confirm("Clear everything on this form?")) { ctrl.clear(); drawPreview(); } };
 $("copyBtn").onclick = async ()=>{
   const text = ctrl.toText();
   try{ await navigator.clipboard.writeText(text); toast("Copied as plain text.","ok"); }
@@ -327,7 +350,7 @@ $("theForm").addEventListener("submit", async e=>{
       if(data.logId) MyReports.add({ id: data.logId, form: current.id, title: current.title, icon: current.icon || "", at: Date.now() });
       try { if (window.parent !== window) window.parent.postMessage({ type: "lspd:filed", form: current.id, title: current.title }, location.origin); } catch (x) {}
       toast(data.warning ? "Posted, with a warning: " + data.warning : "Success: " + current.title + " posted to Discord!", data.warning ? "bad" : "ok");
-      ctrl.clear();
+      ctrl.clear(); drawPreview();
     } else toast("Error: " + (data.error || "Unknown error"), "bad");
   }catch(err){
     toast("Failed to send: " + err.message, "bad");
