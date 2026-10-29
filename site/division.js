@@ -216,7 +216,7 @@
     if (HQ_NEW) h += `<form class="hqb-new" id="hqNew"><div class="hqb-tags">${tags.map((t, i) => `<label style="--t:${TAGC[t] || "#888"}"><input type="radio" name="tag" value="${esc(t)}"${i ? "" : " checked"}><span>${esc(t)}</span></label>`).join("")}</div>
       <input name="title" maxlength="120" placeholder="Title, e.g. Joint warrant service Friday 8pm" required><textarea name="body" maxlength="2000" rows="3" placeholder="Details: who, when, what you need…"></textarea><div class="hqb-acts"><button class="dc-btn ac">Post to all leaders</button></div></form>`;
     h += B.length ? B.map(p => { const open = HQ_OPEN.has(p.id), c = TAGC[p.tag] || "#888";
-      return `<article class="hqb-post${p.pinned ? " pinned" : ""}" style="--t:${c}"><div class="hqb-head"><span class="hqb-tag">${esc(p.tag)}</span>${p.pinned ? '<span class="hqb-pin">📌 Pinned</span>' : ""}<span class="dim">${esc(p.from)} · ${ago(p.at)}</span></div>
+      return `<article class="hqb-post${p.pinned ? " pinned" : ""}" style="--t:${c}"><div class="hqb-head">${face(p, "hqb-av")}<span class="hqb-tag">${esc(p.tag)}</span>${p.pinned ? '<span class="hqb-pin">📌 Pinned</span>' : ""}<span class="dim">${esc(p.from)} · ${ago(p.at)}</span></div>
         <h4>${esc(p.title)}</h4>${p.body ? `<p>${esc(p.body).replace(/\n/g, "<br>")}</p>` : ""}
         <div class="hqb-foot"><button class="hqb-ack${p.acked ? " on" : ""}" data-hqack="${esc(p.id)}"${p.acked ? " disabled" : ""} title="${esc(p.acks.join(", ") || "Nobody yet")}">✓ ${p.acked ? "Acknowledged" : "Acknowledge"} · ${p.acks.length}</button>
           <button class="hqb-btn" data-hqrep="${esc(p.id)}">💬 ${p.replies.length ? p.replies.length + " repl" + (p.replies.length === 1 ? "y" : "ies") : "Reply"}</button>
@@ -240,6 +240,47 @@
     else if (f.dataset.goalf) { const div = f.dataset.goalf; HQ_GOAL = ""; hqDo("hqGoal", { division: div, target: v("target"), note: v("note") }, "Goal set for this week."); }
   });
   const hqTyping = () => { const a = document.activeElement; return !!(a && a.closest && a.closest("#hq") && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && (a.value || "").trim()); };
+  const face = (p, cls) => p && p.avatar ? `<img class="${cls} pic" src="${esc(p.avatar)}" alt="" onerror="this.outerHTML='<span class=&quot;${cls}&quot;>${esc(initials(p.name || p.from || "?"))}</span>'">` : `<span class="${cls}">${esc(initials((p && (p.name || p.from)) || "?"))}</span>`;
+  const ord = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+  function hqGreet(race) {
+    const mine = ((HQ.perms || {}).divisions || []), who = ME && ME.username ? esc(ME.username) : "Commander";
+    const myD = (HQ.perms || {}).pin && mine.length !== 1 ? null : race.find(d => mine.indexOf(d.id) !== -1);   // command staff: the whole department
+    if (!myD) { const tot = race.reduce((n, d) => n + (d[HQ_P].reports || 0), 0); return `${who}, the department has filed <b>${tot}</b> report${tot === 1 ? "" : "s"} this ${HQ_P === "week" ? "week" : "month"}. Here's where every division stands.`; }
+    const i = race.indexOf(myD), s0 = hqScore(myD);
+    if (i === 0) { const nx = race[1], lead = nx ? s0 - hqScore(nx) : 0; return s0 ? `${who}, <b style="color:${esc(myD.color)}">${esc(myD.name)}</b> is leading${nx && lead ? ` by ${lead} pts over ${esc(nx.name)}` : ""}. Keep the pressure on.` : `${who}, the race is wide open. One report puts ${esc(myD.name)} in front.`; }
+    const ah = race[i - 1], gap = hqScore(ah) - s0, need = Math.max(1, Math.ceil((gap + 1) / (HQ_RANK === "per" ? Math.max(1, 10 / Math.max(1, myD.roster || 1)) : 10)));
+    return `${who}, <b style="color:${esc(myD.color)}">${esc(myD.name)}</b> is ${ord(i + 1)}, ${gap ? gap + " pts behind " + esc(ah.name) + ". About " + need + " more report" + (need === 1 ? "" : "s") + " to pass them." : "tied with " + esc(ah.name) + ". One report breaks it."}`;
+  }
+  // race moments: what changed since this leader last looked, plus streaks and hot divisions
+  let HQ_LAST_ORDER = null;
+  function hqMoments(race) {
+    const out = [], P = HQ_P, key = "dc:hqprev:" + P;
+    let prev = null; try { prev = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) {}
+    const order = race.map(d => d.id), nm = id => (race.find(d => d.id === id) || {}).name || id;
+    if (prev && prev.start === (P === "week" ? HQ.weekStart : HQ.monthStart) && prev.order.length) {
+      if (prev.order[0] !== order[0] && hqScore(race[0])) { out.push(`⚡ <b>${esc(race[0].name)}</b> took the lead from ${esc(nm(prev.order[0]))}`); if (HQ_LAST_ORDER && HQ_LAST_ORDER[0] !== order[0]) leadChange(race[0]); }
+      order.forEach((id, i) => { const was = prev.order.indexOf(id); if (was > i && i > 0) out.push(`📈 <b>${esc(nm(id))}</b> moved up to ${ord(i + 1)}`); });
+    }
+    HQ_LAST_ORDER = order;
+    try { localStorage.setItem(key, JSON.stringify({ start: P === "week" ? HQ.weekStart : HQ.monthStart, order: order })); } catch (e) {}
+    race.forEach(d => { if (d.today >= 3) out.push(`🚨 <b>${esc(d.name)}</b> has ${d.today} reports today`); if (d.streak >= 3) out.push(`🔥 <b>${esc(d.name)}</b>: reports ${d.streak} days in a row`); });
+    if (HQ.hot) out.push(`⚡ <b>${esc(nm(HQ.hot))}</b> is the hottest division right now (most points in 24h)`);
+    if (HQ.improved) out.push(`📈 Most improved: <b>${esc(nm(HQ.improved.id))}</b> (+${HQ.improved.by} vs last week)`);
+    if (HQ.mvp) out.push(`🏆 <b>${esc(HQ.mvp.name)}</b> is MVP of the week with ${HQ.mvp.pts} pts`);
+    return out;
+  }
+  let ACTX = null;
+  function chime(up) { try { ACTX = ACTX || new (window.AudioContext || window.webkitAudioContext)(); const t = ACTX.currentTime; [0, .12, .24].forEach((dt, i) => { const o = ACTX.createOscillator(), g = ACTX.createGain(); o.type = "triangle"; o.frequency.value = (up ? [660, 880, 1320] : [520, 660, 780])[i]; g.gain.setValueAtTime(.0001, t + dt); g.gain.exponentialRampToValueAtTime(.12, t + dt + .02); g.gain.exponentialRampToValueAtTime(.0001, t + dt + .35); o.connect(g).connect(ACTX.destination); o.start(t + dt); o.stop(t + dt + .4); }); } catch (e) {} }
+  function leadChange(d) { chime(true); toast("⚡ " + d.name + " just took the lead!", "ok"); confetti(d.color); }
+  function confetti(color) {
+    const c = document.createElement("canvas"); c.className = "hq-confetti"; c.width = innerWidth; c.height = innerHeight; document.body.appendChild(c);
+    const x = c.getContext("2d"), cols = [color || "#e8b54a", "#ffd98a", "#ffffff", "#34d399", "#60a5fa"], P = [];
+    for (let i = 0; i < 140; i++) P.push({ x: innerWidth / 2 + (Math.random() - .5) * 200, y: innerHeight * .35, vx: (Math.random() - .5) * 14, vy: -Math.random() * 12 - 4, r: Math.random() * 5 + 3, c: cols[i % cols.length], a: Math.random() * 6 });
+    let n = 0; (function f() { x.clearRect(0, 0, c.width, c.height); P.forEach(p => { p.vy += .35; p.x += p.vx; p.y += p.vy; p.a += .2; x.save(); x.translate(p.x, p.y); x.rotate(p.a); x.fillStyle = p.c; x.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); x.restore(); }); if (++n < 140) requestAnimationFrame(f); else c.remove(); })();
+  }
+  setInterval(() => { document.querySelectorAll("[data-hqend]").forEach(el => { const ms = Number(el.dataset.hqend) - Date.now(); if (ms <= 0) { el.textContent = "Race closed"; return; }
+    const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4), sec = Math.floor(ms % 6e4 / 1000);
+    el.innerHTML = (d ? "<b>" + d + "</b>d " : "") + "<b>" + h + "</b>h <b>" + String(m).padStart(2, "0") + "</b>m <b>" + String(sec).padStart(2, "0") + "</b>s"; el.closest(".hq-clock") && el.closest(".hq-clock").classList.toggle("soon", ms < 864e5); }); }, 1000);
   function drawHQ(force) {
     const box = $("hq");
     if (!force && hqTyping()) { HQ_PENDING = true; return; }      // don't wipe a post or reply someone is typing
@@ -254,20 +295,24 @@
     const since = new Date(P === "week" ? HQ.weekStart : HQ.monthStart).toLocaleDateString(undefined, { month: "short", day: "numeric" });
     const unit = HQ_RANK === "per" ? "pts / officer" : "pts";
     const gap = second ? hqScore(lead) - hqScore(second) : 0;
-    const heroH = `<section class="hq-hero"><div class="hq-hero-in"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${L.length} DIVISIONS · ${P === "week" ? "WEEK OF" : "MONTH OF"} ${esc(since.toUpperCase())}</div>
+    const endTxt = new Date(HQ.weekEnd || 0).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+    const clockH = P === "week" && HQ.weekEnd ? `<div class="hq-clock"><small>RACE CLOSES ${esc(endTxt.toUpperCase())}</small><span data-hqend="${HQ.weekEnd}">…</span></div>` : "";
+    const lastMonth = (HQ.seasons || [])[0], champD = lastMonth && L.find(d => d.id === lastMonth.champ), nowD = new Date();
+    const champH = champD && nowD.getDate() <= 3 && new Date(lastMonth.month).getMonth() === (nowD.getMonth() + 11) % 12 ? `<section class="hq-champ" style="--c:${esc(champD.color)}"><span>🏆</span><div><small>${new Date(lastMonth.month).toLocaleDateString(undefined, { month: "long" }).toUpperCase()} CHAMPION</small><b>${esc(champD.name)}</b><em>${lastMonth.points} pts · a new season starts now</em></div><span>🏆</span></section>` : "";
+    const heroH = champH + `<section class="hq-hero" style="--lc:${esc(hqScore(lead) ? lead.color : "#e8b54a")}"><div class="hq-hero-in"><p class="hq-hi">${hqGreet(race)}</p><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${L.length} DIVISIONS · ${P === "week" && HQ.weekEnd ? "WEEK ENDING " + esc(new Date(HQ.weekEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()) : (P === "week" ? "WEEK OF " : "MONTH OF ") + esc(since.toUpperCase())}</div>
       <h1>${!hqScore(lead) ? "The race is on." : second && !gap ? "It's a dead heat." : `<b style="color:${esc(lead.color)}">${esc(lead.name)}</b> leads the race.`}</h1>
       <p>${hqScore(lead) ? (second ? (gap ? `${gap} ${unit} ahead of ${esc(second.name)}.` : `${esc(lead.name)} and ${esc(second.name)} are tied on ${hqScore(lead)} ${unit}.`) : "") + " Every report, assist and good grade moves your division up." : "No reports yet this " + (P === "week" ? "week" : "month") + ". First report takes the lead."}</p></div>
-      <div class="hq-tot"><div><b>${sum("reports")}</b><small>Reports</small></div><div><b>${sum("assists")}</b><small>Assists</small></div><div><b>${sum("active")}</b><small>Active officers</small></div><div><b>${GLET(gAvg)}</b><small>Avg grade</small></div><div class="${sum("awaiting") ? "warn" : ""}"><b>${sum("awaiting")}</b><small>Awaiting grade</small></div></div></section>`;
+      ${clockH}<div class="hq-tot"><div><b>${sum("reports")}</b><small>Reports</small></div><div><b>${sum("assists")}</b><small>Assists</small></div><div><b>${sum("active")}</b><small>Active officers</small></div><div><b>${GLET(gAvg)}</b><small>Avg grade</small></div><div class="${sum("awaiting") ? "warn" : ""}"><b>${sum("awaiting")}</b><small>Awaiting grade</small></div></div></section>`;
     // the race
     const raceH = `<section class="hq-race"><header><h2><span>🏁</span>DIVISION RACE</h2><div class="hq-segs"><div class="dc-seg"><button data-hqp="week" class="${P === "week" ? "on" : ""}">This week</button><button data-hqp="month" class="${P === "month" ? "on" : ""}">This month</button></div>
       <div class="dc-seg"><button data-hqr="total" class="${HQ_RANK === "total" ? "on" : ""}">Total points</button><button data-hqr="per" class="${HQ_RANK === "per" ? "on" : ""}" title="Points divided by the officers on the division's roster: fair for small divisions">Per officer</button></div></div></header>
       <div class="hq-lanes">${race.map((d, i) => { const s = hqScore(d), pct = Math.max(3, Math.round(s / top * 92)), dp = (d[P].points || 0) - ((d[prevK] || {}).points || 0);
         return `<div class="hq-lane${i === 0 && s ? " lead" : ""}" style="--c:${esc(d.color)}" data-div="${esc(d.id)}" title="Open ${esc(d.name)}">
           <span class="hq-pos">${i === 0 && s ? "👑" : i + 1}</span>
-          <div class="hq-lname">${emblem(d, "hq-em")}<div><b>${esc(d.name)}${d.trophies ? ` <span class="hq-tro" title="${d.trophies} monthly title${d.trophies === 1 ? "" : "s"}">🏆${d.trophies > 1 ? "×" + d.trophies : ""}</span>` : ""}</b><small>${d[P].reports} report${d[P].reports === 1 ? "" : "s"} · ${d[P].active} active${dp ? ` · <em class="${dp > 0 ? "up" : "down"}">${dp > 0 ? "▲" : "▼"} ${Math.abs(dp)} vs last ${P === "week" ? "week" : "month"}</em>` : ""}</small></div></div>
+          <div class="hq-lname">${emblem(d, "hq-em")}<div><b>${esc(d.name)}${d.trophies ? ` <span class="hq-tro" title="${d.trophies} monthly title${d.trophies === 1 ? "" : "s"}">🏆${d.trophies > 1 ? "×" + d.trophies : ""}</span>` : ""}${d.streak >= 3 ? ` <span class="hq-badge fire" title="Reports ${d.streak} days in a row">🔥 ${d.streak}</span>` : ""}${HQ.hot === d.id ? ' <span class="hq-badge hot" title="Most points in the last 24 hours">⚡ HOT</span>' : ""}${HQ.improved && HQ.improved.id === d.id ? ` <span class="hq-badge imp" title="Biggest jump from last week">📈 +${HQ.improved.by}</span>` : ""}</b><small>${d[P].reports} report${d[P].reports === 1 ? "" : "s"} · ${d[P].active} active${dp ? ` · <em class="${dp > 0 ? "up" : "down"}">${dp > 0 ? "▲" : "▼"} ${Math.abs(dp)} vs last ${P === "week" ? "week" : "month"}</em>` : ""}</small></div></div>
           <div class="hq-track"><i class="hq-trail" style="width:${HQ_ANIM ? 0 : pct}%" data-w="${pct}"></i><span class="hq-car" style="left:${HQ_ANIM ? 0 : pct}%" data-l="${pct}">${emblem(d, "hq-carem")}</span><span class="hq-finish"></span></div>
           <b class="hq-pts">${s}<small>${unit}</small></b></div>`; }).join("")}</div>
-      <p class="hq-legend">Points: report filed <b>${HQ.points.report}</b> · officer assisted <b>${HQ.points.assist}</b> · graded A <b>+${HQ.points.A}</b> / B <b>+${HQ.points.B}</b> / C <b>+${HQ.points.C}</b> · each active officer <b>+${HQ.points.active}</b></p></section>`;
+      <p class="hq-legend">Points: report filed <b>${HQ.points.report}</b> · officer assisted <b>${HQ.points.assist}</b> · graded A <b>+${HQ.points.A}</b> / B <b>+${HQ.points.B}</b> / C <b>+${HQ.points.C}</b> · each active officer <b>+${HQ.points.active}</b> · up to ${HQ.points.capReports || 3} reports and ${HQ.points.capAssists || 6} assists per officer per day count, so quality beats volume</p></section>`;
     // division cards, MVP, hall of fame, live feed
     const mvp = HQ.mvp, mvpDiv = mvp && L.find(d => d.id === mvp.div);
     const cardsH = `<div class="hq-cards">${race.map(d => { const c = d[P], act = d.roster ? Math.round(c.active / d.roster * 100) : 0, mx = Math.max(1, ...d.days);
@@ -276,9 +321,9 @@
           <div class="hq-cstats"><div><b>${c.reports}</b><small>Reports</small></div><div><b>${c.assists}</b><small>Assists</small></div><div><b>${GLET(c.avg)}</b><small>Avg grade</small></div><div class="${c.awaiting ? "warn" : ""}"><b>${c.awaiting}</b><small>To grade</small></div></div>
           ${goalHTML(d)}
           <div class="hq-spark" title="Reports, last 7 days">${d.days.map((n, i) => `<i style="height:${Math.max(6, Math.round(n / mx * 100))}%" class="${i === 6 ? "t" : ""}" title="${n} report${n === 1 ? "" : "s"}"></i>`).join("")}</div>
-          <footer>${d.top ? `<span class="hq-top">⭐ ${esc(d.top.callsign ? d.top.callsign + " · " : "")}${esc(d.top.name)} <em>${d.top.pts} pts</em></span>` : `<span class="hq-top dim">No top performer yet</span>`}<span class="dim">${d.last ? "Last report " + ago(d.last) : "No reports yet"}</span></footer>
+          <footer>${d.top ? `<span class="hq-top">${face(d.top, "hq-tav")} ${esc(d.top.callsign ? d.top.callsign + " · " : "")}${esc(d.top.name)} <em>${d.top.pts} pts</em>${OFFICER() && d.top.id ? ` <button class="hq-kudo sm" data-kudo="${esc(d.top.id)}" data-kname="${esc(d.top.name)}" title="Recognize">👏</button>` : ""}</span>` : `<span class="hq-top dim">No top performer yet</span>`}<span class="dim">${d.last ? "Last report " + ago(d.last) : "No reports yet"}</span></footer>
           <button class="hq-open" data-div="${esc(d.id)}">Open ${esc(d.name)} →</button></article>`; }).join("")}</div>`;
-    const mvpH = `<section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(mvpDiv.color)}"` : ""}><div class="hq-mk">🏆 MVP OF THE WEEK</div>${mvp ? `<div class="hq-mav">${esc(initials(mvp.name))}</div><b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>` : `<p class="dim">The first report of the week claims it.</p>`}</section>`;
+    const mvpH = `<section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(mvpDiv.color)}"` : ""}><div class="hq-mk">🏆 MVP OF THE WEEK</div>${mvp ? `${face(mvp, "hq-mav")}<b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>${OFFICER() && mvp.id ? `<button class="hq-kudo" data-kudo="${esc(mvp.id)}" data-kname="${esc(mvp.name)}">👏 Recognize</button>` : ""}` : `<p class="dim">The first report of the week claims it.</p>`}</section>`;
     const feedH = `<section class="hq-feed"><h3><span class="hq-pulse"></span>LIVE ACROSS DIVISIONS</h3>${(HQ.feed || []).length ? HQ.feed.map(f => { const d = L.find(x => x.id === f.div) || {};
           return `<div class="hq-fi" style="--c:${esc(d.color || "#888")}" data-div="${esc(f.div)}"><i></i><div><b>${esc(f.icon)} ${esc(f.title)}</b><small>${esc(d.name || "")}${f.by ? " · " + esc(f.by) : ""} · ${ago(f.at)}</small></div>${f.grade ? `<span class="hq-g">${esc(f.grade)}</span>` : ""}</div>`; }).join("") : '<p class="dim">No reports yet.</p>'}</section>`;
     // three views so nothing is crowded: the race, the leaders' bulletin, the division cards
@@ -287,11 +332,12 @@
     const tabsH = `<nav class="hq-tabs"><button data-hqt="race" class="${HQ_TAB === "race" ? "on" : ""}"><span>🏁</span>Race<small>${esc(lead.name)} leads</small></button>
       <button data-hqt="board" class="${HQ_TAB === "board" ? "on" : ""}"><span>📌</span>Bulletin<small>${B.length} post${B.length === 1 ? "" : "s"}</small>${unread ? `<em>${unread} new</em>` : ""}</button>
       <button data-hqt="divs" class="${HQ_TAB === "divs" ? "on" : ""}"><span>🗂️</span>Divisions<small>${goalsSet ? goalsHit + " / " + goalsSet + " goals hit" : L.length + " division" + (L.length === 1 ? "" : "s")}</small></button></nav>`;
-    const stripH = `<section class="hq-strip"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${P === "week" ? "WEEK OF" : "MONTH OF"} ${esc(since.toUpperCase())}</div><div class="hq-mini">${race.slice(0, 3).map((d, i) => `<span style="--c:${esc(d.color)}">${i === 0 && hqScore(d) ? "👑" : i + 1 + "."} ${esc(d.name)} <b>${hqScore(d)}</b></span>`).join("")}</div></section>`;
+    const stripH = `<section class="hq-strip"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${P === "week" && HQ.weekEnd ? "WEEK ENDING " + esc(new Date(HQ.weekEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()) : (P === "week" ? "WEEK OF " : "MONTH OF ") + esc(since.toUpperCase())}</div><div class="hq-mini">${race.slice(0, 3).map((d, i) => `<span style="--c:${esc(d.color)}">${i === 0 && hqScore(d) ? "👑" : i + 1 + "."} ${esc(d.name)} <b>${hqScore(d)}</b></span>`).join("")}</div></section>`;
     let h;
     if (HQ_TAB === "board") { HQ_SEEN = Date.now(); store("dc:hqseen", String(HQ_SEEN)); h = stripH + tabsH + `<div class="hq-grid">${boardHTML()}<aside class="hq-side">${feedH}</aside></div>`; }
     else if (HQ_TAB === "divs") h = stripH + tabsH + cardsH;
-    else h = heroH + tabsH + raceH + `<div class="hq-row3">${mvpH}${fameHTML(L)}${feedH}</div>`;
+    else { const mo = hqMoments(race); h = heroH + tabsH + (mo.length ? `<div class="hq-ticker"><span class="hq-tk">RACE WIRE</span><div class="hq-tkm"><div>${mo.concat(mo).map(x => `<span>${x}</span>`).join("")}</div></div></div>` : "") + raceH + `<div class="hq-row3">${mvpH}${fameHTML(L)}${feedH}</div>`; }
+    if (HQ_TAB === "divs") setTimeout(() => L.forEach(d => { const g = (HQ.goals || {})[d.id]; if (!g || !g.target || d.week.reports < g.target) return; const k = "dc:goalcel:" + d.id + ":" + HQ.weekStart; try { if (localStorage.getItem(k)) return; localStorage.setItem(k, "1"); } catch (e) { return; } confetti(d.color); toast("🎯 " + d.name + " hit its weekly goal!", "ok"); }), 400);
     box.innerHTML = h;
     if (HQ_ANIM) { HQ_ANIM = false; requestAnimationFrame(() => requestAnimationFrame(() => box.querySelectorAll(".hq-trail").forEach(t => t.style.width = t.dataset.w + "%") || box.querySelectorAll(".hq-car").forEach(c => c.style.left = c.dataset.l + "%"))); }
   }
@@ -572,6 +618,7 @@
   document.addEventListener("click", e => {
     const t = e.target;
     const ht = t.closest("[data-hqt]"); if (ht) { HQ_TAB = ht.dataset.hqt; store("dc:hqt", HQ_TAB); HQ_ANIM = HQ_TAB === "race"; drawHQ(true); return; }
+    const kb = t.closest("[data-kudo]"); if (kb) { const msg = prompt("Recognize " + kb.dataset.kname + " (they'll see it on their MDT):", "Great work this week. Thanks for carrying the division!"); if (msg && msg.trim()) Portal.post({ action: "unitKudos", session: SESSION, to: kb.dataset.kudo, msg: msg.trim() }).then(r => toast(r.ok ? "👏 " + kb.dataset.kname + " was recognized." : (r.error || "Couldn't send that."), r.ok ? "ok" : "bad")).catch(() => toast("Couldn't reach the server.", "bad")); return; }
     if (t.closest("[data-hqnew]")) { HQ_NEW = !HQ_NEW; drawHQ(true); if (HQ_NEW) setTimeout(() => { const n = document.querySelector("#hqNew [name=title]"); if (n) n.focus(); }, 30); return; }
     const ha = t.closest("[data-hqack]"); if (ha) { hqDo("hqAck", { id: ha.dataset.hqack }); return; }
     const hr2 = t.closest("[data-hqrep]"); if (hr2) { const id = hr2.dataset.hqrep; HQ_OPEN.has(id) ? HQ_OPEN.delete(id) : HQ_OPEN.add(id); drawHQ(true); return; }

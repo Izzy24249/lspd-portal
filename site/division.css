@@ -526,3 +526,34 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
 @media (max-width:700px){.hq-tabs{grid-template-columns:1fr 1fr 1fr;gap:6px}.hq-tabs button{grid-template-columns:1fr;padding:10px;font-size:13px;text-align:center;justify-items:center}.hq-tabs button span{grid-row:auto}.hq-tabs button small{display:none}.hq-tabs em{top:6px;right:6px;transform:none}.hq-row3{grid-template-columns:1fr}}
 .hq-row3 .hq-fi:nth-of-type(n+6){display:none}
 .hq-gtop b{white-space:nowrap}
+/* ---- the touch: greeting, clock, wire, badges, faces, celebrations ---- */
+.hq-hero{background:radial-gradient(760px 320px at 0% 0%,color-mix(in srgb,var(--lc,#e8b54a) 22%,transparent),transparent 60%),radial-gradient(600px 300px at 100% 100%,rgba(47,123,255,.12),transparent 60%),linear-gradient(180deg,rgba(14,20,34,.95),rgba(8,12,22,.95));border-color:color-mix(in srgb,var(--lc,#e8b54a) 40%,transparent);transition:background .8s}
+.hq-hi{font-size:15px;color:#dbe4f2;margin-bottom:12px;max-width:640px}.hq-hi b{font-weight:700}
+.hq-hero-in{position:relative;z-index:1}
+.hq-clock{position:relative;z-index:1;grid-column:2;justify-self:end;text-align:right;margin-bottom:10px}
+.hq-clock small{display:block;font:700 10.5px "JetBrains Mono",monospace;letter-spacing:.16em;color:var(--muted)}
+.hq-clock span{font:500 22px "JetBrains Mono",monospace;color:#fff}.hq-clock span b{font-weight:700;color:#ffd98a}
+.hq-clock.soon span b{color:#f87171}.hq-clock.soon small{color:#fca5a5}
+.hq-hero{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}.hq-hero>.hq-tot{grid-column:2}
+.hq-champ{display:flex;align-items:center;justify-content:center;gap:18px;padding:14px 20px;border-radius:18px;text-align:center;border:1px solid var(--c);background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--c) 22%,transparent),transparent),rgba(10,15,26,.95);animation:hqGlow 3s ease-in-out infinite}
+.hq-champ>span{font-size:30px}.hq-champ small{display:block;font:700 11px "JetBrains Mono",monospace;letter-spacing:.2em;color:#ffd98a}.hq-champ b{display:block;font:700 26px Oswald,sans-serif;letter-spacing:.06em;text-transform:uppercase}.hq-champ em{font-style:normal;color:var(--muted);font-size:12.5px}
+@keyframes hqGlow{50%{box-shadow:0 0 40px -10px var(--c)}}
+.hq-ticker{display:flex;align-items:center;gap:0;border-radius:14px;border:1px solid var(--line);background:rgba(8,12,22,.9);overflow:hidden;height:40px}
+.hq-tk{flex:none;height:100%;display:grid;place-items:center;padding:0 14px;background:#e8b54a;color:#1a1204;font:700 11px "JetBrains Mono",monospace;letter-spacing:.16em}
+.hq-tkm{flex:1;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.hq-tkm>div{display:inline-flex;gap:40px;white-space:nowrap;padding-left:20px;animation:hqTick 38s linear infinite}
+.hq-tkm span{font-size:13px;color:#dbe4f2}.hq-tkm b{color:#fff}
+.hq-ticker:hover .hq-tkm>div{animation-play-state:paused}
+@keyframes hqTick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.hq-badge{display:inline-block;font:700 10.5px Inter,sans-serif;padding:2px 7px;border-radius:999px;vertical-align:middle;margin-left:4px}
+.hq-badge.fire{background:rgba(251,146,60,.16);color:#fdba74}.hq-badge.hot{background:rgba(250,204,21,.16);color:#fde047;animation:hqP 2s infinite}.hq-badge.imp{background:rgba(52,211,153,.15);color:#a7f3d0}
+.pic{object-fit:cover}
+.hq-mav.pic{display:block}
+.hq-tav{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font:700 9px Oswald,sans-serif;background:color-mix(in srgb,var(--c) 40%,#0b111c);vertical-align:middle;margin-right:4px}
+.hqb-av{width:26px;height:26px;border-radius:50%;display:inline-grid;place-items:center;font:700 10px Oswald,sans-serif;background:rgba(232,181,74,.25);color:#fff}
+.hq-kudo{margin-top:10px;height:32px;padding:0 14px;border-radius:999px;border:1px solid color-mix(in srgb,var(--c) 55%,transparent);background:color-mix(in srgb,var(--c) 14%,transparent);color:#fff;font:600 12.5px Inter,sans-serif;cursor:pointer}
+.hq-kudo:hover{background:color-mix(in srgb,var(--c) 28%,transparent)}
+.hq-kudo.sm{margin:0 0 0 4px;height:24px;padding:0 7px;font-size:12px}
+.hq-confetti{position:fixed;inset:0;pointer-events:none;z-index:200}
+@media (max-width:1100px){.hq-clock,.hq-hero>.hq-tot{grid-column:1;justify-self:start;text-align:left}}
+.hq-hero-in{grid-row:span 2}@media (max-width:1100px){.hq-hero-in{grid-row:auto}}

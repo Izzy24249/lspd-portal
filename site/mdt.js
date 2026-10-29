@@ -174,6 +174,21 @@
   }
 
   // ---------- home ----------
+  // the division race, from this officer's side (their division's place and their own points this week)
+  function raceCardHTML() {
+    const R = DATA && DATA.race; if (!R || !((R.divisions || []).length || (R.standings || []).length)) return "";
+    const end = R.weekEnd ? new Date(R.weekEnd) : null;
+    return '<section class="race"><div class="race-head"><span class="race-k">🏁 DIVISION RACE</span>' + (end ? '<span class="race-clock" data-raceend="' + R.weekEnd + '">closes ' + end.toLocaleDateString(undefined, { weekday: "short" }) + " " + end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + "</span>" : "") + "</div>" +
+      (R.divisions.length ? "" : '<p class="race-none">Every report you file counts for your division. Here are this week\'s standings:</p>') +
+      R.divisions.map(d => { const gap = d.ahead ? d.ahead.points - d.points : 0, need = gap ? Math.max(1, Math.ceil((gap + 1) / 10)) : 0;
+        const line = d.rank === 1 ? (d.points ? "Your division is leading the race." : "The race just started. First report takes the lead.")
+          : d.ahead ? gap ? gap + " pts behind " + esc(d.ahead.name) + " · about " + need + " more report" + (need === 1 ? "" : "s") + " to pass them." : "Tied with " + esc(d.ahead.name) + ". One report breaks it." : "";
+        return '<div class="race-row" style="--c:' + esc(d.color) + '"><div class="race-pos">' + (d.rank === 1 && d.points ? "👑" : "#" + d.rank) + '</div><div class="race-txt"><b>' + esc(d.name) + ' <em>' + d.points + " pts</em>" + (d.streak >= 3 ? ' <span class="race-fire" title="Reports ' + d.streak + ' days in a row">🔥 ' + d.streak + "</span>" : "") + "</b><small>" + line + "</small></div>" +
+          '<div class="race-me">' + (d.my ? "<b>+" + d.my.pts + "</b><small>you · " + d.my.reports + " report" + (d.my.reports === 1 ? "" : "s") + "</small>" : "<b>0</b><small>you this week</small>") + "</div></div>"; }).join("") +
+      '<div class="race-foot">' + (R.standings || []).map((x, i) => '<span style="--c:' + esc(x.color) + '">' + (i + 1) + ". " + esc(x.name) + " <b>" + x.points + "</b></span>").join("") + (R.improved ? '<span class="race-imp">📈 Most improved: ' + esc(R.improved) + "</span>" : "") + "</div></section>";
+  }
+  setInterval(() => { document.querySelectorAll("[data-raceend]").forEach(el => { const ms = Number(el.dataset.raceend) - Date.now(); if (ms <= 0) { el.textContent = "race closed"; return; }
+    const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4); el.textContent = "closes in " + (d ? d + "d " : "") + h + "h " + m + "m"; el.classList.toggle("soon", ms < 864e5); }); }, 1000);
   function greet() { const h = new Date().getHours(); return h < 5 ? "Evening" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening"; }
   const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
   const gcls = g => { const x = String(g || "").toUpperCase()[0]; return x === "R" ? "r" : x === "A" ? "a" : x === "B" ? "b" : x === "C" ? "c" : x ? "c" : "w"; };
@@ -199,6 +214,10 @@
       '<div class="stat"><svg viewBox="0 0 24 24"><use href="#i-file"/></svg><small>Your recent reports</small><b data-count="' + mine.length + '">0</b><em>' + (waiting ? waiting + " awaiting grade" : "all graded") + "</em></div>" +
       '<div class="stat ' + (NB0.length ? "r" : "") + '"><svg viewBox="0 0 24 24"><use href="#i-radio"/></svg><small>Active BOLOs</small><b data-count="' + NB0.length + '">0</b><em>' + (NB0[0] ? esc(NB0[0].title).slice(0, 26) : "none posted") + "</em></div>" +
       '<div class="stat a"><svg viewBox="0 0 24 24"><use href="#i-star"/></svg><small>Officers active · 7 days</small><b data-count="' + (D0.active || 0) + '">0</b><em>avg grade ' + esc(D0.avg || "—") + "</em></div></div>";
+    h += raceCardHTML();
+    // a leader recognized this officer in the last 3 days
+    { const me = (p && p.discordId) || ""; const kd = UNIT && (UNIT.kudos || []).find(k => k.toId === me && Date.now() - k.at < 3 * 864e5);
+      if (kd) h += '<a class="kudo-ban" data-go="unit"><span>👏</span><div><small>YOU WERE RECOGNIZED</small><b>' + esc(kd.from) + "</b><p>“" + esc(kd.msg) + "”</p></div></a>"; }
     if (UNIT && UNIT.ootm) h += '<a class="ootm mini" data-go="unit"><span>🏆</span><div><small>' + esc(UNIT.ootm.title) + "</small><b>" + esc(UNIT.ootm.to) + "</b></div></a>";
     if (UNIT && (UNIT.ribbons || []).length) h += '<div class="ribbons" style="margin:-8px 0 16px">' + UNIT.ribbons.map(r => '<span title="' + esc(r.title) + '"><i>' + esc(r.emoji) + "</i>" + esc(r.title) + "</span>").join("") + "</div>";
     const NB = B.notices || [];

@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 82;
+const BACKEND_VERSION = 83;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2059,17 +2059,25 @@ function divView_(d, me) {
   out.me = { username: me.username, role: me.role };
   return out;
 }
+// Discord profile pictures (saved when an officer signs in with Discord)
+function avatarUrl_(id, hash) { return id && hash ? "https://cdn.discordapp.com/avatars/" + id + "/" + hash + ".png?size=128" : ""; }
+function avMap_() { const m = {}; try { acctAll_().forEach(a => { if (a.avatar) m[a.id] = avatarUrl_(a.id, a.avatar); }); } catch (e) {} return m; }
+// the race week closes Sunday 8 PM (no late-night pressure) and the next one starts right then
+function raceWeek_() {
+  const cfg = getConfig_(), ws = (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1;
+  const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() - ws + 7) % 7));
+  let W = d.getTime() - 4 * 3600e3; if (Date.now() >= W + 7 * 864e5) W += 7 * 864e5;
+  return W;
+}
 // ---- Command Center: every division side by side, and the division race (points) ----
 // Points: report filed 10 · officer assisted 4 · graded A +5 / B +3 / C +1 · every active officer +5
-const RACE_PTS_ = { report: 10, assist: 4, A: 5, B: 3, C: 1, active: 5 };
-function divOverview_(allowed, me) {
+const RACE_PTS_ = { report: 10, assist: 4, A: 5, B: 3, C: 1, active: 5, capReports: 3, capAssists: 6 };   // per officer, per day
+function divOverview_(allowed, me, bare) {
   const cfg = getConfig_(), divs = ((cfg.settings || {}).divisions || []).filter(x => !allowed || allowed.indexOf(x.id) !== -1);
   const cache = CacheService.getScriptCache(), ck = "div_hq_" + divs.map(x => x.id).join(",").slice(0, 200);
-  const hit = bigGet_(ck); if (hit) { try { return hqExtras_(Object.assign(JSON.parse(hit), { me: me, cached: true }), me, allowed); } catch (e) {} }
-  const ws = (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1;
+  const hit = bigGet_(ck); if (hit) { try { const o = Object.assign(JSON.parse(hit), { me: me, cached: true }); return bare ? o : hqExtras_(o, me, allowed); } catch (e) {} }
   const d0 = new Date(); d0.setHours(0, 0, 0, 0);
-  const weekFrom = new Date(d0.getTime()); weekFrom.setDate(weekFrom.getDate() - ((weekFrom.getDay() - ws + 7) % 7));
-  const W = weekFrom.getTime(), LW = W - 7 * 864e5, M = new Date(d0.getFullYear(), d0.getMonth(), 1).getTime(), LM = new Date(d0.getFullYear(), d0.getMonth() - 1, 1).getTime();
+  const W = raceWeek_(), LW = W - 7 * 864e5, M = new Date(d0.getFullYear(), d0.getMonth(), 1).getTime(), LM = new Date(d0.getFullYear(), d0.getMonth() - 1, 1).getTime();
   const formsById = {}; cfg.forms.forEach(f => formsById[f.id] = f);
   const rows = actRows_().filter(r => r.at >= Math.min(LW, LM));
   const people = {};   // key -> { name, callsign, div, pts }
@@ -2080,28 +2088,36 @@ function divOverview_(allowed, me) {
     const fset = {}; (dv.forms || []).forEach(f => { const form = formsById[f.id]; if (!form) return; const slots = personSlots_(form); fset[f.id] = f.author && slots.some(x => x.key === f.author) ? f.author : autoAuthor_(form); });
     const mine = rows.filter(r => fset[r.form] !== undefined);
     const per = (from, to) => {
-      const list = mine.filter(r => r.at >= from && r.at < to), act = {}, ppl = {};
-      let assists = 0, bonus = 0, graded = 0, gsum = 0;
+      const list = mine.filter(r => r.at >= from && r.at < to).slice().sort((a, b) => a.at - b.at), act = {}, ppl = {}, cap = {};
+      let assists = 0, bonus = 0, graded = 0, gsum = 0, capped = 0;
       list.forEach(r => {
+        const day = new Date(r.at).toDateString();
         const au = r.people.find(p => p.f === fset[r.form]);
         (r.people || []).forEach(p => { const isAu = p === au;
           const o = find(p) || (p.i || p.n ? { id: p.i || "", cs: p.n.indexOf("|") !== -1 ? p.n.split("|")[0].trim() : "", n: cleanName_((p.n.indexOf("|") !== -1 ? p.n.split("|").slice(1).join("|") : p.n).replace(/\s*\(\d{15,21}\)/, "").trim()) || "ID " + p.i } : null);
           const k = o ? "R:" + (o.id || o.cs || nameKey_(o.n)) : "";
           if (!isAu) assists++;
-          if (o) { act[k] = 1; const pk = (o.id || o.cs || nameKey_(o.n)); ppl[pk] = ppl[pk] || { name: cleanName_(o.n), callsign: o.cs, pts: 0 }; ppl[pk].pts += isAu ? RACE_PTS_.report + (RACE_PTS_[r.grade] || 0) : RACE_PTS_.assist; } });
+          if (o) { act[k] = 1; const pk = (o.id || o.cs || nameKey_(o.n)); ppl[pk] = ppl[pk] || { name: cleanName_(o.n), callsign: o.cs, id: o.id || "", pts: 0, reports: 0 };
+            const ck2 = pk + "|" + day + "|" + (isAu ? "r" : "a"); cap[ck2] = (cap[ck2] || 0) + 1;
+            if (isAu) ppl[pk].reports++;
+            if (cap[ck2] <= (isAu ? RACE_PTS_.capReports : RACE_PTS_.capAssists)) { const g = isAu ? RACE_PTS_.report + (RACE_PTS_[r.grade] || 0) : RACE_PTS_.assist; ppl[pk].pts += g; capped += g; } } });
         if (r.grade && "ABCDF".indexOf(r.grade) !== -1) { graded++; gsum += { A: 4, B: 3, C: 2, D: 1, F: 0 }[r.grade]; bonus += RACE_PTS_[r.grade] || 0; }
       });
       const active = Object.keys(act).length;
       return { reports: list.length, assists: assists, active: active, graded: graded, avg: graded ? gsum / graded : null, awaiting: list.filter(r => !r.grade).length,
-        points: list.length * RACE_PTS_.report + assists * RACE_PTS_.assist + bonus + active * RACE_PTS_.active, people: ppl };
+        points: capped + active * RACE_PTS_.active, people: ppl };
     };
     const wk = per(W, Infinity), lwk = per(LW, W), mo = per(M, Infinity), lmo = per(LM, M);
     Object.keys(wk.people).forEach(k => { const x = wk.people[k]; const pk = k + "|" + dv.id; people[pk] = Object.assign({ div: dv.id }, x); });
     const top = Object.keys(wk.people).map(k => wk.people[k]).sort((a, b) => b.pts - a.pts)[0] || null;
     const days = []; for (let i = 6; i >= 0; i--) { const a = d0.getTime() - i * 864e5; days.push(mine.filter(r => r.at >= a && r.at < a + 864e5).length); }
+    let streak = 0; for (let i = days[6] ? 0 : 1; i < 60; i++) { const a = d0.getTime() - i * 864e5; if (mine.some(r => r.at >= a && r.at < a + 864e5)) streak++; else break; }
+    const h24 = per(Date.now() - 864e5, Infinity).points;
+    const ptsById = {}; Object.keys(wk.people).forEach(k => { const x = wk.people[k]; if (x.id) ptsById[x.id] = { pts: x.pts, reports: x.reports }; });
     const strip = x => { const o = Object.assign({}, x); delete o.people; return o; };
     return { id: dv.id, name: dv.name, color: dv.color || "#2f7bff", logoUrl: dv.logoUrl || "", tagline: dv.tagline || "", roster: roster.length,
-      week: strip(wk), lastWeek: strip(lwk), month: strip(mo), lastMonth: strip(lmo), days: days, top: top, last: mine.length ? Math.max.apply(null, mine.map(r => r.at)) : 0 };
+      week: strip(wk), lastWeek: strip(lwk), month: strip(mo), lastMonth: strip(lmo), days: days, top: top, last: mine.length ? Math.max.apply(null, mine.map(r => r.at)) : 0,
+      today: days[6], streak: streak, h24: h24, ptsById: ptsById };
   });
   const feed = rows.filter(r => out.some(dv => (divs.find(x => x.id === dv.id).forms || []).some(f => f.id === r.form))).sort((a, b) => b.at - a.at).slice(0, 10).map(r => {
     const dv = divs.find(x => (x.forms || []).some(f => f.id === r.form)), au = (r.people || [])[0];
@@ -2118,7 +2134,10 @@ function divOverview_(allowed, me) {
     if (st[0] && st[0].points) seasons.push({ month: a, champ: st[0].id, points: st[0].points, runner: st[1] && st[1].points ? st[1].id : "" });
   }
   out.forEach(dv => { dv.trophies = seasons.filter(x => x.champ === dv.id).length; });
-  const res = { ok: true, hq: true, divisions: out, feed: feed, mvp: mvp, seasons: seasons, points: RACE_PTS_, weekStart: W, monthStart: M, at: Date.now() };
+  const av = avMap_(); out.forEach(dv => { if (dv.top && dv.top.id) dv.top.avatar = av[dv.top.id] || ""; }); if (mvp && mvp.id) mvp.avatar = av[mvp.id] || "";
+  const hot = out.slice().sort((a, b) => b.h24 - a.h24)[0], imp = out.map(dv => ({ id: dv.id, d: dv.week.points - dv.lastWeek.points })).sort((a, b) => b.d - a.d)[0];
+  const res = { ok: true, hq: true, divisions: out, feed: feed, mvp: mvp, seasons: seasons, points: RACE_PTS_, weekStart: W, weekEnd: W + 7 * 864e5, monthStart: M, at: Date.now(),
+    hot: hot && hot.h24 > 0 ? hot.id : "", improved: imp && imp.d > 0 && out.length > 1 ? { id: imp.id, by: imp.d } : null };
   try { bigPut_(ck, JSON.stringify(res), 120); } catch (e) {}
   res.me = me;
   return hqExtras_(res, me, allowed);
@@ -2139,10 +2158,7 @@ function hqGoals_(weekStart) {
   for (let i = 1; i < v.length; i++) { const r = v[i], ws = isDate_(r[1]) ? r[1].getTime() : Number(r[1]) || 0; if (ws !== weekStart) continue; out[str_(r[0])] = { target: Number(r[2]) || 0, note: str_(r[3]), by: str_(r[4]), row: i + 1 }; }
   return out;
 }
-function hqWeekStart_() {
-  const cfg = getConfig_(), ws = (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1;
-  const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() - ws + 7) % 7)); return d.getTime();
-}
+function hqWeekStart_() { return raceWeek_(); }
 // what this person may do on the Command Center
 function hqPerms_(me, allowed) {
   const boss = ["command", "admin", "owner"].indexOf(me.role) !== -1;
@@ -2150,7 +2166,8 @@ function hqPerms_(me, allowed) {
 }
 function hqExtras_(res, me, allowed) {
   const ws = hqWeekStart_();
-  res.board = hqPosts_().slice(0, 40).map(p => ({ id: p.id, at: p.at, from: p.from, mine: p.fromKey === me.key, tag: p.tag, title: p.title, body: p.body, pinned: p.pinned,
+  const av = avMap_();
+  res.board = hqPosts_().slice(0, 40).map(p => ({ id: p.id, at: p.at, from: p.from, avatar: av[p.fromKey] || "", mine: p.fromKey === me.key, tag: p.tag, title: p.title, body: p.body, pinned: p.pinned,
     acks: p.acks.map(a => a.n), acked: p.acks.some(a => a.k === me.key), replies: p.replies.slice(-30) }));
   res.goals = hqGoals_(ws); Object.keys(res.goals).forEach(k => delete res.goals[k].row);
   res.perms = hqPerms_(me, allowed); res.tags = HQ_TAGS_;
@@ -2476,7 +2493,7 @@ function digestTrigger_(on) {
 // OFFICER ACCOUNTS: sign in with Discord once per device, then a 4-digit PIN
 // =====================================================================
 const ACCT_SHEET_ = "Officer Accounts";
-const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices", "Say Name As", "Say Rank As", "Divisions"];
+const ACCT_HEAD_ = ["Discord ID", "Username", "Callsign", "Name", "Level Override", "PIN Salt", "PIN Hash", "Created", "Last Sign-in", "Locked", "Signed Out", "Devices", "Say Name As", "Say Rank As", "Divisions", "Avatar"];
 const LEVELS_ = ["trainee", "officer", "fto", "leader", "command", "admin", "owner"];
 const LEVEL_NAMES_ = { trainee: "Trainees", officer: "Officers", fto: "FTOs", leader: "Division leaders", command: "Command staff", admin: "Admins", owner: "Owners" };
 const OFFICER_DAYS_ = 30;              // a PIN sign-in lasts 30 days on that device
@@ -2491,7 +2508,7 @@ function acctAll_() {
   const v = acctSheet_().getDataRange().getValues(), out = [];
   for (let i = 1; i < v.length; i++) { const r = v[i], id = str_(r[0]).replace(/^'/, ""); if (!id) continue;
     out.push({ row: i + 1, id: id, username: str_(r[1]), callsign: str_(r[2]), name: str_(r[3]), override: str_(r[4]), salt: str_(r[5]), hash: str_(r[6]),
-      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0, sayAs: str_(r[12]), rankAs: str_(r[13]), divisions: str_(r[14]).split(",").map(x => x.trim()).filter(Boolean) }); }
+      created: isDate_(r[7]) ? r[7].toISOString() : str_(r[7]), last: isDate_(r[8]) ? r[8].toISOString() : str_(r[8]), locked: r[9] === true || str_(r[9]).toUpperCase() === "TRUE", signedOut: Number(r[10]) || 0, devices: Number(r[11]) || 0, sayAs: str_(r[12]), rankAs: str_(r[13]), divisions: str_(r[14]).split(",").map(x => x.trim()).filter(Boolean), avatar: str_(r[15]) }); }
   ACCT_MEMO_ = out;
   return out;
 }
@@ -2586,8 +2603,10 @@ function acctHandle_(d) {
     if (acct && acct.locked) return { ok: false, error: "This account is locked. Contact command staff." };
     withLock_(() => {
       const sh = acctSheet_(); acct = acctFind_(id);
-      if (!acct) sh.appendRow(["'" + id, cellSafe_(du.username || ""), cellSafe_(person ? person.callsign : ""), cellSafe_(person ? person.name : ""), "", "", "", new Date(), "", false, 0, 1]);
-      else sh.getRange(acct.row, 2).setValue(cellSafe_(du.username || acct.username)), sh.getRange(acct.row, 12).setValue((acct.devices || 0) + 1);
+      const av = /^[\w]{6,40}$/.test(str_(du.avatar)) ? str_(du.avatar) : "";
+      if (str_(sh.getRange(1, 16).getValue()) !== "Avatar") sh.getRange(1, 16).setValue("Avatar").setFontWeight("bold");
+      if (!acct) sh.appendRow(["'" + id, cellSafe_(du.username || ""), cellSafe_(person ? person.callsign : ""), cellSafe_(person ? person.name : ""), "", "", "", new Date(), "", false, 0, 1, "", "", "", av]);
+      else { sh.getRange(acct.row, 2).setValue(cellSafe_(du.username || acct.username)); sh.getRange(acct.row, 12).setValue((acct.devices || 0) + 1); sh.getRange(acct.row, 16).setValue(av); }
       return { ok: true };
     });
     acct = acctFind_(id); mark_("saved");
@@ -2928,6 +2947,20 @@ function promoTrack_(d) {
   return promoBoard_();
 }
 
+// the race, from an officer's side: their divisions' standing and their own points this week
+function officerRace_(acct) {
+  try {
+    const divs = ((getConfig_().settings || {}).divisions || []);
+    if (!divs.length) return null;
+    const ov = divOverview_(null, { username: "", role: "officer", key: acct.id }, true), L = ov.divisions || [];
+    const order = L.slice().sort((a, b) => b.week.points - a.week.points);
+    const mine = divs.filter(dv => dv.rosterTabId != null && tabIds_(dv.rosterTabId, false).indexOf(acct.id) !== -1).map(dv => dv.id);
+    return { weekEnd: ov.weekEnd, of: order.length, leader: order[0] ? { name: order[0].name, color: order[0].color, points: order[0].week.points } : null,
+      divisions: order.map((d, i) => ({ id: d.id, name: d.name, color: d.color, logoUrl: d.logoUrl, rank: i + 1, points: d.week.points, mine: mine.indexOf(d.id) !== -1,
+        ahead: i ? { name: order[i - 1].name, points: order[i - 1].week.points } : null, my: (d.ptsById || {})[acct.id] || null, streak: d.streak })).filter(x => x.mine || x.my),
+      standings: order.slice(0, 5).map(d => ({ name: d.name, color: d.color, points: d.week.points })), improved: ov.improved ? (L.find(d => d.id === ov.improved.id) || {}).name || "" : "" };
+  } catch (e) { return null; }
+}
 // the officer's own progression (onboarding, promotion programs): tasks, counts, deadline
 function myPaths_(person) {
   const out = []; if (!person) return out;
@@ -3141,6 +3174,7 @@ function officerHome_(d) {
   out.forms = myForms_(acct, prof); mark_("forms");
   out.ladder = (() => { try { return promoReqParse_(false); } catch (e) { return null; } })(); mark_("ladder");
   out.promoMe = promoMine_(acct); mark_("promo");
+  out.race = officerRace_(acct); mark_("race");
   return out;
 }
 
