@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 81;
+const BACKEND_VERSION = 82;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1905,7 +1905,7 @@ function cidHandle_(d) {
 // =====================================================================
 const ACT_SHEET_ = "Division Activity";
 const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source", "Report", "Data"];
-const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divOverview: 1, divGrade: 1, divReport: 1, changePassword: 1 };
+const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divOverview: 1, hqPost: 1, hqAck: 1, hqReply: 1, hqDelete: 1, hqGoal: 1, divGrade: 1, divReport: 1, changePassword: 1 };
 const GRADES_ = ["A", "B", "C", "D", "F", "R"];   // R = returned to the officer for correction
 function actSheet_() {
   const ss = ss_();
@@ -2065,7 +2065,7 @@ const RACE_PTS_ = { report: 10, assist: 4, A: 5, B: 3, C: 1, active: 5 };
 function divOverview_(allowed, me) {
   const cfg = getConfig_(), divs = ((cfg.settings || {}).divisions || []).filter(x => !allowed || allowed.indexOf(x.id) !== -1);
   const cache = CacheService.getScriptCache(), ck = "div_hq_" + divs.map(x => x.id).join(",").slice(0, 200);
-  const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: me, cached: true }); } catch (e) {} }
+  const hit = bigGet_(ck); if (hit) { try { return hqExtras_(Object.assign(JSON.parse(hit), { me: me, cached: true }), me, allowed); } catch (e) {} }
   const ws = (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1;
   const d0 = new Date(); d0.setHours(0, 0, 0, 0);
   const weekFrom = new Date(d0.getTime()); weekFrom.setDate(weekFrom.getDate() - ((weekFrom.getDay() - ws + 7) % 7));
@@ -2108,10 +2108,79 @@ function divOverview_(allowed, me) {
     return { at: r.at, div: dv ? dv.id : "", title: r.title || r.no || (formsById[r.form] || {}).title || r.form, form: (formsById[r.form] || {}).title || r.form, icon: (formsById[r.form] || {}).icon || "📄", by: au ? cleanName_(au.n).replace(/\s*\(\d{15,21}\)/, "") : "", grade: r.grade };
   });
   const mvp = Object.keys(people).map(k => people[k]).sort((a, b) => b.pts - a.pts)[0] || null;
-  const res = { ok: true, hq: true, divisions: out, feed: feed, mvp: mvp, points: RACE_PTS_, weekStart: W, monthStart: M, at: Date.now() };
+  // seasons: every finished month's champion (last 6 months)
+  const seasons = [], all = actRows_();
+  for (let i = 1; i <= 6; i++) {
+    const a = new Date(d0.getFullYear(), d0.getMonth() - i, 1).getTime(), b = new Date(d0.getFullYear(), d0.getMonth() - i + 1, 1).getTime();
+    const st = divs.map(dv => { const fs = {}; (dv.forms || []).forEach(f => fs[f.id] = 1); const list = all.filter(r => fs[r.form] && r.at >= a && r.at < b);
+      const act = {}; let assists = 0, bonus = 0; list.forEach(r => { (r.people || []).forEach((p, pi) => { act[p.i || nameKey_(p.n)] = 1; if (pi) assists++; }); bonus += RACE_PTS_[r.grade] || 0; });
+      return { id: dv.id, points: list.length * RACE_PTS_.report + assists * RACE_PTS_.assist + bonus + Object.keys(act).length * RACE_PTS_.active }; }).sort((x, y) => y.points - x.points);
+    if (st[0] && st[0].points) seasons.push({ month: a, champ: st[0].id, points: st[0].points, runner: st[1] && st[1].points ? st[1].id : "" });
+  }
+  out.forEach(dv => { dv.trophies = seasons.filter(x => x.champ === dv.id).length; });
+  const res = { ok: true, hq: true, divisions: out, feed: feed, mvp: mvp, seasons: seasons, points: RACE_PTS_, weekStart: W, monthStart: M, at: Date.now() };
   try { bigPut_(ck, JSON.stringify(res), 120); } catch (e) {}
   res.me = me;
+  return hqExtras_(res, me, allowed);
+}
+// ---- Leader bulletin board + weekly division goals (Command Center) ----
+const HQB_SHEET_ = "Leader Board", HQB_HEAD_ = ["ID", "Posted", "From", "From key", "Tag", "Title", "Body", "Pinned", "Acknowledged (JSON)", "Replies (JSON)"];
+const HQG_SHEET_ = "Division Goals", HQG_HEAD_ = ["Division", "Week start", "Target reports", "Note", "Set by", "Set at"];
+const HQ_TAGS_ = ["Announcement", "Need help", "Joint operation", "Policy change", "Shout-out"];
+function hqSheet_(name, head) { const ss = ss_(); let sh = ss.getSheetByName(name); if (!sh) { sh = ss.insertSheet(name); sh.appendRow(head); sh.setFrozenRows(1); sh.getRange(1, 1, 1, head.length).setFontWeight("bold"); } return sh; }
+function hqPosts_() {
+  const v = hqSheet_(HQB_SHEET_, HQB_HEAD_).getDataRange().getValues(), out = [];
+  for (let i = 1; i < v.length; i++) { const r = v[i]; if (!str_(r[0])) continue; let acks = [], reps = []; try { acks = JSON.parse(str_(r[8]) || "[]"); } catch (e) {} try { reps = JSON.parse(str_(r[9]) || "[]"); } catch (e) {}
+    out.push({ row: i + 1, id: str_(r[0]), at: isDate_(r[1]) ? r[1].getTime() : 0, from: str_(r[2]), fromKey: str_(r[3]), tag: str_(r[4]), title: str_(r[5]), body: str_(r[6]), pinned: r[7] === true || str_(r[7]) === "TRUE", acks: acks, replies: reps }); }
+  return out.sort((a, b) => (b.pinned - a.pinned) || b.at - a.at);
+}
+function hqGoals_(weekStart) {
+  const v = hqSheet_(HQG_SHEET_, HQG_HEAD_).getDataRange().getValues(), out = {};
+  for (let i = 1; i < v.length; i++) { const r = v[i], ws = isDate_(r[1]) ? r[1].getTime() : Number(r[1]) || 0; if (ws !== weekStart) continue; out[str_(r[0])] = { target: Number(r[2]) || 0, note: str_(r[3]), by: str_(r[4]), row: i + 1 }; }
+  return out;
+}
+function hqWeekStart_() {
+  const cfg = getConfig_(), ws = (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1;
+  const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() - ws + 7) % 7)); return d.getTime();
+}
+// what this person may do on the Command Center
+function hqPerms_(me, allowed) {
+  const boss = ["command", "admin", "owner"].indexOf(me.role) !== -1;
+  return { post: true, pin: boss, goalAll: boss || !allowed, divisions: allowed };
+}
+function hqExtras_(res, me, allowed) {
+  const ws = hqWeekStart_();
+  res.board = hqPosts_().slice(0, 40).map(p => ({ id: p.id, at: p.at, from: p.from, mine: p.fromKey === me.key, tag: p.tag, title: p.title, body: p.body, pinned: p.pinned,
+    acks: p.acks.map(a => a.n), acked: p.acks.some(a => a.k === me.key), replies: p.replies.slice(-30) }));
+  res.goals = hqGoals_(ws); Object.keys(res.goals).forEach(k => delete res.goals[k].row);
+  res.perms = hqPerms_(me, allowed); res.tags = HQ_TAGS_;
   return res;
+}
+function hqAct_(d, me, allowed) {
+  const P = hqPerms_(me, allowed);
+  return withLock_(() => {
+    if (d.action === "hqPost") {
+      const title = clip_(str_(d.title), 120), body = clip_(str_(d.body), 2000), tag = HQ_TAGS_.indexOf(str_(d.tag)) !== -1 ? str_(d.tag) : HQ_TAGS_[0];
+      if (!title) return { ok: false, error: "Give the post a title." };
+      hqSheet_(HQB_SHEET_, HQB_HEAD_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), cellSafe_(me.username), me.key, tag, cellSafe_(title), cellSafe_(body), false, "[]", "[]"]);
+      return { ok: true };
+    }
+    if (d.action === "hqGoal") {
+      const div = str_(d.division);
+      if (!P.goalAll && (allowed || []).indexOf(div) === -1) return { ok: false, error: "You can only set goals for your own divisions." };
+      const target = Math.max(0, Math.min(500, parseInt(d.target, 10) || 0)), ws = hqWeekStart_(), have = hqGoals_(ws)[div], sh = hqSheet_(HQG_SHEET_, HQG_HEAD_);
+      const row = [div, new Date(ws), target, cellSafe_(clip_(str_(d.note), 120)), cellSafe_(me.username), new Date()];
+      if (have) sh.getRange(have.row, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
+      return { ok: true };
+    }
+    const post = hqPosts_().find(x => x.id === str_(d.id)); if (!post) return { ok: false, error: "That post was removed." };
+    const sh = hqSheet_(HQB_SHEET_, HQB_HEAD_);
+    if (d.action === "hqAck") { if (!post.acks.some(a => a.k === me.key)) { post.acks.push({ k: me.key, n: me.username, at: Date.now() }); sh.getRange(post.row, 9).setValue(JSON.stringify(post.acks)); } return { ok: true }; }
+    if (d.action === "hqReply") { const t = clip_(str_(d.text), 600); if (!t) return { ok: false, error: "Type a reply." }; post.replies.push({ n: me.username, t: t, at: Date.now() }); sh.getRange(post.row, 10).setValue(JSON.stringify(post.replies.slice(-60))); return { ok: true }; }
+    if (d.action === "hqPin") { if (!P.pin) return { ok: false, error: "Only command staff can pin posts." }; sh.getRange(post.row, 8).setValue(!!d.on); return { ok: true }; }
+    if (d.action === "hqDelete") { if (!P.pin && post.fromKey !== me.key) return { ok: false, error: "You can only remove your own posts." }; sh.deleteRow(post.row); return { ok: true }; }
+    return { ok: false, error: "Unknown action." };
+  });
 }
 function divGrade_(d, me) {
   const rows = actRows_(), rec = rows.find(r => r.id === str_(d.id));
@@ -2571,7 +2640,9 @@ function divOfficer_(d) {
     return r;
   }
   if (d.action === "divGrade") { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." }; return withLock_(() => divGrade_(d, me)); }
+  me.key = acct.id;
   if (d.action === "divOverview") return divOverview_(allowed, me);
+  if (/^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(d.action)) { const r = hqAct_(d, me, allowed); return r.ok ? divOverview_(allowed, me) : r; }
   return divReport_(d);
 }
 function acctList_() {
@@ -3462,7 +3533,7 @@ function handleAdmin_(d) {
   if (a === "quickRef") return quickRef_(d);
   if (a === "mdtNoticePost" || a === "mdtNoticeClose") return mdtNotice_(d);
 
-  if (d.session && /^div(View|Report|Grade|Overview)$/.test(a)) return divOfficer_(d);
+  if (d.session && (/^div(View|Report|Grade|Overview)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
 
   const me = sessionAdmin_(d.token);
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
@@ -3471,7 +3542,8 @@ function handleAdmin_(d) {
   // division leaders: the Division Command page only (no forms, settings, webhooks or accounts)
   if (me.role === "leader" && !LEADER_ACTIONS_[a]) throw new Error("Division leader accounts can only use the Division Command page.");
   if (a === "divView") return divView_(d, me);
-  if (a === "divOverview") return divOverview_(null, { username: me.username, role: me.role });
+  if (a === "divOverview") return divOverview_(null, { username: me.username, role: me.role, key: "admin:" + me.username });
+  if (/^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a)) { const hm = { username: me.username, role: me.role === "leader" ? "leader" : "admin", key: "admin:" + me.username }; const r = hqAct_(d, hm, me.role === "leader" ? [] : null); return r.ok ? divOverview_(null, hm) : r; }
   if (a === "divReport") return divReport_(d);
   if (a === "divGrade") return withLock_(() => divGrade_(d, me));
 
