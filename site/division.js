@@ -16,9 +16,11 @@
   function toast(m, t) { const x = $("toast"); x.textContent = m; x.className = "toast show " + (t || ""); clearTimeout(toast.t); toast.t = setTimeout(() => x.className = "toast", 4500); }
   // officers come in with their MDT sign-on (Leader level and up); portal admins can still use the admin login
   let SESSION = ""; try { SESSION = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
-  const OFFICER = () => !TOKEN && !!SESSION;
+  // the officer sign-on comes first (it carries your rank and name); the portal admin login is the fallback
+  const OFFICER = () => !!SESSION;
   async function api(action, data) {
     const r = await Portal.post(Object.assign({ action: action }, OFFICER() ? { session: SESSION } : { token: TOKEN }, data || {}));
+    if (!r.ok && r.error === "AUTH" && OFFICER() && TOKEN) { SESSION = ""; return api(action, data); }   // MDT sign-on expired: use the admin login instead
     if (!r.ok && r.error === "AUTH") {
       if (OFFICER()) { location.replace("signon.html?next=division.html"); throw new Error("Sign on again."); }
       signOut(true); throw new Error(r.message || "Please sign in again."); }
@@ -176,7 +178,7 @@
       const list = (HQ && HQ.divisions) || (DATA && DATA.divisions) || [];
       $("topDiv").textContent = "COMMAND CENTER";
       if (ME) { $("me").innerHTML = `<i class="r-${esc(ME.role)}">${esc(ME.role === "leader" ? "LEADER" : String(ME.role).toUpperCase())}</i>${esc(ME.username)}`; $("adminLink").hidden = ME.role === "leader" || (!!ME.officer && ["admin", "owner"].indexOf(ME.role) === -1); }
-      $("divs").innerHTML = `<button data-div="_hq" class="hqb${inHq ? " on" : ""}"><i></i>🛰️ Command Center</button>` + list.map(d => `<button data-div="${esc(d.id)}" class="${!inHq && DATA && DATA.division && d.id === DATA.division.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("");
+      $("divs").innerHTML = `<button data-div="_hq" class="hqb${inHq ? " on" : ""}"><i></i>Command Center</button>` + list.map(d => `<button data-div="${esc(d.id)}" class="${!inHq && DATA && DATA.division && d.id === DATA.division.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("");
       document.documentElement.style.setProperty("--ac", "#e8b54a"); document.documentElement.style.setProperty("--acr", "232,181,74");
       if (inHq) { drawHQ(); return; }
     }
@@ -186,7 +188,7 @@
     $("topDiv").textContent = dv.name.toUpperCase();
     $("me").innerHTML = `<i class="r-${esc(ME.role)}">${esc(ME.role === "leader" ? "LEADER" : ME.role.toUpperCase())}</i>${esc(ME.username)}`;
     $("adminLink").hidden = ME.role === "leader" || (!!ME.officer && ["admin", "owner"].indexOf(ME.role) === -1);
-    $("divs").innerHTML = `<button data-div="_hq" class="hqb"><i></i>🛰️ Command Center</button>` + (DATA.divisions || []).map(d => `<button data-div="${esc(d.id)}" class="${d.id === dv.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("");
+    $("divs").innerHTML = `<button data-div="_hq" class="hqb"><i></i>Command Center</button>` + (DATA.divisions || []).map(d => `<button data-div="${esc(d.id)}" class="${d.id === dv.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("");
     document.querySelectorAll("#period [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === PERIOD));
     document.querySelectorAll("#tabs [data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === TAB));
     drawHero(dv, S); drawKpis(S);
@@ -196,6 +198,13 @@
   const GLET = v => v == null ? "—" : GL[Math.max(0, Math.min(4, Math.round(v)))];
   function hqScore(d) { const c = d[HQ_P] || {}; return HQ_RANK === "per" ? Math.round((c.points || 0) / Math.max(1, d.roster || c.active || 1) * 10) / 10 : (c.points || 0); }
   function emblem(d, cls) { return d.logoUrl ? `<img class="${cls}" src="${esc(d.logoUrl)}" alt="" onerror="this.outerHTML='<span class=&quot;${cls} ini&quot;>${esc(initials(d.name))}</span>'">` : `<span class="${cls} ini">${esc(initials(d.name))}</span>`; }
+  const ICON = {
+    flag: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
+    pin: '<svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8"/></svg>',
+    grid: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
+    trophy: '<svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8M10 17h4"/></svg>',
+    star: '<svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>'
+  };
   const TAGC = { "Announcement": "#60a5fa", "Need help": "#f87171", "Joint operation": "#fbbf24", "Policy change": "#c084fc", "Shout-out": "#34d399" };
   function goalHTML(d) {
     const g = (HQ.goals || {})[d.id], c = d.week || {}, P = HQ.perms || {}, can = P.goalAll || (P.divisions || []).indexOf(d.id) !== -1;
@@ -207,12 +216,12 @@
   function fameHTML(L) {
     const S = HQ.seasons || [];
     const nm = id => (L.find(x => x.id === id) || {}).name || id, col = id => (L.find(x => x.id === id) || {}).color || "#888";
-    return `<section class="hq-fame"><h3>🏆 HALL OF FAME</h3>${S.length ? S.map(x => `<div class="hq-fr" style="--c:${esc(col(x.champ))}"><span>${new Date(x.month).toLocaleDateString(undefined, { month: "short", year: "2-digit" }).toUpperCase()}</span><b>${esc(nm(x.champ))}</b><em>${x.points} pts</em></div>`).join("")
+    return `<section class="hq-fame"><h3>${ICON.trophy} HALL OF FAME</h3>${S.length ? S.map(x => `<div class="hq-fr" style="--c:${esc(col(x.champ))}"><span>${new Date(x.month).toLocaleDateString(undefined, { month: "short", year: "2-digit" }).toUpperCase()}</span><b>${esc(nm(x.champ))}</b><em>${x.points} pts</em></div>`).join("")
       : '<p class="dim">The first monthly champion is crowned when this month ends. The division with the most points wins the title.</p>'}</section>`;
   }
   function boardHTML() {
     const B = HQ.board || [], P = HQ.perms || {}, tags = HQ.tags || Object.keys(TAGC);
-    let h = `<section class="hqb"><header><h2>📌 LEADER BULLETIN</h2><span class="dim">Only division leaders and command see this board</span><button class="dc-btn ac" data-hqnew>${HQ_NEW ? "Close" : "+ New post"}</button></header>`;
+    let h = `<section class="hqb"><header><h2><span class="hq-ic">${ICON.pin}</span>LEADER BULLETIN</h2><span class="dim">Only division leaders and command see this board</span><button class="dc-btn ac" data-hqnew>${HQ_NEW ? "Close" : "+ New post"}</button></header>`;
     if (HQ_NEW) h += `<form class="hqb-new" id="hqNew"><div class="hqb-tags">${tags.map((t, i) => `<label style="--t:${TAGC[t] || "#888"}"><input type="radio" name="tag" value="${esc(t)}"${i ? "" : " checked"}><span>${esc(t)}</span></label>`).join("")}</div>
       <input name="title" maxlength="120" placeholder="Title, e.g. Joint warrant service Friday 8pm" required><textarea name="body" maxlength="2000" rows="3" placeholder="Details: who, when, what you need…"></textarea><div class="hqb-acts"><button class="dc-btn ac">Post to all leaders</button></div></form>`;
     h += B.length ? B.map(p => { const open = HQ_OPEN.has(p.id), c = TAGC[p.tag] || "#888";
@@ -247,9 +256,9 @@
     const myD = (HQ.perms || {}).pin && mine.length !== 1 ? null : race.find(d => mine.indexOf(d.id) !== -1);   // command staff: the whole department
     if (!myD) { const tot = race.reduce((n, d) => n + (d[HQ_P].reports || 0), 0); return `${who}, the department has filed <b>${tot}</b> report${tot === 1 ? "" : "s"} this ${HQ_P === "week" ? "week" : "month"}. Here's where every division stands.`; }
     const i = race.indexOf(myD), s0 = hqScore(myD);
-    if (i === 0) { const nx = race[1], lead = nx ? s0 - hqScore(nx) : 0; return s0 ? `${who}, <b style="color:${esc(myD.color)}">${esc(myD.name)}</b> is leading${nx && lead ? ` by ${lead} pts over ${esc(nx.name)}` : ""}. Keep the pressure on.` : `${who}, the race is wide open. One report puts ${esc(myD.name)} in front.`; }
+    if (i === 0) { const nx = race[1], lead = nx ? s0 - hqScore(nx) : 0; return s0 ? `${who}, <b class="dcol" style="--c:${esc(myD.color)}">${esc(myD.name)}</b> is leading${nx && lead ? ` by ${lead} pts over ${esc(nx.name)}` : ""}. Keep the pressure on.` : `${who}, the race is wide open. One report puts ${esc(myD.name)} in front.`; }
     const ah = race[i - 1], gap = hqScore(ah) - s0, need = Math.max(1, Math.ceil((gap + 1) / (HQ_RANK === "per" ? Math.max(1, 10 / Math.max(1, myD.roster || 1)) : 10)));
-    return `${who}, <b style="color:${esc(myD.color)}">${esc(myD.name)}</b> is ${ord(i + 1)}, ${gap ? gap + " pts behind " + esc(ah.name) + ". About " + need + " more report" + (need === 1 ? "" : "s") + " to pass them." : "tied with " + esc(ah.name) + ". One report breaks it."}`;
+    return `${who}, <b class="dcol" style="--c:${esc(myD.color)}">${esc(myD.name)}</b> is ${ord(i + 1)}, ${gap ? gap + " pts behind " + esc(ah.name) + ". About " + need + " more report" + (need === 1 ? "" : "s") + " to pass them." : "tied with " + esc(ah.name) + ". One report breaks it."}`;
   }
   // race moments: what changed since this leader last looked, plus streaks and hot divisions
   let HQ_LAST_ORDER = null;
@@ -300,18 +309,21 @@
     const lastMonth = (HQ.seasons || [])[0], champD = lastMonth && L.find(d => d.id === lastMonth.champ), nowD = new Date();
     const champH = champD && nowD.getDate() <= 3 && new Date(lastMonth.month).getMonth() === (nowD.getMonth() + 11) % 12 ? `<section class="hq-champ" style="--c:${esc(champD.color)}"><span>🏆</span><div><small>${new Date(lastMonth.month).toLocaleDateString(undefined, { month: "long" }).toUpperCase()} CHAMPION</small><b>${esc(champD.name)}</b><em>${lastMonth.points} pts · a new season starts now</em></div><span>🏆</span></section>` : "";
     const heroH = champH + `<section class="hq-hero" style="--lc:${esc(hqScore(lead) ? lead.color : "#e8b54a")}"><div class="hq-hero-in"><p class="hq-hi">${hqGreet(race)}</p><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${L.length} DIVISIONS · ${P === "week" && HQ.weekEnd ? "WEEK ENDING " + esc(new Date(HQ.weekEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()) : (P === "week" ? "WEEK OF " : "MONTH OF ") + esc(since.toUpperCase())}</div>
-      <h1>${!hqScore(lead) ? "The race is on." : second && !gap ? "It's a dead heat." : `<b style="color:${esc(lead.color)}">${esc(lead.name)}</b> leads the race.`}</h1>
+      <h1>${!hqScore(lead) ? "The race is on." : second && !gap ? "It's a dead heat." : `<b class="dcol" style="--c:${esc(lead.color)}">${esc(lead.name)}</b> leads the race.`}</h1>
       <p>${hqScore(lead) ? (second ? (gap ? `${gap} ${unit} ahead of ${esc(second.name)}.` : `${esc(lead.name)} and ${esc(second.name)} are tied on ${hqScore(lead)} ${unit}.`) : "") + " Every report, assist and good grade moves your division up." : "No reports yet this " + (P === "week" ? "week" : "month") + ". First report takes the lead."}</p></div>
       ${clockH}<div class="hq-tot"><div><b>${sum("reports")}</b><small>Reports</small></div><div><b>${sum("assists")}</b><small>Assists</small></div><div><b>${sum("active")}</b><small>Active officers</small></div><div><b>${GLET(gAvg)}</b><small>Avg grade</small></div><div class="${sum("awaiting") ? "warn" : ""}"><b>${sum("awaiting")}</b><small>Awaiting grade</small></div></div></section>`;
     // the race
-    const raceH = `<section class="hq-race"><header><h2><span>🏁</span>DIVISION RACE</h2><div class="hq-segs"><div class="dc-seg"><button data-hqp="week" class="${P === "week" ? "on" : ""}">This week</button><button data-hqp="month" class="${P === "month" ? "on" : ""}">This month</button></div>
+    const raceH = `<section class="hq-race"><header><h2><span class="hq-ic">${ICON.flag}</span>DIVISION RACE</h2><div class="hq-segs"><div class="dc-seg"><button data-hqp="week" class="${P === "week" ? "on" : ""}">This week</button><button data-hqp="month" class="${P === "month" ? "on" : ""}">This month</button></div>
       <div class="dc-seg"><button data-hqr="total" class="${HQ_RANK === "total" ? "on" : ""}">Total points</button><button data-hqr="per" class="${HQ_RANK === "per" ? "on" : ""}" title="Points divided by the officers on the division's roster: fair for small divisions">Per officer</button></div></div></header>
-      <div class="hq-lanes">${race.map((d, i) => { const s = hqScore(d), pct = Math.max(3, Math.round(s / top * 92)), dp = (d[P].points || 0) - ((d[prevK] || {}).points || 0);
+      <div class="hq-tower"><div class="hq-thead"><span>POS</span><span></span><span>DIVISION</span><span class="hq-tprog">PROGRESS</span><span>INTERVAL</span><span>PTS</span></div>
+      ${race.map((d, i) => { const s = hqScore(d), pct = Math.max(2, Math.round(s / top * 100)), dp = (d[P].points || 0) - ((d[prevK] || {}).points || 0), gap = i ? hqScore(race[0]) - s : 0;
+        const tags = (d.trophies ? `<i class="t-title" title="${d.trophies} monthly title${d.trophies === 1 ? "" : "s"}">${ICON.trophy}${d.trophies > 1 ? "×" + d.trophies : ""}</i>` : "") + (d.streak >= 3 ? `<i class="t-streak" title="Reports ${d.streak} days in a row">STREAK ${d.streak}</i>` : "") + (HQ.hot === d.id ? '<i class="t-hot" title="Most points in the last 24 hours">HOT</i>' : "") + (HQ.improved && HQ.improved.id === d.id ? `<i class="t-imp" title="Biggest jump from last week">+${HQ.improved.by}</i>` : "");
         return `<div class="hq-lane${i === 0 && s ? " lead" : ""}" style="--c:${esc(d.color)}" data-div="${esc(d.id)}" title="Open ${esc(d.name)}">
-          <span class="hq-pos">${i === 0 && s ? "👑" : i + 1}</span>
-          <div class="hq-lname">${emblem(d, "hq-em")}<div><b>${esc(d.name)}${d.trophies ? ` <span class="hq-tro" title="${d.trophies} monthly title${d.trophies === 1 ? "" : "s"}">🏆${d.trophies > 1 ? "×" + d.trophies : ""}</span>` : ""}${d.streak >= 3 ? ` <span class="hq-badge fire" title="Reports ${d.streak} days in a row">🔥 ${d.streak}</span>` : ""}${HQ.hot === d.id ? ' <span class="hq-badge hot" title="Most points in the last 24 hours">⚡ HOT</span>' : ""}${HQ.improved && HQ.improved.id === d.id ? ` <span class="hq-badge imp" title="Biggest jump from last week">📈 +${HQ.improved.by}</span>` : ""}</b><small>${d[P].reports} report${d[P].reports === 1 ? "" : "s"} · ${d[P].active} active${dp ? ` · <em class="${dp > 0 ? "up" : "down"}">${dp > 0 ? "▲" : "▼"} ${Math.abs(dp)} vs last ${P === "week" ? "week" : "month"}</em>` : ""}</small></div></div>
-          <div class="hq-track"><i class="hq-trail" style="width:${HQ_ANIM ? 0 : pct}%" data-w="${pct}"></i><span class="hq-car" style="left:${HQ_ANIM ? 0 : pct}%" data-l="${pct}">${emblem(d, "hq-carem")}</span><span class="hq-finish"></span></div>
-          <b class="hq-pts">${s}<small>${unit}</small></b></div>`; }).join("")}</div>
+          <span class="hq-pos">${i + 1}</span><span class="hq-stripe"></span>
+          <div class="hq-lname">${emblem(d, "hq-em")}<div><b>${esc(d.name)}</b><small>${d[P].reports} report${d[P].reports === 1 ? "" : "s"} · ${d[P].active} active${dp ? ` · <em class="${dp > 0 ? "up" : "down"}">${dp > 0 ? "▲" : "▼"} ${Math.abs(dp)}</em>` : ""}</small></div>${tags ? `<span class="hq-tags">${tags}</span>` : ""}</div>
+          <div class="hq-track"><i class="hq-trail" style="width:${HQ_ANIM ? 0 : pct}%" data-w="${pct}"></i><span class="hq-car" style="left:${HQ_ANIM ? 0 : pct}%" data-l="${pct}"></span></div>
+          <span class="hq-int">${i === 0 ? (s ? "LEADER" : "—") : gap ? "+" + gap : "TIED"}</span>
+          <b class="hq-pts">${s}</b></div>`; }).join("")}</div>
       <p class="hq-legend">Points: report filed <b>${HQ.points.report}</b> · officer assisted <b>${HQ.points.assist}</b> · graded A <b>+${HQ.points.A}</b> / B <b>+${HQ.points.B}</b> / C <b>+${HQ.points.C}</b> · each active officer <b>+${HQ.points.active}</b> · up to ${HQ.points.capReports || 3} reports and ${HQ.points.capAssists || 6} assists per officer per day count, so quality beats volume</p></section>`;
     // division cards, MVP, hall of fame, live feed
     const mvp = HQ.mvp, mvpDiv = mvp && L.find(d => d.id === mvp.div);
@@ -323,20 +335,20 @@
           <div class="hq-spark" title="Reports, last 7 days">${d.days.map((n, i) => `<i style="height:${Math.max(6, Math.round(n / mx * 100))}%" class="${i === 6 ? "t" : ""}" title="${n} report${n === 1 ? "" : "s"}"></i>`).join("")}</div>
           <footer>${d.top ? `<span class="hq-top">${face(d.top, "hq-tav")} ${esc(d.top.callsign ? d.top.callsign + " · " : "")}${esc(d.top.name)} <em>${d.top.pts} pts</em>${OFFICER() && d.top.id ? ` <button class="hq-kudo sm" data-kudo="${esc(d.top.id)}" data-kname="${esc(d.top.name)}" title="Recognize">👏</button>` : ""}</span>` : `<span class="hq-top dim">No top performer yet</span>`}<span class="dim">${d.last ? "Last report " + ago(d.last) : "No reports yet"}</span></footer>
           <button class="hq-open" data-div="${esc(d.id)}">Open ${esc(d.name)} →</button></article>`; }).join("")}</div>`;
-    const mvpH = `<section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(mvpDiv.color)}"` : ""}><div class="hq-mk">🏆 MVP OF THE WEEK</div>${mvp ? `${face(mvp, "hq-mav")}<b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>${OFFICER() && mvp.id ? `<button class="hq-kudo" data-kudo="${esc(mvp.id)}" data-kname="${esc(mvp.name)}">👏 Recognize</button>` : ""}` : `<p class="dim">The first report of the week claims it.</p>`}</section>`;
+    const mvpH = `<section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(mvpDiv.color)}"` : ""}><div class="hq-mk">MVP · THIS WEEK</div>${mvp ? `${face(mvp, "hq-mav")}<b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>${OFFICER() && mvp.id ? `<button class="hq-kudo" data-kudo="${esc(mvp.id)}" data-kname="${esc(mvp.name)}">👏 Recognize</button>` : ""}` : `<p class="dim">The first report of the week claims it.</p>`}</section>`;
     const feedH = `<section class="hq-feed"><h3><span class="hq-pulse"></span>LIVE ACROSS DIVISIONS</h3>${(HQ.feed || []).length ? HQ.feed.map(f => { const d = L.find(x => x.id === f.div) || {};
           return `<div class="hq-fi" style="--c:${esc(d.color || "#888")}" data-div="${esc(f.div)}"><i></i><div><b>${esc(f.icon)} ${esc(f.title)}</b><small>${esc(d.name || "")}${f.by ? " · " + esc(f.by) : ""} · ${ago(f.at)}</small></div>${f.grade ? `<span class="hq-g">${esc(f.grade)}</span>` : ""}</div>`; }).join("") : '<p class="dim">No reports yet.</p>'}</section>`;
     // three views so nothing is crowded: the race, the leaders' bulletin, the division cards
     const B = HQ.board || [], unread = B.filter(p => !p.mine && p.at > HQ_SEEN).length;
     const goalsSet = L.filter(d => (HQ.goals || {})[d.id] && HQ.goals[d.id].target).length, goalsHit = L.filter(d => { const g = (HQ.goals || {})[d.id]; return g && g.target && d.week.reports >= g.target; }).length;
-    const tabsH = `<nav class="hq-tabs"><button data-hqt="race" class="${HQ_TAB === "race" ? "on" : ""}"><span>🏁</span>Race<small>${esc(lead.name)} leads</small></button>
-      <button data-hqt="board" class="${HQ_TAB === "board" ? "on" : ""}"><span>📌</span>Bulletin<small>${B.length} post${B.length === 1 ? "" : "s"}</small>${unread ? `<em>${unread} new</em>` : ""}</button>
-      <button data-hqt="divs" class="${HQ_TAB === "divs" ? "on" : ""}"><span>🗂️</span>Divisions<small>${goalsSet ? goalsHit + " / " + goalsSet + " goals hit" : L.length + " division" + (L.length === 1 ? "" : "s")}</small></button></nav>`;
+    const tabsH = `<nav class="hq-tabs"><button data-hqt="race" class="${HQ_TAB === "race" ? "on" : ""}"><span>${ICON.flag}</span>Race<small>${esc(lead.name)} leads</small></button>
+      <button data-hqt="board" class="${HQ_TAB === "board" ? "on" : ""}"><span>${ICON.pin}</span>Bulletin<small>${B.length} post${B.length === 1 ? "" : "s"}</small>${unread ? `<em>${unread} new</em>` : ""}</button>
+      <button data-hqt="divs" class="${HQ_TAB === "divs" ? "on" : ""}"><span>${ICON.grid}</span>Divisions<small>${goalsSet ? goalsHit + " / " + goalsSet + " goals hit" : L.length + " division" + (L.length === 1 ? "" : "s")}</small></button></nav>`;
     const stripH = `<section class="hq-strip"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${P === "week" && HQ.weekEnd ? "WEEK ENDING " + esc(new Date(HQ.weekEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()) : (P === "week" ? "WEEK OF " : "MONTH OF ") + esc(since.toUpperCase())}</div><div class="hq-mini">${race.slice(0, 3).map((d, i) => `<span style="--c:${esc(d.color)}">${i === 0 && hqScore(d) ? "👑" : i + 1 + "."} ${esc(d.name)} <b>${hqScore(d)}</b></span>`).join("")}</div></section>`;
     let h;
     if (HQ_TAB === "board") { HQ_SEEN = Date.now(); store("dc:hqseen", String(HQ_SEEN)); h = stripH + tabsH + `<div class="hq-grid">${boardHTML()}<aside class="hq-side">${feedH}</aside></div>`; }
     else if (HQ_TAB === "divs") h = stripH + tabsH + cardsH;
-    else { const mo = hqMoments(race); h = heroH + tabsH + (mo.length ? `<div class="hq-ticker"><span class="hq-tk">RACE WIRE</span><div class="hq-tkm"><div>${mo.concat(mo).map(x => `<span>${x}</span>`).join("")}</div></div></div>` : "") + raceH + `<div class="hq-row3">${mvpH}${fameHTML(L)}${feedH}</div>`; }
+    else { const mo = hqMoments(race); h = heroH + tabsH + (mo.length ? `<div class="hq-ticker"><span class="hq-tk"><i class="hq-pulse"></i>RACE WIRE</span><div class="hq-tkm"><div>${mo.concat(mo).map(x => `<span>${x.replace(/^(⚡|📈|🚨|🔥|🏆)\s*/, (m, e) => `<i class="tk tk-${{ "⚡": "lead", "📈": "up", "🚨": "busy", "🔥": "streak", "🏆": "mvp" }[e]}">${{ "⚡": /lead/.test(x) ? "LEAD" : "HOT", "📈": /improved/i.test(x) ? "IMPROVED" : "MOVE", "🚨": "BUSY", "🔥": "STREAK", "🏆": "MVP" }[e]}</i>`)}</span>`).join("")}</div></div></div>` : "") + raceH + `<div class="hq-row3">${mvpH}${fameHTML(L)}${feedH}</div>`; }
     if (HQ_TAB === "divs") setTimeout(() => L.forEach(d => { const g = (HQ.goals || {})[d.id]; if (!g || !g.target || d.week.reports < g.target) return; const k = "dc:goalcel:" + d.id + ":" + HQ.weekStart; try { if (localStorage.getItem(k)) return; localStorage.setItem(k, "1"); } catch (e) { return; } confetti(d.color); toast("🎯 " + d.name + " hit its weekly goal!", "ok"); }), 400);
     box.innerHTML = h;
     if (HQ_ANIM) { HQ_ANIM = false; requestAnimationFrame(() => requestAnimationFrame(() => box.querySelectorAll(".hq-trail").forEach(t => t.style.width = t.dataset.w + "%") || box.querySelectorAll(".hq-car").forEach(c => c.style.left = c.dataset.l + "%"))); }
