@@ -386,3 +386,8 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
 
 /* returned for correction */
 .g-r{color:#e9d5ff!important;border-color:#a78bfa!important}.gm-letters .g-r.on{background:rgba(167,139,250,.2)}
+
+/* inside the MDT terminal: the terminal has its own clock, sign-off and branding */
+.embed .dc-brand,.embed .dc-clock,.embed #outBtn{display:none!important}
+.embed .dc-top-in{justify-content:flex-end;padding-top:8px;padding-bottom:8px}
+.embed body.dc{background-attachment:scroll}
