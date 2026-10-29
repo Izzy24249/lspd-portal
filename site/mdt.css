@@ -539,3 +539,11 @@ mark{background:rgba(255,190,61,.35);color:#fff;padding:0 2px;border-radius:3px}
 .kudo-ban{display:flex;gap:14px;align-items:center;margin:0 0 16px;padding:12px 16px;border-radius:var(--r);border:1px solid rgba(52,217,150,.4);background:linear-gradient(90deg,rgba(52,217,150,.14),transparent),var(--glass);cursor:pointer}
 .kudo-ban>span{font-size:30px}.kudo-ban small{font:700 10.5px "JetBrains Mono",monospace;letter-spacing:.16em;color:#a8f3d1}.kudo-ban b{display:block;font-weight:700}.kudo-ban p{color:#cdd6e4;font-size:13.5px;margin-top:2px}
 .race-none{color:var(--mute);font-size:13px}
+/* on duty now (from the On Duty role in Discord) */
+.pane.duty{margin-bottom:18px}
+.duty-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));column-gap:22px}
+.duty-me{font:700 11px "JetBrains Mono",monospace;color:#4ade80;letter-spacing:.06em}
+.duty-note{margin:10px 0 0;font-size:12px;color:var(--mute)}
+.duty-link{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px 16px;margin-bottom:14px;border:1px solid var(--line2);border-radius:14px;background:linear-gradient(90deg,rgba(88,101,242,.16),transparent)}
+.duty-link>span{font-size:24px}.duty-link b{display:block}.duty-link small{color:var(--mute)}
+@media (max-width:640px){.duty-link{grid-template-columns:1fr}.duty-link>span{display:none}}

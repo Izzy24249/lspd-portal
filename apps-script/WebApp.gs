@@ -14,13 +14,14 @@
  *   - Leaderboard counts                   -> "Leaderboard Log" tab
  *   - Hours from reports (start -> end)    -> "Hours Log" tab
  *   - SGT promotion task credits           -> "Promotion Log" tab
+ *   - Duty sessions from the On Duty role  -> "Duty Log" tab (sign-ins for it: Script Properties)
  *
  * FIRST ADMIN: open the Google Sheet, menu "🚔 LSPD Portal" > "Create / reset admin account".
  * Webhook URLs never belong in this file (it is stored on GitHub).
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 85;
+const BACKEND_VERSION = 86;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2599,7 +2600,7 @@ function acctHandle_(d) {
   if (a === "acctDiscordUrl") {
     if (!st.clientId || !st.hasSecret || !st.redirect) return { ok: false, error: "Sign in with Discord isn't set up yet. An owner adds the Discord app in Admin → Accounts." };
     const state = offToken_("STATE", "x", 10 * 60000);
-    const q = { client_id: st.clientId, redirect_uri: st.redirect, response_type: "code", scope: st.guildId ? "identify guilds" : "identify", state: state, prompt: "none" };
+    const q = { client_id: st.clientId, redirect_uri: st.redirect, response_type: "code", scope: st.guildId ? "identify guilds guilds.members.read" : "identify", state: state, prompt: "none" };
     return { ok: true, url: "https://discord.com/oauth2/authorize?" + Object.keys(q).map(k => k + "=" + encodeURIComponent(q[k])).join("&") };
   }
   if (a === "acctDiscord") {
@@ -2607,11 +2608,17 @@ function acctHandle_(d) {
     const tok = UrlFetchApp.fetch("https://discord.com/api/oauth2/token", { method: "post", muteHttpExceptions: true,
       payload: { client_id: st.clientId, client_secret: PROPS_.getProperty("DISCORD_CLIENT_SECRET"), grant_type: "authorization_code", code: str_(d.code), redirect_uri: st.redirect } });
     mark_("discord token"); if (tok.getResponseCode() !== 200) return { ok: false, error: "Discord didn't accept the sign-in. Try again." };
-    const access = JSON.parse(tok.getContentText()).access_token, H = { headers: { Authorization: "Bearer " + access }, muteHttpExceptions: true };
+    const tokJ = JSON.parse(tok.getContentText()), access = tokJ.access_token, H = { headers: { Authorization: "Bearer " + access }, muteHttpExceptions: true };
     const meR = UrlFetchApp.fetch("https://discord.com/api/users/@me", H); if (meR.getResponseCode() !== 200) return { ok: false, error: "Couldn't read your Discord account." };
     const du = JSON.parse(meR.getContentText()), id = str_(du.id); mark_("discord user");
-    if (st.guildId) { const gR = UrlFetchApp.fetch("https://discord.com/api/users/@me/guilds", H); const gs = gR.getResponseCode() === 200 ? JSON.parse(gR.getContentText()) : [];
-      if (!gs.some(g => str_(g.id) === st.guildId)) return { ok: false, error: "This Discord account isn't in the LSPD Discord server." }; }
+    if (st.guildId) {             // member info (roles) when they allowed it; the plain server list otherwise
+      const mR = /guilds\.members\.read/.test(str_(tokJ.scope)) ? UrlFetchApp.fetch("https://discord.com/api/v10/users/@me/guilds/" + st.guildId + "/member", H) : null, mc = mR ? mR.getResponseCode() : 0;
+      if (mc === 404) return { ok: false, error: "This Discord account isn't in the LSPD Discord server." };
+      if (mc !== 200) { const gR = UrlFetchApp.fetch("https://discord.com/api/users/@me/guilds", H); const gs = gR.getResponseCode() === 200 ? JSON.parse(gR.getContentText()) : [];
+        if (!gs.some(g => str_(g.id) === st.guildId)) return { ok: false, error: "This Discord account isn't in the LSPD Discord server." }; }
+      if (mc === 200) { dlinkSave_(id, tokJ);     // lets the portal check the On Duty role every 15 minutes
+        try { const dc = dutyCfg_(); if (dc.on && dc.sopRoleId) { const ch = {}; ch[id] = (JSON.parse(mR.getContentText()).roles || []).map(String).indexOf(dc.sopRoleId) !== -1; sopApply_(ch); } } catch (e) {} }
+    }
     mark_("discord guilds"); const person = rosterPerson_(id); mark_("roster");
     let acct = acctFind_(id); mark_("account");
     if (!person && !acct) return { ok: false, error: "Your Discord account (" + (du.username || id) + ") isn't on the LSPD roster. Ask a supervisor to add your Discord ID to the roster." };
@@ -2878,14 +2885,16 @@ function pchkAll_() {
 }
 function reqKey_(idx, t) { let h = 5381; const x = str_(t).toLowerCase().replace(/[^a-z0-9]/g, ""); for (let i = 0; i < x.length; i++) h = ((h * 33) ^ x.charCodeAt(i)) >>> 0; return idx + "-" + h.toString(36); }
 // what a requirement line asks for, when the portal can count it itself
-function reqAuto_(t) {
+function reqAuto_(t, sopOn) {
   if (/time in grade|\btig\b/i.test(t)) { const m = /\((\d+)\)\s*days/i.exec(t) || /(\d+)\s*days/i.exec(t); if (m) return { type: "tig", need: Number(m[1]) }; }
   const r = /\((\d+)\)\s*reports/i.exec(t) || /minimum of (\d+) reports/i.exec(t); if (r) return { type: "reports", need: Number(r[1]) };
+  if (sopOn && /\bsop\b.*certified|certified.*\bsop\b/i.test(t)) return { type: "sop", need: 1 };   // SOP Certified role in Discord
   return null;
 }
 function promoLadderKeys_() {
   const L = promoReqParse_(false);
-  (L.ranks || []).forEach(r => r.reqs.forEach(q => { q.key = reqKey_(r.idx, q.t); const a = reqAuto_(q.t); if (a) q.auto = a; }));
+  const dc = dutyCfg_(), sopOn = dc.on && !!dc.sopRoleId;
+  (L.ranks || []).forEach(r => r.reqs.forEach(q => { q.key = reqKey_(r.idx, q.t); const a = reqAuto_(q.t, sopOn); if (a) q.auto = a; else delete q.auto; }));
   return L;
 }
 // everyone on the Personnel and Onboarding rosters, with their rank, time in grade and report count
@@ -2916,18 +2925,20 @@ function promoPeopleRead_() {
   out.forEach(o => { const from = o.since || now - 28 * 864e5; o.reports = (byId[o.id] || []).filter(t => t >= from).length; o.tigDays = o.since ? Math.floor((now - o.since) / 864e5) : null; });
   return out;
 }
+var SOP_MEMO_ = null;
 function promoEval_(o, rankReqs, checks) {
   const mine = checks || {};
   const items = (rankReqs ? rankReqs.reqs : []).map(q => {
     const c = mine[q.key], a = q.auto; let have = null, auto = false;
     if (a && a.type === "tig") { have = o.tigDays; auto = have != null && have >= a.need; }
     if (a && a.type === "reports") { have = o.reports; auto = have >= a.need; }
+    if (a && a.type === "sop") { have = SOP_MEMO_ ? (SOP_MEMO_[o.id] ? 1 : 0) : (sopIds_()[o.id] ? 1 : 0); auto = have >= 1; }
     return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
   });
   return { items: items, done: items.filter(x => x.done).length, total: items.length, ready: items.length > 0 && items.every(x => x.done) };
 }
 function promoBoard_() {
-  const L = promoLadderKeys_(), people = promoPeople_(), checks = pchkAll_();
+  const L = promoLadderKeys_(), people = promoPeople_(), checks = pchkAll_(); SOP_MEMO_ = sopIds_();
   const byIdx = {}; (L.ranks || []).forEach(r => byIdx[r.idx] = r);
   const nextName = idx => { const n = (L.ranks || []).find(x => x.idx > idx); return n ? n.name : "High Command"; };
   return { ok: true, error: L.error || "", doc: L.doc, ranks: (L.ranks || []).map(r => ({ idx: r.idx, label: r.label, name: r.name, next: nextName(r.idx), tig: r.tig, group: r.group })),
@@ -3179,6 +3190,125 @@ function myForms_(acct, prof) {
   return getConfig_().forms.filter(f => (f.status === "live" || f.status === "soon") && formAllowed_(f, acct, prof))
     .map(f => ({ id: f.id, title: f.title, icon: f.icon || "📄", status: f.status, section: f.section || "", desc: clip_(str_(f.desc || f.subtitle), 140), cid: isCidApp_(f), division: (f.accessTabs || []).map(t => t.name).join(", ") }));
 }
+// =====================================================================
+// DUTY FROM DISCORD: the server's own bot gives officers an "On Duty" role while they're on duty in game.
+// No bot of ours: each officer's own Discord sign-in (scope guilds.members.read) lets the portal ask
+// Discord for that officer's roles in the LSPD server. A trigger checks everyone every 15 minutes.
+//   - sign-ins are kept in Script Properties only ("DLINK_<discordId>"), never in a sheet or a page
+//   - who is on duty right now -> Script Property "DUTY_STATE" ({ id: [startMs, lastSeenMs] })
+//   - finished duty sessions   -> "Duty Log" tab
+// Times are accurate to about one check (15 minutes); on and off are both seen late, so lengths even out.
+// =====================================================================
+const DUTY_SHEET_ = "Duty Log", DUTY_EVERY_MIN_ = 15, DUTY_STALE_MS_ = 3 * 3600000;
+function dutyCfg_() {
+  const s = (getConfig_().settings || {}).duty || {};
+  const id = v => /^\d{15,21}$/.test(str_(v)) ? str_(v) : "";
+  return { on: !!s.on, roleId: id(s.roleId), roleName: str_(s.roleName), sopRoleId: id(s.sopRoleId) };
+}
+function dlinkSave_(id, tok) {
+  if (!tok || !tok.refresh_token || !/^\d{15,21}$/.test(str_(id))) return;
+  try { PROPS_.setProperty("DLINK_" + id, JSON.stringify({ a: tok.access_token, r: tok.refresh_token, x: Date.now() + (Number(tok.expires_in) || 604800) * 1000 - 3600000 })); } catch (e) {}
+}
+function dlinkHas_(id) { return !!PROPS_.getProperty("DLINK_" + str_(id)); }
+// officers seen holding the SOP Certified role ({ id: first seen ms }); ticks the "SOP Certified" promotion requirement
+function sopIds_() { try { return JSON.parse(PROPS_.getProperty("SOP_IDS") || "{}") || {}; } catch (e) { return {}; } }
+function sopApply_(changes) {        // { id: true | false }
+  const cur = sopIds_(); let changed = false;
+  Object.keys(changes).forEach(id => { if (changes[id] && !cur[id]) { cur[id] = Date.now(); changed = true; } if (!changes[id] && cur[id]) { delete cur[id]; changed = true; } });
+  if (changed) { PROPS_.setProperty("SOP_IDS", JSON.stringify(cur)); try { CacheService.getScriptCache().remove("promo_people"); } catch (e) {} }
+}
+// a working access token for this officer: "" = try again later, null = the link is gone (they removed the app)
+function dlinkAccess_(id, link) {
+  if (link.a && link.x > Date.now()) return link.a;
+  const st = discordStatus_();
+  const r = UrlFetchApp.fetch("https://discord.com/api/oauth2/token", { method: "post", muteHttpExceptions: true,
+    payload: { client_id: st.clientId, client_secret: PROPS_.getProperty("DISCORD_CLIENT_SECRET"), grant_type: "refresh_token", refresh_token: link.r } });
+  const c = r.getResponseCode();
+  if (c === 200) { const t = JSON.parse(r.getContentText()); dlinkSave_(id, t); return t.access_token; }
+  if (c === 400 || c === 401) { PROPS_.deleteProperty("DLINK_" + id); return null; }
+  return "";
+}
+function dutyState_() { try { return JSON.parse(PROPS_.getProperty("DUTY_STATE") || "{}") || {}; } catch (e) { return {}; } }
+function dutySheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(DUTY_SHEET_);
+  if (!sh) {
+    sh = ss.insertSheet(DUTY_SHEET_);
+    sh.appendRow(["Logged", "Week Of", "Officer", "Discord ID", "On duty", "Off duty", "Minutes", "Hours", "Note"]);
+    sh.setFrozenRows(1); sh.getRange(1, 1, 1, 9).setFontWeight("bold");
+    sh.getRange("B:B").setNumberFormat("@"); sh.getRange("D:D").setNumberFormat("@");
+  }
+  return sh;
+}
+function dutyWho_(id) {
+  const p = rosterPerson_(id); if (p) return { name: p.name || "", callsign: p.callsign || "", rank: p.rank || "" };
+  const a = acctFind_(id); return { name: (a && (a.name || a.username)) || "", callsign: (a && a.callsign) || "", rank: "" };
+}
+// install or remove the 15-minute check
+function dutyTrigger_(on) {
+  const mine = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "dutyPoll");
+  if (on && !mine.length) ScriptApp.newTrigger("dutyPoll").timeBased().everyMinutes(DUTY_EVERY_MIN_).create();
+  if (!on) mine.forEach(t => ScriptApp.deleteTrigger(t));
+}
+function dutyPoll() {                                            // trigger entry point
+  const cfg = dutyCfg_(), st = discordStatus_();
+  if (!cfg.on || !(cfg.roleId || cfg.sopRoleId) || !st.guildId) return;
+  const props = PROPS_.getProperties(), now = Date.now(), seen = {}, sop = {};   // id -> true (role), false (no role), null (couldn't tell)
+  const ready = [];
+  Object.keys(props).filter(k => /^DLINK_\d+$/.test(k)).forEach(k => {
+    const id = k.slice(6); let link; try { link = JSON.parse(props[k]); } catch (e) { return; }
+    let a = ""; try { a = dlinkAccess_(id, link); } catch (e) {}
+    if (a) ready.push({ id: id, a: a }); else seen[id] = null;
+  });
+  let checked = 0, failed = 0;
+  for (let i = 0; i < ready.length; i += 25) {
+    const batch = ready.slice(i, i + 25);
+    let rs = []; try { rs = UrlFetchApp.fetchAll(batch.map(b => ({ url: "https://discord.com/api/v10/users/@me/guilds/" + st.guildId + "/member", headers: { Authorization: "Bearer " + b.a }, muteHttpExceptions: true }))); } catch (e) { rs = []; }
+    batch.forEach((b, k) => {
+      const r = rs[k], c = r ? r.getResponseCode() : 0;
+      if (c === 200) { let m = {}; try { m = JSON.parse(r.getContentText()); } catch (e) {} const roles = (m.roles || []).map(String);
+        seen[b.id] = !!cfg.roleId && roles.indexOf(cfg.roleId) !== -1; if (cfg.sopRoleId) sop[b.id] = roles.indexOf(cfg.sopRoleId) !== -1; checked++; }
+      else if (c === 404) { seen[b.id] = false; if (cfg.sopRoleId) sop[b.id] = false; checked++; }   // left the server
+      else { seen[b.id] = null; failed++;
+        if (c === 401) { try { const l = JSON.parse(props["DLINK_" + b.id]); l.x = 0; PROPS_.setProperty("DLINK_" + b.id, JSON.stringify(l)); } catch (e) {} } }   // refresh next time
+    });
+    if (i + 25 < ready.length) Utilities.sleep(1000);
+  }
+  const state = dutyState_(), done = [];
+  Object.keys(seen).forEach(id => {
+    const was = state[id];
+    if (seen[id] === true) { if (was) was[1] = now; else state[id] = [now, now]; }
+    else if (seen[id] === false && was) { done.push([id, was[0], now]); delete state[id]; }
+  });
+  Object.keys(state).forEach(id => {                             // unlinked, or unreadable for hours: close at the last time we saw them
+    if (!(id in seen) || (seen[id] === null && now - state[id][1] > DUTY_STALE_MS_)) { done.push([id, state[id][0], state[id][1], "closed: couldn't check Discord"]); delete state[id]; }
+  });
+  PROPS_.setProperty("DUTY_STATE", JSON.stringify(state));
+  try { sopApply_(sop); } catch (e) {}
+  PROPS_.setProperty("DUTY_LAST", JSON.stringify({ t: now, linked: ready.length + Object.keys(seen).filter(id => seen[id] === null && !ready.some(b => b.id === id)).length, checked: checked, failed: failed, onDuty: Object.keys(state).length }));
+  if (done.length) dutyLog_(done);
+}
+function dutyLog_(done) {
+  const ws = ((getConfig_().settings || {}).hours || {}).weekStart; const fmt = ms => Utilities.formatDate(new Date(ms), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
+  const rows = done.map(x => { const w = dutyWho_(x[0]), min = Math.max(0, Math.round((x[2] - x[1]) / 60000));
+    return [new Date(), "'" + weekOf_(new Date(x[1]), ws == null ? 1 : ws), cellSafe_((w.callsign ? w.callsign + " | " : "") + w.name), "'" + x[0], fmt(x[1]), fmt(x[2]), min, Math.round(min / 6) / 10,
+      x[3] || (min > 12 * 60 ? "Long shift - check" : min === 0 ? "Seen on duty once (under 15 min)" : "")]; });
+  withLock_(() => { const sh = dutySheet_(); sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); return { ok: true }; });
+}
+function dutyAdmin_() {
+  const c = dutyCfg_(); let last = {}; try { last = JSON.parse(PROPS_.getProperty("DUTY_LAST") || "{}"); } catch (e) {}
+  const linked = Object.keys(PROPS_.getProperties()).filter(k => /^DLINK_\d+$/.test(k)).length;
+  return { on: c.on, roleId: c.roleId, roleName: c.roleName, sopRoleId: c.sopRoleId, sopCount: Object.keys(sopIds_()).length, guildId: discordStatus_().guildId, linked: linked, last: last, board: c.on && c.roleId ? dutyBoard_() : null,
+    trigger: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "dutyPoll") };
+}
+// who's on duty right now (for the MDT and admin)
+function dutyBoard_() {
+  const cfg = dutyCfg_(); if (!cfg.on || !cfg.roleId) return null;
+  const state = dutyState_(), now = Date.now();
+  let last = {}; try { last = JSON.parse(PROPS_.getProperty("DUTY_LAST") || "{}"); } catch (e) {}
+  const list = Object.keys(state).map(id => { const w = dutyWho_(id); return { id: id, name: w.name, callsign: w.callsign, rank: w.rank, since: state[id][0], minutes: Math.round((now - state[id][0]) / 60000) }; })
+    .sort((a, b) => a.since - b.since);
+  return { on: true, every: DUTY_EVERY_MIN_, checkedAt: last.t || 0, list: list };
+}
 function officerHome_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
   mark_("session"); const person = rosterPerson_(acct.id); mark_("roster"); const prof = acctProfile_(acct); mark_("profile"); const s = getConfig_().settings || {};
@@ -3190,6 +3320,7 @@ function officerHome_(d) {
   out.ladder = (() => { try { return promoReqParse_(false); } catch (e) { return null; } })(); mark_("ladder");
   out.promoMe = promoMine_(acct); mark_("promo");
   out.race = officerRace_(acct); mark_("race");
+  try { const b = dutyBoard_(); if (b) { b.linked = dlinkHas_(acct.id); b.me = !!dutyState_()[acct.id]; out.duty = b; } } catch (e) {} mark_("duty");
   return out;
 }
 
@@ -3727,6 +3858,22 @@ function handleAdmin_(d) {
       const r = acctAdmin_(a, d, me); logAdmin_(me.username, "officer account", a.replace("acct", "") + " " + str_(d.discordId) + (d.level ? " -> " + d.level : "") + (d.locked != null ? " -> " + (d.locked ? "locked" : "unlocked") : ""));
       return r;
     }
+    case "dutySetup": {          // On Duty role from the server's own bot -> automatic duty hours
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");
+      const rid = str_(d.roleId), sid = str_(d.sopRoleId), bad = x => x && !/^\d{15,21}$/.test(x);
+      if (bad(rid) || bad(sid)) throw new Error("A role ID is a long number (Discord Developer Mode → right-click the role → Copy Role ID).");
+      if (d.on && !rid && !sid) throw new Error("Paste the On Duty role ID first.");
+      if (d.on && !discordStatus_().guildId) throw new Error("Add the LSPD Discord server ID under Sign in with Discord first.");
+      const r = withLock_(() => { const cfg = getConfig_(); cfg.settings = cfg.settings || {};
+        cfg.settings.duty = { on: !!d.on, roleId: rid, roleName: clip_(str_(d.roleName), 40), sopRoleId: sid };
+        cfg.version = (Number(cfg.version) || 0) + 1; writeConfig_(cfg, me.username); return { ok: true }; });
+      if (!r.ok) return r;
+      dutyTrigger_(!!d.on);
+      logAdmin_(me.username, "duty tracking", (d.on ? "on" : "off") + (rid ? " role " + rid : ""));
+      return { ok: true, duty: dutyAdmin_() };
+    }
+    case "dutyAdmin": return { ok: true, duty: dutyAdmin_() };
+    case "dutyCheckNow": { if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can do this."); dutyPoll(); return { ok: true, duty: dutyAdmin_() }; }
     case "discordSetup": {       // owner pastes the Discord app's Client ID + Secret (sign in with Discord)
       ownerOnly();
       if (str_(d.clientId) && !/^\d{15,21}$/.test(str_(d.clientId))) throw new Error("The Client ID is the long number on the app's OAuth2 page.");

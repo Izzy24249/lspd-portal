@@ -205,6 +205,18 @@
       '<div class="ackrow">' + (b.acked ? '<span class="acked">✓ Acknowledged</span>' : '<button class="btn" data-ack="' + esc(b.id) + '">ACKNOWLEDGE · ROLL CALL</button>') +
       (b.ackCount != null ? '<span class="lbl">' + b.ackCount + " acknowledged</span>" : "") + "</div>";
   }
+  // ---------- on duty now: read from the On Duty role in the LSPD Discord (checked every 15 minutes) ----------
+  function durTxt(min) { const hh = Math.floor(min / 60), mm = min % 60; return hh ? hh + "h" + (mm ? " " + mm + "m" : "") : mm + "m"; }
+  function dutyHTML() {
+    const du = DATA.duty; if (!du) return "";
+    const L = du.list || []; let h = "";
+    if (!du.linked) h += '<div class="duty-link"><span>🛰️</span><div><b>Connect Discord for automatic duty hours</b><small>One time only. Your on-duty time is counted from the On Duty role in the LSPD Discord, so you never have to clock in here. You\'ll confirm with Discord, then enter your PIN.</small></div><button class="btn" data-duty-link type="button">CONNECT</button></div>';
+    h += '<section class="pane duty"><div class="ph"><span class="lbl">On duty now · ' + L.length + "</span>" + (du.me ? '<span class="duty-me">● YOU\'RE ON DUTY</span>' : "") + "</div>" +
+      (L.length ? '<div class="duty-list">' + L.map(o => '<div class="need"><span class="cs">' + esc(o.callsign || "—") + "</span><div><b>" + esc(o.name || "Officer") + "</b><small>" + esc(o.rank ? o.rank + " · " : "") + "on for " + durTxt(o.minutes) + "</small></div></div>").join("") + "</div>"
+        : '<p style="color:var(--mute);margin:0">Nobody is on duty right now.</p>') +
+      '<p class="duty-note">From the On Duty role in Discord' + (du.checkedAt ? " · checked " + (ago(du.checkedAt) === "now" ? "just now" : ago(du.checkedAt) + " ago") : " · first check within " + (du.every || 15) + " minutes") + "</p></section>";
+    return h;
+  }
   function homeHTML() {
     const p = DATA.profile || {}, f = DATA.fleet || {}, B = DATA.board || {}, trainee = f.rank && f.rank.trainee, mine = B.mine || [];
     const waiting = mine.filter(r => !r.grade).length;
@@ -218,6 +230,7 @@
       '<div class="stat ' + (NB0.length ? "r" : "") + '"><svg viewBox="0 0 24 24"><use href="#i-radio"/></svg><small>Active BOLOs</small><b data-count="' + NB0.length + '">0</b><em>' + (NB0[0] ? esc(NB0[0].title).slice(0, 26) : "none posted") + "</em></div>" +
       '<div class="stat a"><svg viewBox="0 0 24 24"><use href="#i-star"/></svg><small>Officers active · 7 days</small><b data-count="' + (D0.active || 0) + '">0</b><em>avg grade ' + esc(D0.avg || "—") + "</em></div></div>";
     h += raceCardHTML();
+    h += dutyHTML();
     // a leader recognized this officer in the last 3 days
     { const me = (p && p.discordId) || ""; const kd = UNIT && (UNIT.kudos || []).find(k => k.toId === me && Date.now() - k.at < 3 * 864e5);
       if (kd) h += '<a class="kudo-ban" data-go="unit"><span>👏</span><div><small>YOU WERE RECOGNIZED</small><b>' + esc(kd.from) + "</b><p>“" + esc(kd.msg) + "”</p></div></a>"; }
@@ -425,7 +438,7 @@
   let PROMO_OPEN = {};
   function promoReqs(r, marks) {
     const mk = (i) => { const m = marks && marks[i]; if (!m) return ""; return '<span class="pr-mark ' + (m.done ? "ok" : "") + '">' + (m.done ? "✓ " : "") +
-      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
+      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
     return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map((q, i) => '<li class="' + (marks && marks[i] && marks[i].done ? "ok" : "") + '"><b>' + esc(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
       (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + mk(i) + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
   }
@@ -490,7 +503,8 @@
           (o.ready ? '<span class="tr-ready">READY</span>' : "") + "</summary><div class=\"tr-items\">" + o.items.map(it =>
             '<button class="tr-it' + (it.done ? " on" : "") + '" data-tcheck="' + esc(o.id) + '|' + esc(it.key) + '|' + (it.manual ? "0" : "1") + '"' + (it.done && !it.manual ? ' title="Counted automatically"' : "") + '><span class="bx">' + (it.done ? "✓" : "") + "</span><span class=\"tx\">" + esc(it.t) +
             "<small>" + (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)" : it.have + " / " + it.need + " days") + (it.done && !it.manual ? " · counted automatically" : "") :
-              it.auto === "reports" ? it.have + " / " + it.need + " reports since reaching this rank" + (it.done && !it.manual ? " · counted automatically" : "") : "") +
+              it.auto === "reports" ? it.have + " / " + it.need + " reports since reaching this rank" + (it.done && !it.manual ? " · counted automatically" : "") :
+              it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord" : "No SOP Certified role in Discord yet (checked every 15 min, once they've connected Discord)") : "") +
             (it.manual ? (it.auto ? " · " : "") + "Signed off by " + esc(it.by) + (it.at ? " · " + new Date(it.at).toLocaleDateString() : "") : (!it.auto && !it.done ? "Tick when done" : "")) + "</small></span></button>").join("") + "</div></details>";
       }).join("") + "</div>";
     });
@@ -566,6 +580,8 @@
   }
 
   document.addEventListener("click", e => {
+    const dl = e.target.closest("[data-duty-link]"); if (dl) { dl.disabled = true; dl.textContent = "OPENING DISCORD…";
+      Portal.post({ action: "acctDiscordUrl" }).then(r => { if (r && r.ok && r.url) location.href = r.url; else { dl.disabled = false; dl.textContent = "CONNECT"; toast((r && r.error) || "Couldn't open Discord."); } }); return; }
     const c = e.target.closest("[data-copy]"); if (c && !c.disabled) { copy(c.getAttribute("data-copy"), c.getAttribute("data-what") || "Code"); return; }
     const fa = e.target.closest("[data-fa]"); if (fa) { FLEET_ALL = fa.getAttribute("data-fa") === "1"; LS.set("mdt:fleetAll", FLEET_ALL ? "1" : ""); draw(); return; }
     const ua = e.target.closest("[data-ua]"); if (ua) { UNI_ALL = ua.getAttribute("data-ua") === "1"; LS.set("mdt:uniAll", UNI_ALL ? "1" : ""); draw(); return; }

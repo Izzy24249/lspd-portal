@@ -1667,7 +1667,7 @@ function pageAccounts(page) {
   const box = h("div", {}, h("div", { class: "sec empty-note", text: "Loading accounts…" }));
   page.append(box);
   const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; VOICE = r.voice || null; SIGNON = r.signon || null; DIVLIST = r.divisionList || []; });
-  load.then(() => { box.innerHTML = ""; if (["owner", "admin"].includes(ME.role)) box.append(signonSec()); drawAccounts(box); if (ME.role === "owner") box.append(discordSec(), voiceSec(), extrasSec()); })
+  load.then(() => { box.innerHTML = ""; if (["owner", "admin"].includes(ME.role)) box.append(signonSec()); drawAccounts(box); if (ME.role === "owner") box.append(discordSec()); if (["owner", "admin"].includes(ME.role)) box.append(dutySec()); if (ME.role === "owner") box.append(voiceSec(), extrasSec()); })
     .catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 55 ? "Paste the new WebApp.gs (version 55 or newer) and deploy a new version to use officer accounts." : e.message })); });
 }
 function drawAccounts(box) {
@@ -1735,6 +1735,39 @@ function signonSec() {
       catch (err) { toast(err.message, "bad"); }
       e.target.disabled = false;
     } }, "Save")));
+  return sec;
+}
+// On Duty + SOP Certified roles in the LSPD Discord: read with each officer's own Discord sign-in (no bot), every 15 minutes
+const DUTY_DEFAULT_ROLE = "1297303537809756282", SOP_DEFAULT_ROLE = "1330993909546877010";
+function dutySec() {
+  const sec = h("div", { class: "sec", style: "display:grid;gap:12px" });
+  sec.append(h("h3", { text: "Duty & roles from Discord" }), h("div", { class: "help", text: "Loading…" }));
+  if (BACKEND_HAVE < 86) { sec.lastChild.textContent = "Paste the new WebApp.gs (version 86 or newer) and deploy a new version to turn this on."; return sec; }
+  const fmt = t => t ? new Date(t).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "never";
+  const dur = m => { const hh = Math.floor(m / 60), mm = m % 60; return hh ? hh + "h" + (mm ? " " + mm + "m" : "") : mm + "m"; };
+  const draw = du => {
+    sec.innerHTML = "";
+    const on = h("input", { type: "checkbox" }); on.checked = !!du.on;
+    const role = h("input", { type: "text", value: du.roleId || DUTY_DEFAULT_ROLE, placeholder: "On Duty role ID" });
+    const sop = h("input", { type: "text", value: du.sopRoleId || SOP_DEFAULT_ROLE, placeholder: "SOP Certified role ID" });
+    const L = (du.board && du.board.list) || [], last = du.last || {};
+    sec.append(h("h3", { text: "Duty & roles from Discord" }),
+      h("p", { class: "help", text: "The server's own bot gives officers the On Duty role while they're on duty in game. Every 15 minutes the portal asks Discord which officers have it (using each officer's own Discord sign-in, no bot), and logs each stretch to the \"Duty Log\" tab. Times are accurate to about 15 minutes. Officers who have the SOP Certified role get the \"SOP Certified\" promotion requirement ticked automatically. Officers connect once from the banner on their MDT." }),
+      h("div", { class: "help", text: "Status: " + (du.on ? (du.trigger ? "on ✓" : "on, but the 15-minute check isn't installed (press Save)") : "off") + " · " + du.linked + " officer" + (du.linked === 1 ? "" : "s") + " connected · last check " + fmt(last.t) +
+        (last.t ? " (" + (last.checked || 0) + " read" + (last.failed ? ", " + last.failed + " couldn't be read" : "") + ")" : "") + (du.sopRoleId ? " · " + (du.sopCount || 0) + " with SOP Certified" : "") + (du.guildId ? "" : " · ⚠ add the LSPD server ID under Sign in with Discord") }),
+      h("div", { class: "g2" }, field("On Duty role ID", role, "Developer Mode → right-click the role → Copy Role ID."), field("SOP Certified role ID", sop, "Ticks the PO requirement \"SOP Certified & Verified Within The Department Discord\".")),
+      h("label", { style: "display:flex;gap:8px;align-items:center" }, on, h("span", { text: "Track duty and roles from Discord" })),
+      h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
+        h("button", { class: "btn primary sm", onclick: async e => { e.target.disabled = true;
+          try { const r = await api("dutySetup", { on: on.checked, roleId: role.value.trim(), sopRoleId: sop.value.trim() }); toast(r.duty.on ? "Duty tracking is on. First check within 15 minutes." : "Duty tracking is off.", "ok"); draw(r.duty); }
+          catch (x) { toast(x.message, "bad"); e.target.disabled = false; } } }, "Save"),
+        du.on ? h("button", { class: "btn ghost sm", onclick: async e => { e.target.disabled = true; e.target.textContent = "Checking…";
+          try { const r = await api("dutyCheckNow", {}); toast("Checked " + ((r.duty.last || {}).checked || 0) + " officers.", "ok"); draw(r.duty); } catch (x) { toast(x.message, "bad"); e.target.disabled = false; e.target.textContent = "Check now"; } } }, "Check now") : ""),
+      du.board ? h("div", {}, h("b", { text: "On duty now · " + L.length }),
+        L.length ? h("ul", { style: "margin:6px 0 0;padding-left:18px" }, ...L.map(o => h("li", { text: (o.callsign ? o.callsign + " | " : "") + (o.name || o.id) + (o.rank ? " · " + o.rank : "") + " · on for " + dur(o.minutes) })))
+          : h("div", { class: "help", text: "Nobody right now." })) : "");
+  };
+  api("dutyAdmin", {}).then(r => draw(r.duty)).catch(e => { sec.lastChild.textContent = e.message; });
   return sec;
 }
 function discordSec() {
