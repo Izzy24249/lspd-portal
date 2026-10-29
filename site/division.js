@@ -15,6 +15,7 @@
 
   function toast(m, t) { const x = $("toast"); x.textContent = m; x.className = "toast show " + (t || ""); clearTimeout(toast.t); toast.t = setTimeout(() => x.className = "toast", 4500); }
   // officers come in with their MDT sign-on (Leader level and up); portal admins can still use the admin login
+  const EMBED_ = /[?&]embed=1/.test(location.search);   // opened inside the MDT
   let SESSION = ""; try { SESSION = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
   // the officer sign-on comes first (it carries your rank and name); the portal admin login is the fallback
   const OFFICER = () => !!SESSION;
@@ -177,7 +178,7 @@
     if (inHq || !DATA || !DATA.division) {
       const list = (HQ && HQ.divisions) || (DATA && DATA.divisions) || [];
       $("topDiv").textContent = "COMMAND CENTER";
-      if (ME) { $("me").innerHTML = `<i class="r-${esc(ME.role)}">${esc(ME.role === "leader" ? "LEADER" : String(ME.role).toUpperCase())}</i>${esc(ME.username)}`; $("adminLink").hidden = ME.role === "leader" || (!!ME.officer && ["admin", "owner"].indexOf(ME.role) === -1); }
+      if (ME) { $("me").innerHTML = `<i class="r-${esc(ME.role)}">${esc(ME.role === "leader" ? "LEADER" : String(ME.role).toUpperCase())}</i>${esc(ME.username)}`; $("adminLink").hidden = EMBED_ || ["admin", "owner"].indexOf(ME.role) === -1; }
       $("divs").innerHTML = `<button data-div="_hq" class="hqb${inHq ? " on" : ""}"><i></i>Command Center</button>` + list.map(d => `<button data-div="${esc(d.id)}" class="${!inHq && DATA && DATA.division && d.id === DATA.division.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("");
       document.documentElement.style.setProperty("--ac", "#e8b54a"); document.documentElement.style.setProperty("--acr", "232,181,74");
       if (inHq) { drawHQ(); return; }
@@ -187,7 +188,7 @@
     const dv = DATA.division, S = stats();
     $("topDiv").textContent = dv.name.toUpperCase();
     $("me").innerHTML = `<i class="r-${esc(ME.role)}">${esc(ME.role === "leader" ? "LEADER" : ME.role.toUpperCase())}</i>${esc(ME.username)}`;
-    $("adminLink").hidden = ME.role === "leader" || (!!ME.officer && ["admin", "owner"].indexOf(ME.role) === -1);
+    $("adminLink").hidden = EMBED_ || ["admin", "owner"].indexOf(ME.role) === -1;
     $("divs").innerHTML = `<button data-div="_hq" class="hqb"><i></i>Command Center</button>` + (DATA.divisions || []).map(d => `<button data-div="${esc(d.id)}" class="${d.id === dv.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("");
     document.querySelectorAll("#period [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === PERIOD));
     document.querySelectorAll("#tabs [data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === TAB));

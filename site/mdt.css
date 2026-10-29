@@ -93,6 +93,10 @@ button{font:inherit;color:inherit}
 .crumb b{font:700 20px "Barlow Condensed",sans-serif;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tb-right{margin-left:auto;display:flex;align-items:center;gap:16px}
 .chip-live{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:999px;border:1px solid rgba(52,217,150,.35);background:rgba(52,217,150,.07);font:700 10.5px "Barlow Condensed",sans-serif;letter-spacing:.18em;color:#a8f3d1}
+.tb-admin{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid rgba(143,178,255,.35);background:rgba(47,123,255,.08);font:700 10.5px "Barlow Condensed",sans-serif;letter-spacing:.18em;color:#cfe0ff;text-decoration:none;transition:.2s}
+.tb-admin:hover{border-color:rgba(143,178,255,.7);background:rgba(47,123,255,.16);color:#fff}
+.tb-admin svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.tb-admin[hidden]{display:none}
 .chip-live i{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.6s infinite}
 .chip-live.bad{border-color:rgba(255,93,108,.4);background:rgba(255,93,108,.07);color:#ffc2c8}.chip-live.bad i{background:var(--red);box-shadow:0 0 8px var(--red)}
 .watch{font:700 11.5px "Barlow Condensed",sans-serif;letter-spacing:.2em;color:var(--amber)}

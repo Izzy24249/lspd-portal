@@ -33,6 +33,7 @@
     const sop = (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; $("sopLink").href = "#sop";
     const nt = UNIT && UNIT.sessions ? UNIT.sessions.filter(x => !x.mine && !x.full).length + (UNIT.checks || []).filter(c => !c.best).length : 0; $("nTrain").textContent = nt || "";
     document.querySelectorAll("[data-need-command]").forEach(a => a.hidden = !isCommand());
+    $("adminBtn").hidden = ["admin", "owner"].indexOf(p.level) === -1;   // portal admin: admins and the owner only
     const nb = (DATA && DATA.board && DATA.board.notices || []).length; $("nBolo").textContent = nb || ""; $("nBolo").className = nb ? "new" : "";
     if (DATA && DATA.fleet) { $("nFleet").textContent = DATA.fleet.vehicles.filter(v => v.allowed).length || ""; $("nUni").textContent = (DATA.fleet.uniforms[SEX] || []).filter(u => u.yours).length || ""; }
     drawFormsNav();
