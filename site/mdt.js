@@ -10,6 +10,8 @@
   if (!SESSION) { location.replace("signon.html?next=" + encodeURIComponent("mdt.html" + location.hash)); return; }
 
   let DATA = LS.json("mdt:home"), VIEW = "home", SNAP_FORMS = null, FLEET_ALL = LS.get("mdt:fleetAll") === "1", UNI_ALL = LS.get("mdt:uniAll") === "1", SEX = LS.get("mdt:sex") || "male";
+  const SHOW_FEMALE = false;   // female uniforms are hidden from officers until command posts them; set to true to show the MALE/FEMALE switch
+  if (!SHOW_FEMALE) SEX = "male";
   function toast(t) { const x = $("toast"); x.textContent = t; x.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => x.classList.remove("show"), 2200); }
   function copy(text, what) {
     const done = () => toast(what + " copied: " + text);
@@ -541,7 +543,7 @@
     const mine = list.filter(u => u.yours), show = UNI_ALL ? list : mine, badge = f.badge;
     let h = '<div class="h2"><div><h1>UNIFORMS <span>· ' + esc(rk.known || rk.trainee ? rk.name : "rank not on file") + "</span></h1><p>Outfits approved for your rank. Tap a duplicate code to copy it." +
       (badge ? " Your badge &amp; logo: <b>" + esc(badge.value) + "</b>." : "") + '</p></div><div style="display:flex;gap:8px;flex-wrap:wrap">' +
-      (f.female ? '<div class="seg"><button data-sex="male" class="' + (SEX === "male" ? "on" : "") + '">MALE</button><button data-sex="female" class="' + (SEX === "female" ? "on" : "") + '">FEMALE</button></div>' : "") +
+      (f.female && SHOW_FEMALE ? '<div class="seg"><button data-sex="male" class="' + (SEX === "male" ? "on" : "") + '">MALE</button><button data-sex="female" class="' + (SEX === "female" ? "on" : "") + '">FEMALE</button></div>' : "") +
       '<div class="seg"><button data-ua="0" class="' + (UNI_ALL ? "" : "on") + '">MY RANK · ' + mine.length + '</button><button data-ua="1" class="' + (UNI_ALL ? "on" : "") + '">ALL · ' + list.length + "</button></div></div></div>";
     if (!list.length) return h + '<div class="empty">No uniforms found. Command: make sure the roster has a "Patrol Attire Guidelines" tab.</div>';
     h += '<div class="cards">';
@@ -567,7 +569,7 @@
     const c = e.target.closest("[data-copy]"); if (c && !c.disabled) { copy(c.getAttribute("data-copy"), c.getAttribute("data-what") || "Code"); return; }
     const fa = e.target.closest("[data-fa]"); if (fa) { FLEET_ALL = fa.getAttribute("data-fa") === "1"; LS.set("mdt:fleetAll", FLEET_ALL ? "1" : ""); draw(); return; }
     const ua = e.target.closest("[data-ua]"); if (ua) { UNI_ALL = ua.getAttribute("data-ua") === "1"; LS.set("mdt:uniAll", UNI_ALL ? "1" : ""); draw(); return; }
-    const sx = e.target.closest("[data-sex]"); if (sx) { SEX = sx.getAttribute("data-sex"); LS.set("mdt:sex", SEX); draw(); return; }
+    const sx = e.target.closest("[data-sex]"); if (sx && SHOW_FEMALE) { SEX = sx.getAttribute("data-sex"); LS.set("mdt:sex", SEX); draw(); return; }
     const rk = e.target.closest("[data-rk]"); if (rk) { REC_KIND = rk.getAttribute("data-rk"); const q = ($("recQ") || {}).value || ""; REC = null; draw(); const n = $("recQ"); if (n) { n.value = q; n.focus(); } return; }
     const rc = e.target.closest("[data-rec]"); if (rc) { const r = REC.results[+rc.getAttribute("data-rec")]; modal("<h3>" + esc(r.icon + " " + r.form) + '</h3><dl class="kv full">' + r.fields.map(f => "<dt>" + esc(f.label) + "</dt><dd>" + hl(f.value, REC.q).replace(/\n/g, "<br>") + "</dd>").join("") + '</dl><div class="md-act"><button class="btn ghost" data-close>Close</button></div>'); return; }
     const cn = e.target.closest("[data-close-notice]"); if (cn) { cn.disabled = true; Portal.post({ action: "mdtNoticeClose", session: SESSION, id: cn.getAttribute("data-close-notice") }).then(r => { if (r.ok) { DATA.board.notices = DATA.board.notices.filter(n => n.id !== cn.getAttribute("data-close-notice")); draw(); toast("Cleared."); } else { cn.disabled = false; toast(r.error || "Couldn't clear it."); } }); return; }
