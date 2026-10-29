@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 83;
+const BACKEND_VERSION = 84;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2022,6 +2022,22 @@ function actRows_(full) {
 }
 // Everything the Division Command page shows for one division: its officers + every report from its forms.
 // Stats, leaderboard, quotas and alerts are worked out in the browser from this.
+// roster names: "L-404 | 1T-03 | N. James" -> callsign L-404, division (unit) callsign 1T-03, name N. James
+const CS_SEG_ = /^(?=[^.]*\d)[A-Za-z0-9]{1,5}(?:\s*-\s*|\s)?[A-Za-z0-9]{0,5}$/;
+function rosterName_(raw) {
+  const name = str_(raw);
+  if (name.indexOf("|") === -1) { const cs = callKey_(name) ? (/\b[A-Za-z]{1,4}\s*-?\s*\d{1,5}\b/.exec(name) || [""])[0] : ""; return { cs: cs, unit: "", n: name.replace(cs, "").trim() || name }; }
+  const seg = name.split("|").map(x => x.trim()); let i = 0; const css = [];
+  while (i < seg.length - 1 && CS_SEG_.test(seg[i])) css.push(seg[i++]);
+  if (!css.length) css.push(seg[i++]);   // old rule: the first part is the callsign
+  return { cs: css[0] || "", unit: css[1] || "", n: seg.slice(i).join(" | ") };
+}
+// an open spot on a roster: no Discord ID and no officer name (just a unit callsign, "VACANT", "—"…)
+function rosterVacant_(p) {
+  if (p.id) return false;
+  const n = rosterName_(p.name).n.replace(/[()\[\]]/g, "").trim();
+  return !n || CS_SEG_.test(n) || /^(vacant|open|opening|available|n\/?a|tbd|tba|none|empty|unassigned|reserved|-+|—+|\.+|x+)$/i.test(n) || (n === p.name.trim() && CS_SEG_.test(n));
+}
 function divView_(d, me) {
   const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [];
   const dv = divs.find(x => x.id === str_(d.division)) || divs[0];
@@ -2032,9 +2048,8 @@ function divView_(d, me) {
   let officers = [], rosterError = "";
   if (dv.rosterTabId != null) {
     try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [dv.unitCol, dv.positionCol].filter(Boolean), false, false); rosterError = t.error || "";
-      officers = (t.people || []).map(p => { const cs = p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : (callKey_(p.name) ? (/\b[A-Za-z]{1,4}\s*-?\s*\d{1,5}\b/.exec(p.name) || [""])[0] : "");
-        const nm = p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name.replace(cs, "").trim() || p.name;
-        const more = p.more || {}, unit = dv.unitCol ? str_(more[dv.unitCol]) : "", rank = (dv.positionCol ? str_(more[dv.positionCol]) : "") || p.extra || "";
+      officers = (t.people || []).filter(p => !rosterVacant_(p)).map(p => { const rp = rosterName_(p.name), cs = rp.cs, nm = rp.n;
+        const more = p.more || {}, unit = (dv.unitCol ? str_(more[dv.unitCol]) : "") || rp.unit, rank = (dv.positionCol ? str_(more[dv.positionCol]) : "") || p.extra || "";
         return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: unit || cs, alt: unit && cs ? cs : "", id: p.id || "", section: p.sec || "", rank: rank,
           exempt: exemptHit_(dv.exempt, [p.sec, rank, unit, cs, nm]) }; });
     } catch (e) { rosterError = errMsg_(e); }
@@ -2083,7 +2098,7 @@ function divOverview_(allowed, me, bare) {
   const people = {};   // key -> { name, callsign, div, pts }
   const out = divs.map(dv => {
     let roster = [];
-    if (dv.rosterTabId != null) { try { roster = (getRosterTab_(dv.rosterTabId, false, [], false, false).people || []).map(p => ({ id: p.id, cs: p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : "", n: p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name })); } catch (e) {} }
+    if (dv.rosterTabId != null) { try { roster = (getRosterTab_(dv.rosterTabId, false, [], false, false).people || []).filter(p => !rosterVacant_(p)).map(p => { const rp = rosterName_(p.name); return { id: p.id, cs: rp.cs, unit: rp.unit, n: rp.n }; }); } catch (e) {} }
     const find = p => (p.i && roster.find(o => o.id === p.i)) || (callKey_(p.n) && roster.find(o => o.cs && callKey_(o.cs) === callKey_(p.n))) || (nameKey_(p.n) && roster.find(o => nameKey_(o.n) === nameKey_(cleanName_(p.n.indexOf("|") !== -1 ? p.n.split("|").slice(1).join("|") : p.n)))) || null;
     const fset = {}; (dv.forms || []).forEach(f => { const form = formsById[f.id]; if (!form) return; const slots = personSlots_(form); fset[f.id] = f.author && slots.some(x => x.key === f.author) ? f.author : autoAuthor_(form); });
     const mine = rows.filter(r => fset[r.form] !== undefined);

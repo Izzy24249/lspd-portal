@@ -489,10 +489,10 @@
 
   function viewOfficers(S) {
     const rank = { never: 0, bad: 1, warn: 2, quiet: 3, ok: 4, exempt: 5 };
-    let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign + " " + o.rank + " " + o.section).toLowerCase().includes(OFF_Q.toLowerCase()));
+    let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign + " " + (o.alt || "") + " " + o.rank + " " + o.section).toLowerCase().includes(OFF_Q.toLowerCase()));
     list.sort(OFF_SORT === "roster" ? (a, b) => a.idx - b.idx : OFF_SORT === "name" ? (a, b) => (a.callsign || a.name).localeCompare(b.callsign || b.name, undefined, { numeric: true }) : OFF_SORT === "activity" ? (a, b) => b.score - a.score : (a, b) => rank[a.status] - rank[b.status] || (b.days || 0) - (a.days || 0));
     const card = o => `<button type="button" class="oc s-${o.status}" data-off="${esc(o.key)}">
-        <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${o.rank ? esc(o.rank === o.rank.toUpperCase() ? titleCase(o.rank) : o.rank) : "&nbsp;"}</small></span><em class="cs${o.callsign ? "" : " none"}" title="Unit callsign">${esc(o.callsign || "NO CALLSIGN")}</em>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
+        <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${[o.rank ? esc(o.rank === o.rank.toUpperCase() ? titleCase(o.rank) : o.rank) : "", o.alt ? `<span class="oc-alt">${esc(o.alt)}</span>` : ""].filter(Boolean).join(" · ") || "&nbsp;"}</small></span><em class="cs${o.callsign ? "" : " none"}${o.alt ? " unit" : ""}" title="${o.alt ? "Division callsign" : "Callsign"}">${esc(o.callsign || "NO CALLSIGN")}</em>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
         ${statusPill(o)}
         <div class="oc-n"><span><b>${o.filed.length}</b>filed</span><span><b>${o.assists.length}</b>assists</span><span><b>${fmtPts(o.score)}</b>points</span></div>
         ${quotaBar(o)}</button>`;
@@ -552,7 +552,7 @@
     const chart = `<svg viewBox="0 0 320 120" class="wchart"><defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="rgba(var(--acr),.12)"/><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(var(--acr),.7)" stroke-width="2"/></pattern></defs>
       ${weeks.map((w, i) => { const x = 8 + i * 39, hf = w.f / mx * 84, hs = w.s / mx * 84; return `<rect x="${x}" y="${96 - hf}" width="26" height="${hf}" rx="3" class="bf"><title>${w.f} filed</title></rect><rect x="${x}" y="${96 - hf - hs}" width="26" height="${hs}" rx="3" fill="url(#hatch)"><title>${w.s} assists</title></rect><text x="${x + 13}" y="112" text-anchor="middle">${new Date(w.a).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</text>${w.f + w.s ? `<text x="${x + 13}" y="${90 - hf - hs}" text-anchor="middle" class="v">${w.f + w.s}</text>` : ""}`; }).join("")}</svg>`;
     $("dpanel").innerHTML = `<button class="dc-x" data-close aria-label="Close">✕</button>
-      <div class="pf-h"><i class="av xl s-${o.status}">${esc(initials(o.name))}</i><div><div class="dc-kick">${esc(o.callsign || "OFFICER")}</div><h2>${esc(o.name)}</h2>${statusPill(o)}</div></div>
+      <div class="pf-h"><i class="av xl s-${o.status}">${esc(initials(o.name))}</i><div><div class="dc-kick">${esc([o.callsign, o.alt].filter(Boolean).join(" · ") || "OFFICER")}</div><h2>${esc(o.name)}</h2>${statusPill(o)}</div></div>
       <div class="pf-k"><div><small>Filed · ${esc(PNAME[PERIOD])}</small><b>${o.filed.length}</b></div><div><small>Assists · ${esc(PNAME[PERIOD])}</small><b>${o.assists.length}</b></div><div><small>Avg grade (all)</small><b>${o.gradeAll ? `<em class="gb ${GCLS(o.gradeAll.letter)}">${o.gradeAll.letter}</em>` : "—"}</b></div><div><small>Last active</small><b class="sm">${o.last ? esc(ago(o.last)) : "never"}</b></div></div>
       ${o.quota ? `<div class="pf-q"><small>Quota this ${esc(DATA.division.quotaPer)}</small>${quotaBar(o)}</div>` : ""}
       <h3>Last 8 weeks <span class="lg"><i class="lf"></i>filed <i class="ls"></i>assists</span></h3>${chart}
