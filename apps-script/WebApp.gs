@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 84;
+const BACKEND_VERSION = 85;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2723,7 +2723,7 @@ function rankIndex_(t) {
 function rankSpan_(t) {
   const x = str_(t).toLowerCase();
   if (/all ranks/.test(x)) return [0, RANKS_.length - 1];
-  if (/command staff/.test(x)) return [7, RANKS_.length - 1];
+  if (/command staff|\bcommand\b/.test(x)) return [7, RANKS_.length - 1];   // "Command Staff", or "[Command]" on the female tab
   if (/supervisor/.test(x)) return [4, 6];
   if (/po ?1 ?- ?po ?3/.test(x)) return [0, 2];
   const parts = x.split(/\s[-–&]\s|\s(?:to|and)\s/).map(rankIndex_).filter(i => i >= 0);
