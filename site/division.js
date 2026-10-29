@@ -9,7 +9,8 @@
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
   // Command Center (all divisions + the division race) is the first page every time Division Command opens
   let MODE = "hq", HQ = null, HQ_P = "week", HQ_RANK = "total", HQ_BUSY = false, HQ_AT = 0, HQ_ANIM = true;
-  let HQ_NEW = false, HQ_OPEN = new Set(), HQ_GOAL = "", HQ_PENDING = false, HQ_WORK = false;
+  let HQ_NEW = false, HQ_OPEN = new Set(), HQ_GOAL = "", HQ_PENDING = false, HQ_WORK = false, HQ_TAB = "race", HQ_SEEN = 0;
+  try { HQ_TAB = localStorage.getItem("dc:hqt") || "race"; HQ_SEEN = Number(localStorage.getItem("dc:hqseen")) || 0; } catch (e) {}
   try { HQ = JSON.parse(localStorage.getItem("dc:hq") || "null"); HQ_P = localStorage.getItem("dc:hqp") || "week"; HQ_RANK = localStorage.getItem("dc:hqr") || "total"; } catch (e) {}
 
   function toast(m, t) { const x = $("toast"); x.textContent = m; x.className = "toast show " + (t || ""); clearTimeout(toast.t); toast.t = setTimeout(() => x.className = "toast", 4500); }
@@ -253,12 +254,12 @@
     const since = new Date(P === "week" ? HQ.weekStart : HQ.monthStart).toLocaleDateString(undefined, { month: "short", day: "numeric" });
     const unit = HQ_RANK === "per" ? "pts / officer" : "pts";
     const gap = second ? hqScore(lead) - hqScore(second) : 0;
-    let h = `<section class="hq-hero"><div class="hq-hero-in"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${L.length} DIVISIONS · ${P === "week" ? "WEEK OF" : "MONTH OF"} ${esc(since.toUpperCase())}</div>
+    const heroH = `<section class="hq-hero"><div class="hq-hero-in"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${L.length} DIVISIONS · ${P === "week" ? "WEEK OF" : "MONTH OF"} ${esc(since.toUpperCase())}</div>
       <h1>${!hqScore(lead) ? "The race is on." : second && !gap ? "It's a dead heat." : `<b style="color:${esc(lead.color)}">${esc(lead.name)}</b> leads the race.`}</h1>
       <p>${hqScore(lead) ? (second ? (gap ? `${gap} ${unit} ahead of ${esc(second.name)}.` : `${esc(lead.name)} and ${esc(second.name)} are tied on ${hqScore(lead)} ${unit}.`) : "") + " Every report, assist and good grade moves your division up." : "No reports yet this " + (P === "week" ? "week" : "month") + ". First report takes the lead."}</p></div>
       <div class="hq-tot"><div><b>${sum("reports")}</b><small>Reports</small></div><div><b>${sum("assists")}</b><small>Assists</small></div><div><b>${sum("active")}</b><small>Active officers</small></div><div><b>${GLET(gAvg)}</b><small>Avg grade</small></div><div class="${sum("awaiting") ? "warn" : ""}"><b>${sum("awaiting")}</b><small>Awaiting grade</small></div></div></section>`;
     // the race
-    h += `<section class="hq-race"><header><h2><span>🏁</span>DIVISION RACE</h2><div class="hq-segs"><div class="dc-seg"><button data-hqp="week" class="${P === "week" ? "on" : ""}">This week</button><button data-hqp="month" class="${P === "month" ? "on" : ""}">This month</button></div>
+    const raceH = `<section class="hq-race"><header><h2><span>🏁</span>DIVISION RACE</h2><div class="hq-segs"><div class="dc-seg"><button data-hqp="week" class="${P === "week" ? "on" : ""}">This week</button><button data-hqp="month" class="${P === "month" ? "on" : ""}">This month</button></div>
       <div class="dc-seg"><button data-hqr="total" class="${HQ_RANK === "total" ? "on" : ""}">Total points</button><button data-hqr="per" class="${HQ_RANK === "per" ? "on" : ""}" title="Points divided by the officers on the division's roster: fair for small divisions">Per officer</button></div></div></header>
       <div class="hq-lanes">${race.map((d, i) => { const s = hqScore(d), pct = Math.max(3, Math.round(s / top * 92)), dp = (d[P].points || 0) - ((d[prevK] || {}).points || 0);
         return `<div class="hq-lane${i === 0 && s ? " lead" : ""}" style="--c:${esc(d.color)}" data-div="${esc(d.id)}" title="Open ${esc(d.name)}">
@@ -267,22 +268,30 @@
           <div class="hq-track"><i class="hq-trail" style="width:${HQ_ANIM ? 0 : pct}%" data-w="${pct}"></i><span class="hq-car" style="left:${HQ_ANIM ? 0 : pct}%" data-l="${pct}">${emblem(d, "hq-carem")}</span><span class="hq-finish"></span></div>
           <b class="hq-pts">${s}<small>${unit}</small></b></div>`; }).join("")}</div>
       <p class="hq-legend">Points: report filed <b>${HQ.points.report}</b> · officer assisted <b>${HQ.points.assist}</b> · graded A <b>+${HQ.points.A}</b> / B <b>+${HQ.points.B}</b> / C <b>+${HQ.points.C}</b> · each active officer <b>+${HQ.points.active}</b></p></section>`;
-    // division cards + MVP + feed
+    // division cards, MVP, hall of fame, live feed
     const mvp = HQ.mvp, mvpDiv = mvp && L.find(d => d.id === mvp.div);
-    h += `<div class="hq-grid"><div class="hq-left">${boardHTML()}<div class="hq-cards">${race.map(d => { const c = d[P], act = d.roster ? Math.round(c.active / d.roster * 100) : 0, mx = Math.max(1, ...d.days);
+    const cardsH = `<div class="hq-cards">${race.map(d => { const c = d[P], act = d.roster ? Math.round(c.active / d.roster * 100) : 0, mx = Math.max(1, ...d.days);
         return `<article class="hq-card" style="--c:${esc(d.color)}"><header>${emblem(d, "hq-cem")}<div><b>${esc(d.name)}</b><small>${esc(d.tagline || "Division")}${d.trophies ? ` · 🏆 ${d.trophies} title${d.trophies === 1 ? "" : "s"}` : ""}</small></div>
           <div class="hq-ring" style="--p:${act}"><b>${c.active}${d.roster ? "<i>/" + d.roster + "</i>" : ""}</b><small>active</small></div></header>
           <div class="hq-cstats"><div><b>${c.reports}</b><small>Reports</small></div><div><b>${c.assists}</b><small>Assists</small></div><div><b>${GLET(c.avg)}</b><small>Avg grade</small></div><div class="${c.awaiting ? "warn" : ""}"><b>${c.awaiting}</b><small>To grade</small></div></div>
           ${goalHTML(d)}
           <div class="hq-spark" title="Reports, last 7 days">${d.days.map((n, i) => `<i style="height:${Math.max(6, Math.round(n / mx * 100))}%" class="${i === 6 ? "t" : ""}" title="${n} report${n === 1 ? "" : "s"}"></i>`).join("")}</div>
           <footer>${d.top ? `<span class="hq-top">⭐ ${esc(d.top.callsign ? d.top.callsign + " · " : "")}${esc(d.top.name)} <em>${d.top.pts} pts</em></span>` : `<span class="hq-top dim">No top performer yet</span>`}<span class="dim">${d.last ? "Last report " + ago(d.last) : "No reports yet"}</span></footer>
-          <button class="hq-open" data-div="${esc(d.id)}">Open ${esc(d.name)} →</button></article>`; }).join("")}</div></div>
-      <aside class="hq-side">
-        <section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(mvpDiv.color)}"` : ""}><div class="hq-mk">🏆 MVP OF THE WEEK</div>${mvp ? `<div class="hq-mav">${esc(initials(mvp.name))}</div><b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>` : `<p class="dim">The first report of the week claims it.</p>`}</section>
-        ${fameHTML(L)}
-        <section class="hq-feed"><h3><span class="hq-pulse"></span>LIVE ACROSS DIVISIONS</h3>${(HQ.feed || []).length ? HQ.feed.map(f => { const d = L.find(x => x.id === f.div) || {};
-          return `<div class="hq-fi" style="--c:${esc(d.color || "#888")}" data-div="${esc(f.div)}"><i></i><div><b>${esc(f.icon)} ${esc(f.title)}</b><small>${esc(d.name || "")}${f.by ? " · " + esc(f.by) : ""} · ${ago(f.at)}</small></div>${f.grade ? `<span class="hq-g">${esc(f.grade)}</span>` : ""}</div>`; }).join("") : '<p class="dim">No reports yet.</p>'}</section>
-      </aside></div>`;
+          <button class="hq-open" data-div="${esc(d.id)}">Open ${esc(d.name)} →</button></article>`; }).join("")}</div>`;
+    const mvpH = `<section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(mvpDiv.color)}"` : ""}><div class="hq-mk">🏆 MVP OF THE WEEK</div>${mvp ? `<div class="hq-mav">${esc(initials(mvp.name))}</div><b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>` : `<p class="dim">The first report of the week claims it.</p>`}</section>`;
+    const feedH = `<section class="hq-feed"><h3><span class="hq-pulse"></span>LIVE ACROSS DIVISIONS</h3>${(HQ.feed || []).length ? HQ.feed.map(f => { const d = L.find(x => x.id === f.div) || {};
+          return `<div class="hq-fi" style="--c:${esc(d.color || "#888")}" data-div="${esc(f.div)}"><i></i><div><b>${esc(f.icon)} ${esc(f.title)}</b><small>${esc(d.name || "")}${f.by ? " · " + esc(f.by) : ""} · ${ago(f.at)}</small></div>${f.grade ? `<span class="hq-g">${esc(f.grade)}</span>` : ""}</div>`; }).join("") : '<p class="dim">No reports yet.</p>'}</section>`;
+    // three views so nothing is crowded: the race, the leaders' bulletin, the division cards
+    const B = HQ.board || [], unread = B.filter(p => !p.mine && p.at > HQ_SEEN).length;
+    const goalsSet = L.filter(d => (HQ.goals || {})[d.id] && HQ.goals[d.id].target).length, goalsHit = L.filter(d => { const g = (HQ.goals || {})[d.id]; return g && g.target && d.week.reports >= g.target; }).length;
+    const tabsH = `<nav class="hq-tabs"><button data-hqt="race" class="${HQ_TAB === "race" ? "on" : ""}"><span>🏁</span>Race<small>${esc(lead.name)} leads</small></button>
+      <button data-hqt="board" class="${HQ_TAB === "board" ? "on" : ""}"><span>📌</span>Bulletin<small>${B.length} post${B.length === 1 ? "" : "s"}</small>${unread ? `<em>${unread} new</em>` : ""}</button>
+      <button data-hqt="divs" class="${HQ_TAB === "divs" ? "on" : ""}"><span>🗂️</span>Divisions<small>${goalsSet ? goalsHit + " / " + goalsSet + " goals hit" : L.length + " division" + (L.length === 1 ? "" : "s")}</small></button></nav>`;
+    const stripH = `<section class="hq-strip"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${P === "week" ? "WEEK OF" : "MONTH OF"} ${esc(since.toUpperCase())}</div><div class="hq-mini">${race.slice(0, 3).map((d, i) => `<span style="--c:${esc(d.color)}">${i === 0 && hqScore(d) ? "👑" : i + 1 + "."} ${esc(d.name)} <b>${hqScore(d)}</b></span>`).join("")}</div></section>`;
+    let h;
+    if (HQ_TAB === "board") { HQ_SEEN = Date.now(); store("dc:hqseen", String(HQ_SEEN)); h = stripH + tabsH + `<div class="hq-grid">${boardHTML()}<aside class="hq-side">${feedH}</aside></div>`; }
+    else if (HQ_TAB === "divs") h = stripH + tabsH + cardsH;
+    else h = heroH + tabsH + raceH + `<div class="hq-row3">${mvpH}${fameHTML(L)}${feedH}</div>`;
     box.innerHTML = h;
     if (HQ_ANIM) { HQ_ANIM = false; requestAnimationFrame(() => requestAnimationFrame(() => box.querySelectorAll(".hq-trail").forEach(t => t.style.width = t.dataset.w + "%") || box.querySelectorAll(".hq-car").forEach(c => c.style.left = c.dataset.l + "%"))); }
   }
@@ -562,6 +571,7 @@
   // ---------------- clicks ----------------
   document.addEventListener("click", e => {
     const t = e.target;
+    const ht = t.closest("[data-hqt]"); if (ht) { HQ_TAB = ht.dataset.hqt; store("dc:hqt", HQ_TAB); HQ_ANIM = HQ_TAB === "race"; drawHQ(true); return; }
     if (t.closest("[data-hqnew]")) { HQ_NEW = !HQ_NEW; drawHQ(true); if (HQ_NEW) setTimeout(() => { const n = document.querySelector("#hqNew [name=title]"); if (n) n.focus(); }, 30); return; }
     const ha = t.closest("[data-hqack]"); if (ha) { hqDo("hqAck", { id: ha.dataset.hqack }); return; }
     const hr2 = t.closest("[data-hqrep]"); if (hr2) { const id = hr2.dataset.hqrep; HQ_OPEN.has(id) ? HQ_OPEN.delete(id) : HQ_OPEN.add(id); drawHQ(true); return; }

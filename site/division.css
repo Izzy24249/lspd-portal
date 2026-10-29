@@ -508,3 +508,20 @@ body.dc{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-
 .hq .dc-btn{height:34px;padding:0 14px;font-size:13px}
 .hq .dc-btn.ac{background:linear-gradient(135deg,#e8b54a,#c48a1d);border-color:#e8b54a;color:#1a1204}
 .hq p.dim{font-size:13px;line-height:1.5}.hq-card footer{letter-spacing:0}
+/* ---- Command Center views ---- */
+.hq-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.hq-tabs button{position:relative;display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:12px;align-items:center;text-align:left;padding:12px 16px;border-radius:16px;border:1px solid var(--line);background:rgba(12,18,32,.7);color:var(--text);cursor:pointer;transition:border-color .2s,background .2s,transform .2s}
+.hq-tabs button span{grid-row:span 2;font-size:22px}
+.hq-tabs button{font:700 16px Oswald,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+.hq-tabs button small{font:500 12px Inter,sans-serif;letter-spacing:0;text-transform:none;color:var(--muted)}
+.hq-tabs button:hover{border-color:rgba(232,181,74,.45);transform:translateY(-1px)}
+.hq-tabs button.on{border-color:#e8b54a;background:linear-gradient(135deg,rgba(232,181,74,.18),rgba(12,18,32,.8));box-shadow:0 14px 34px -22px rgba(232,181,74,.8)}
+.hq-tabs em{position:absolute;right:12px;top:50%;transform:translateY(-50%);font:700 11px Inter,sans-serif;font-style:normal;padding:3px 8px;border-radius:999px;background:#f87171;color:#fff;letter-spacing:0;text-transform:none;animation:hqP 2s infinite}
+.hq-row3{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:14px;align-items:start}
+.hq-strip{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 18px;border-radius:16px;border:1px solid rgba(232,181,74,.25);background:radial-gradient(500px 120px at 0 0,rgba(232,181,74,.12),transparent 60%),rgba(10,15,26,.92)}
+.hq-mini{display:flex;gap:8px;flex-wrap:wrap}.hq-mini span{padding:5px 11px;border-radius:999px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);font:600 12.5px Inter,sans-serif}.hq-mini b{color:#ffd98a;margin-left:4px}
+.hq-cards{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.hq-grid .hqb{align-self:start}
+@media (max-width:1100px){.hq-row3{grid-template-columns:1fr 1fr}.hq-row3 .hq-feed{grid-column:1/-1}}
+@media (max-width:700px){.hq-tabs{grid-template-columns:1fr 1fr 1fr;gap:6px}.hq-tabs button{grid-template-columns:1fr;padding:10px;font-size:13px;text-align:center;justify-items:center}.hq-tabs button span{grid-row:auto}.hq-tabs button small{display:none}.hq-tabs em{top:6px;right:6px;transform:none}.hq-row3{grid-template-columns:1fr}}
+.hq-row3 .hq-fi:nth-of-type(n+6){display:none}
