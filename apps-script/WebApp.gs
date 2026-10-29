@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 86;
+const BACKEND_VERSION = 87;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2617,7 +2617,9 @@ function acctHandle_(d) {
       if (mc !== 200) { const gR = UrlFetchApp.fetch("https://discord.com/api/users/@me/guilds", H); const gs = gR.getResponseCode() === 200 ? JSON.parse(gR.getContentText()) : [];
         if (!gs.some(g => str_(g.id) === st.guildId)) return { ok: false, error: "This Discord account isn't in the LSPD Discord server." }; }
       if (mc === 200) { dlinkSave_(id, tokJ);     // lets the portal check the On Duty role every 15 minutes
-        try { const dc = dutyCfg_(); if (dc.on && dc.sopRoleId) { const ch = {}; ch[id] = (JSON.parse(mR.getContentText()).roles || []).map(String).indexOf(dc.sopRoleId) !== -1; sopApply_(ch); } } catch (e) {} }
+        try { const mm = JSON.parse(mR.getContentText()), rl = (mm.roles || []).map(String), dc = dutyCfg_();
+          if (dc.on && dc.sopRoleId) { const ch = {}; ch[id] = rl.indexOf(dc.sopRoleId) !== -1; sopApply_(ch); }
+          const one = {}; one[id] = { n: str_(mm.nick), r: rl, j: str_(mm.joined_at).slice(0, 10), t: Date.now() }; dmemWrite_(one); } catch (e) {} }
     }
     mark_("discord guilds"); const person = rosterPerson_(id); mark_("roster");
     let acct = acctFind_(id); mark_("account");
@@ -3181,7 +3183,7 @@ function tabIds_(tabId, fresh) {
 function formAllowed_(form, acct, prof) {
   const lv = LEVELS_.indexOf(prof.level);
   if (form.minLevel && lv < LEVELS_.indexOf(form.minLevel)) return false;
-  if ((form.accessTabs || []).length && lv < LEVELS_.indexOf("command")) return form.accessTabs.some(t => tabIds_(t.id, false).indexOf(acct.id) !== -1);
+  if ((form.accessTabs || []).length && lv < LEVELS_.indexOf("command")) return form.accessTabs.some(t => tabIds_(t.id, false).indexOf(acct.id) !== -1 || hasDivRole_(acct.id, t.id));   // division roster, or the division's role in Discord
   return true;
 }
 // the CID Case File is always posted from the CID case builder page (also when the admin toggle is off)
@@ -3252,7 +3254,7 @@ function dutyTrigger_(on) {
 function dutyPoll() {                                            // trigger entry point
   const cfg = dutyCfg_(), st = discordStatus_();
   if (!cfg.on || !(cfg.roleId || cfg.sopRoleId) || !st.guildId) return;
-  const props = PROPS_.getProperties(), now = Date.now(), seen = {}, sop = {};   // id -> true (role), false (no role), null (couldn't tell)
+  const props = PROPS_.getProperties(), now = Date.now(), seen = {}, sop = {}, mem = {};   // id -> true (role), false (no role), null (couldn't tell)
   const ready = [];
   Object.keys(props).filter(k => /^DLINK_\d+$/.test(k)).forEach(k => {
     const id = k.slice(6); let link; try { link = JSON.parse(props[k]); } catch (e) { return; }
@@ -3266,8 +3268,9 @@ function dutyPoll() {                                            // trigger entr
     batch.forEach((b, k) => {
       const r = rs[k], c = r ? r.getResponseCode() : 0;
       if (c === 200) { let m = {}; try { m = JSON.parse(r.getContentText()); } catch (e) {} const roles = (m.roles || []).map(String);
-        seen[b.id] = !!cfg.roleId && roles.indexOf(cfg.roleId) !== -1; if (cfg.sopRoleId) sop[b.id] = roles.indexOf(cfg.sopRoleId) !== -1; checked++; }
-      else if (c === 404) { seen[b.id] = false; if (cfg.sopRoleId) sop[b.id] = false; checked++; }   // left the server
+        seen[b.id] = !!cfg.roleId && roles.indexOf(cfg.roleId) !== -1; if (cfg.sopRoleId) sop[b.id] = roles.indexOf(cfg.sopRoleId) !== -1; checked++;
+        mem[b.id] = { n: str_(m.nick), r: roles, j: str_(m.joined_at).slice(0, 10), t: now }; }
+      else if (c === 404) { seen[b.id] = false; if (cfg.sopRoleId) sop[b.id] = false; checked++; mem[b.id] = { g: 1, t: now }; }   // left the server
       else { seen[b.id] = null; failed++;
         if (c === 401) { try { const l = JSON.parse(props["DLINK_" + b.id]); l.x = 0; PROPS_.setProperty("DLINK_" + b.id, JSON.stringify(l)); } catch (e) {} } }   // refresh next time
     });
@@ -3284,6 +3287,7 @@ function dutyPoll() {                                            // trigger entr
   });
   PROPS_.setProperty("DUTY_STATE", JSON.stringify(state));
   try { sopApply_(sop); } catch (e) {}
+  try { dmemWrite_(mem); } catch (e) {}
   PROPS_.setProperty("DUTY_LAST", JSON.stringify({ t: now, linked: ready.length + Object.keys(seen).filter(id => seen[id] === null && !ready.some(b => b.id === id)).length, checked: checked, failed: failed, onDuty: Object.keys(state).length }));
   if (done.length) dutyLog_(done);
 }
@@ -3293,6 +3297,7 @@ function dutyLog_(done) {
     return [new Date(), "'" + weekOf_(new Date(x[1]), ws == null ? 1 : ws), cellSafe_((w.callsign ? w.callsign + " | " : "") + w.name), "'" + x[0], fmt(x[1]), fmt(x[2]), min, Math.round(min / 6) / 10,
       x[3] || (min > 12 * 60 ? "Long shift - check" : min === 0 ? "Seen on duty once (under 15 min)" : "")]; });
   withLock_(() => { const sh = dutySheet_(); sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); return { ok: true }; });
+  try { CacheService.getScriptCache().remove("duty_sum"); } catch (e) {}
 }
 function dutyAdmin_() {
   const c = dutyCfg_(); let last = {}; try { last = JSON.parse(PROPS_.getProperty("DUTY_LAST") || "{}"); } catch (e) {}
@@ -3300,14 +3305,122 @@ function dutyAdmin_() {
   return { on: c.on, roleId: c.roleId, roleName: c.roleName, sopRoleId: c.sopRoleId, sopCount: Object.keys(sopIds_()).length, guildId: discordStatus_().guildId, linked: linked, last: last, board: c.on && c.roleId ? dutyBoard_() : null,
     trigger: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "dutyPoll") };
 }
+// ---- what Discord says about each connected officer: nickname, role IDs, join date (hidden "Discord Members" tab) ----
+const DMEM_SHEET_ = "Discord Members";
+function dmemSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(DMEM_SHEET_);
+  if (!sh) { sh = ss.insertSheet(DMEM_SHEET_); sh.appendRow(["Discord ID", "Server nickname", "Role IDs", "Joined server", "Checked", "In LSPD Discord"]);
+    sh.setFrozenRows(1); sh.getRange(1, 1, 1, 6).setFontWeight("bold"); sh.getRange("A:A").setNumberFormat("@"); sh.getRange("C:C").setNumberFormat("@"); try { sh.hideSheet(); } catch (e) {} }
+  return sh;
+}
+var DMEM_MEMO_ = null;
+function dmemAll_() {           // { id: { n: nickname, r: [roleIds], j: "yyyy-mm-dd", t: checkedMs, g: 1 if they left the server } }
+  if (DMEM_MEMO_) return DMEM_MEMO_;
+  const cache = CacheService.getScriptCache(), hit = cache.get("dmem");
+  if (hit) { try { return (DMEM_MEMO_ = JSON.parse(hit)); } catch (e) {} }
+  const out = {}; const sh = ss_().getSheetByName(DMEM_SHEET_);
+  if (sh && sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues().forEach(r => { const id = str_(r[0]).replace(/^'/, ""); if (!/^\d{15,21}$/.test(id)) return;
+    out[id] = { n: str_(r[1]), r: str_(r[2]).split(",").map(x => x.trim()).filter(Boolean), j: str_(r[3]), t: isDate_(r[4]) ? r[4].getTime() : 0 }; if (str_(r[5]).toLowerCase() === "no") out[id].g = 1; });
+  try { const js = JSON.stringify(out); if (js.length < 95000) cache.put("dmem", js, 21600); } catch (e) {}
+  return (DMEM_MEMO_ = out);
+}
+function dmemWrite_(changes) {
+  const ids = Object.keys(changes || {}); if (!ids.length) return;
+  withLock_(() => {
+    DMEM_MEMO_ = null; try { CacheService.getScriptCache().remove("dmem"); } catch (e) {}
+    const cur = dmemAll_(); ids.forEach(id => { cur[id] = changes[id].g ? Object.assign({}, cur[id] || { r: [] }, { g: 1, t: changes[id].t }) : changes[id]; });
+    const rows = Object.keys(cur).map(id => { const m = cur[id]; return ["'" + id, cellSafe_(m.n || ""), "'" + (m.r || []).join(","), m.j || "", m.t ? new Date(m.t) : "", m.g ? "No" : "Yes"]; });
+    const sh = dmemSheet_(); if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 6).clearContent();
+    if (rows.length) sh.getRange(2, 1, rows.length, 6).setValues(rows);
+    DMEM_MEMO_ = null; try { CacheService.getScriptCache().remove("dmem"); } catch (e) {}
+    return { ok: true };
+  });
+}
+// ---- role map: which Discord role ID means which rank / division (admin confirms; the portal suggests) ----
+//   settings.roleMap = { "<roleId>": { kind: "rank", rank: 3 } | { kind: "div", tab: <roster tab id>, name } | { kind: "lspd" } | { kind: "ignore" } }
+function roleMap_() { return ((getConfig_().settings || {}).roleMap) || {}; }
+function divTabs_() {           // the division rosters that restricted reports use (Admin -> Forms -> who can file)
+  const seen = {}, out = []; getConfig_().forms.forEach(f => (f.accessTabs || []).forEach(t => { if (t && t.id != null && !seen[t.id]) { seen[t.id] = 1; out.push({ id: t.id, name: str_(t.name) }); } }));
+  return out;
+}
+function hasDivRole_(discordId, tabId) {
+  const map = roleMap_(), m = dmemAll_()[str_(discordId)]; if (!m || m.g) return false;
+  return (m.r || []).some(r => map[r] && map[r].kind === "div" && String(map[r].tab) === String(tabId));
+}
+function roleSuggest_() {
+  const mem = dmemAll_(), map = roleMap_(), dc = dutyCfg_(), people = promoPeople_(), byId = {}; people.forEach(o => byId[o.id] = o);
+  const ids = Object.keys(mem).filter(id => !mem[id].g), tabs = divTabs_(), tabSets = {};
+  tabs.forEach(t => { const set = {}; tabIds_(t.id, false).forEach(x => set[x] = 1); tabSets[t.id] = set; });
+  const holders = {}; ids.forEach(id => (mem[id].r || []).forEach(r => (holders[r] = holders[r] || []).push(id)));
+  const onRoster = ids.filter(id => byId[id]).length;
+  return Object.keys(holders).map(rid => {
+    const H = holders[rid], n = H.length, row = { id: rid, holders: n, map: map[rid] || null, sample: H.slice(0, 4).map(id => { const o = byId[id]; return o ? (o.callsign ? o.callsign + " " : "") + o.name : (mem[id].n || id); }) };
+    if (rid === dc.roleId) { row.special = "On Duty"; return row; }
+    if (rid === dc.sopRoleId) { row.special = "SOP Certified"; return row; }
+    let best = null;
+    const rk = {}; H.forEach(id => { const o = byId[id]; if (o && o.idx >= 0) rk[o.idx] = (rk[o.idx] || 0) + 1; });
+    Object.keys(rk).forEach(k => { const hit = rk[k], score = hit / n; if (hit >= 2 && score >= 0.7 && (!best || score > best.score)) best = { kind: "rank", rank: Number(k), score: score, why: hit + " of " + n + " holders are " + RANKS_[k] + " on the roster" }; });
+    tabs.forEach(t => { const hit = H.filter(id => tabSets[t.id][id]).length, score = hit / n; if (hit >= 2 && score >= 0.7 && (!best || score > best.score + 0.05)) best = { kind: "div", tab: t.id, name: t.name, score: score, why: hit + " of " + n + " holders are on " + t.name }; });
+    if (onRoster >= 5 && n >= onRoster * 0.8) { const hit = H.filter(id => byId[id]).length; if (!best || n > 15) best = { kind: "lspd", score: hit / n, why: "held by " + n + " of " + ids.length + " connected officers" }; }
+    row.suggest = best; return row;
+  }).sort((a, b) => b.holders - a.holders);
+}
+// ---- roster vs Discord audit ----
+function discordAudit_() {
+  const mem = dmemAll_(), map = roleMap_(), people = promoPeople_(), tabs = divTabs_(), tabSets = {}, tabName = {};
+  tabs.forEach(t => { const set = {}; tabIds_(t.id, false).forEach(x => set[x] = 1); tabSets[t.id] = set; tabName[t.id] = t.name; });
+  const rankRoles = Object.keys(map).filter(r => map[r].kind === "rank"), divRoles = Object.keys(map).filter(r => map[r].kind === "div"), lspdRoles = Object.keys(map).filter(r => map[r].kind === "lspd");
+  const issues = [], notConnected = [], seen = {};
+  people.forEach(o => {
+    seen[o.id] = 1; const m = mem[o.id], who = { id: o.id, callsign: o.callsign, name: o.name, rank: o.rank };
+    if (!m) { notConnected.push(who); return; }
+    const p = [];
+    if (m.g) p.push("Not in the LSPD Discord any more");
+    else {
+      const R = m.r || [];
+      if (lspdRoles.length && !lspdRoles.some(r => R.indexOf(r) !== -1)) p.push("Missing the LSPD role in Discord");
+      if (rankRoles.length && o.idx >= 0 && !o.trainee) {
+        const held = rankRoles.filter(r => R.indexOf(r) !== -1).map(r => map[r].rank), mapped = rankRoles.some(r => map[r].rank === o.idx);
+        if (held.indexOf(o.idx) === -1 && (held.length || mapped)) p.push("Roster: " + RANKS_[o.idx] + " · Discord: " + (held.length ? held.map(i => RANKS_[i]).join(", ") : "no rank role"));
+      }
+      divRoles.forEach(r => { const t = map[r].tab, has = R.indexOf(r) !== -1, on = !!(tabSets[t] && tabSets[t][o.id]), nm = str_(tabName[t] || map[r].name || "division").replace(/\s*-?\s*roster\s*$/i, "").trim() || "division";
+        if (has && !on) p.push("Has the " + nm + " role, not on the " + nm + " roster");
+        if (!has && on) p.push("On the " + nm + " roster, no " + nm + " role in Discord"); });
+    }
+    if (p.length) issues.push(Object.assign(who, { problems: p, nick: m.n || "" }));
+  });
+  Object.keys(mem).forEach(id => { if (seen[id] || mem[id].g) return; const R = mem[id].r || [];
+    if (lspdRoles.some(r => R.indexOf(r) !== -1) || rankRoles.some(r => R.indexOf(r) !== -1)) issues.push({ id: id, callsign: "", name: mem[id].n || id, rank: "", nick: mem[id].n || "", problems: ["Has LSPD roles in Discord but isn't on the roster"] }); });
+  return { issues: issues, notConnected: notConnected, connected: Object.keys(mem).length, rosterCount: people.length, mapped: { rank: rankRoles.length, div: divRoles.length, lspd: lspdRoles.length } };
+}
+// ---- an officer's own duty time: last shift, this week, the last 14 days (from the Duty Log) ----
+function dutySums_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get("duty_sum");
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const out = {}, sh = ss_().getSheetByName(DUTY_SHEET_), since = Date.now() - 35 * 864e5;
+  if (sh && sh.getLastRow() > 1) { const from = Math.max(2, sh.getLastRow() - 4000 + 1);
+    const ms = v => isDate_(v) ? v.getTime() : new Date(str_(v).replace(" ", "T")).getTime();    // the sheet turns "yyyy-MM-dd HH:mm" into a date
+    sh.getRange(from, 1, sh.getLastRow() - from + 1, 7).getValues().forEach(r => {
+      const id = str_(r[3]).replace(/^'/, ""), st = ms(r[4]), en = ms(r[5]), min = Number(r[6]) || 0;
+      if (!id || isNaN(st) || st < since) return; (out[id] = out[id] || []).push([st, en, min]); }); }
+  try { const js = JSON.stringify(out); if (js.length < 95000) cache.put("duty_sum", js, 3600); } catch (e) {}
+  return out;
+}
+function dutyMine_(id, cur) {
+  const s = (getConfig_().settings || {}), g = s.duty || {}, goalH = Number(g.goalHours) || 8, goalD = Number(g.goalDays) || 14, now = Date.now();
+  const L = (dutySums_()[id] || []).slice().sort((a, b) => b[0] - a[0]), ws = (s.hours || {}).weekStart, wk0 = parseYmd_(weekOf_(new Date(), ws == null ? 1 : ws)); wk0.setHours(0, 0, 0, 0);
+  const sum = from => L.filter(x => x[0] >= from).reduce((t, x) => t + x[2], 0), live = cur ? Math.round((now - cur[0]) / 60000) : 0;
+  return { last: L[0] ? { start: L[0][0], end: L[0][1], minutes: L[0][2] } : null, week: sum(wk0.getTime()) + live, window: sum(now - goalD * 864e5) + live, live: live, goalMinutes: goalH * 60, goalDays: goalD };
+}
 // who's on duty right now (for the MDT and admin)
 function dutyBoard_() {
   const cfg = dutyCfg_(); if (!cfg.on || !cfg.roleId) return null;
   const state = dutyState_(), now = Date.now();
   let last = {}; try { last = JSON.parse(PROPS_.getProperty("DUTY_LAST") || "{}"); } catch (e) {}
-  const list = Object.keys(state).map(id => { const w = dutyWho_(id); return { id: id, name: w.name, callsign: w.callsign, rank: w.rank, since: state[id][0], minutes: Math.round((now - state[id][0]) / 60000) }; })
-    .sort((a, b) => a.since - b.since);
-  return { on: true, every: DUTY_EVERY_MIN_, checkedAt: last.t || 0, list: list };
+  const list = Object.keys(state).map(id => { const w = dutyWho_(id), ri = rankIndex_(w.rank);
+      return { id: id, name: w.name, callsign: w.callsign, rank: w.rank, sup: ri >= 4, since: state[id][0], minutes: Math.round((now - state[id][0]) / 60000) }; })
+    .sort((a, b) => (b.sup - a.sup) || (a.since - b.since));
+  return { on: true, every: DUTY_EVERY_MIN_, checkedAt: last.t || 0, list: list, supervisors: list.filter(o => o.sup).length };
 }
 function officerHome_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
@@ -3320,7 +3433,7 @@ function officerHome_(d) {
   out.ladder = (() => { try { return promoReqParse_(false); } catch (e) { return null; } })(); mark_("ladder");
   out.promoMe = promoMine_(acct); mark_("promo");
   out.race = officerRace_(acct); mark_("race");
-  try { const b = dutyBoard_(); if (b) { b.linked = dlinkHas_(acct.id); b.me = !!dutyState_()[acct.id]; out.duty = b; } } catch (e) {} mark_("duty");
+  try { const b = dutyBoard_(); if (b) { const cur = dutyState_()[acct.id]; b.linked = dlinkHas_(acct.id); b.me = !!cur; b.mine = dutyMine_(acct.id, cur); out.duty = b; } } catch (e) {} mark_("duty");
   return out;
 }
 
@@ -3873,6 +3986,20 @@ function handleAdmin_(d) {
       return { ok: true, duty: dutyAdmin_() };
     }
     case "dutyAdmin": return { ok: true, duty: dutyAdmin_() };
+    case "roleMapAdmin": if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can see this."); return { ok: true, roles: roleSuggest_(), ranks: RANKS_, tabs: divTabs_(), connected: Object.keys(dmemAll_()).length };
+    case "roleMapSave": {
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");
+      const inMap = d.map || {}, out = {}, tabs = divTabs_();
+      Object.keys(inMap).forEach(rid => { if (!/^\d{15,21}$/.test(rid)) return; const v = inMap[rid] || {};
+        if (v.kind === "rank" && Number(v.rank) >= 0 && Number(v.rank) < RANKS_.length) out[rid] = { kind: "rank", rank: Number(v.rank) };
+        else if (v.kind === "div") { const t = tabs.find(x => String(x.id) === String(v.tab)); if (t) out[rid] = { kind: "div", tab: t.id, name: t.name }; }
+        else if (v.kind === "lspd" || v.kind === "ignore") out[rid] = { kind: v.kind }; });
+      const r = withLock_(() => { const cfg = getConfig_(); cfg.settings = cfg.settings || {}; cfg.settings.roleMap = out; cfg.version = (Number(cfg.version) || 0) + 1; writeConfig_(cfg, me.username); return { ok: true }; });
+      if (!r.ok) return r;
+      logAdmin_(me.username, "Discord role map", Object.keys(out).length + " roles");
+      return { ok: true, roles: roleSuggest_(), ranks: RANKS_, tabs: divTabs_(), connected: Object.keys(dmemAll_()).length };
+    }
+    case "discordAudit": if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can see this."); return Object.assign({ ok: true }, discordAudit_());
     case "dutyCheckNow": { if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can do this."); dutyPoll(); return { ok: true, duty: dutyAdmin_() }; }
     case "discordSetup": {       // owner pastes the Discord app's Client ID + Secret (sign in with Discord)
       ownerOnly();

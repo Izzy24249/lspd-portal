@@ -404,6 +404,7 @@
 <button data-tab="perms"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Permissions</span></button>
 <button data-tab="fleet"><svg viewBox="0 0 24 24"><path d="M4 16v-4l2-5h12l2 5v4M4 16h16M4 16v2h3v-2M17 16v2h3v-2M7 12h10"/></svg><span>Fleet &amp; Uniforms</span></button>
 <button data-tab="accounts"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg><span>Officer Accounts</span></button>
+<button data-tab="discord"><svg viewBox="0 0 24 24"><path d="M8 7.5c2.6-1 5.4-1 8 0M7 16.5c3.2 1.2 6.8 1.2 10 0M6.5 7.5 4 15.5c1.4 1.3 3 2 4.5 2.3l1-2M17.5 7.5l2.5 8c-1.4 1.3-3 2-4.5 2.3l-1-2"/><circle cx="9.5" cy="12" r="1.2"/><circle cx="14.5" cy="12" r="1.2"/></svg><span>Discord</span></button>
 <button data-tab="admins"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a6 6 0 0 1 3 6"/></svg><span>Admins</span></button>
 <button data-tab="activity"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Activity Log</span></button>
         <div class="ng sp"></div>
@@ -655,7 +656,7 @@ function renderPage(keepScroll) {
   const y = window.scrollY;
   document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
   const page = $("page"); page.innerHTML = ""; page.className = "pg pg-" + TAB;
-  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, fleet: pageFleet, perms: pagePerms, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
+  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, fleet: pageFleet, discord: pageDiscord, perms: pagePerms, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
   if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
 }
 const TAB_GROUP = { hours: "Operations", promo: "Operations", settings: "Administration", admins: "Administration", activity: "Administration", account: "Account" };
@@ -1667,7 +1668,7 @@ function pageAccounts(page) {
   const box = h("div", {}, h("div", { class: "sec empty-note", text: "Loading accounts…" }));
   page.append(box);
   const load = ACCTS ? Promise.resolve() : api("acctList", {}).then(r => { ACCTS = r.accounts; DISC = r.discord; VOICE = r.voice || null; SIGNON = r.signon || null; DIVLIST = r.divisionList || []; });
-  load.then(() => { box.innerHTML = ""; if (["owner", "admin"].includes(ME.role)) box.append(signonSec()); drawAccounts(box); if (ME.role === "owner") box.append(discordSec()); if (["owner", "admin"].includes(ME.role)) box.append(dutySec()); if (ME.role === "owner") box.append(voiceSec(), extrasSec()); })
+  load.then(() => { box.innerHTML = ""; if (["owner", "admin"].includes(ME.role)) box.append(signonSec()); drawAccounts(box); if (ME.role === "owner") box.append(discordSec(), voiceSec(), extrasSec()); })
     .catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 55 ? "Paste the new WebApp.gs (version 55 or newer) and deploy a new version to use officer accounts." : e.message })); });
 }
 function drawAccounts(box) {
@@ -1735,6 +1736,66 @@ function signonSec() {
       catch (err) { toast(err.message, "bad"); }
       e.target.disabled = false;
     } }, "Save")));
+  return sec;
+}
+/* ---------------- DISCORD: duty, role map, roster audit ---------------- */
+function pageDiscord(page) {
+  page.append(head("Discord", "Everything the portal reads from the LSPD Discord, using each officer's own Discord sign-in (no bot): who's on duty, the SOP Certified role, rank and division roles, and where the roster and Discord disagree. Officers connect once from the banner on their MDT."));
+  if (!["owner", "admin"].includes(ME.role)) { page.append(h("div", { class: "sec empty-note", text: "Only an owner or admin can manage this page." })); return; }
+  page.append(dutySec());
+  if (BACKEND_HAVE < 87) { page.append(h("div", { class: "sec empty-note", text: "Paste the new WebApp.gs (version 87 or newer) and deploy a new version for the role map and roster audit." })); return; }
+  page.append(roleMapSec(), auditSec());
+}
+function roleMapSec() {
+  const sec = h("div", { class: "sec", style: "display:grid;gap:12px" }, h("h3", { text: "Discord roles" }), h("div", { class: "help", text: "Loading…" }));
+  const draw = r => {
+    sec.innerHTML = "";
+    sec.append(h("h3", { text: "Discord roles" }),
+      h("p", { class: "help", text: "Discord only tells the portal role IDs, not names. These are every role seen on " + r.connected + " connected officer" + (r.connected === 1 ? "" : "s") + ". The portal suggests what each one is by matching who holds it against the roster. Check the suggestions, change anything that's wrong, and press Save. A division role lets its holders file that division's reports even if they're missing from the division roster tab." }));
+    if (!r.roles.length) { sec.append(h("div", { class: "help", text: "No roles yet. They show up after officers connect Discord and the first 15-minute check runs." })); return; }
+    const sels = {};
+    const opts = (cur, sug) => {
+      const o = [["", "— not used —"], ["lspd", "LSPD member role"]].concat(r.ranks.map((n, i) => ["rank:" + i, "Rank: " + n])).concat(r.tabs.map(t => ["div:" + t.id, "Division: " + String(t.name).replace(/\s*-?\s*roster\s*$/i, "")])).concat([["ignore", "Ignore"]]);
+      const key = m => !m ? "" : m.kind === "rank" ? "rank:" + m.rank : m.kind === "div" ? "div:" + m.tab : m.kind;
+      const pick = cur ? key(cur) : key(sug);
+      const sel = h("select", {}, ...o.map(x => h("option", { value: x[0], text: x[1] + (!cur && sug && x[0] === key(sug) && x[0] ? "  (suggested)" : "") })));
+      sel.value = pick; return sel;
+    };
+    const rows = r.roles.map(x => {
+      const cell = x.special ? h("span", { class: "help", text: x.special + " (set above)" }) : (sels[x.id] = opts(x.map, x.suggest));
+      return h("tr", {}, h("td", {}, h("code", { text: x.id })), h("td", { text: x.holders + "" }),
+        h("td", {}, h("div", { text: x.sample.join(", ") + (x.holders > x.sample.length ? ", …" : "") }), x.suggest && !x.map ? h("div", { class: "help", text: "Suggested: " + x.suggest.why }) : ""),
+        h("td", {}, cell));
+    });
+    sec.append(h("div", { style: "overflow-x:auto" }, h("table", { class: "list" }, h("tr", {}, h("th", { text: "Role ID" }), h("th", { text: "Holders" }), h("th", { text: "Who has it" }), h("th", { text: "Means" })), ...rows)),
+      h("div", {}, h("button", { class: "btn primary sm", onclick: async e => { e.target.disabled = true;
+        const map = {}; Object.keys(sels).forEach(id => { const v = sels[id].value; if (!v) return; const [k, a] = v.split(":"); map[id] = k === "rank" ? { kind: "rank", rank: Number(a) } : k === "div" ? { kind: "div", tab: a } : { kind: k }; });
+        try { const res = await api("roleMapSave", { map: map }); toast("Saved " + Object.keys(map).length + " roles.", "ok"); draw(res); AUDIT_RELOAD && AUDIT_RELOAD(); }
+        catch (x) { toast(x.message, "bad"); e.target.disabled = false; } } }, "Save roles")));
+  };
+  api("roleMapAdmin", {}).then(draw).catch(e => { sec.lastChild.textContent = e.message; });
+  return sec;
+}
+let AUDIT_RELOAD = null;
+function auditSec() {
+  const sec = h("div", { class: "sec", style: "display:grid;gap:12px" });
+  const load = () => {
+    sec.innerHTML = ""; sec.append(h("h3", { text: "Roster vs Discord" }), h("div", { class: "help", text: "Checking…" }));
+    api("discordAudit", {}).then(a => {
+      sec.innerHTML = "";
+      const nm = o => (o.callsign ? o.callsign + " | " : "") + o.name + (o.rank ? " · " + o.rank : "");
+      sec.append(h("h3", { text: "Roster vs Discord" }),
+        h("div", { class: "help", text: a.connected + " of " + a.rosterCount + " rostered officers have connected Discord · roles in use: " + a.mapped.rank + " rank, " + a.mapped.div + " division, " + a.mapped.lspd + " LSPD member" +
+          (!a.mapped.rank && !a.mapped.div && !a.mapped.lspd ? ". Set up the Discord roles above to check ranks and divisions." : "") }),
+        a.issues.length ? h("div", { style: "overflow-x:auto" }, h("table", { class: "list" }, h("tr", {}, h("th", { text: "Officer" }), h("th", { text: "Discord nickname" }), h("th", { text: "Problem" })),
+          ...a.issues.map(i => h("tr", {}, h("td", { text: nm(i) }), h("td", { text: i.nick || "—" }), h("td", {}, ...i.problems.map(p => h("div", { text: "• " + p })))))))
+          : h("div", { class: "help", text: "✓ No mismatches among connected officers." }),
+        a.notConnected.length ? h("details", {}, h("summary", { text: a.notConnected.length + " rostered officer" + (a.notConnected.length === 1 ? " hasn't" : "s haven't") + " connected Discord yet" }),
+          h("div", { class: "help", style: "margin-top:8px", text: a.notConnected.map(nm).join(" · ") })) : "",
+        h("div", {}, h("button", { class: "btn ghost sm", onclick: load }, "Check again")));
+    }).catch(e => { sec.lastChild.textContent = e.message; });
+  };
+  AUDIT_RELOAD = load; load();
   return sec;
 }
 // On Duty + SOP Certified roles in the LSPD Discord: read with each officer's own Discord sign-in (no bot), every 15 minutes

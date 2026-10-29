@@ -211,10 +211,23 @@
     const du = DATA.duty; if (!du) return "";
     const L = du.list || []; let h = "";
     if (!du.linked) h += '<div class="duty-link"><span>🛰️</span><div><b>Connect Discord for automatic duty hours</b><small>One time only. Your on-duty time is counted from the On Duty role in the LSPD Discord, so you never have to clock in here. You\'ll confirm with Discord, then enter your PIN.</small></div><button class="btn" data-duty-link type="button">CONNECT</button></div>';
+    const sups = L.filter(o => o.sup);
     h += '<section class="pane duty"><div class="ph"><span class="lbl">On duty now · ' + L.length + "</span>" + (du.me ? '<span class="duty-me">● YOU\'RE ON DUTY</span>' : "") + "</div>" +
-      (L.length ? '<div class="duty-list">' + L.map(o => '<div class="need"><span class="cs">' + esc(o.callsign || "—") + "</span><div><b>" + esc(o.name || "Officer") + "</b><small>" + esc(o.rank ? o.rank + " · " : "") + "on for " + durTxt(o.minutes) + "</small></div></div>").join("") + "</div>"
+      (L.length ? '<div class="duty-sup ' + (sups.length ? "ok" : "no") + '">' + (sups.length ? "★ Supervisor on duty: <b>" + sups.map(o => esc((o.callsign ? o.callsign + " " : "") + (o.rank ? o.rank + " " : "") + last(o.name))).join("</b>, <b>") + "</b>"
+        : "No supervisor (Sergeant or above) on duty right now") + "</div>" : "") +
+      (L.length ? '<div class="duty-list">' + L.map(o => '<div class="need' + (o.sup ? " sup" : "") + '"><span class="cs">' + esc(o.callsign || "—") + "</span><div><b>" + esc(o.name || "Officer") + "</b><small>" + esc(o.rank ? o.rank + " · " : "") + "on for " + durTxt(o.minutes) + "</small></div></div>").join("") + "</div>"
         : '<p style="color:var(--mute);margin:0">Nobody is on duty right now.</p>') +
       '<p class="duty-note">From the On Duty role in Discord' + (du.checkedAt ? " · checked " + (ago(du.checkedAt) === "now" ? "just now" : ago(du.checkedAt) + " ago") : " · first check within " + (du.every || 15) + " minutes") + "</p></section>";
+    const M = du.linked && du.mine;
+    if (M) {
+      const pct = Math.min(100, Math.round(M.window / Math.max(1, M.goalMinutes) * 100)), left = Math.max(0, M.goalMinutes - M.window);
+      h += '<section class="pane shift"><div class="ph"><span class="lbl">Your duty time</span></div><div class="shift-grid">' +
+        "<div><small>" + (du.me ? "This shift so far" : "Last shift") + "</small><b>" + (du.me ? durTxt(M.live) : M.last ? durTxt(M.last.minutes) : "—") + "</b><em>" +
+          (du.me ? "since " + new Date(Date.now() - M.live * 60000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : M.last ? new Date(M.last.start).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) : "no shifts logged yet") + "</em></div>" +
+        "<div><small>This week</small><b>" + durTxt(M.week) + "</b><em>" + (du.me ? "including this shift" : "&nbsp;") + "</em></div>" +
+        "<div><small>Last " + M.goalDays + " days</small><b>" + durTxt(M.window) + " / " + durTxt(M.goalMinutes) + "</b><em>" + (left ? durTxt(left) + " to go" : "✓ minimum met") + "</em></div></div>" +
+        '<div class="shift-bar' + (left ? "" : " ok") + '"><i style="width:' + pct + '%"></i></div></section>';
+    }
     return h;
   }
   function homeHTML() {
