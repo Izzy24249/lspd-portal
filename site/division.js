@@ -7,6 +7,9 @@
   let TOKEN = "", ME = null, DATA = null, DIV = "", PERIOD = "week", TAB = "overview", SEEN = null, OFF_Q = "", OFF_SORT = "roster", REP_F = { state: "all", form: "", q: "" }, REP_N = 40, LAST = 0;
   try { TOKEN = localStorage.getItem(TK) || sessionStorage.getItem(TK) || ""; DIV = localStorage.getItem("dc:div") || ""; PERIOD = localStorage.getItem("dc:period") || "week"; } catch (e) {}
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  // Command Center (all divisions + the division race) is the first page every time Division Command opens
+  let MODE = "hq", HQ = null, HQ_P = "week", HQ_RANK = "total", HQ_BUSY = false, HQ_AT = 0, HQ_ANIM = true;
+  try { HQ = JSON.parse(localStorage.getItem("dc:hq") || "null"); HQ_P = localStorage.getItem("dc:hqp") || "week"; HQ_RANK = localStorage.getItem("dc:hqr") || "total"; } catch (e) {}
 
   function toast(m, t) { const x = $("toast"); x.textContent = m; x.className = "toast show " + (t || ""); clearTimeout(toast.t); toast.t = setTimeout(() => x.className = "toast", 4500); }
   // officers come in with their MDT sign-on (Leader level and up); portal admins can still use the admin login
@@ -36,7 +39,7 @@
       TOKEN = r.token;
       try { localStorage.removeItem(TK); sessionStorage.removeItem(TK); ($("lgKeep").checked ? localStorage : sessionStorage).setItem(TK, TOKEN); } catch (x) {}
       $("lgPass").value = ""; $("login").hidden = true; $("boot").hidden = false;
-      await load(false);
+      loadHQ(); await load(false);
     } catch (x) { $("lgErr").textContent = x.message; }
     finally { $("lgBtn").disabled = false; $("lgBtn").textContent = "Enter command"; }
   };
@@ -56,11 +59,17 @@
     try { localStorage.setItem(LSK(id), JSON.stringify({ at: Date.now(), data: data }, (k, v) => k === "_new" ? undefined : v)); } catch (e) {} };
   const saved = id => { if (MEM[id]) return MEM[id]; try { const j = JSON.parse(localStorage.getItem(LSK(id)) || "null"); if (j && j.data && j.data.division) { MEM[id] = { data: j.data, at: j.at, seen: new Set(j.data.reports.map(x => x.id)), old: true }; return MEM[id]; } } catch (e) {} return null; };
   function setLive(t) { $("live").classList.toggle("upd", !!t); if (t) $("liveTxt").textContent = t; else tick(); }
+  async function loadHQ() {
+    if (HQ_BUSY) return; HQ_BUSY = true;
+    try { const r = await api("divOverview"); ME = r.me || ME; HQ = r; HQ_AT = Date.now(); store("dc:hq", JSON.stringify(r)); LAST = Date.now();
+      if (MODE === "hq") { $("boot").hidden = true; $("login").hidden = true; $("app").hidden = false; drawAll(); } }
+    catch (e) { if (MODE === "hq" && !HQ) $("hq").innerHTML = '<div class="dc-empty">' + esc(e.message) + "</div>"; }
+    finally { HQ_BUSY = false; }
+  }
   function show(data) {
     DATA = data; ME = data.me || ME; DIV = data.division.id; store("dc:div", DIV);
+    if (MODE === "hq" && !HQ) return;                 // the Command Center is on its way: keep the boot screen until it lands
     $("boot").hidden = true; $("login").hidden = true; $("app").hidden = false;
-    document.documentElement.style.setProperty("--ac", data.division.color || "#2f7bff");
-    document.documentElement.style.setProperty("--acr", hexRgb(data.division.color || "#2f7bff"));
     drawAll();
   }
   // fetch one division; it's drawn only if it's still the one on screen when the answer arrives
@@ -101,7 +110,9 @@
     finally { pre = false; }
   }
   function switchDiv(id) {
-    if (id === DIV) return;
+    if (id === "_hq") { MODE = "hq"; HQ_ANIM = true; drawAll(); window.scrollTo({ top: 0 }); if (Date.now() - HQ_AT > 60000) loadHQ(); return; }
+    const wasHq = MODE === "hq"; MODE = "div";
+    if (id === DIV) { if (wasHq) { drawAll(); window.scrollTo({ top: 0 }); } return; }
     DIV = id; OPEN.clear(); store("dc:div", DIV);
     const s = saved(id);
     if (s) { LAST = s.at; show(s.data); if (Date.now() - s.at < 60000 && !s.old) return; }   // fresh enough: no wait at all
@@ -157,15 +168,74 @@
     $("view").innerHTML = `<div class="dc-empty big"><b>No divisions set up yet.</b><span>${ME && ME.role !== "leader" ? 'Open <a href="admin.html">Admin → Division Command</a> to add a division, pick its roster tab and the reports that count.' : "Ask a portal admin to set up your division in Admin → Division Command."}</span></div>`;
   }
   function drawAll() {
+    const inHq = MODE === "hq";
+    ["hero", "kpis", "view"].forEach(id => $(id).hidden = inHq); document.querySelector(".dc-bar").hidden = inHq; $("hq").hidden = !inHq;
+    if (inHq || !DATA || !DATA.division) {
+      const list = (HQ && HQ.divisions) || (DATA && DATA.divisions) || [];
+      $("topDiv").textContent = "COMMAND CENTER";
+      if (ME) { $("me").innerHTML = `<i class="r-${esc(ME.role)}">${esc(ME.role === "leader" ? "LEADER" : String(ME.role).toUpperCase())}</i>${esc(ME.username)}`; $("adminLink").hidden = ME.role === "leader" || (!!ME.officer && ["admin", "owner"].indexOf(ME.role) === -1); }
+      $("divs").innerHTML = `<button data-div="_hq" class="hqb${inHq ? " on" : ""}"><i></i>🛰️ Command Center</button>` + list.map(d => `<button data-div="${esc(d.id)}" class="${!inHq && DATA && DATA.division && d.id === DATA.division.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("");
+      document.documentElement.style.setProperty("--ac", "#e8b54a"); document.documentElement.style.setProperty("--acr", "232,181,74");
+      if (inHq) { drawHQ(); return; }
+    }
+    if (!DATA || !DATA.division) return;
+    document.documentElement.style.setProperty("--ac", DATA.division.color || "#2f7bff"); document.documentElement.style.setProperty("--acr", hexRgb(DATA.division.color || "#2f7bff"));
     const dv = DATA.division, S = stats();
     $("topDiv").textContent = dv.name.toUpperCase();
     $("me").innerHTML = `<i class="r-${esc(ME.role)}">${esc(ME.role === "leader" ? "LEADER" : ME.role.toUpperCase())}</i>${esc(ME.username)}`;
     $("adminLink").hidden = ME.role === "leader" || (!!ME.officer && ["admin", "owner"].indexOf(ME.role) === -1);
-    $("divs").innerHTML = (DATA.divisions || []).length > 1 ? DATA.divisions.map(d => `<button data-div="${esc(d.id)}" class="${d.id === dv.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("") : "";
+    $("divs").innerHTML = `<button data-div="_hq" class="hqb"><i></i>🛰️ Command Center</button>` + (DATA.divisions || []).map(d => `<button data-div="${esc(d.id)}" class="${d.id === dv.id ? "on" : ""}" style="--c:${esc(d.color)}"><i></i>${esc(d.name)}</button>`).join("");
     document.querySelectorAll("#period [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === PERIOD));
     document.querySelectorAll("#tabs [data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === TAB));
     drawHero(dv, S); drawKpis(S);
     ({ overview: viewOverview, officers: viewOfficers, board: viewBoard, reports: viewReports })[TAB](S);
+  }
+  // ---------------- Command Center ----------------
+  const GLET = v => v == null ? "—" : GL[Math.max(0, Math.min(4, Math.round(v)))];
+  function hqScore(d) { const c = d[HQ_P] || {}; return HQ_RANK === "per" ? Math.round((c.points || 0) / Math.max(1, d.roster || c.active || 1) * 10) / 10 : (c.points || 0); }
+  function emblem(d, cls) { return d.logoUrl ? `<img class="${cls}" src="${esc(d.logoUrl)}" alt="" onerror="this.outerHTML='<span class=&quot;${cls} ini&quot;>${esc(initials(d.name))}</span>'">` : `<span class="${cls} ini">${esc(initials(d.name))}</span>`; }
+  function drawHQ() {
+    const box = $("hq");
+    if (!HQ) { box.innerHTML = '<div class="dc-empty">Loading the Command Center…</div>'; loadHQ(); return; }
+    const P = HQ_P, prevK = P === "week" ? "lastWeek" : "lastMonth", L = HQ.divisions || [];
+    if (!L.length) { box.innerHTML = '<div class="dc-empty big"><b>No divisions set up yet.</b></div>'; return; }
+    const race = L.slice().sort((a, b) => hqScore(b) - hqScore(a) || (b[P].reports - a[P].reports));
+    const top = hqScore(race[0]) || 1, lead = race[0], second = race[1];
+    const sum = k => L.reduce((n, d) => n + (d[P][k] || 0), 0);
+    const graded = L.reduce((n, d) => n + (d[P].graded || 0), 0), gAvg = graded ? L.reduce((n, d) => n + (d[P].avg || 0) * (d[P].graded || 0), 0) / graded : null;
+    const since = new Date(P === "week" ? HQ.weekStart : HQ.monthStart).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const unit = HQ_RANK === "per" ? "pts / officer" : "pts";
+    const gap = second ? hqScore(lead) - hqScore(second) : 0;
+    let h = `<section class="hq-hero"><div class="hq-hero-in"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${L.length} DIVISIONS · ${P === "week" ? "WEEK OF" : "MONTH OF"} ${esc(since.toUpperCase())}</div>
+      <h1>${!hqScore(lead) ? "The race is on." : second && !gap ? "It's a dead heat." : `<b style="color:${esc(lead.color)}">${esc(lead.name)}</b> leads the race.`}</h1>
+      <p>${hqScore(lead) ? (second ? (gap ? `${gap} ${unit} ahead of ${esc(second.name)}.` : `${esc(lead.name)} and ${esc(second.name)} are tied on ${hqScore(lead)} ${unit}.`) : "") + " Every report, assist and good grade moves your division up." : "No reports yet this " + (P === "week" ? "week" : "month") + ". First report takes the lead."}</p></div>
+      <div class="hq-tot"><div><b>${sum("reports")}</b><small>Reports</small></div><div><b>${sum("assists")}</b><small>Assists</small></div><div><b>${sum("active")}</b><small>Active officers</small></div><div><b>${GLET(gAvg)}</b><small>Avg grade</small></div><div class="${sum("awaiting") ? "warn" : ""}"><b>${sum("awaiting")}</b><small>Awaiting grade</small></div></div></section>`;
+    // the race
+    h += `<section class="hq-race"><header><h2><span>🏁</span>DIVISION RACE</h2><div class="hq-segs"><div class="dc-seg"><button data-hqp="week" class="${P === "week" ? "on" : ""}">This week</button><button data-hqp="month" class="${P === "month" ? "on" : ""}">This month</button></div>
+      <div class="dc-seg"><button data-hqr="total" class="${HQ_RANK === "total" ? "on" : ""}">Total points</button><button data-hqr="per" class="${HQ_RANK === "per" ? "on" : ""}" title="Points divided by the officers on the division's roster: fair for small divisions">Per officer</button></div></div></header>
+      <div class="hq-lanes">${race.map((d, i) => { const s = hqScore(d), pct = Math.max(3, Math.round(s / top * 92)), dp = (d[P].points || 0) - ((d[prevK] || {}).points || 0);
+        return `<div class="hq-lane${i === 0 && s ? " lead" : ""}" style="--c:${esc(d.color)}" data-div="${esc(d.id)}" title="Open ${esc(d.name)}">
+          <span class="hq-pos">${i === 0 && s ? "👑" : i + 1}</span>
+          <div class="hq-lname">${emblem(d, "hq-em")}<div><b>${esc(d.name)}</b><small>${d[P].reports} report${d[P].reports === 1 ? "" : "s"} · ${d[P].active} active${dp ? ` · <em class="${dp > 0 ? "up" : "down"}">${dp > 0 ? "▲" : "▼"} ${Math.abs(dp)} vs last ${P === "week" ? "week" : "month"}</em>` : ""}</small></div></div>
+          <div class="hq-track"><i class="hq-trail" style="width:${HQ_ANIM ? 0 : pct}%" data-w="${pct}"></i><span class="hq-car" style="left:${HQ_ANIM ? 0 : pct}%" data-l="${pct}">${emblem(d, "hq-carem")}</span><span class="hq-finish"></span></div>
+          <b class="hq-pts">${s}<small>${unit}</small></b></div>`; }).join("")}</div>
+      <p class="hq-legend">Points: report filed <b>${HQ.points.report}</b> · officer assisted <b>${HQ.points.assist}</b> · graded A <b>+${HQ.points.A}</b> / B <b>+${HQ.points.B}</b> / C <b>+${HQ.points.C}</b> · each active officer <b>+${HQ.points.active}</b></p></section>`;
+    // division cards + MVP + feed
+    const mvp = HQ.mvp, mvpDiv = mvp && L.find(d => d.id === mvp.div);
+    h += `<div class="hq-grid"><div class="hq-cards">${race.map(d => { const c = d[P], act = d.roster ? Math.round(c.active / d.roster * 100) : 0, mx = Math.max(1, ...d.days);
+        return `<article class="hq-card" style="--c:${esc(d.color)}"><header>${emblem(d, "hq-cem")}<div><b>${esc(d.name)}</b><small>${esc(d.tagline || "Division")}</small></div>
+          <div class="hq-ring" style="--p:${act}"><b>${c.active}${d.roster ? "<i>/" + d.roster + "</i>" : ""}</b><small>active</small></div></header>
+          <div class="hq-cstats"><div><b>${c.reports}</b><small>Reports</small></div><div><b>${c.assists}</b><small>Assists</small></div><div><b>${GLET(c.avg)}</b><small>Avg grade</small></div><div class="${c.awaiting ? "warn" : ""}"><b>${c.awaiting}</b><small>To grade</small></div></div>
+          <div class="hq-spark" title="Reports, last 7 days">${d.days.map((n, i) => `<i style="height:${Math.max(6, Math.round(n / mx * 100))}%" class="${i === 6 ? "t" : ""}" title="${n} report${n === 1 ? "" : "s"}"></i>`).join("")}</div>
+          <footer>${d.top ? `<span class="hq-top">⭐ ${esc(d.top.callsign ? d.top.callsign + " · " : "")}${esc(d.top.name)} <em>${d.top.pts} pts</em></span>` : `<span class="hq-top dim">No top performer yet</span>`}<span class="dim">${d.last ? "Last report " + ago(d.last) : "No reports yet"}</span></footer>
+          <button class="hq-open" data-div="${esc(d.id)}">Open ${esc(d.name)} →</button></article>`; }).join("")}</div>
+      <aside class="hq-side">
+        <section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(mvpDiv.color)}"` : ""}><div class="hq-mk">🏆 MVP OF THE WEEK</div>${mvp ? `<div class="hq-mav">${esc(initials(mvp.name))}</div><b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>` : `<p class="dim">The first report of the week claims it.</p>`}</section>
+        <section class="hq-feed"><h3><span class="hq-pulse"></span>LIVE ACROSS DIVISIONS</h3>${(HQ.feed || []).length ? HQ.feed.map(f => { const d = L.find(x => x.id === f.div) || {};
+          return `<div class="hq-fi" style="--c:${esc(d.color || "#888")}" data-div="${esc(f.div)}"><i></i><div><b>${esc(f.icon)} ${esc(f.title)}</b><small>${esc(d.name || "")}${f.by ? " · " + esc(f.by) : ""} · ${ago(f.at)}</small></div>${f.grade ? `<span class="hq-g">${esc(f.grade)}</span>` : ""}</div>`; }).join("") : '<p class="dim">No reports yet.</p>'}</section>
+      </aside></div>`;
+    box.innerHTML = h;
+    if (HQ_ANIM) { HQ_ANIM = false; requestAnimationFrame(() => requestAnimationFrame(() => box.querySelectorAll(".hq-trail").forEach(t => t.style.width = t.dataset.w + "%") || box.querySelectorAll(".hq-car").forEach(c => c.style.left = c.dataset.l + "%"))); }
   }
   function drawHero(dv, S) {
     $("hero").innerHTML = `<div class="dc-radar"><i></i><img src="${esc(dv.logoUrl || "img/lspd-seal.png")}" alt="" onerror="this.onerror=null;this.src='img/lspd-seal.png'"></div>
@@ -443,6 +513,8 @@
   // ---------------- clicks ----------------
   document.addEventListener("click", e => {
     const t = e.target;
+    const hp = t.closest("[data-hqp]"); if (hp) { HQ_P = hp.dataset.hqp; store("dc:hqp", HQ_P); HQ_ANIM = true; drawHQ(); return; }
+    const hr = t.closest("[data-hqr]"); if (hr) { HQ_RANK = hr.dataset.hqr; store("dc:hqr", HQ_RANK); HQ_ANIM = true; drawHQ(); return; }
     const dvb = t.closest("[data-div]"); if (dvb) { switchDiv(dvb.dataset.div); return; }
     const pb = t.closest("#period [data-p]"); if (pb) { PERIOD = pb.dataset.p; store("dc:period", PERIOD); drawAll(); return; }
     const tb = t.closest("[data-tab],[data-t]"); if (tb && !t.closest("#dpanel")) { TAB = tb.dataset.tab || tb.dataset.t; drawAll(); window.scrollTo({ top: $("kpis").offsetTop - 120, behavior: "smooth" }); return; }
@@ -457,5 +529,6 @@
   // ---------------- start ----------------
   tick();
   if (OFFICER()) { $("outBtn").textContent = "← Portal"; }
-  if (TOKEN || SESSION) load(false); else showLogin();
+  if (TOKEN || SESSION) { if (HQ) { $("boot").hidden = true; $("app").hidden = false; drawAll(); } loadHQ(); load(false); } else showLogin();
+  setInterval(() => { if (MODE === "hq" && (TOKEN || SESSION) && !document.hidden) loadHQ(); }, 90000);
 })();

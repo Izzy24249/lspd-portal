@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 80;
+const BACKEND_VERSION = 81;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1905,7 +1905,7 @@ function cidHandle_(d) {
 // =====================================================================
 const ACT_SHEET_ = "Division Activity";
 const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source", "Report", "Data"];
-const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divGrade: 1, divReport: 1, changePassword: 1 };
+const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divOverview: 1, divGrade: 1, divReport: 1, changePassword: 1 };
 const GRADES_ = ["A", "B", "C", "D", "F", "R"];   // R = returned to the officer for correction
 function actSheet_() {
   const ss = ss_();
@@ -2058,6 +2058,60 @@ function divView_(d, me) {
   try { bigPut_(ck, JSON.stringify(out), 900); } catch (e) {}   // 15 min; cleared the moment a report is filed or graded
   out.me = { username: me.username, role: me.role };
   return out;
+}
+// ---- Command Center: every division side by side, and the division race (points) ----
+// Points: report filed 10 · officer assisted 4 · graded A +5 / B +3 / C +1 · every active officer +5
+const RACE_PTS_ = { report: 10, assist: 4, A: 5, B: 3, C: 1, active: 5 };
+function divOverview_(allowed, me) {
+  const cfg = getConfig_(), divs = ((cfg.settings || {}).divisions || []).filter(x => !allowed || allowed.indexOf(x.id) !== -1);
+  const cache = CacheService.getScriptCache(), ck = "div_hq_" + divs.map(x => x.id).join(",").slice(0, 200);
+  const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: me, cached: true }); } catch (e) {} }
+  const ws = (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1;
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const weekFrom = new Date(d0.getTime()); weekFrom.setDate(weekFrom.getDate() - ((weekFrom.getDay() - ws + 7) % 7));
+  const W = weekFrom.getTime(), LW = W - 7 * 864e5, M = new Date(d0.getFullYear(), d0.getMonth(), 1).getTime(), LM = new Date(d0.getFullYear(), d0.getMonth() - 1, 1).getTime();
+  const formsById = {}; cfg.forms.forEach(f => formsById[f.id] = f);
+  const rows = actRows_().filter(r => r.at >= Math.min(LW, LM));
+  const people = {};   // key -> { name, callsign, div, pts }
+  const out = divs.map(dv => {
+    let roster = [];
+    if (dv.rosterTabId != null) { try { roster = (getRosterTab_(dv.rosterTabId, false, [], false, false).people || []).map(p => ({ id: p.id, cs: p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : "", n: p.name.indexOf("|") !== -1 ? p.name.split("|").slice(1).join("|").trim() : p.name })); } catch (e) {} }
+    const find = p => (p.i && roster.find(o => o.id === p.i)) || (callKey_(p.n) && roster.find(o => o.cs && callKey_(o.cs) === callKey_(p.n))) || (nameKey_(p.n) && roster.find(o => nameKey_(o.n) === nameKey_(cleanName_(p.n.indexOf("|") !== -1 ? p.n.split("|").slice(1).join("|") : p.n)))) || null;
+    const fset = {}; (dv.forms || []).forEach(f => { const form = formsById[f.id]; if (!form) return; const slots = personSlots_(form); fset[f.id] = f.author && slots.some(x => x.key === f.author) ? f.author : autoAuthor_(form); });
+    const mine = rows.filter(r => fset[r.form] !== undefined);
+    const per = (from, to) => {
+      const list = mine.filter(r => r.at >= from && r.at < to), act = {}, ppl = {};
+      let assists = 0, bonus = 0, graded = 0, gsum = 0;
+      list.forEach(r => {
+        const au = r.people.find(p => p.f === fset[r.form]);
+        (r.people || []).forEach(p => { const isAu = p === au;
+          const o = find(p) || (p.i || p.n ? { id: p.i || "", cs: p.n.indexOf("|") !== -1 ? p.n.split("|")[0].trim() : "", n: cleanName_((p.n.indexOf("|") !== -1 ? p.n.split("|").slice(1).join("|") : p.n).replace(/\s*\(\d{15,21}\)/, "").trim()) || "ID " + p.i } : null);
+          const k = o ? "R:" + (o.id || o.cs || nameKey_(o.n)) : "";
+          if (!isAu) assists++;
+          if (o) { act[k] = 1; const pk = (o.id || o.cs || nameKey_(o.n)); ppl[pk] = ppl[pk] || { name: cleanName_(o.n), callsign: o.cs, pts: 0 }; ppl[pk].pts += isAu ? RACE_PTS_.report + (RACE_PTS_[r.grade] || 0) : RACE_PTS_.assist; } });
+        if (r.grade && "ABCDF".indexOf(r.grade) !== -1) { graded++; gsum += { A: 4, B: 3, C: 2, D: 1, F: 0 }[r.grade]; bonus += RACE_PTS_[r.grade] || 0; }
+      });
+      const active = Object.keys(act).length;
+      return { reports: list.length, assists: assists, active: active, graded: graded, avg: graded ? gsum / graded : null, awaiting: list.filter(r => !r.grade).length,
+        points: list.length * RACE_PTS_.report + assists * RACE_PTS_.assist + bonus + active * RACE_PTS_.active, people: ppl };
+    };
+    const wk = per(W, Infinity), lwk = per(LW, W), mo = per(M, Infinity), lmo = per(LM, M);
+    Object.keys(wk.people).forEach(k => { const x = wk.people[k]; const pk = k + "|" + dv.id; people[pk] = Object.assign({ div: dv.id }, x); });
+    const top = Object.keys(wk.people).map(k => wk.people[k]).sort((a, b) => b.pts - a.pts)[0] || null;
+    const days = []; for (let i = 6; i >= 0; i--) { const a = d0.getTime() - i * 864e5; days.push(mine.filter(r => r.at >= a && r.at < a + 864e5).length); }
+    const strip = x => { const o = Object.assign({}, x); delete o.people; return o; };
+    return { id: dv.id, name: dv.name, color: dv.color || "#2f7bff", logoUrl: dv.logoUrl || "", tagline: dv.tagline || "", roster: roster.length,
+      week: strip(wk), lastWeek: strip(lwk), month: strip(mo), lastMonth: strip(lmo), days: days, top: top, last: mine.length ? Math.max.apply(null, mine.map(r => r.at)) : 0 };
+  });
+  const feed = rows.filter(r => out.some(dv => (divs.find(x => x.id === dv.id).forms || []).some(f => f.id === r.form))).sort((a, b) => b.at - a.at).slice(0, 10).map(r => {
+    const dv = divs.find(x => (x.forms || []).some(f => f.id === r.form)), au = (r.people || [])[0];
+    return { at: r.at, div: dv ? dv.id : "", title: r.title || r.no || (formsById[r.form] || {}).title || r.form, form: (formsById[r.form] || {}).title || r.form, icon: (formsById[r.form] || {}).icon || "📄", by: au ? cleanName_(au.n).replace(/\s*\(\d{15,21}\)/, "") : "", grade: r.grade };
+  });
+  const mvp = Object.keys(people).map(k => people[k]).sort((a, b) => b.pts - a.pts)[0] || null;
+  const res = { ok: true, hq: true, divisions: out, feed: feed, mvp: mvp, points: RACE_PTS_, weekStart: W, monthStart: M, at: Date.now() };
+  try { bigPut_(ck, JSON.stringify(res), 120); } catch (e) {}
+  res.me = me;
+  return res;
 }
 function divGrade_(d, me) {
   const rows = actRows_(), rec = rows.find(r => r.id === str_(d.id));
@@ -2517,6 +2571,7 @@ function divOfficer_(d) {
     return r;
   }
   if (d.action === "divGrade") { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." }; return withLock_(() => divGrade_(d, me)); }
+  if (d.action === "divOverview") return divOverview_(allowed, me);
   return divReport_(d);
 }
 function acctList_() {
@@ -3407,7 +3462,7 @@ function handleAdmin_(d) {
   if (a === "quickRef") return quickRef_(d);
   if (a === "mdtNoticePost" || a === "mdtNoticeClose") return mdtNotice_(d);
 
-  if (d.session && /^div(View|Report|Grade)$/.test(a)) return divOfficer_(d);
+  if (d.session && /^div(View|Report|Grade|Overview)$/.test(a)) return divOfficer_(d);
 
   const me = sessionAdmin_(d.token);
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
@@ -3416,6 +3471,7 @@ function handleAdmin_(d) {
   // division leaders: the Division Command page only (no forms, settings, webhooks or accounts)
   if (me.role === "leader" && !LEADER_ACTIONS_[a]) throw new Error("Division leader accounts can only use the Division Command page.");
   if (a === "divView") return divView_(d, me);
+  if (a === "divOverview") return divOverview_(null, { username: me.username, role: me.role });
   if (a === "divReport") return divReport_(d);
   if (a === "divGrade") return withLock_(() => divGrade_(d, me));
 
