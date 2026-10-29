@@ -198,6 +198,15 @@
   const GLET = v => v == null ? "—" : GL[Math.max(0, Math.min(4, Math.round(v)))];
   function hqScore(d) { const c = d[HQ_P] || {}; return HQ_RANK === "per" ? Math.round((c.points || 0) / Math.max(1, d.roster || c.active || 1) * 10) / 10 : (c.points || 0); }
   function emblem(d, cls) { return d.logoUrl ? `<img class="${cls}" src="${esc(d.logoUrl)}" alt="" onerror="this.outerHTML='<span class=&quot;${cls} ini&quot;>${esc(initials(d.name))}</span>'">` : `<span class="${cls} ini">${esc(initials(d.name))}</span>`; }
+  // very dark division colors (e.g. a deep maroon) get lifted so bars, dots and names stay visible on the dark page
+  function vivid(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return hex || "#888";
+    let r = parseInt(m[1].slice(0, 2), 16), g = parseInt(m[1].slice(2, 4), 16), b = parseInt(m[1].slice(4, 6), 16);
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; if (lum >= 0.22) return "#" + m[1];
+    const mx = Math.max(r, g, b) || 1, sc = Math.min(3, 200 / mx); r *= sc; g *= sc; b *= sc;          // same hue, brighter
+    const k = 0.18; r = Math.round(r + (255 - r) * k); g = Math.round(g + (255 - g) * k); b = Math.round(b + (255 - b) * k);
+    return "#" + [r, g, b].map(x => Math.min(255, x).toString(16).padStart(2, "0")).join("");
+  }
   const ICON = {
     flag: '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
     pin: '<svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8"/></svg>',
@@ -256,9 +265,9 @@
     const myD = (HQ.perms || {}).pin && mine.length !== 1 ? null : race.find(d => mine.indexOf(d.id) !== -1);   // command staff: the whole department
     if (!myD) { const tot = race.reduce((n, d) => n + (d[HQ_P].reports || 0), 0); return `${who}, the department has filed <b>${tot}</b> report${tot === 1 ? "" : "s"} this ${HQ_P === "week" ? "week" : "month"}. Here's where every division stands.`; }
     const i = race.indexOf(myD), s0 = hqScore(myD);
-    if (i === 0) { const nx = race[1], lead = nx ? s0 - hqScore(nx) : 0; return s0 ? `${who}, <b class="dcol" style="--c:${esc(myD.color)}">${esc(myD.name)}</b> is leading${nx && lead ? ` by ${lead} pts over ${esc(nx.name)}` : ""}. Keep the pressure on.` : `${who}, the race is wide open. One report puts ${esc(myD.name)} in front.`; }
+    if (i === 0) { const nx = race[1], lead = nx ? s0 - hqScore(nx) : 0; return s0 ? `${who}, <b class="dcol" style="--c:${esc(vivid(myD.color))}">${esc(myD.name)}</b> is leading${nx && lead ? ` by ${lead} pts over ${esc(nx.name)}` : ""}. Keep the pressure on.` : `${who}, the race is wide open. One report puts ${esc(myD.name)} in front.`; }
     const ah = race[i - 1], gap = hqScore(ah) - s0, need = Math.max(1, Math.ceil((gap + 1) / (HQ_RANK === "per" ? Math.max(1, 10 / Math.max(1, myD.roster || 1)) : 10)));
-    return `${who}, <b class="dcol" style="--c:${esc(myD.color)}">${esc(myD.name)}</b> is ${ord(i + 1)}, ${gap ? gap + " pts behind " + esc(ah.name) + ". About " + need + " more report" + (need === 1 ? "" : "s") + " to pass them." : "tied with " + esc(ah.name) + ". One report breaks it."}`;
+    return `${who}, <b class="dcol" style="--c:${esc(vivid(myD.color))}">${esc(myD.name)}</b> is ${ord(i + 1)}, ${gap ? gap + " pts behind " + esc(ah.name) + ". About " + need + " more report" + (need === 1 ? "" : "s") + " to pass them." : "tied with " + esc(ah.name) + ". One report breaks it."}`;
   }
   // race moments: what changed since this leader last looked, plus streaks and hot divisions
   let HQ_LAST_ORDER = null;
@@ -307,9 +316,9 @@
     const endTxt = new Date(HQ.weekEnd || 0).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
     const clockH = P === "week" && HQ.weekEnd ? `<div class="hq-clock"><small>RACE CLOSES ${esc(endTxt.toUpperCase())}</small><span data-hqend="${HQ.weekEnd}">…</span></div>` : "";
     const lastMonth = (HQ.seasons || [])[0], champD = lastMonth && L.find(d => d.id === lastMonth.champ), nowD = new Date();
-    const champH = champD && nowD.getDate() <= 3 && new Date(lastMonth.month).getMonth() === (nowD.getMonth() + 11) % 12 ? `<section class="hq-champ" style="--c:${esc(champD.color)}"><span>🏆</span><div><small>${new Date(lastMonth.month).toLocaleDateString(undefined, { month: "long" }).toUpperCase()} CHAMPION</small><b>${esc(champD.name)}</b><em>${lastMonth.points} pts · a new season starts now</em></div><span>🏆</span></section>` : "";
-    const heroH = champH + `<section class="hq-hero" style="--lc:${esc(hqScore(lead) ? lead.color : "#e8b54a")}"><div class="hq-hero-in"><p class="hq-hi">${hqGreet(race)}</p><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${L.length} DIVISIONS · ${P === "week" && HQ.weekEnd ? "WEEK ENDING " + esc(new Date(HQ.weekEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()) : (P === "week" ? "WEEK OF " : "MONTH OF ") + esc(since.toUpperCase())}</div>
-      <h1>${!hqScore(lead) ? "The race is on." : second && !gap ? "It's a dead heat." : `<b class="dcol" style="--c:${esc(lead.color)}">${esc(lead.name)}</b> leads the race.`}</h1>
+    const champH = champD && nowD.getDate() <= 3 && new Date(lastMonth.month).getMonth() === (nowD.getMonth() + 11) % 12 ? `<section class="hq-champ" style="--c:${esc(vivid(champD.color))}"><span>🏆</span><div><small>${new Date(lastMonth.month).toLocaleDateString(undefined, { month: "long" }).toUpperCase()} CHAMPION</small><b>${esc(champD.name)}</b><em>${lastMonth.points} pts · a new season starts now</em></div><span>🏆</span></section>` : "";
+    const heroH = champH + `<section class="hq-hero" style="--lc:${esc(hqScore(lead) ? vivid(lead.color) : "#e8b54a")}"><div class="hq-hero-in"><p class="hq-hi">${hqGreet(race)}</p><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${L.length} DIVISIONS · ${P === "week" && HQ.weekEnd ? "WEEK ENDING " + esc(new Date(HQ.weekEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()) : (P === "week" ? "WEEK OF " : "MONTH OF ") + esc(since.toUpperCase())}</div>
+      <h1>${!hqScore(lead) ? "The race is on." : second && !gap ? "It's a dead heat." : `<b class="dcol" style="--c:${esc(vivid(lead.color))}">${esc(lead.name)}</b> leads the race.`}</h1>
       <p>${hqScore(lead) ? (second ? (gap ? `${gap} ${unit} ahead of ${esc(second.name)}.` : `${esc(lead.name)} and ${esc(second.name)} are tied on ${hqScore(lead)} ${unit}.`) : "") + " Every report, assist and good grade moves your division up." : "No reports yet this " + (P === "week" ? "week" : "month") + ". First report takes the lead."}</p></div>
       ${clockH}<div class="hq-tot"><div><b>${sum("reports")}</b><small>Reports</small></div><div><b>${sum("assists")}</b><small>Assists</small></div><div><b>${sum("active")}</b><small>Active officers</small></div><div><b>${GLET(gAvg)}</b><small>Avg grade</small></div><div class="${sum("awaiting") ? "warn" : ""}"><b>${sum("awaiting")}</b><small>Awaiting grade</small></div></div></section>`;
     // the race
@@ -318,7 +327,7 @@
       <div class="hq-tower"><div class="hq-thead"><span>POS</span><span></span><span>DIVISION</span><span class="hq-tprog">PROGRESS</span><span>INTERVAL</span><span>PTS</span></div>
       ${race.map((d, i) => { const s = hqScore(d), pct = Math.max(2, Math.round(s / top * 100)), dp = (d[P].points || 0) - ((d[prevK] || {}).points || 0), gap = i ? hqScore(race[0]) - s : 0;
         const tags = (d.trophies ? `<i class="t-title" title="${d.trophies} monthly title${d.trophies === 1 ? "" : "s"}">${ICON.trophy}${d.trophies > 1 ? "×" + d.trophies : ""}</i>` : "") + (d.streak >= 3 ? `<i class="t-streak" title="Reports ${d.streak} days in a row">STREAK ${d.streak}</i>` : "") + (HQ.hot === d.id ? '<i class="t-hot" title="Most points in the last 24 hours">HOT</i>' : "") + (HQ.improved && HQ.improved.id === d.id ? `<i class="t-imp" title="Biggest jump from last week">+${HQ.improved.by}</i>` : "");
-        return `<div class="hq-lane${i === 0 && s ? " lead" : ""}" style="--c:${esc(d.color)}" data-div="${esc(d.id)}" title="Open ${esc(d.name)}">
+        return `<div class="hq-lane${i === 0 && s ? " lead" : ""}" style="--c:${esc(vivid(d.color))}" data-div="${esc(d.id)}" title="Open ${esc(d.name)}">
           <span class="hq-pos">${i + 1}</span><span class="hq-stripe"></span>
           <div class="hq-lname">${emblem(d, "hq-em")}<div><b>${esc(d.name)}</b><small>${d[P].reports} report${d[P].reports === 1 ? "" : "s"} · ${d[P].active} active${dp ? ` · <em class="${dp > 0 ? "up" : "down"}">${dp > 0 ? "▲" : "▼"} ${Math.abs(dp)}</em>` : ""}</small></div>${tags ? `<span class="hq-tags">${tags}</span>` : ""}</div>
           <div class="hq-track"><i class="hq-trail" style="width:${HQ_ANIM ? 0 : pct}%" data-w="${pct}"></i><span class="hq-car" style="left:${HQ_ANIM ? 0 : pct}%" data-l="${pct}"></span></div>
@@ -328,23 +337,23 @@
     // division cards, MVP, hall of fame, live feed
     const mvp = HQ.mvp, mvpDiv = mvp && L.find(d => d.id === mvp.div);
     const cardsH = `<div class="hq-cards">${race.map(d => { const c = d[P], act = d.roster ? Math.round(c.active / d.roster * 100) : 0, mx = Math.max(1, ...d.days);
-        return `<article class="hq-card" style="--c:${esc(d.color)}"><header>${emblem(d, "hq-cem")}<div><b>${esc(d.name)}</b><small>${esc(d.tagline || "Division")}${d.trophies ? ` · 🏆 ${d.trophies} title${d.trophies === 1 ? "" : "s"}` : ""}</small></div>
+        return `<article class="hq-card" style="--c:${esc(vivid(d.color))}"><header>${emblem(d, "hq-cem")}<div><b>${esc(d.name)}</b><small>${esc(d.tagline || "Division")}${d.trophies ? ` · 🏆 ${d.trophies} title${d.trophies === 1 ? "" : "s"}` : ""}</small></div>
           <div class="hq-ring" style="--p:${act}"><b>${c.active}${d.roster ? "<i>/" + d.roster + "</i>" : ""}</b><small>active</small></div></header>
           <div class="hq-cstats"><div><b>${c.reports}</b><small>Reports</small></div><div><b>${c.assists}</b><small>Assists</small></div><div><b>${GLET(c.avg)}</b><small>Avg grade</small></div><div class="${c.awaiting ? "warn" : ""}"><b>${c.awaiting}</b><small>To grade</small></div></div>
           ${goalHTML(d)}
           <div class="hq-spark" title="Reports, last 7 days">${d.days.map((n, i) => `<i style="height:${Math.max(6, Math.round(n / mx * 100))}%" class="${i === 6 ? "t" : ""}" title="${n} report${n === 1 ? "" : "s"}"></i>`).join("")}</div>
           <footer>${d.top ? `<span class="hq-top">${face(d.top, "hq-tav")} ${esc(d.top.callsign ? d.top.callsign + " · " : "")}${esc(d.top.name)} <em>${d.top.pts} pts</em>${OFFICER() && d.top.id ? ` <button class="hq-kudo sm" data-kudo="${esc(d.top.id)}" data-kname="${esc(d.top.name)}" title="Recognize">👏</button>` : ""}</span>` : `<span class="hq-top dim">No top performer yet</span>`}<span class="dim">${d.last ? "Last report " + ago(d.last) : "No reports yet"}</span></footer>
           <button class="hq-open" data-div="${esc(d.id)}">Open ${esc(d.name)} →</button></article>`; }).join("")}</div>`;
-    const mvpH = `<section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(mvpDiv.color)}"` : ""}><div class="hq-mk">MVP · THIS WEEK</div>${mvp ? `${face(mvp, "hq-mav")}<b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>${OFFICER() && mvp.id ? `<button class="hq-kudo" data-kudo="${esc(mvp.id)}" data-kname="${esc(mvp.name)}">👏 Recognize</button>` : ""}` : `<p class="dim">The first report of the week claims it.</p>`}</section>`;
+    const mvpH = `<section class="hq-mvp"${mvpDiv ? ` style="--c:${esc(vivid(mvpDiv.color))}"` : ""}><div class="hq-mk">MVP · THIS WEEK</div>${mvp ? `${face(mvp, "hq-mav")}<b>${esc(mvp.name)}</b><small>${esc(mvp.callsign || "")}${mvpDiv ? " · " + esc(mvpDiv.name) : ""}</small><div class="hq-mpts">${mvp.pts}<span>pts</span></div>${OFFICER() && mvp.id ? `<button class="hq-kudo" data-kudo="${esc(mvp.id)}" data-kname="${esc(mvp.name)}">👏 Recognize</button>` : ""}` : `<p class="dim">The first report of the week claims it.</p>`}</section>`;
     const feedH = `<section class="hq-feed"><h3><span class="hq-pulse"></span>LIVE ACROSS DIVISIONS</h3>${(HQ.feed || []).length ? HQ.feed.map(f => { const d = L.find(x => x.id === f.div) || {};
-          return `<div class="hq-fi" style="--c:${esc(d.color || "#888")}" data-div="${esc(f.div)}"><i></i><div><b>${esc(f.icon)} ${esc(f.title)}</b><small>${esc(d.name || "")}${f.by ? " · " + esc(f.by) : ""} · ${ago(f.at)}</small></div>${f.grade ? `<span class="hq-g">${esc(f.grade)}</span>` : ""}</div>`; }).join("") : '<p class="dim">No reports yet.</p>'}</section>`;
+          return `<div class="hq-fi" style="--c:${esc(vivid(d.color || "#888"))}" data-div="${esc(f.div)}"><i></i><div><b>${esc(f.icon)} ${esc(f.title)}</b><small>${esc(d.name || "")}${f.by ? " · " + esc(f.by) : ""} · ${ago(f.at)}</small></div>${f.grade ? `<span class="hq-g">${esc(f.grade)}</span>` : ""}</div>`; }).join("") : '<p class="dim">No reports yet.</p>'}</section>`;
     // three views so nothing is crowded: the race, the leaders' bulletin, the division cards
     const B = HQ.board || [], unread = B.filter(p => !p.mine && p.at > HQ_SEEN).length;
     const goalsSet = L.filter(d => (HQ.goals || {})[d.id] && HQ.goals[d.id].target).length, goalsHit = L.filter(d => { const g = (HQ.goals || {})[d.id]; return g && g.target && d.week.reports >= g.target; }).length;
     const tabsH = `<nav class="hq-tabs"><button data-hqt="race" class="${HQ_TAB === "race" ? "on" : ""}"><span>${ICON.flag}</span>Race<small>${esc(lead.name)} leads</small></button>
       <button data-hqt="board" class="${HQ_TAB === "board" ? "on" : ""}"><span>${ICON.pin}</span>Bulletin<small>${B.length} post${B.length === 1 ? "" : "s"}</small>${unread ? `<em>${unread} new</em>` : ""}</button>
       <button data-hqt="divs" class="${HQ_TAB === "divs" ? "on" : ""}"><span>${ICON.grid}</span>Divisions<small>${goalsSet ? goalsHit + " / " + goalsSet + " goals hit" : L.length + " division" + (L.length === 1 ? "" : "s")}</small></button></nav>`;
-    const stripH = `<section class="hq-strip"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${P === "week" && HQ.weekEnd ? "WEEK ENDING " + esc(new Date(HQ.weekEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()) : (P === "week" ? "WEEK OF " : "MONTH OF ") + esc(since.toUpperCase())}</div><div class="hq-mini">${race.slice(0, 3).map((d, i) => `<span style="--c:${esc(d.color)}">${i === 0 && hqScore(d) ? "👑" : i + 1 + "."} ${esc(d.name)} <b>${hqScore(d)}</b></span>`).join("")}</div></section>`;
+    const stripH = `<section class="hq-strip"><div class="hq-kick"><span class="hq-pulse"></span>COMMAND CENTER · ${P === "week" && HQ.weekEnd ? "WEEK ENDING " + esc(new Date(HQ.weekEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()) : (P === "week" ? "WEEK OF " : "MONTH OF ") + esc(since.toUpperCase())}</div><div class="hq-mini">${race.slice(0, 3).map((d, i) => `<span style="--c:${esc(vivid(d.color))}">${i === 0 && hqScore(d) ? "👑" : i + 1 + "."} ${esc(d.name)} <b>${hqScore(d)}</b></span>`).join("")}</div></section>`;
     let h;
     if (HQ_TAB === "board") { HQ_SEEN = Date.now(); store("dc:hqseen", String(HQ_SEEN)); h = stripH + tabsH + `<div class="hq-grid">${boardHTML()}<aside class="hq-side">${feedH}</aside></div>`; }
     else if (HQ_TAB === "divs") h = stripH + tabsH + cardsH;
