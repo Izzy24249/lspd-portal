@@ -20,7 +20,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 79;
+const BACKEND_VERSION = 80;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -52,14 +52,25 @@ function doGet(e) {
 // Only actions that change saved data wait in line; reading, logging in and Discord posting run side by side.
 const WRITE_ACTIONS_ = { saveConfig: 1, webhookSave: 1, webhookDelete: 1, adminAdd: 1, adminReset: 1, adminRole: 1, adminRemove: 1, changePassword: 1, leaderboardRefresh: 1, hoursRefresh: 1, promoCredit: 1, promoRemove: 1, promoExcuse: 1, promoSince: 1, cidSetPassword: 1 };
 
+// request timing: slow requests (over 8 s) are written to the "Slow Requests" tab with where the time went
+var T0_ = 0, MARKS_ = [];
+function mark_(label) { if (T0_) MARKS_.push(label + " " + (Date.now() - T0_) + "ms"); }
+function slowLog_(action, ms) {
+  if (ms < 8000) return;
+  try { const ss = ss_(); let sh = ss.getSheetByName("Slow Requests"); if (!sh) { sh = ss.insertSheet("Slow Requests"); sh.appendRow(["When", "Action", "Seconds", "Steps"]); sh.setFrozenRows(1); }
+    if (sh.getLastRow() > 400) sh.deleteRows(2, 100);
+    sh.appendRow([new Date(), action, Math.round(ms / 100) / 10, MARKS_.join(" · ")]); } catch (e) {}
+}
 function doPost(e) {
-  ACCT_MEMO_ = null;
+  ACCT_MEMO_ = null; ACT_MEMO_ = null; T0_ = Date.now(); MARKS_ = [];
   let d;
   try { d = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "Bad request." }); }
   try {
     if (d.action) {
       const out = WRITE_ACTIONS_[d.action] ? withLock_(() => handleAdmin_(d)) : handleAdmin_(d);
       if (out && out.ok && /^promo(Credit|Remove|Excuse|Since)$/.test(d.action)) snapshotSoon_();
+      const ms = Date.now() - T0_; slowLog_(d.action, ms);
+      if (out && /^acct|officerHome/.test(d.action)) { out._ms = ms; if (MARKS_.length) out._steps = MARKS_; }
       return json_(out);
     }
     const res = handleSubmit_(d);
@@ -72,9 +83,9 @@ function doPost(e) {
 
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(45000)) return { ok: false, error: "Server busy, please try again in a few seconds." };
-  ACCT_MEMO_ = null;
-  try { try { flushDeferred_(); } catch (e) {} return fn(); } finally { ACCT_MEMO_ = null; lock.releaseLock(); }
+  mark_("lock?"); if (!lock.tryLock(45000)) return { ok: false, error: "Server busy, please try again in a few seconds." }; mark_("lock");
+  ACCT_MEMO_ = null; ACT_MEMO_ = null;
+  try { try { flushDeferred_(); } catch (e) {} return fn(); } finally { ACCT_MEMO_ = null; ACT_MEMO_ = null; lock.releaseLock(); }
 }
 
 function json_(obj) {
@@ -349,6 +360,12 @@ function warmRosters() {
   rostersFor_(cfg.forms, { fresh: true });
   // sign-in: the Personnel / Onboarding tabs (with the rank column) are ready before anyone signs on
   [PERSONNEL_TAB_, ONBOARD_TAB_].forEach(t => { try { const tid = rosterTabByName_(t); if (tid != null) getRosterTab_(tid, true, [RANK_COL_], false, true); } catch (e) {} });
+  // division-only reports: who's on each division roster (sign-in and the report list check this)
+  const accTabs = {}; cfg.forms.forEach(f => (f.accessTabs || []).forEach(t => accTabs[t.id] = 1));
+  Object.keys(accTabs).forEach(id => { try { tabIds_(Number(id), true); } catch (e) {} });
+  // promotion tracker: rank + time-in-grade columns, everyone's report counts
+  try { const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); } catch (e) {}
+  try { promoPeople_(true); } catch (e) {}
   try { CacheService.getScriptCache().remove("builder_people"); builderPeople_(); } catch (e) {}
   try { if (usesOldRoster_(cfg.forms)) getRoster_(true); } catch (e) {}
   programs_(cfg).forEach(p => { try { if (p.on) promoCandidates_(true, p.id); } catch (e) {} });
@@ -1956,6 +1973,7 @@ function actLog_(form, values, repeaters, cols, x) {
   const people = actPeople_(form, values, repeaters);
   const caseF = allFields_(form).find(f => f.type === "case_number");
   const id = Utilities.getUuid().replace(/-/g, "").slice(0, 14);
+  try { CacheService.getScriptCache().remove("promo_people"); } catch (e) {} ACT_MEMO_ = null;
   actSheet_().appendRow([id, new Date(), form.id, cellSafe_(caseF ? str_(values[caseF.id]) : ""), cellSafe_(clip_(x.title, 200)), JSON.stringify(people), cellSafe_(actSummary_(cols, people)),
     "'" + (x.threadId || ""), "'" + (x.messageId || ""), x.webhookId || "", cellSafe_(clip_(x.content || "", 1900)), "", "", "", "", x.source || "report", cellSafe_(clip_(x.report || actFull_(cols), 45000)), (() => { const j = x.data ? JSON.stringify(x.data) : ""; return j.length < 48000 ? cellSafe_(j) : ""; })()]);
   divClearCache_();
@@ -1987,13 +2005,19 @@ function exemptHit_(rule, fields) {
   return hit ? fields.find(x => str_(x).toLowerCase().indexOf(hit) !== -1) || hit : "";
 }
 function divList_() { return ((getConfig_().settings || {}).divisions || []).map(x => ({ id: x.id, name: x.name, color: x.color, logoUrl: x.logoUrl, tagline: x.tagline })); }
-function actRows_() {
-  const v = actSheet_().getDataRange().getValues(), out = [];
+// the report log. Lists only need the first 16 columns; the full report text and data (the big cells) are read
+// only when a report is opened (full = true). Read once per request.
+var ACT_MEMO_ = null;
+function actRows_(full) {
+  if (ACT_MEMO_ && (ACT_MEMO_.full || !full)) return ACT_MEMO_.rows;
+  const sh = actSheet_(), n = sh.getLastRow(), w = full ? Math.max(sh.getLastColumn(), 18) : 16;
+  const v = n < 2 ? [] : sh.getRange(1, 1, n, w).getValues(), out = [];
   for (let i = 1; i < v.length; i++) { const r = v[i]; if (!str_(r[0])) continue;
     let people = []; try { people = JSON.parse(str_(r[5]) || "[]"); } catch (e) {}
     out.push({ row: i + 1, id: str_(r[0]), at: isDate_(r[1]) ? r[1].getTime() : new Date(r[1]).getTime() || 0, form: str_(r[2]), no: str_(r[3]), title: str_(r[4]), people: people, summary: str_(r[6]),
       threadId: str_(r[7]).replace(/^'/, ""), messageId: str_(r[8]).replace(/^'/, ""), webhookId: str_(r[9]), content: str_(r[10]),
-      grade: str_(r[11]), gradedBy: str_(r[12]), comments: str_(r[13]), gradedAt: isDate_(r[14]) ? r[14].getTime() : 0, source: str_(r[15]), report: str_(r[16]), data: str_(r[17]) }); }
+      grade: str_(r[11]), gradedBy: str_(r[12]), comments: str_(r[13]), gradedAt: isDate_(r[14]) ? r[14].getTime() : 0, source: str_(r[15]), report: str_(r[16] || ""), data: str_(r[17] || "") }); }
+  ACT_MEMO_ = { full: !!full, rows: out };
   return out;
 }
 // Everything the Division Command page shows for one division: its officers + every report from its forms.
@@ -2076,7 +2100,7 @@ function divGrade_(d, me) {
 // One report for reading/grading: the printed case file (CID page), and the answers + the form, so the page can lay it
 // out like the report writer. Reports logged before answers were saved get theirs back from the form's sheet tab.
 function divReport_(d) {
-  const r = actRows_().find(x => x.id === str_(d.id)); if (!r) return { ok: false, error: "That report isn't in the log." };
+  const r = actRows_(true).find(x => x.id === str_(d.id)); if (!r) return { ok: false, error: "That report isn't in the log." };
   const form = getConfig_().forms.find(f => f.id === r.form);
   let data = null; try { data = r.data ? JSON.parse(r.data) : null; } catch (e) {}
   if (!data && form) { try { data = archiveLookup_(form, r); } catch (e) {} }
@@ -2427,14 +2451,14 @@ function acctHandle_(d) {
     if (!offRead_(d.state, "STATE")) return { ok: false, error: "That sign-in link expired. Try again." };
     const tok = UrlFetchApp.fetch("https://discord.com/api/oauth2/token", { method: "post", muteHttpExceptions: true,
       payload: { client_id: st.clientId, client_secret: PROPS_.getProperty("DISCORD_CLIENT_SECRET"), grant_type: "authorization_code", code: str_(d.code), redirect_uri: st.redirect } });
-    if (tok.getResponseCode() !== 200) return { ok: false, error: "Discord didn't accept the sign-in. Try again." };
+    mark_("discord token"); if (tok.getResponseCode() !== 200) return { ok: false, error: "Discord didn't accept the sign-in. Try again." };
     const access = JSON.parse(tok.getContentText()).access_token, H = { headers: { Authorization: "Bearer " + access }, muteHttpExceptions: true };
     const meR = UrlFetchApp.fetch("https://discord.com/api/users/@me", H); if (meR.getResponseCode() !== 200) return { ok: false, error: "Couldn't read your Discord account." };
-    const du = JSON.parse(meR.getContentText()), id = str_(du.id);
+    const du = JSON.parse(meR.getContentText()), id = str_(du.id); mark_("discord user");
     if (st.guildId) { const gR = UrlFetchApp.fetch("https://discord.com/api/users/@me/guilds", H); const gs = gR.getResponseCode() === 200 ? JSON.parse(gR.getContentText()) : [];
       if (!gs.some(g => str_(g.id) === st.guildId)) return { ok: false, error: "This Discord account isn't in the LSPD Discord server." }; }
-    const person = rosterPerson_(id);
-    let acct = acctFind_(id);
+    mark_("discord guilds"); const person = rosterPerson_(id); mark_("roster");
+    let acct = acctFind_(id); mark_("account");
     if (!person && !acct) return { ok: false, error: "Your Discord account (" + (du.username || id) + ") isn't on the LSPD roster. Ask a supervisor to add your Discord ID to the roster." };
     if (acct && acct.locked) return { ok: false, error: "This account is locked. Contact command staff." };
     withLock_(() => {
@@ -2443,8 +2467,9 @@ function acctHandle_(d) {
       else sh.getRange(acct.row, 2).setValue(cellSafe_(du.username || acct.username)), sh.getRange(acct.row, 12).setValue((acct.devices || 0) + 1);
       return { ok: true };
     });
-    acct = acctFind_(id);
-    return { ok: true, device: offToken_("DEV", id, 400 * 864e5), hasPin: !!acct.hash, profile: acctProfile_(acct) };
+    acct = acctFind_(id); mark_("saved");
+    const prof = acctProfile_(acct); mark_("profile");
+    return { ok: true, device: offToken_("DEV", id, 400 * 864e5), hasPin: !!acct.hash, profile: prof };
   }
   // device token → set the first PIN (or a new one after an admin reset)
   if (a === "acctSetPin") {
@@ -2462,15 +2487,16 @@ function acctHandle_(d) {
     const dv = offRead_(d.device, "DEV"); if (!dv) return { ok: false, error: "Sign in with Discord again on this device." };
     const cache = CacheService.getScriptCache(), fk = "pinfail_" + dv.id, fails = Number(cache.get(fk) || 0);
     if (fails >= 5) return { ok: false, error: "Too many wrong PINs. Try again in 15 minutes, or ask an admin to reset it." };
-    const acct = acctFind_(dv.id);
+    const acct = acctFind_(dv.id); mark_("account");
     if (!acct) return { ok: false, error: "Sign in with Discord again on this device." };
     if (acct.locked) return { ok: false, error: "This account is locked. Contact command staff." };
     if (!acct.hash) return { ok: false, needPin: true, error: "Create your PIN first." };
     if (acct.signedOut && dv.issued < acct.signedOut) return { ok: false, error: "This device was signed out. Sign in with Discord again." };
     if (hashPw_(str_(d.pin), acct.salt) !== acct.hash) { cache.put(fk, String(fails + 1), 900); return { ok: false, error: "Wrong PIN" + (fails >= 3 ? " — " + (4 - fails) + " tr" + (4 - fails === 1 ? "y" : "ies") + " left." : ".") }; }
     cache.remove(fk);
-    try { acctSheet_().getRange(acct.row, 9).setValue(new Date()); } catch (e) {}
-    return { ok: true, session: offToken_("OFF", acct.id, OFFICER_DAYS_ * 864e5), profile: acctProfile_(acct) };
+    try { acctSheet_().getRange(acct.row, 9).setValue(new Date()); } catch (e) {} mark_("saved");
+    const prof = acctProfile_(acct); mark_("profile");
+    return { ok: true, session: offToken_("OFF", acct.id, OFFICER_DAYS_ * 864e5), profile: prof };
   }
   if (a === "acctMe") { const acct = officerSession_(d.session); return acct ? { ok: true, profile: acctProfile_(acct) } : { ok: false, error: "AUTH" }; }
   if (a === "acctOut") return { ok: true };       // the browser forgets its tokens
@@ -2703,7 +2729,14 @@ function promoLadderKeys_() {
   return L;
 }
 // everyone on the Personnel and Onboarding rosters, with their rank, time in grade and report count
-function promoPeople_() {
+function promoPeople_(fresh) {
+  const cache = CacheService.getScriptCache(), ck = "promo_people";
+  if (!fresh) { const hit = cache.get(ck); if (hit) { try { const o = JSON.parse(hit), now = Date.now(); o.forEach(x => { x.tigDays = x.since ? Math.floor((now - x.since) / 864e5) : null; }); return o; } catch (e) {} } }
+  const out = promoPeopleRead_();
+  try { const js = JSON.stringify(out); if (js.length < 95000) cache.put(ck, js, 900); } catch (e) {}
+  return out;
+}
+function promoPeopleRead_() {
   const out = [], seen = {}, now = Date.now();
   [[PERSONNEL_TAB_, false], [ONBOARD_TAB_, true]].forEach(pair => {
     const tid = rosterTabByName_(pair[0]); if (tid == null) return;
@@ -2764,6 +2797,7 @@ function promoTrack_(d) {
       if (!d.on && have) sh.deleteRow(have.row);
       return { ok: true };
     });
+    try { CacheService.getScriptCache().remove("promo_people"); } catch (e) {}
   }
   return promoBoard_();
 }
@@ -2951,12 +2985,18 @@ function mdtNotice_(d) {
 }
 
 // can this officer file this form? level (minLevel) + division rosters (accessTabs; command and up see every division's forms)
+// who's on a division roster tab: just the Discord IDs, kept in the cache for 6 hours (refreshed every 10 minutes)
+function tabIds_(tabId, fresh) {
+  const cache = CacheService.getScriptCache(), ck = "tabids_" + tabId;
+  if (!fresh) { const hit = cache.get(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  let ids = []; try { ids = (getRosterTab_(tabId, !!fresh, [], false, true).people || []).map(p => p.id).filter(Boolean); } catch (e) { return []; }
+  try { cache.put(ck, JSON.stringify(ids), 21600); } catch (e) {}
+  return ids;
+}
 function formAllowed_(form, acct, prof) {
   const lv = LEVELS_.indexOf(prof.level);
   if (form.minLevel && lv < LEVELS_.indexOf(form.minLevel)) return false;
-  if ((form.accessTabs || []).length && lv < LEVELS_.indexOf("command")) {
-    return form.accessTabs.some(t => { try { return (getRosterTab_(t.id, false, [], false, true).people || []).some(p => p.id === acct.id); } catch (e) { return false; } });
-  }
+  if ((form.accessTabs || []).length && lv < LEVELS_.indexOf("command")) return form.accessTabs.some(t => tabIds_(t.id, false).indexOf(acct.id) !== -1);
   return true;
 }
 // the CID Case File is always posted from the CID case builder page (also when the admin toggle is off)
@@ -2967,8 +3007,15 @@ function myForms_(acct, prof) {
 }
 function officerHome_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
-  const person = rosterPerson_(acct.id), prof = acctProfile_(acct), s = getConfig_().settings || {};
-  return { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_, paths: myPaths_(person), fleet: fleetFor_(person && person.rank, person && person.onboarding), board: mdtBoard_(acct, prof, person), forms: myForms_(acct, prof), ladder: (() => { try { return promoReqParse_(false); } catch (e) { return null; } })(), promoMe: promoMine_(acct) };
+  mark_("session"); const person = rosterPerson_(acct.id); mark_("roster"); const prof = acctProfile_(acct); mark_("profile"); const s = getConfig_().settings || {};
+  const out = { ok: true, profile: prof, sop: str_(s.sopUrl) || SOP_URL_DEFAULT_ };
+  out.paths = myPaths_(person); mark_("paths");
+  out.fleet = fleetFor_(person && person.rank, person && person.onboarding); mark_("fleet");
+  out.board = mdtBoard_(acct, prof, person); mark_("board");
+  out.forms = myForms_(acct, prof); mark_("forms");
+  out.ladder = (() => { try { return promoReqParse_(false); } catch (e) { return null; } })(); mark_("ladder");
+  out.promoMe = promoMine_(acct); mark_("promo");
+  return out;
 }
 
 // =====================================================================

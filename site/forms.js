@@ -1452,8 +1452,10 @@ window.Portal = (function () {
     // reports carry the officer's MDT sign-on (some forms are limited by level)
     try { if (body && body.form && !body.session) { const s = localStorage.getItem("lspd_sess"); if (s) body.session = s; } } catch (e) {}
     // text/plain avoids a CORS preflight, which Apps Script web apps don't answer.
-    const res = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
-    return res.json();
+    const t0 = Date.now(), res = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
+    const j = await res.json();
+    try { const ms = Date.now() - t0; if (ms > 3000) console.warn("[LSPD slow] " + (body.action || "submit") + " took " + ms + "ms (server " + (j._ms || "?") + "ms)" + (j._steps ? " · " + j._steps.join(" · ") : "")); } catch (e) {}
+    return j;
   }
   async function loadConfig() {
     const ac = typeof AbortController === "function" ? new AbortController() : null, timer = ac && setTimeout(() => ac.abort(), 30000);
