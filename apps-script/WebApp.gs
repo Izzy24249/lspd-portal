@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 88;
+const BACKEND_VERSION = 89;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -93,7 +93,16 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 function errMsg_(err) { return String((err && err.message) || err); }
-function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
+// the portal's own spreadsheet. A roster-change trigger runs with the ROSTER as its "active" spreadsheet, so the
+// portal sheet's ID is remembered and used whenever the active one is a different file.
+var SS_MEMO_ = null;
+function ss_() {
+  if (SS_MEMO_) return SS_MEMO_;
+  const a = SpreadsheetApp.getActiveSpreadsheet(), want = PROPS_.getProperty("PORTAL_SS_ID");
+  if (want && (!a || a.getId() !== want)) return (SS_MEMO_ = SpreadsheetApp.openById(want));
+  if (!want && a && a.getSheetByName(CONFIG_SHEET_)) PROPS_.setProperty("PORTAL_SS_ID", a.getId());
+  return (SS_MEMO_ = a);
+}
 function isDate_(v) { return Object.prototype.toString.call(v) === "[object Date]" && !isNaN(v); }
 function str_(v) { return String(v == null ? "" : v).trim(); }
 function clip_(s, n) { s = String(s == null ? "" : s); return s.length > n ? s.substring(0, n - 3) + "..." : s; }
@@ -116,6 +125,7 @@ function getConfig_() {
     const raw = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(r => String(r[0]).replace(/^\|/, "")).join("");
     try { cfg = JSON.parse(raw); } catch (e) { cfg = null; }
   }
+  if (!cfg && !sh && PROPS_.getProperty("PORTAL_SS_ID") && ss_().getId() !== PROPS_.getProperty("PORTAL_SS_ID")) throw new Error("Portal sheet not found.");
   if (!cfg) {
     cfg = defaultConfig_();
     cfg.version = 1;
@@ -354,38 +364,58 @@ function rostersFor_(forms, opts) {
   return out;
 }
 // Runs every 10 minutes (time trigger) so the website and admin never wait on reading the roster sheet.
-function warmRosters() {
-  try { flushDeferred_(); } catch (e) {}
-  const cfg = getConfig_();
-  try { callsignMap_(true); } catch (e) {}
-  rostersFor_(cfg.forms, { fresh: true });
+// Every 10 minutes (and after roster edits): load the rosters and pages officers need, so nobody waits on the sheet.
+// Runs in steps, most important first, and stops itself before Google's 6-minute limit. Each step's time is
+// printed to the run's log (Apps Script -> Executions) and saved, so a slow step is easy to spot.
+const WARM_BUDGET_MS_ = 4.5 * 60000;
+function warmRosters(opts) {
+  opts = opts || {};
+  const t0 = Date.now(), done = [], budget = opts.budget || WARM_BUDGET_MS_;
+  let cfg = null, stopped = "";
+  const step = (name, fn) => {
+    if (stopped) return;
+    if (Date.now() - t0 > budget) { stopped = name; console.log("warm: out of time before " + name); return; }
+    const a = Date.now(); console.log("warm: " + name + " ...");
+    let err = ""; try { fn(); } catch (e) { err = errMsg_(e); }
+    const ms = Date.now() - a; done.push(name + " " + Math.round(ms / 100) / 10 + "s" + (err ? " (error: " + clip_(err, 80) + ")" : ""));
+    console.log("warm: " + name + " " + ms + "ms" + (err ? " ERROR " + err : ""));
+    try { PROPS_.setProperty("WARM_LAST", JSON.stringify({ at: t0, running: true, steps: done })); } catch (e) {}
+  };
+  step("settings", () => { flushDeferred_(); cfg = getConfig_(); });
+  if (!cfg) return;
+  step("callsigns", () => callsignMap_(true));
   // sign-in: the Personnel / Onboarding tabs (with the rank column) are ready before anyone signs on
-  [PERSONNEL_TAB_, ONBOARD_TAB_].forEach(t => { try { const tid = rosterTabByName_(t); if (tid != null) getRosterTab_(tid, true, [RANK_COL_], false, true); } catch (e) {} });
+  step("sign-in rosters", () => [PERSONNEL_TAB_, ONBOARD_TAB_].forEach(t => { const tid = rosterTabByName_(t); if (tid != null) getRosterTab_(tid, true, [RANK_COL_], false, true); }));
   // division-only reports: who's on each division roster (sign-in and the report list check this)
-  const accTabs = {}; cfg.forms.forEach(f => (f.accessTabs || []).forEach(t => accTabs[t.id] = 1));
-  Object.keys(accTabs).forEach(id => { try { tabIds_(Number(id), true); } catch (e) {} });
+  step("division access", () => { const accTabs = {}; cfg.forms.forEach(f => (f.accessTabs || []).forEach(t => accTabs[t.id] = 1)); Object.keys(accTabs).forEach(id => tabIds_(Number(id), true)); });
+  // division race on the MDT home: division rosters + standings
+  const divs = (cfg.settings || {}).divisions || [];
+  if (divs.length) {
+    step("division rosters", () => divs.forEach(dv => { if (dv.rosterTabId != null) getRosterTab_(dv.rosterTabId, true, [], false, false); }));
+    step("race standings", () => { const ck = "div_hq_" + divs.map(x => x.id).join(",").slice(0, 200); CacheService.getScriptCache().remove(ck + "_n"); divOverview_(null, { username: "", role: "officer", key: "warm" }, true); });
+  }
+  step("form rosters", () => rostersFor_(cfg.forms, { fresh: true }));
   // promotion tracker: rank + time-in-grade columns, everyone's report counts
-  try { const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); } catch (e) {}
-  try { promoPeople_(true); } catch (e) {}
-  try { CacheService.getScriptCache().remove("builder_people"); builderPeople_(); } catch (e) {}
-  try { if (usesOldRoster_(cfg.forms)) getRoster_(true); } catch (e) {}
-  programs_(cfg).forEach(p => { try { if (p.on) promoCandidates_(true, p.id); } catch (e) {} });
-  try { promoSync_(); } catch (e) {}
-  promoClearCache_();
-  programs_(cfg).forEach(p => { try { if (p.on) promoView_(false, p.id); } catch (e) {} });   // progression pages answer from the saved copy
-  try { publishSnapshot_(); } catch (e) {}                   // copy on the website itself (only when something changed)
-  // division race on the MDT home: division rosters + standings, so no officer waits for them
-  ((cfg.settings || {}).divisions || []).forEach(dv => { try { if (dv.rosterTabId != null) getRosterTab_(dv.rosterTabId, true, [], false, false); } catch (e) {} });
-  try { if (((cfg.settings || {}).divisions || []).length) { const c = CacheService.getScriptCache(), ck = "div_hq_" + cfg.settings.divisions.map(x => x.id).join(",").slice(0, 200); c.remove(ck + "_n"); divOverview_(null, { username: "", role: "officer", key: "warm" }, true); } } catch (e) {}
+  step("promotion roster", () => { const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); promoPeople_(true); });
+  step("report builder", () => { CacheService.getScriptCache().remove("builder_people"); builderPeople_(); });
+  step("old roster", () => { if (usesOldRoster_(cfg.forms)) getRoster_(true); });
+  if (!opts.quick) {
+    step("progression", () => { programs_(cfg).forEach(p => { if (p.on) promoCandidates_(true, p.id); }); promoSync_(); promoClearCache_(); programs_(cfg).forEach(p => { if (p.on) promoView_(false, p.id); }); });
+    step("website copy", () => publishSnapshot_());           // copy on the website itself (only when something changed)
+  }
+  const total = Date.now() - t0;
+  console.log("warm: finished in " + total + "ms" + (stopped ? ", stopped before " + stopped : ""));
+  try { PROPS_.setProperty("WARM_LAST", JSON.stringify({ at: t0, ms: total, stopped: stopped, steps: done })); } catch (e) {}
 }
 // RUN THIS ONCE FROM THE APPS SCRIPT EDITOR after pasting a new version (pick "authorizeAll" next to Run, press Run, Allow).
 // Google asks for any permission the new code needs, then the background timers are (re)installed:
 // roster warm-up every 10 minutes, roster edits, and the On Duty check every 15 minutes when it's turned on.
 function authorizeAll() {
+  const a = SpreadsheetApp.getActiveSpreadsheet(); if (a && a.getSheetByName(CONFIG_SHEET_)) PROPS_.setProperty("PORTAL_SS_ID", a.getId());
   ScriptApp.getProjectTriggers(); UrlFetchApp.getRequest("https://discord.com/api/v10/gateway"); ss_().getName(); rosterBook_().getName();
   CacheService.getScriptCache().remove("warm_trigger_ok"); ensureWarmTrigger_();
   try { dutyTrigger_(dutyCfg_().on); } catch (e) {}
-  try { warmRosters(); } catch (e) {}
+  try { warmRosters({ budget: 3 * 60000 }); } catch (e) {}
   const t = ScriptApp.getProjectTriggers().map(x => x.getHandlerFunction());
   Logger.log("Permissions OK. Background timers: " + t.join(", "));
   return t;
@@ -412,11 +442,12 @@ function ensureRosterChangeTrigger_() {
   ScriptApp.newTrigger("onRosterChange").forSpreadsheet(id).onChange().create();
 }
 function onRosterChange(e) {
+  if (!PROPS_.getProperty("PORTAL_SS_ID")) return;                // never touch the roster file as if it were the portal sheet
   const c = CacheService.getScriptCache();
   if (c.get("roster_busy")) { c.put("roster_pending", "1", 300); return; }   // a refresh is already running: run once more after it
-  c.put("roster_busy", "1", 120);
+  c.put("roster_busy", "1", 300);
   try {
-    for (let i = 0; i < 3; i++) { c.remove("roster_pending"); warmRosters(); if (!c.get("roster_pending")) break; }
+    for (let i = 0; i < 2; i++) { c.remove("roster_pending"); warmRosters({ quick: true, budget: 2 * 60000 }); if (!c.get("roster_pending")) break; }
     promoClearCache_();
   } finally { c.remove("roster_busy"); }
 }
@@ -3320,7 +3351,8 @@ function dutyLog_(done) {
 function dutyAdmin_() {
   const c = dutyCfg_(); let last = {}; try { last = JSON.parse(PROPS_.getProperty("DUTY_LAST") || "{}"); } catch (e) {}
   const linked = Object.keys(PROPS_.getProperties()).filter(k => /^DLINK_\d+$/.test(k)).length;
-  return { on: c.on, roleId: c.roleId, roleName: c.roleName, sopRoleId: c.sopRoleId, sopCount: Object.keys(sopIds_()).length, guildId: discordStatus_().guildId, linked: linked, last: last, board: c.on && c.roleId ? dutyBoard_() : null,
+  let warm = null; try { warm = JSON.parse(PROPS_.getProperty("WARM_LAST") || "null"); } catch (e) {}
+  return { warm: warm, on: c.on, roleId: c.roleId, roleName: c.roleName, sopRoleId: c.sopRoleId, sopCount: Object.keys(sopIds_()).length, guildId: discordStatus_().guildId, linked: linked, last: last, board: c.on && c.roleId ? dutyBoard_() : null,
     trigger: (() => { try { return ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "dutyPoll"); } catch (e) { return null; } })() };
 }
 // ---- what Discord says about each connected officer: nickname, role IDs, join date (hidden "Discord Members" tab) ----
