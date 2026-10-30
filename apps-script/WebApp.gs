@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 87;
+const BACKEND_VERSION = 88;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -374,6 +374,21 @@ function warmRosters() {
   promoClearCache_();
   programs_(cfg).forEach(p => { try { if (p.on) promoView_(false, p.id); } catch (e) {} });   // progression pages answer from the saved copy
   try { publishSnapshot_(); } catch (e) {}                   // copy on the website itself (only when something changed)
+  // division race on the MDT home: division rosters + standings, so no officer waits for them
+  ((cfg.settings || {}).divisions || []).forEach(dv => { try { if (dv.rosterTabId != null) getRosterTab_(dv.rosterTabId, true, [], false, false); } catch (e) {} });
+  try { if (((cfg.settings || {}).divisions || []).length) { const c = CacheService.getScriptCache(), ck = "div_hq_" + cfg.settings.divisions.map(x => x.id).join(",").slice(0, 200); c.remove(ck + "_n"); divOverview_(null, { username: "", role: "officer", key: "warm" }, true); } } catch (e) {}
+}
+// RUN THIS ONCE FROM THE APPS SCRIPT EDITOR after pasting a new version (pick "authorizeAll" next to Run, press Run, Allow).
+// Google asks for any permission the new code needs, then the background timers are (re)installed:
+// roster warm-up every 10 minutes, roster edits, and the On Duty check every 15 minutes when it's turned on.
+function authorizeAll() {
+  ScriptApp.getProjectTriggers(); UrlFetchApp.getRequest("https://discord.com/api/v10/gateway"); ss_().getName(); rosterBook_().getName();
+  CacheService.getScriptCache().remove("warm_trigger_ok"); ensureWarmTrigger_();
+  try { dutyTrigger_(dutyCfg_().on); } catch (e) {}
+  try { warmRosters(); } catch (e) {}
+  const t = ScriptApp.getProjectTriggers().map(x => x.getHandlerFunction());
+  Logger.log("Permissions OK. Background timers: " + t.join(", "));
+  return t;
 }
 function ensureWarmTrigger_() {
   const cache = CacheService.getScriptCache();
@@ -2154,7 +2169,7 @@ function divOverview_(allowed, me, bare) {
   const hot = out.slice().sort((a, b) => b.h24 - a.h24)[0], imp = out.map(dv => ({ id: dv.id, d: dv.week.points - dv.lastWeek.points })).sort((a, b) => b.d - a.d)[0];
   const res = { ok: true, hq: true, divisions: out, feed: feed, mvp: mvp, seasons: seasons, points: RACE_PTS_, weekStart: W, weekEnd: W + 7 * 864e5, monthStart: M, at: Date.now(),
     hot: hot && hot.h24 > 0 ? hot.id : "", improved: imp && imp.d > 0 && out.length > 1 ? { id: imp.id, by: imp.d } : null };
-  try { bigPut_(ck, JSON.stringify(res), 120); } catch (e) {}
+  try { const js = JSON.stringify(res); bigPut_(ck, js, 120); bigPut_(ck + "_last", js, 21600); } catch (e) {}   // 2 min fresh; the last good copy is kept 6 h for the MDT
   res.me = me;
   return hqExtras_(res, me, allowed);
 }
@@ -2980,7 +2995,10 @@ function officerRace_(acct) {
   try {
     const divs = ((getConfig_().settings || {}).divisions || []);
     if (!divs.length) return null;
-    const ov = divOverview_(null, { username: "", role: "officer", key: acct.id }, true), L = ov.divisions || [];
+    const ck = "div_hq_" + divs.map(x => x.id).join(",").slice(0, 200), hit = bigGet_(ck) || bigGet_(ck + "_last");   // the 10-minute timer keeps this fresh
+    let ov = null; if (hit) { try { ov = JSON.parse(hit); } catch (e) {} }
+    if (!ov) ov = divOverview_(null, { username: "", role: "officer", key: acct.id }, true);
+    const L = ov.divisions || [];
     const order = L.slice().sort((a, b) => b.week.points - a.week.points);
     const mine = divs.filter(dv => dv.rosterTabId != null && tabIds_(dv.rosterTabId, false).indexOf(acct.id) !== -1).map(dv => dv.id);
     return { weekEnd: ov.weekEnd, of: order.length, leader: order[0] ? { name: order[0].name, color: order[0].color, points: order[0].week.points } : null,
@@ -3303,7 +3321,7 @@ function dutyAdmin_() {
   const c = dutyCfg_(); let last = {}; try { last = JSON.parse(PROPS_.getProperty("DUTY_LAST") || "{}"); } catch (e) {}
   const linked = Object.keys(PROPS_.getProperties()).filter(k => /^DLINK_\d+$/.test(k)).length;
   return { on: c.on, roleId: c.roleId, roleName: c.roleName, sopRoleId: c.sopRoleId, sopCount: Object.keys(sopIds_()).length, guildId: discordStatus_().guildId, linked: linked, last: last, board: c.on && c.roleId ? dutyBoard_() : null,
-    trigger: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "dutyPoll") };
+    trigger: (() => { try { return ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === "dutyPoll"); } catch (e) { return null; } })() };
 }
 // ---- what Discord says about each connected officer: nickname, role IDs, join date (hidden "Discord Members" tab) ----
 const DMEM_SHEET_ = "Discord Members";
@@ -3981,7 +3999,7 @@ function handleAdmin_(d) {
         cfg.settings.duty = { on: !!d.on, roleId: rid, roleName: clip_(str_(d.roleName), 40), sopRoleId: sid };
         cfg.version = (Number(cfg.version) || 0) + 1; writeConfig_(cfg, me.username); return { ok: true }; });
       if (!r.ok) return r;
-      dutyTrigger_(!!d.on);
+      try { dutyTrigger_(!!d.on); } catch (e) { return { ok: true, duty: dutyAdmin_(), warn: "Saved, but Google hasn't approved the background timer yet. In Apps Script, run authorizeAll once and press Allow." }; }
       logAdmin_(me.username, "duty tracking", (d.on ? "on" : "off") + (rid ? " role " + rid : ""));
       return { ok: true, duty: dutyAdmin_() };
     }
