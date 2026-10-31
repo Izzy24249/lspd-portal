@@ -1319,3 +1319,6 @@ body[data-ftheme="teu"] .fp-acts{border-top-color:rgba(74,222,128,.25)}
 body[data-ftheme="teu"] .fp-dot{background:#4ade80}
 body[data-ftheme="teu"] .fp-prev pre::selection,body[data-ftheme="teu"] input::selection{background:rgba(74,222,128,.35)}
 .div-teu .ofc-chip{background:rgba(74,222,128,.14);border-color:rgba(74,222,128,.45)}
+/* TEU report builder: a wider page, with more of it for the builder (the preview keeps its own column) */
+body[data-ftheme="teu"] main:has(#view-form.active){max-width:1500px}
+body[data-ftheme="teu"] .fp-grid.on{grid-template-columns:minmax(0,1.7fr) minmax(360px,.8fr)}
