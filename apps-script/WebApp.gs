@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 96;
+const BACKEND_VERSION = 97;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -313,7 +313,7 @@ function callsignMap_(fresh) {
   if (!c.on || c.tabId == null) return null;
   const cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get("roster_calls"); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
-  const out = { byId: {}, byName: {}, count: 0, tab: "", error: "" };
+  const out = { byId: {}, byName: {}, nameId: {}, count: 0, tab: "", error: "" };
   try {
     const sh = rosterBook_().getSheets().find(x => x.getSheetId() === Number(c.tabId));
     if (!sh) out.error = "The main roster tab for callsigns no longer exists.";
@@ -327,7 +327,7 @@ function callsignMap_(fresh) {
       rows.forEach(m => {
         const cs = str_(m.cs); if (!cs) return;
         if (m.id) out.byId[m.id] = cs;
-        if (m.nm && nameCount[m.nm] === 1) out.byName[m.nm] = cs;
+        if (m.nm && nameCount[m.nm] === 1) { out.byName[m.nm] = cs; if (m.id) out.nameId[m.nm] = m.id; }
         out.count++;
       });
     }
@@ -338,7 +338,10 @@ function callsignMap_(fresh) {
 // "F. Duzen" + "L-104" -> "L-104 | F. Duzen" (replaces any other callsign already in front)
 function withCallsign_(p, calls) {
   if (!calls) return p.name;
-  const cs = (p.id && calls.byId[p.id]) || calls.byName[nameKey_(p.name)];
+  // by Discord ID first; by name only when that can't be a different person (both rows have an ID and they differ:
+  // e.g. a trainee "J. Smith" must not get the callsign of the J. Smith already on the Personnel roster)
+  const nk = nameKey_(p.name), other = (calls.nameId || {})[nk];
+  const cs = (p.id && calls.byId[p.id]) || (p.id && other && other !== p.id ? "" : calls.byName[nk]);
   if (!cs || p.name.indexOf(cs) === 0) return p.name;
   return cs + " | " + p.name.replace(/^\s*[A-Za-z]{1,4}\s*-?\s*\d{1,5}\s*[|·\-–]\s*/, "").trim();
 }
