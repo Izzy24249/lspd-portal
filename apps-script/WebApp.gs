@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 94;
+const BACKEND_VERSION = 95;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2886,7 +2886,9 @@ function fleetParse_(fresh) {
 function fleetFor_(rank, trainee) {
   const f = fleetParse_(false), photos = (getConfig_().settings || {}).fleetPhotos || {};
   let ri = trainee ? 0 : rankIndex_(rank); const known = ri >= 0; if (!known) ri = 0;
-  const ins = f.insignia.find(x => x.idx === ri) || null;
+  const honorary = !trainee && promoExempt_(rank);
+  if (honorary) ri = 10;                       // Honorary Officers (retired command): every command vehicle and uniform
+  const ins = honorary ? null : f.insignia.find(x => x.idx === ri) || null;   // their badge isn't a command rank's badge
   const pic = x => photos[x.key] || x.photo || "";
   return {
     rank: { idx: ri, name: rankShown_(rank, trainee) || RANKS_[ri], known: known, trainee: !!trainee },
