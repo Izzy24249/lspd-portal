@@ -1322,3 +1322,4 @@ body[data-ftheme="teu"] .fp-prev pre::selection,body[data-ftheme="teu"] input::s
 /* TEU report builder: a wider page, with more of it for the builder (the preview keeps its own column) */
 body[data-ftheme="teu"] main:has(#view-form.active){max-width:1500px}
 body[data-ftheme="teu"] .fp-grid.on{grid-template-columns:minmax(0,1.7fr) minmax(360px,.8fr)}
+.div-teu .hud-hero{gap:40px}
