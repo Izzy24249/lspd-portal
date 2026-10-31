@@ -1280,6 +1280,7 @@ a.pill.myrep i{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;
 
 /* ---------- live report preview beside a form ("preview": true) ---------- */
 .fp-grid.on{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:18px;align-items:start}
+#view-form [hidden]{display:none!important}   /* the preview panel and buttons stay hidden on forms without them */
 .fp-prev{position:sticky;top:14px;display:flex;flex-direction:column;max-height:calc(100vh - 28px);border:1px solid rgba(74,222,128,.28);background:#0b0d0a;box-shadow:0 30px 70px -40px rgba(0,0,0,.9)}
 .fp-top{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid rgba(74,222,128,.2);font:700 11px "Oswald","Barlow Condensed",sans-serif;letter-spacing:.2em;color:#86efac}
 .fp-top em{margin-left:auto;font-style:normal;color:#8f9a78}
