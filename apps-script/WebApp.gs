@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 99;
+const BACKEND_VERSION = 100;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -1462,9 +1462,11 @@ function promoAppend_(list) {
   promoClearCache_();
 }
 // "L-5##" -> /^L5\d\d$/ (letters/digits only, so "L-501", "L501" and "l 501" all match)
+// "L-5##" (any 5xx), or a list: "L-401, L-402, L-403" / "L-40#, L-41#"
 function promoRe_(pattern) {
-  const p = str_(pattern).toUpperCase().replace(/[^A-Z0-9#*]/g, "");
-  return new RegExp("^" + p.replace(/#/g, "\\d").replace(/\*/g, "[A-Z0-9]*") + "$");
+  const one = x => str_(x).toUpperCase().replace(/[^A-Z0-9#*]/g, "").replace(/#/g, "\\d").replace(/\*/g, "[A-Z0-9]*");
+  const parts = str_(pattern).split(/[,;\s]+/).map(one).filter(Boolean);
+  return new RegExp("^(?:" + (parts.length ? parts.join("|") : "") + ")$");
 }
 function promoTabId_(pc, which) {
   const id = which === "tig" ? pc.tigTabId : pc.rosterTabId, name = which === "tig" ? pc.tigTabName : pc.rosterTabName;
