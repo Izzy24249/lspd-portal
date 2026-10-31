@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 98;
+const BACKEND_VERSION = 99;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -399,7 +399,7 @@ function warmRosters(opts) {
   }
   step("form rosters", () => rostersFor_(cfg.forms, { fresh: true }));
   // promotion tracker: rank + time-in-grade columns, everyone's report counts
-  step("promotion roster", () => { const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); promoPeople_(true); });
+  step("promotion roster", () => { [PERSONNEL_TAB_, ONBOARD_TAB_].forEach(t => { const tid = rosterTabByName_(t); if (tid != null) getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); }); promoPeople_(true); });
   step("report builder", () => { CacheService.getScriptCache().remove("builder_people"); builderPeople_(); });
   step("old roster", () => { if (usesOldRoster_(cfg.forms)) getRoster_(true); });
   if (!opts.quick) {
