@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 95;
+const BACKEND_VERSION = 96;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2623,8 +2623,8 @@ function rosterTabByName_(name) {
   cache.put(ck, id == null ? "" : String(id), 21600);
   return id;
 }
-// roster tags stuck to the end of a name ("F. DuzenRM", "F. Duzen RM") aren't part of the name
-function cleanName_(n) { return str_(n).replace(/([a-z'])RM\b/g, "$1").replace(/\s+RM\b/g, "").trim(); }
+// roster tags stuck to the end of a name ("F. DuzenRM", "A. RoyRA", "F. Duzen RM") aren't part of the name
+function cleanName_(n) { return str_(n).replace(/([a-z'])R[MA]\b/g, "$1").replace(/\s+R[MA]\b/g, "").trim(); }   // roster tags RM, RA
 function rosterPerson_(id) {
   const cache = CacheService.getScriptCache(), ck = "rp_" + str_(id), hit = cache.get(ck);
   if (hit !== null) { try { return hit === "" ? null : JSON.parse(hit); } catch (e) {} }

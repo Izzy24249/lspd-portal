@@ -26,7 +26,7 @@
     const h = d.getHours(); $("watch").textContent = h >= 6 && h < 14 ? "DAY WATCH" : h >= 14 && h < 22 ? "SWING WATCH" : "NIGHT WATCH";
   }
   tick(); setInterval(tick, 1000);
-  const last = n => String(n || "").replace(/([a-z'])RM\b/g, "$1").trim().split(/\s+/).pop();
+  const last = n => String(n || "").replace(/([a-z'])R[MA]\b/g, "$1").trim().split(/\s+/).pop();
   function who(p) { return p ? ((p.title || "Officer") + " " + last(p.name)) : "Officer"; }
   function drawStrip() {
     const p = (DATA && DATA.profile) || LS.json("lspd_prof") || {};
