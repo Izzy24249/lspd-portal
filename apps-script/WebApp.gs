@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 92;
+const BACKEND_VERSION = 93;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2639,7 +2639,7 @@ function rosterPersonRead_(id) {
     try { const p = (getRosterTab_(tid, false, [RANK_COL_], false, true).people || []).find(x => x.id === id); if (p) { hit = Object.assign(split(p.name), { rank: str_(p.more && p.more[RANK_COL_]) || p.extra || "", section: p.sec || "" }); trainee = isTrainee; } } catch (e) {} };
   fromTab(PERSONNEL_TAB_, false);
   fromTab(ONBOARD_TAB_, true);
-  if (hit && trainee) hit.rank = rankShown_(hit.rank, true);
+  if (hit && trainee) { if (!hit.callsign) hit.callsign = callsignIn_(hit.rank); hit.rank = rankShown_(hit.rank, true); }
   if (hit) return Object.assign(hit, { trainee: trainee, onboarding: trainee });
   try { const p = (getRoster_(false).people || []).find(x => x.id === id); if (p) hit = Object.assign(split(p.name), { rank: p.extra || "" }); } catch (e) {}
   try { programs_().forEach(pc => { if (!pc.on) return; const c = promoCandidates_(false, pc.id).list.find(x => x.id === id); if (c) { if (!hit) hit = { callsign: c.callsign, name: cleanName_(c.name), rank: "" }; if (/onboard|recruit|cadet|trainee|probation/i.test(pc.id + " " + pc.title + " " + (pc.rosterTabName || ""))) trainee = true; } }); } catch (e) {}
@@ -2804,6 +2804,7 @@ function rankIndex_(t) {
 // the rank to show for someone: their roster rank as written ("Division Chief", "Head Lieutenant");
 // onboarding officers' rank column holds their name, so they show as "Police Officer (Onboarding)"
 const ONBOARD_RANK_ = "Police Officer (Onboarding)";
+function callsignIn_(t) { const seg = str_(t).split("|").map(x => x.trim()).find(x => /^[A-Za-z]{1,4}\s*-\s*\d{1,5}$/.test(x)); return seg ? seg.replace(/\s+/g, "") : ""; }
 function rankShown_(t, trainee) {
   const x = str_(t).replace(/\s+/g, " ");
   if (trainee) return !x || /\|/.test(x) || rankIndex_(x) !== 0 ? ONBOARD_RANK_ : x;
@@ -2999,7 +3000,7 @@ function promoPeopleRead_() {
       const idx = pair[1] ? 0 : rankIndex_(str_(p.more && p.more[RANK_COL_]) || p.extra || "");
       const raw = str_(p.more && p.more[TIG_COL_]).trim(); let since = 0;
       if (/^\d{1,4}$/.test(raw)) since = now - Number(raw) * 864e5; else if (raw) { const d = new Date(raw); if (!isNaN(d)) since = d.getTime(); }
-      out.push({ id: p.id, callsign: cs, name: name, rank: pair[1] ? rankShown_(p.more && p.more[RANK_COL_], true) : str_(p.more && p.more[RANK_COL_]), idx: idx, trainee: pair[1], since: since });
+      out.push({ id: p.id, callsign: cs || (pair[1] ? callsignIn_(p.more && p.more[RANK_COL_]) : ""), name: name, rank: pair[1] ? rankShown_(p.more && p.more[RANK_COL_], true) : str_(p.more && p.more[RANK_COL_]), idx: idx, trainee: pair[1], since: since });
     });
   });
   // reports that credit each officer
