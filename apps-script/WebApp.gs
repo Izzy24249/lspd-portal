@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 90;
+const BACKEND_VERSION = 91;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -411,8 +411,12 @@ function warmRosters(opts) {
 // Google asks for any permission the new code needs, then the background timers are (re)installed:
 // roster warm-up every 10 minutes, roster edits, and the On Duty check every 15 minutes when it's turned on.
 function authorizeAll() {
+  // Google's permission screen has a checkbox per permission: this asks for ALL of them (tick "Select all" and Allow)
+  try { ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL); } catch (e) {}
   const a = SpreadsheetApp.getActiveSpreadsheet(); if (a && a.getSheetByName(CONFIG_SHEET_)) PROPS_.setProperty("PORTAL_SS_ID", a.getId());
   ScriptApp.getProjectTriggers(); UrlFetchApp.getRequest("https://discord.com/api/v10/gateway"); ss_().getName(); rosterBook_().getName();
+  const doc = promoDocId_(promoDocUrl_()); if (doc) DocumentApp.openById(doc).getName();     // Promotion Guidelines doc (Docs permission)
+  try { promoReqParse_(true); } catch (e) {}                                                  // reload the promotion requirements now
   CacheService.getScriptCache().remove("warm_trigger_ok"); ensureWarmTrigger_();
   try { dutyTrigger_(dutyCfg_().on); } catch (e) {}
   try { warmRosters({ budget: 3 * 60000 }); } catch (e) {}
