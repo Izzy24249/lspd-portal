@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 89;
+const BACKEND_VERSION = 90;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -511,7 +511,8 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
   const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
   const statusCols = head.map((h, i) => /status|state|active|standing/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
   let inOutSection = false, section = "";
-  const checkHidden = shown.length - hr <= 400;      // per-row hidden checks are slow; skip them on very long tabs
+  const checkHidden = shown.length - hr <= 400;      // hidden rows = left the department (skipped on very long tabs)
+  const hiddenRows = checkHidden ? hiddenRowsOf_(sh, shown.length) : {};
   for (let i = hr + 1; i < shown.length; i++) {
     const filled = shown[i].filter(c => str_(c)).length;
     const noId = !(idCol >= 0 && str_(shown[i][idCol])), noCall = !(callCol >= 0 && callKey_(shown[i][callCol]));
@@ -525,7 +526,7 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
     if (!filled) continue;
     const why = inOutSection || statusCols.some(c => isOut(shown[i][c])) ||
       (lines && lines[i] && (lines[i][nameCol] === "line-through" || (callCol >= 0 && lines[i][callCol] === "line-through"))) ||
-      (checkHidden && (sh.isRowHiddenByUser(i + 1) || sh.isRowHiddenByFilter(i + 1)));
+      !!hiddenRows[i];
     if (why) { info.left++; continue; }
     const nm = str_(shown[i][nameCol]), cs = callCol >= 0 ? str_(shown[i][callCol]) : "";
     const name = cs && nm ? (nm.indexOf(cs) === -1 ? cs + " | " + nm : nm) : (nm || cs);   // "L-104 | Duzen"
@@ -541,6 +542,26 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
     if (!id) info.noId++;
   }
   return rows;
+}
+// which rows of a tab are hidden ({ rowIndex0: 1 }). One request to the Sheets API for the whole tab; asking
+// SpreadsheetApp row by row took two calls per row (minutes on a big roster). Falls back to row-by-row, capped at 20 s.
+function hiddenRowsOf_(sh, n) {
+  const out = {};
+  try {
+    const id = sh.getParent().getId(), rng = "'" + sh.getName().replace(/'/g, "''") + "'!A1:A" + n;
+    const r = UrlFetchApp.fetch("https://sheets.googleapis.com/v4/spreadsheets/" + id + "?ranges=" + encodeURIComponent(rng) + "&fields=" + encodeURIComponent("sheets(data(rowMetadata(hiddenByUser,hiddenByFilter)))"),
+      { headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) {
+      const md = ((((JSON.parse(r.getContentText()).sheets || [])[0] || {}).data || [])[0] || {}).rowMetadata || [];
+      md.forEach((m, i) => { if (m && (m.hiddenByUser || m.hiddenByFilter)) out[i] = 1; });
+      return out;
+    }
+    console.log("hidden rows: Sheets API answered " + r.getResponseCode() + " " + clip_(r.getContentText(), 200));
+  } catch (e) { console.log("hidden rows: " + errMsg_(e)); }
+  const t0 = Date.now(); let filter = true; try { filter = !!sh.getFilter(); } catch (e) {}
+  for (let i = 1; i < n; i++) { if (Date.now() - t0 > 20000) { console.log("hidden rows: row-by-row check stopped at row " + i + " of " + sh.getName()); break; }
+    if (sh.isRowHiddenByUser(i + 1) || (filter && sh.isRowHiddenByFilter(i + 1))) out[i] = 1; }
+  return out;
 }
 // "L-104 | Duzen" -> "L104";  "Duzen" -> ""
 function callKey_(t) { const m = /\b([A-Za-z]{1,4})\s*-?\s*(\d{1,5})\b/.exec(String(t || "")); return m ? (m[1] + m[2]).toUpperCase() : ""; }
