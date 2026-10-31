@@ -555,20 +555,20 @@
     const rows = list.map(o => {
       const key = o.id || (o.callsign + "|" + o.name);
       const cells = o.items.map(it => {
-        const ref = esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1");
-        if (it.done) return '<span class="pb-c ok' + (can && it.manual ? " can" : " auto") + '"' + (can && it.manual ? ' data-tcheck="' + ref + '"' : "") + ' title="' + esc(it.manual ? "Signed off by " + it.by : "Counted automatically") + '">✓</span>';
+        if (it.done) return '<span class="pb-c ok" title="' + esc(it.manual ? "Signed off by " + it.by : "Counted automatically") + '">✓</span>';
         if (it.auto === "tig" || it.auto === "reports") { const have = it.have == null ? 0 : it.have, need = Math.max(1, it.need);
-          return '<span class="pb-c part' + (can ? " can" : "") + '"' + (can ? ' data-tcheck="' + ref + '"' : "") + ' title="' + esc(it.auto === "tig" ? (it.have == null ? "No TIG date on the roster" : have + " of " + it.need + " days") : have + " of " + it.need + " reports") + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + (it.auto === "tig" ? (it.have == null ? "—" : have + "d") : have + "/" + it.need) + "</span>"; }
-        return '<span class="pb-c zero' + (can ? " can" : "") + '"' + (can ? ' data-tcheck="' + ref + '"' : "") + ' title="' + (can ? "Tap to sign off" : "Not done yet") + '">·</span>';
+          return '<span class="pb-c part" title="' + esc(it.auto === "tig" ? (it.have == null ? "No TIG date on the roster" : have + " of " + it.need + " days") : have + " of " + it.need + " reports") + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + (it.auto === "tig" ? (it.have == null ? "—" : have + "d") : have + "/" + it.need) + "</span>"; }
+        return '<span class="pb-c zero" title="Not done yet">·</span>';
       });
       const tigNeed = r.tig || 0, chip = o.tigDays == null ? { txt: "TIG —", ok: false } : { txt: "TIG " + o.tigDays + "d", ok: !tigNeed || o.tigDays >= tigNeed };
       const detail = '<div class="pb-detail">' + o.items.map((it, i) => '<div class="pd-item' + (it.done ? " ok" : "") + '"><div class="pd-h"><span class="pd-n">' + (i + 1) + "</span><b>" + reqText(it.t) + "</b><em>" + (it.done ? "Done" : "Open") + "</em></div><p>" +
         (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)." : it.have + " of " + it.need + " days.") : it.auto === "reports" ? it.have + " of " + it.need + " reports since reaching this rank." : it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord." : "No SOP Certified role in Discord yet.") : "") +
         (it.manual ? " Signed off by " + esc(it.by) + (it.at ? " on " + new Date(it.at).toLocaleDateString() : "") + "." : !it.auto && !it.done ? " Command signs this off." : "") + "</p>" +
-        (can && (!it.done || it.manual) ? '<button class="btn ghost" data-tcheck="' + esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1") + '">' + (it.done ? "UNDO SIGN-OFF" : "SIGN OFF") + "</button>" : "") + "</div>").join("") + "</div>";
+        (can ? (it.done && !it.manual ? '<span class="pd-check auto"><i>✓</i>Counted automatically</span>'
+          : '<button class="pd-check' + (it.done ? " on" : "") + '" data-tcheck="' + esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1") + '"><i>' + (it.done ? "✓" : "") + "</i>" + (it.done ? "Signed off · tap to undo" : "Tick to sign off") + "</button>") : "") + "</div>").join("") + "</div>";
       return { key: key, callsign: o.callsign, name: o.name, me: !!o.me, chip: chip, cells: cells, done: o.done, total: o.total, ready: !!o.ready, detail: detail };
     });
-    return boardHTML({ kick: "Promotion tracker", title: r.name + " → " + r.next, sub: "From the LSPD Promotion Guidelines. Time in grade, reports and the SOP role tick themselves" + (can ? "; tap a box to sign off the rest." : "; command signs off the rest."),
+    return boardHTML({ kick: "Promotion tracker", title: r.name + " → " + r.next, sub: "From the LSPD Promotion Guidelines. Time in grade, reports and the SOP role tick themselves" + (can ? "; open a row to sign off the rest." : "; command signs off the rest."),
       noun: "Officer", readyWord: "Ready", tasks: tasks, rows: rows, foot: r.tig ? "Requires " + r.tig + " days time in grade." : "" });
   }
   // a Training Progression program (Onboarding, CPL -> SGT…) -> board (read-only: it fills itself from reports)
@@ -601,7 +601,8 @@
     let h = '<div class="h2"><div><h1>PROMOTION TRACKER</h1><p>Where everyone stands on their next step. Your own row is marked <b style="color:var(--amber)">YOU</b> and listed first.</p></div><button class="btn ghost" data-trefresh>↻ REFRESH</button></div>';
     if (!TRACK) { loadTrack(); return h + '<div class="boot"><i></i>LOADING THE TRACKER…</div>'; }
     if (!TRACK.ok) return h + '<div class="empty">' + esc(TRACK.error || "Couldn't load the tracker.") + "</div>";
-    const ranks = (TRACK.ranks || []).filter(r => (TRACK.officers || []).some(o => o.listed && o.idx === r.idx)), progs = TRACK.programs || [];
+    const ranks = (TRACK.ranks || []).filter(r => (TRACK.officers || []).some(o => o.listed && o.idx === r.idx));
+    const progs = (TRACK.programs || []).slice().sort((a, b) => (b.id === "onboard") - (a.id === "onboard"));   // Onboarding first
     const meO = (TRACK.officers || []).find(o => o.me), myProg = ((DATA && DATA.paths) || [])[0];
     const tabs = ranks.map(r => ({ k: "r:" + r.idx, label: r.name + " → " + r.next, n: (TRACK.officers || []).filter(o => o.listed && o.idx === r.idx).length, mine: !!(meO && meO.listed && meO.idx === r.idx) }))
       .concat(progs.map(p => ({ k: "p:" + p.id, label: p.title, prog: true, mine: !!(myProg && myProg.id === p.id) })));
