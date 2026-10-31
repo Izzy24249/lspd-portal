@@ -108,7 +108,7 @@
 
   // ---------- router ----------
   const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker"];
-  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["COMMAND", "Promotion tracker"] };
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["DEPARTMENT", "Promotion tracker"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
   function go(v) { VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
@@ -475,6 +475,7 @@
         ((DATA.paths || []).length ? '<a class="pr-track" data-go="home">Your tracked progress is on the dashboard →</a>' : "") + "</section>";
     } else if (exempt) { /* shown above */ } else if (mine >= 0) h += '<section class="pr-next top"><div class="pr-kick">YOUR RANK</div><div class="pr-path"><b>' + esc(rk.name) + '</b></div><p class="pr-none">The guidelines don\'t list requirements for your rank. Promotions from here are at High Command\'s discretion.</p></section>';
     else h += '<div class="pr-notes"><p>Your rank isn\'t in column B of the roster, so nothing is marked for you. Ask command to fix your roster entry.</p></div>';
+    h += '<a class="pr-track" data-go="tracker" style="display:inline-block;margin:0 0 14px">See where everyone stands in the Promotion tracker →</a>';
     if ((L.notes || []).length) h += '<div class="pr-notes">' + L.notes.map(n => "<p>💬 " + esc(n) + "</p>").join("") + "</div>";
     let grp = null;
     h += '<div class="pr-ladder">' + ranks.map(r => {
@@ -488,55 +489,138 @@
     return h;
   }
   // ---------- promotion tracker (command): every officer's checklist for their current rank ----------
-  let TRACK = null, TRACK_Q = "", TRACK_RANK = "", TRACK_READY = false, TRACK_OPEN = {}, TRACK_BUSY = false;
+  // ---------- promotion tracker: one grid per rank (from the Promotion Guidelines doc) + the Training Progression programs ----------
+  // same look as the forms page's progression boards: a column per requirement, check marks, TIG days, progress bar
+  let TRACK = null, TRK_TAB = LS.get("mdt:trkTab") || "", TRK_Q = "", TRK_F = "all", TRK_SORT = LS.get("mdt:trkSort") || "callsign", TRK_OPEN = {}, TRK_BUSY = false, PROGS = {};
   const isCommand = () => { const lv = ((DATA && DATA.profile) || LS.json("lspd_prof") || {}).level; return ["command", "admin", "owner"].indexOf(lv) !== -1; };
   async function loadTrack() { const r = await Portal.post({ action: "promoBoard", session: SESSION }).catch(() => ({ ok: false, error: "Couldn't reach the server." })); TRACK = r; if (VIEW === "tracker") draw(); }
-  function trackHTML() {
-    let h = '<div class="h2"><div><h1>PROMOTION TRACKER</h1><p>Every officer\'s checklist for their current rank, from the Promotion Guidelines. Time in grade and report counts tick themselves (division reports count); tick the rest when it\'s done.</p></div>' +
-      '<button class="btn ghost" data-trefresh>↻ REFRESH</button></div>';
-    if (!isCommand()) return h + '<div class="empty">The promotion tracker is for command staff.</div>';
-    if (!TRACK) { loadTrack(); return h + '<div class="boot"><i></i>LOADING THE TRACKER…</div>'; }
-    if (!TRACK.ok) return h + '<div class="empty">' + esc(TRACK.error || "Couldn't load the tracker.") + "</div>";
-    const all = TRACK.officers || [], listed = all.filter(o => o.listed), q = TRACK_Q.toLowerCase().trim();
-    const ready = listed.filter(o => o.ready).length, close = listed.filter(o => !o.ready && o.total && o.done / o.total >= .6).length;
-    h += '<div class="stats" style="margin-bottom:14px"><div class="stat"><small>Ready for promotion</small><b style="color:var(--green)">' + ready + "</b><em>every box ticked</em></div>" +
-      '<div class="stat a"><small>Almost there</small><b>' + close + "</b><em>60% or more done</em></div>" +
-      '<div class="stat"><small>Officers tracked</small><b>' + listed.length + "</b><em>" + all.filter(o => !o.listed && !o.exempt).length + " with no listed requirements" + (all.some(o => o.exempt) ? " · " + all.filter(o => o.exempt).length + " honorary (exempt)" : "") + "</em></div></div>";
-    h += '<div class="pen-bar"><label class="pen-search"><svg><use href="#i-search"/></svg><input id="trackQ" placeholder="Search callsign or name…" value="' + esc(TRACK_Q) + '" autocomplete="off"></label>' +
-      '<select class="tr-sel" id="trackRank"><option value="">All ranks</option>' + (TRACK.ranks || []).map(r => '<option value="' + r.idx + '"' + (String(r.idx) === TRACK_RANK ? " selected" : "") + ">" + esc(r.name) + "</option>").join("") + "</select>" +
-      '<div class="seg"><button data-tready="0" class="' + (TRACK_READY ? "" : "on") + '">Everyone</button><button data-tready="1" class="' + (TRACK_READY ? "on" : "") + '">Ready · ' + ready + "</button></div></div>";
-    const shown = listed.filter(o => (!q || (o.callsign + " " + o.name).toLowerCase().indexOf(q) !== -1) && (!TRACK_RANK || String(o.idx) === TRACK_RANK) && (!TRACK_READY || o.ready));
-    if (!shown.length) return h + '<div class="empty">No officers match.</div>';
-    (TRACK.ranks || []).slice().reverse().forEach(r => {
-      const list = shown.filter(o => o.idx === r.idx).sort((a, b) => b.ready - a.ready || (b.done / (b.total || 1)) - (a.done / (a.total || 1)) || (a.callsign || "~").localeCompare(b.callsign || "~", undefined, { numeric: true }));
-      if (!list.length) return;
-      h += '<div class="tr-head"><b>' + esc(r.label) + '</b><span>→ ' + esc(r.next) + (r.tig ? " · " + r.tig + " TIG" : "") + "</span><em>" + list.filter(o => o.ready).length + " / " + list.length + " ready</em></div>";
-      h += '<div class="tr-list">' + list.map(o => {
-        const pct = Math.round(o.done / Math.max(1, o.total) * 100), open = !!TRACK_OPEN[o.id];
-        return '<details class="tr-row' + (o.ready ? " ready" : "") + '" data-tid="' + esc(o.id) + '"' + (open ? " open" : "") + '><summary><span class="cs">' + esc(o.callsign || "—") + '</span><div class="nm"><b>' + esc(o.name) + "</b><small>" + esc(o.rank) +
-          (o.tigDays != null ? " · " + o.tigDays + " days in grade" : " · no TIG date") + " · " + o.reports + " report" + (o.reports === 1 ? "" : "s") + '</small></div><div class="tr-bar"><i style="width:' + pct + '%"></i></div><span class="tr-n">' + o.done + "/" + o.total + "</span>" +
-          (o.ready ? '<span class="tr-ready">READY</span>' : "") + "</summary><div class=\"tr-items\">" + o.items.map(it =>
-            '<button class="tr-it' + (it.done ? " on" : "") + '" data-tcheck="' + esc(o.id) + '|' + esc(it.key) + '|' + (it.manual ? "0" : "1") + '"' + (it.done && !it.manual ? ' title="Counted automatically"' : "") + '><span class="bx">' + (it.done ? "✓" : "") + "</span><span class=\"tx\">" + esc(it.t) +
-            "<small>" + (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)" : it.have + " / " + it.need + " days") + (it.done && !it.manual ? " · counted automatically" : "") :
-              it.auto === "reports" ? it.have + " / " + it.need + " reports since reaching this rank" + (it.done && !it.manual ? " · counted automatically" : "") :
-              it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord" : "No SOP Certified role in Discord yet (checked every 15 min, once they've connected Discord)") : "") +
-            (it.manual ? (it.auto ? " · " : "") + "Signed off by " + esc(it.by) + (it.at ? " · " + new Date(it.at).toLocaleDateString() : "") : (!it.auto && !it.done ? "Tick when done" : "")) + "</small></span></button>").join("") + "</div></details>";
-      }).join("") + "</div>";
-    });
+  async function loadProg(id) {
+    try { const r = await fetch(Portal.ENDPOINT + "?action=promo&p=" + encodeURIComponent(id) + "&t=" + Date.now()); const j = await r.json(); PROGS[id] = j.ok ? j.promo : { error: j.error || "Couldn't load it." }; }
+    catch (e) { PROGS[id] = { error: "Couldn't reach the server." }; }
+    if (VIEW === "tracker") draw();
+  }
+  // "Officer Must Complete & Pass Basic Police Training" -> "Complete & Pass Basic"
+  function reqShort(it) {
+    if (it.auto === "tig") return "Time in grade";
+    if (it.auto === "reports") return it.need + " reports";
+    if (it.auto === "sop") return "SOP certified";
+    const t = String(it.t || "");
+    if (/hours?\s+logged/i.test(t)) { const h = /\((\d+)\)\s*hours/i.exec(t), d = /\((\d+)\)\s*days/i.exec(t); return (h ? h[1] + " hrs" : "Hours") + (d ? " / " + d[1] + "d" : ""); }
+    const x = t.replace(/^.*?\bmust\b\s*/i, "").replace(/\(.*?\)/g, " ");
+    const w = x.split(/\s+/).filter(v => v && !/^(a|an|the|of|with|within|by|to|and|&|in|on|for|be|have|has|complete|pass|must|officer|department|lspd|los|santos|police)$/i.test(v)).slice(0, 3).join(" ");
+    return w || t.slice(0, 18);
+  }
+  const trkByCall = (a, b) => (a.callsign || "~").localeCompare(b.callsign || "~", undefined, { numeric: true }) || String(a.name).localeCompare(String(b.name));
+  // one board from a common shape: { kick, title, sub, noun, readyWord, tasks:[{short,title,sub}], rows:[...] , foot }
+  function boardHTML(M) {
+    const q = TRK_Q.toLowerCase().trim(), rows = M.rows.slice();
+    if (TRK_SORT === "progress") rows.sort((a, b) => (b.ready - a.ready) || (b.done / Math.max(1, b.total) - a.done / Math.max(1, a.total)) || trkByCall(a, b)); else rows.sort(trkByCall);
+    const mine = rows.filter(r => r.me); const rest = rows.filter(r => !r.me); const ordered = mine.concat(rest);
+    const shown = ordered.filter(r => (TRK_F === "all" || (TRK_F === "ready" ? r.ready : !r.ready)) && (!q || (r.callsign + " " + r.name).toLowerCase().indexOf(q) !== -1));
+    const ready = rows.filter(r => r.ready).length, avg = rows.length ? Math.round(rows.reduce((n, r) => n + r.done / Math.max(1, r.total), 0) / rows.length * 100) : 0;
+    const T = M.tasks, nouns = M.noun + (/s$/i.test(M.noun) ? "" : "s");
+    let h = '<header class="pb-head"><div class="pb-title"><div class="pb-rank"><svg viewBox="0 0 40 40"><path d="M8 14l12-7 12 7M8 21l12-7 12 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="M8 28l12-7 12 7" fill="none" stroke="var(--amber)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 5"/></svg></div>' +
+      '<div><span class="pb-kick">' + esc(M.kick) + "</span><h1>" + esc(M.title) + "</h1>" + (M.sub ? "<p>" + esc(M.sub) + "</p>" : "") + "</div></div>" +
+      '<dl class="pb-stats"><div><dt>' + esc(nouns) + "</dt><dd>" + rows.length + '</dd></div><div><dt>' + esc(M.readyWord) + '</dt><dd class="g">' + ready + "</dd></div><div><dt>Average</dt><dd>" + avg + "%</dd></div></dl></header>";
+    h += '<div class="pb-tools"><input id="trkQ" placeholder="Search callsign or name" value="' + esc(TRK_Q) + '" autocomplete="off">' +
+      '<label class="pb-sort" style="color:var(--mute);font-size:12px">Order <select id="trkSort" class="tr-sel">' + [["callsign", "Callsign"], ["progress", "Progress"]].map(o => '<option value="' + o[0] + '"' + (TRK_SORT === o[0] ? " selected" : "") + ">" + o[1] + "</option>").join("") + "</select></label>" +
+      '<div class="seg">' + [["all", "All"], ["prog", "In progress"], ["ready", M.readyWord]].map(o => '<button data-trkf="' + o[0] + '" class="' + (TRK_F === o[0] ? "on" : "") + '">' + o[1].toUpperCase() + "</button>").join("") + "</div></div>";
+    if (M.error) h += '<div class="empty" style="margin-bottom:12px">' + esc(M.error) + "</div>";
+    h += '<div class="pb-scroll"><div class="pb-board" style="--cols:' + Math.max(1, T.length) + '"><div class="pb-row pb-th"><span class="pb-who">' + esc(M.noun) + "</span>" +
+      T.map((t, i) => '<span class="pb-task" title="' + esc(t.title) + '"><b>' + (i + 1) + "</b><small>" + esc(t.short) + "</small></span>").join("") + '<span class="pb-prog">Progress</span></div>';
+    h += shown.length ? shown.map(r => {
+      const open = !!TRK_OPEN[r.key];
+      return '<div class="pb-item' + (r.ready ? " ready" : "") + (r.me ? " me" : "") + (open ? " open" : "") + '"><div class="pb-row" data-trow="' + esc(r.key) + '">' +
+        '<span class="pb-who">' + (r.callsign ? "<code>" + esc(r.callsign) + "</code>" : "") + '<span class="nm">' + esc(r.name) + "</span>" + (r.me ? '<span class="you">YOU</span>' : "") + (r.chip ? '<span class="tg' + (r.chip.ok ? " ok" : "") + '">' + esc(r.chip.txt) + "</span>" : "") + "</span>" +
+        r.cells.map((c, i) => '<span class="pb-cell" data-n="' + (i + 1) + '">' + c + "</span>").join("") +
+        '<span class="pb-prog">' + (r.dl || "") + (r.ready ? '<span class="rd" style="font-size:.58rem;font-weight:800;letter-spacing:.12em;color:#06210f;background:var(--green);border-radius:4px;padding:2px 6px">' + esc(M.readyWord.toUpperCase()) + "</span>" : "") +
+        '<span class="bar"><i style="width:' + Math.round(r.done / Math.max(1, r.total) * 100) + '%"></i></span><b>' + r.done + "/" + r.total + "</b></span></div>" + (open ? r.detail : "") + "</div>";
+    }).join("") : '<div class="pb-empty">' + (rows.length ? "No one matches." : "No " + esc(nouns.toLowerCase()) + " at this step right now.") + "</div>";
+    h += "</div></div>";
+    if (T.length) h += '<ol class="pb-legend">' + T.map(t => "<li><span>" + esc(t.title) + "</span>" + (t.sub ? "<b>" + esc(t.sub) + "</b>" : "") + "</li>").join("") + "</ol>";
+    if (M.foot) h += '<p class="promo-upd">' + M.foot + "</p>";
     return h;
   }
-  document.addEventListener("toggle", e => { const d = e.target; if (d && d.dataset && d.dataset.tid != null) TRACK_OPEN[d.dataset.tid] = d.open; }, true);
-  document.addEventListener("input", e => { if (e.target.id === "trackQ") { TRACK_Q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("trackQ"); n.focus(); n.setSelectionRange(pos, pos); } });
-  document.addEventListener("change", e => { if (e.target.id === "trackRank") { TRACK_RANK = e.target.value; draw(); } });
+  // a rank from the guidelines doc -> board
+  function rankBoard(r) {
+    const can = !!TRACK.canTick, list = (TRACK.officers || []).filter(o => o.listed && o.idx === r.idx);
+    const items0 = (list[0] && list[0].items) || (r.reqs || []).map(t => ({ t: t.t }));
+    const tasks = items0.map(it => ({ short: reqShort(it), title: it.t, sub: it.auto === "tig" ? it.need + " days" : it.auto === "reports" ? "×" + it.need : it.auto === "sop" ? "Discord role" : "" }));
+    const rows = list.map(o => {
+      const key = o.id || (o.callsign + "|" + o.name);
+      const cells = o.items.map(it => {
+        const ref = esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1");
+        if (it.done) return '<span class="pb-c ok' + (can && it.manual ? " can" : " auto") + '"' + (can && it.manual ? ' data-tcheck="' + ref + '"' : "") + ' title="' + esc(it.manual ? "Signed off by " + it.by : "Counted automatically") + '">✓</span>';
+        if (it.auto === "tig" || it.auto === "reports") { const have = it.have == null ? 0 : it.have, need = Math.max(1, it.need);
+          return '<span class="pb-c part' + (can ? " can" : "") + '"' + (can ? ' data-tcheck="' + ref + '"' : "") + ' title="' + esc(it.auto === "tig" ? (it.have == null ? "No TIG date on the roster" : have + " of " + it.need + " days") : have + " of " + it.need + " reports") + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + (it.auto === "tig" ? (it.have == null ? "—" : have + "d") : have + "/" + it.need) + "</span>"; }
+        return '<span class="pb-c zero' + (can ? " can" : "") + '"' + (can ? ' data-tcheck="' + ref + '"' : "") + ' title="' + (can ? "Tap to sign off" : "Not done yet") + '">·</span>';
+      });
+      const tigNeed = r.tig || 0, chip = o.tigDays == null ? { txt: "TIG —", ok: false } : { txt: "TIG " + o.tigDays + "d", ok: !tigNeed || o.tigDays >= tigNeed };
+      const detail = '<div class="pb-detail">' + o.items.map((it, i) => '<div class="pd-item' + (it.done ? " ok" : "") + '"><div class="pd-h"><span class="pd-n">' + (i + 1) + "</span><b>" + esc(it.t) + "</b><em>" + (it.done ? "Done" : "Open") + "</em></div><p>" +
+        (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)." : it.have + " of " + it.need + " days.") : it.auto === "reports" ? it.have + " of " + it.need + " reports since reaching this rank." : it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord." : "No SOP Certified role in Discord yet.") : "") +
+        (it.manual ? " Signed off by " + esc(it.by) + (it.at ? " on " + new Date(it.at).toLocaleDateString() : "") + "." : !it.auto && !it.done ? " Command signs this off." : "") + "</p>" +
+        (can && (!it.done || it.manual) ? '<button class="btn ghost" data-tcheck="' + esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1") + '">' + (it.done ? "UNDO SIGN-OFF" : "SIGN OFF") + "</button>" : "") + "</div>").join("") + "</div>";
+      return { key: key, callsign: o.callsign, name: o.name, me: !!o.me, chip: chip, cells: cells, done: o.done, total: o.total, ready: !!o.ready, detail: detail };
+    });
+    return boardHTML({ kick: "Promotion tracker", title: r.name + " → " + r.next, sub: "From the LSPD Promotion Guidelines. Time in grade, reports and the SOP role tick themselves" + (can ? "; tap a box to sign off the rest." : "; command signs off the rest."),
+      noun: (r.name || "Officer").replace(/\s*\(.*\)$/, ""), readyWord: "Ready", tasks: tasks, rows: rows, foot: r.tig ? "Requires " + r.tig + " days time in grade." : "" });
+  }
+  // a Training Progression program (Onboarding, CPL -> SGT…) -> board (read-only: it fills itself from reports)
+  function progBoard(id) {
+    const P = PROGS[id]; if (!P) { loadProg(id); return '<div class="boot"><i></i>LOADING…</div>'; }
+    if (P.error && !P.candidates) return '<div class="empty">' + esc(P.error) + "</div>";
+    const T = P.tasks || [], me = DATA && DATA.profile || {};
+    const short = t => String(t.title || "").replace(/Global Operation Manual/i, "GOM").replace(/^(Witness|Lead|Complete|Do)\s+(a|an)?\s*/i, m => m.split(" ")[0] + " ");
+    const fmtDl = d => d ? new Date(d + "T12:00:00").toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+    const rows = (P.candidates || []).map(c => {
+      const cells = T.map(t => { const st = c.tasks[t.id] || { count: 0, need: t.need };
+        if (st.excused) return '<span class="pb-c ex" title="Excused">EX</span>';
+        if (st.done) return '<span class="pb-c ok" title="Done">✓</span>';
+        if (st.locked) return '<span class="pb-c lk" title="Locked until the other requirements are done"><svg viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3.5" y="7" width="9" height="7" rx="1.5" fill="currentColor"/></svg></span>';
+        if (!st.count) return '<span class="pb-c zero" title="Not started">·</span>';
+        return '<span class="pb-c part" title="' + st.count + " of " + st.need + '"><i style="--p:' + Math.round(st.count / st.need * 100) + '%"></i>' + st.count + "/" + st.need + "</span>"; });
+      const d = c.deadline, dl = d && d.state !== "done" && !c.complete ? '<span class="tg" style="font-size:.66rem;padding:2px 8px;border-radius:999px;border:1px solid ' + (d.state === "over" ? "var(--red);color:var(--red)" : d.state === "warn" ? "var(--amber);color:var(--amber)" : "var(--line2);color:var(--mute)") + '" title="Deadline ' + esc(fmtDl(d.date)) + '">' + (d.state === "over" ? "Out of time" : d.left === 1 ? "1 day left" : d.left + " days left") + "</span>" : "";
+      const chip = P.tigDays || P.showTig ? { txt: P.id === "cpl" || !P.tigLabel ? (c.tig == null ? "TIG —" : "TIG " + c.tig + "d") : (c.tig == null ? "Joined —" : "Joined " + (c.tig === 0 ? "today" : c.tig + "d ago")), ok: !!(c.tigOk || !P.tigDays) } : null;
+      const detail = '<div class="pb-detail">' + T.map((t, i) => { const st = c.tasks[t.id] || { count: 0, need: t.need, items: [] };
+        return '<div class="pd-item' + (st.done ? " ok" : "") + '"><div class="pd-h"><span class="pd-n">' + (i + 1) + "</span><b>" + esc(t.title) + "</b><em>" + (st.excused ? "Excused" : st.done ? "Complete" : st.locked ? "Locked" : st.count + " of " + st.need) + "</em></div>" +
+          ((st.items || []).length ? "<ul>" + st.items.map(x => "<li>" + esc(fmtDl(x.date)) + " · " + esc(x.source) + (x.report ? " <code>" + esc(x.report) + "</code>" : "") + (x.count > 1 ? " ×" + x.count : "") + "</li>").join("") + "</ul>" : "<p>Nothing logged yet.</p>") + "</div>"; }).join("") + "</div>";
+      const mine = (me.callsign && c.callsign === me.callsign) || (!me.callsign && me.name && c.name === me.name);
+      return { key: "p:" + (c.callsign || c.name), callsign: c.callsign, name: c.name, me: !!mine, chip: chip, cells: cells, done: c.done, total: c.total, ready: !!c.complete, dl: dl, detail: detail };
+    });
+    return boardHTML({ kick: "Training progression", title: P.title, sub: P.subtitle, noun: P.noun || "Person", readyWord: P.id === "cpl" ? "Ready" : "Complete", error: P.error,
+      tasks: T.map(t => ({ short: short(t), title: t.title, sub: "×" + t.need + (t.freshDays ? " in " + t.freshDays + "d" : "") })), rows: rows,
+      foot: (P.tigDays ? "Final step requires " + P.tigDays + " days time in grade. " : "") + (P.deadlineDays ? "Requirements must be finished within " + P.deadlineDays + " days of joining. " : "") + "Fills itself when reports are filed." });
+  }
+  function trackHTML() {
+    let h = '<div class="h2"><div><h1>PROMOTION TRACKER</h1><p>Where everyone stands on their next step. Your own row is marked <b style="color:var(--amber)">YOU</b> and listed first.</p></div><button class="btn ghost" data-trefresh>↻ REFRESH</button></div>';
+    if (!TRACK) { loadTrack(); return h + '<div class="boot"><i></i>LOADING THE TRACKER…</div>'; }
+    if (!TRACK.ok) return h + '<div class="empty">' + esc(TRACK.error || "Couldn't load the tracker.") + "</div>";
+    const ranks = (TRACK.ranks || []).filter(r => (TRACK.officers || []).some(o => o.listed && o.idx === r.idx)), progs = TRACK.programs || [];
+    const meO = (TRACK.officers || []).find(o => o.me), myProg = ((DATA && DATA.paths) || [])[0];
+    const tabs = ranks.map(r => ({ k: "r:" + r.idx, label: r.name + " → " + r.next, n: (TRACK.officers || []).filter(o => o.listed && o.idx === r.idx).length, mine: !!(meO && meO.listed && meO.idx === r.idx) }))
+      .concat(progs.map(p => ({ k: "p:" + p.id, label: p.title, prog: true, mine: !!(myProg && myProg.id === p.id) })));
+    if (!tabs.some(t => t.k === TRK_TAB)) TRK_TAB = ((tabs.find(t => t.mine && t.prog) || tabs.find(t => t.mine) || tabs[0]) || {}).k || "";
+    h += '<div class="trk"><div class="trk-tabs"><i>Ranks</i>' + tabs.filter(t => !t.prog).map(t => '<button data-trktab="' + t.k + '" class="' + (t.k === TRK_TAB ? "on" : "") + (t.mine ? " mine" : "") + '">' + esc(t.label) + "<small>" + t.n + "</small></button>").join("") +
+      (progs.length ? "<i>Training</i>" + tabs.filter(t => t.prog).map(t => '<button data-trktab="' + t.k + '" class="' + (t.k === TRK_TAB ? "on" : "") + (t.mine ? " mine" : "") + '">' + esc(t.label) + "</button>").join("") : "") + "</div>";
+    if (!TRK_TAB) return h + '<div class="empty">Promotion requirements aren\'t set up yet.</div></div>';
+    if (TRK_TAB.indexOf("p:") === 0) return h + progBoard(TRK_TAB.slice(2)) + "</div>";
+    const r = ranks.find(x => "r:" + x.idx === TRK_TAB);
+    return h + rankBoard(r) + "</div>";
+  }
+  document.addEventListener("input", e => { if (e.target.id === "trkQ") { TRK_Q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("trkQ"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } } });
+  document.addEventListener("change", e => { if (e.target.id === "trkSort") { TRK_SORT = e.target.value; LS.set("mdt:trkSort", TRK_SORT); draw(); } });
   document.addEventListener("click", async e => {
-    const rd = e.target.closest("[data-tready]"); if (rd) { TRACK_READY = rd.dataset.tready === "1"; draw(); return; }
-    if (e.target.closest("[data-trefresh]")) { TRACK = null; draw(); return; }
-    const c = e.target.closest("[data-tcheck]"); if (!c || TRACK_BUSY) return;
+    const tb = e.target.closest("[data-trktab]"); if (tb) { TRK_TAB = tb.dataset.trktab; LS.set("mdt:trkTab", TRK_TAB); TRK_OPEN = {}; draw(); return; }
+    const tf = e.target.closest("[data-trkf]"); if (tf) { TRK_F = tf.dataset.trkf; draw(); return; }
+    if (e.target.closest("[data-trefresh]")) { TRACK = null; PROGS = {}; draw(); return; }
+    const c = e.target.closest("[data-tcheck]");
+    if (!c) { const row = e.target.closest("[data-trow]"); if (row) { const k = row.dataset.trow; TRK_OPEN[k] = !TRK_OPEN[k]; draw(); } return; }
+    e.stopPropagation(); if (TRK_BUSY || !TRACK || !TRACK.canTick) return;
     const [id, key, turnOn] = c.dataset.tcheck.split("|"), it = ((TRACK.officers.find(o => o.id === id) || {}).items || []).find(x => x.key === key);
     if (it && it.done && !it.manual) { toast("This one is counted automatically."); return; }
-    TRACK_BUSY = true; c.classList.add("busy"); blip(turnOn === "1" ? 1400 : 600);
+    TRK_BUSY = true; c.classList.add("busy"); blip(turnOn === "1" ? 1400 : 600);
     const r = await Portal.post({ action: "promoCheck", session: SESSION, id: id, key: key, on: turnOn === "1" }).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
-    TRACK_BUSY = false;
+    TRK_BUSY = false;
     if (r.ok) { TRACK = r; const o = r.officers.find(x => x.id === id); draw(); if (o && o.ready && turnOn === "1") toast("🎖️ " + o.name + " has every requirement for " + ((r.ranks.find(x => x.idx === o.idx) || {}).next || "promotion") + "."); }
     else { c.classList.remove("busy"); toast(r.error || "Couldn't save that."); }
   });
@@ -647,7 +731,7 @@
   function palItems(q) {
     q = q.toLowerCase().trim();
     const out = [], add = (grp, icon, title, sub, run, extra) => { const hay = (title + " " + (sub || "") + " " + (extra || "")).toLowerCase(); if (!q || hay.indexOf(q) !== -1) out.push({ grp, icon, title, sub, run }); };
-    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"]].concat(isCommand() ? [["tracker", "✅", "Promotion tracker"]] : []).forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
+    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"], ["tracker", "✅", "Promotion tracker"]].forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
     add("Go to", "📋", "My reports", "", () => go("frame:myreports.html"));
     if ((((DATA && DATA.profile) || LS.json("lspd_prof") || {}).divisions || []).length) add("Go to", "🛡️", "Division Command", "Grading, activity and officers", () => go("frame:division.html"));
     myForms().filter(f => f.status === "live").forEach(f => add("File a report", f.icon, f.title, f.division ? f.division + " report" : "", () => go("form:" + f.id), f.section));

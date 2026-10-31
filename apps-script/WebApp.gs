@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 97;
+const BACKEND_VERSION = 98;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3047,9 +3047,9 @@ function promoMine_(acct) {
 }
 function promoTrack_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
-  const prof = acctProfile_(acct);
-  if (LEVELS_.indexOf(prof.level) < LEVELS_.indexOf("command")) return { ok: false, error: "The promotion tracker is for command staff." };
+  const prof = acctProfile_(acct), cmd = LEVELS_.indexOf(prof.level) >= LEVELS_.indexOf("command");
   if (d.action === "promoCheck") {
+    if (!cmd) return { ok: false, error: "Only command staff can sign off requirements." };
     const who = promoPeople_().find(x => x.id === str_(d.id)); if (!who) return { ok: false, error: "That officer isn't on the roster any more." };
     const L = promoLadderKeys_(), r = (L.ranks || []).find(x => x.idx === who.idx), q = r && r.reqs.find(x => x.key === str_(d.key));
     if (!q) return { ok: false, error: "That requirement changed in the guidelines doc. Refresh the tracker." };
@@ -3062,7 +3062,12 @@ function promoTrack_(d) {
     });
     try { CacheService.getScriptCache().remove("promo_people"); } catch (e) {}
   }
-  return promoBoard_();
+  // every signed-in officer can see the tracker (like the Training Progression pages); only command ticks boxes
+  const b = promoBoard_();
+  b.canTick = cmd;
+  b.programs = programs_().filter(p => p.on).map(p => ({ id: p.id, title: p.title || p.id }));
+  (b.officers || []).forEach(o => { o.me = o.id === acct.id; if (!cmd) o.id = ""; });   // others' Discord IDs stay with command
+  return b;
 }
 
 // the race, from an officer's side: their divisions' standing and their own points this week
