@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 93;
+const BACKEND_VERSION = 94;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2804,6 +2804,8 @@ function rankIndex_(t) {
 // the rank to show for someone: their roster rank as written ("Division Chief", "Head Lieutenant");
 // onboarding officers' rank column holds their name, so they show as "Police Officer (Onboarding)"
 const ONBOARD_RANK_ = "Police Officer (Onboarding)";
+// Honorary Officers (retired command members) have no promotion requirements
+function promoExempt_(rank) { return /honou?rary/i.test(str_(rank)); }
 function callsignIn_(t) { const seg = str_(t).split("|").map(x => x.trim()).find(x => /^[A-Za-z]{1,4}\s*-\s*\d{1,5}$/.test(x)); return seg ? seg.replace(/\s+/g, "") : ""; }
 function rankShown_(t, trainee) {
   const x = str_(t).replace(/\s+/g, " ");
@@ -3026,12 +3028,13 @@ function promoBoard_() {
   const byIdx = {}; (L.ranks || []).forEach(r => byIdx[r.idx] = r);
   const nextName = idx => { const n = (L.ranks || []).find(x => x.idx > idx); return n ? n.name : "High Command"; };
   return { ok: true, error: L.error || "", doc: L.doc, ranks: (L.ranks || []).map(r => ({ idx: r.idx, label: r.label, name: r.name, next: nextName(r.idx), tig: r.tig, group: r.group })),
-    officers: people.filter(o => o.idx >= 0).map(o => Object.assign({ id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, trainee: o.trainee, tigDays: o.tigDays, reports: o.reports, listed: !!byIdx[o.idx] },
+    officers: people.filter(o => o.idx >= 0).map(o => Object.assign({ id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, trainee: o.trainee, tigDays: o.tigDays, reports: o.reports, exempt: promoExempt_(o.rank), listed: !!byIdx[o.idx] && !promoExempt_(o.rank) },
       promoEval_(o, byIdx[o.idx], checks[o.id]))) };
 }
 function promoMine_(acct) {
   try {
     const L = promoLadderKeys_(), o = promoPeople_().find(x => x.id === acct.id); if (!o) return null;
+    if (promoExempt_(o.rank)) return { idx: o.idx, exempt: true, rank: o.rank, items: [], ready: false };
     const r = (L.ranks || []).find(x => x.idx === o.idx); if (!r) return null;
     const e = promoEval_(o, r, pchkAll_()[acct.id]);
     return { idx: o.idx, tigDays: o.tigDays, reports: o.reports, items: e.items.map(x => ({ key: x.key, done: x.done, auto: x.auto, need: x.need, have: x.have, by: x.manual ? x.by : "" })), ready: e.ready };

@@ -464,14 +464,16 @@
       (L.doc ? '<a class="btn ghost" href="' + esc(L.doc) + '" target="_blank" rel="noopener">FULL GUIDELINES ↗</a>' : "") + "</div>";
     if (L.error) return h + '<div class="empty">' + esc(L.error) + "</div>";
     if (!ranks.length) return h + '<div class="empty">Promotion requirements aren\'t set up yet.</div>';
-    const me = ranks.find(r => r.idx === mine), after = r => { const n = ranks.find(x => x.idx > r.idx); return n ? n.name : "High Command"; };
+    const exempt = !!(PM && PM.exempt);
+    if (exempt) h += '<section class="pr-next top"><div class="pr-kick">YOUR RANK</div><div class="pr-path"><b>' + esc(PM.rank || "Honorary Officer") + '</b></div><p class="pr-none">Honorary Officers are exempt from promotion requirements and training tracks. Thank you for your service in command.</p></section>';
+    const me = exempt ? null : ranks.find(r => r.idx === mine), after = r => { const n = ranks.find(x => x.idx > r.idx); return n ? n.name : "High Command"; };
     if (me) {
       h += '<section class="pr-next"><div class="pr-kick">YOUR PROMOTION REQUIREMENTS' + (me.draft ? ' <span class="pr-draft">NOT FINAL YET</span>' : "") + '</div><div class="pr-path"><span>' + esc(me.label) + '</span><i>→</i><b>' + esc(after(me)) + "</b></div>" +
         (me.tig ? '<div class="pr-tig">⏱ ' + me.tig + " days time in grade required</div>" : "") +
         (DATA.promoMe && DATA.promoMe.idx === me.idx ? '<div class="pr-prog"><i style="width:' + Math.round(DATA.promoMe.items.filter(x => x.done).length / Math.max(1, DATA.promoMe.items.length) * 100) + '%"></i></div><div class="pr-progt">' + DATA.promoMe.items.filter(x => x.done).length + " of " + DATA.promoMe.items.length + " done" + (DATA.promoMe.ready ? " · <b>Ready for review by High Command</b>" : "") + "</div>" : "") +
         promoReqs(me, DATA.promoMe && DATA.promoMe.idx === me.idx ? DATA.promoMe.items : null) +
         ((DATA.paths || []).length ? '<a class="pr-track" data-go="home">Your tracked progress is on the dashboard →</a>' : "") + "</section>";
-    } else if (mine >= 0) h += '<section class="pr-next top"><div class="pr-kick">YOUR RANK</div><div class="pr-path"><b>' + esc(rk.name) + '</b></div><p class="pr-none">The guidelines don\'t list requirements for your rank. Promotions from here are at High Command\'s discretion.</p></section>';
+    } else if (exempt) { /* shown above */ } else if (mine >= 0) h += '<section class="pr-next top"><div class="pr-kick">YOUR RANK</div><div class="pr-path"><b>' + esc(rk.name) + '</b></div><p class="pr-none">The guidelines don\'t list requirements for your rank. Promotions from here are at High Command\'s discretion.</p></section>';
     else h += '<div class="pr-notes"><p>Your rank isn\'t in column B of the roster, so nothing is marked for you. Ask command to fix your roster entry.</p></div>';
     if ((L.notes || []).length) h += '<div class="pr-notes">' + L.notes.map(n => "<p>💬 " + esc(n) + "</p>").join("") + "</div>";
     let grp = null;
@@ -499,7 +501,7 @@
     const ready = listed.filter(o => o.ready).length, close = listed.filter(o => !o.ready && o.total && o.done / o.total >= .6).length;
     h += '<div class="stats" style="margin-bottom:14px"><div class="stat"><small>Ready for promotion</small><b style="color:var(--green)">' + ready + "</b><em>every box ticked</em></div>" +
       '<div class="stat a"><small>Almost there</small><b>' + close + "</b><em>60% or more done</em></div>" +
-      '<div class="stat"><small>Officers tracked</small><b>' + listed.length + "</b><em>" + (all.length - listed.length) + " with no listed requirements</em></div></div>";
+      '<div class="stat"><small>Officers tracked</small><b>' + listed.length + "</b><em>" + all.filter(o => !o.listed && !o.exempt).length + " with no listed requirements" + (all.some(o => o.exempt) ? " · " + all.filter(o => o.exempt).length + " honorary (exempt)" : "") + "</em></div></div>";
     h += '<div class="pen-bar"><label class="pen-search"><svg><use href="#i-search"/></svg><input id="trackQ" placeholder="Search callsign or name…" value="' + esc(TRACK_Q) + '" autocomplete="off"></label>' +
       '<select class="tr-sel" id="trackRank"><option value="">All ranks</option>' + (TRACK.ranks || []).map(r => '<option value="' + r.idx + '"' + (String(r.idx) === TRACK_RANK ? " selected" : "") + ">" + esc(r.name) + "</option>").join("") + "</select>" +
       '<div class="seg"><button data-tready="0" class="' + (TRACK_READY ? "" : "on") + '">Everyone</button><button data-tready="1" class="' + (TRACK_READY ? "on" : "") + '">Ready · ' + ready + "</button></div></div>";
