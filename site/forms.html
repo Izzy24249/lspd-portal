@@ -59,6 +59,7 @@
       <div id="formMount"></div>
       <div class="actions">
         <span id="draftStatus" class="draftstat"></span>
+        <button type="button" class="btn ghost" id="exBtn" hidden>Load example</button>
         <button type="button" class="btn ghost" id="copyBtn" style="display:none">Copy as Text</button>
         <button type="button" class="btn ghost" id="clearBtn">Clear Form</button>
         <button type="submit" class="btn primary" id="submitBtn">Submit</button>
@@ -310,7 +311,7 @@ function openForm(id){
   document.body.dataset.ftheme = f.theme || "";
   ctrl = Portal.render(f, $("formMount"), { draft: true, onStatus: draftStatus });
   // live report preview beside the form (forms with "preview": true)
-  $("fpPrev").hidden = !f.preview; $("fpGrid").classList.toggle("on", !!f.preview); $("fpExample").hidden = !(f.example && f.preview);
+  $("fpPrev").hidden = !f.preview; $("fpGrid").classList.toggle("on", !!f.preview); $("fpExample").hidden = !(f.example && f.preview); $("exBtn").hidden = !(f.example && !f.preview);
   const t = ctrl.restoreDraft(); ctrl.fillMe();   // the signed-on officer goes in their own spot
   setTimeout(drawPreview, 0);
   if(t) toast("Restored your unsaved draft from " + new Date(t).toLocaleString(), "ok");
@@ -331,6 +332,7 @@ $("fpCopy").onclick = async ()=>{
 };
 $("fpExample").onclick = ()=>{ if(current && current.example){ ctrl.load(JSON.parse(JSON.stringify(current.example))); ctrl.fillMe(); drawPreview(); toast("Example loaded. Clear Form when you're done looking.","ok"); } };
 $("clearBtn").onclick = ()=>{ if(confirm("Clear everything on this form?")) { ctrl.clear(); drawPreview(); } };
+$("exBtn").onclick = () => $("fpExample").onclick();
 $("copyBtn").onclick = async ()=>{
   const text = ctrl.toText();
   try{ await navigator.clipboard.writeText(text); toast("Copied as plain text.","ok"); }
