@@ -657,3 +657,8 @@ mark{background:rgba(255,190,61,.35);color:#fff;padding:0 2px;border-radius:3px}
 .trk .pd-item button{margin-top:8px}
 .trk .pb-scroll{overflow-x:auto}
 .trk .pb-scroll .pb-board{min-width:min(100%,var(--minw,0px))}
+/* important timing/condition notes inside a requirement (e.g. when the second command RA can happen) */
+.req-warn{display:block;margin-top:6px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,93,108,.55);background:rgba(255,93,108,.12);color:#ffb3ba;font-weight:700;font-size:.92em;line-height:1.35}
+.pb-legend .req-warn{display:inline-block;margin:4px 0 0}
+.trk .trk-tabs + .trk-tabs{margin-top:-6px}
+.trk .trk-tabs i{min-width:64px}

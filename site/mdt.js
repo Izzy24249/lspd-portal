@@ -449,10 +449,16 @@
   // ---------- promotions: every rank's requirements, from the LSPD Promotion Guidelines doc ----------
   // each rank's section is what an officer AT that rank needs for their next promotion
   let PROMO_OPEN = {};
+  // a requirement's text with its timing/condition notes in brackets made to stand out, e.g.
+  // "(First RA can be anytime, Second RA - after ALL requirement Completed and has a minimum 14 TIG)"
+  function reqText(t) {
+    return esc(t).replace(/\(((?:[^()]|\([^()]*\))*)\)/g, (m, inner) => /\b(after|before|anytime|any time|only|until|once|must|not)\b/i.test(inner) && inner.trim().split(/\s+/).length >= 3
+      ? '<span class="req-warn">⚠ ' + inner.trim() + "</span>" : m);
+  }
   function promoReqs(r, marks) {
     const mk = (i) => { const m = marks && marks[i]; if (!m) return ""; return '<span class="pr-mark ' + (m.done ? "ok" : "") + '">' + (m.done ? "✓ " : "") +
       (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
-    return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map((q, i) => '<li class="' + (marks && marks[i] && marks[i].done ? "ok" : "") + '"><b>' + esc(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
+    return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map((q, i) => '<li class="' + (marks && marks[i] && marks[i].done ? "ok" : "") + '"><b>' + reqText(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
       (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + mk(i) + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
   }
   function promoHTML() {
@@ -537,7 +543,7 @@
         '<span class="bar"><i style="width:' + Math.round(r.done / Math.max(1, r.total) * 100) + '%"></i></span><b>' + r.done + "/" + r.total + "</b></span></div>" + (open ? r.detail : "") + "</div>";
     }).join("") : '<div class="pb-empty">' + (rows.length ? "No one matches." : "No " + esc(nouns.toLowerCase()) + " at this step right now.") + "</div>";
     h += "</div></div>";
-    if (T.length) h += '<ol class="pb-legend">' + T.map(t => "<li><span>" + esc(t.title) + "</span>" + (t.sub ? "<b>" + esc(t.sub) + "</b>" : "") + "</li>").join("") + "</ol>";
+    if (T.length) h += '<ol class="pb-legend">' + T.map(t => "<li><span>" + reqText(t.title) + "</span>" + (t.sub ? "<b>" + esc(t.sub) + "</b>" : "") + "</li>").join("") + "</ol>";
     if (M.foot) h += '<p class="promo-upd">' + M.foot + "</p>";
     return h;
   }
@@ -556,7 +562,7 @@
         return '<span class="pb-c zero' + (can ? " can" : "") + '"' + (can ? ' data-tcheck="' + ref + '"' : "") + ' title="' + (can ? "Tap to sign off" : "Not done yet") + '">·</span>';
       });
       const tigNeed = r.tig || 0, chip = o.tigDays == null ? { txt: "TIG —", ok: false } : { txt: "TIG " + o.tigDays + "d", ok: !tigNeed || o.tigDays >= tigNeed };
-      const detail = '<div class="pb-detail">' + o.items.map((it, i) => '<div class="pd-item' + (it.done ? " ok" : "") + '"><div class="pd-h"><span class="pd-n">' + (i + 1) + "</span><b>" + esc(it.t) + "</b><em>" + (it.done ? "Done" : "Open") + "</em></div><p>" +
+      const detail = '<div class="pb-detail">' + o.items.map((it, i) => '<div class="pd-item' + (it.done ? " ok" : "") + '"><div class="pd-h"><span class="pd-n">' + (i + 1) + "</span><b>" + reqText(it.t) + "</b><em>" + (it.done ? "Done" : "Open") + "</em></div><p>" +
         (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)." : it.have + " of " + it.need + " days.") : it.auto === "reports" ? it.have + " of " + it.need + " reports since reaching this rank." : it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord." : "No SOP Certified role in Discord yet.") : "") +
         (it.manual ? " Signed off by " + esc(it.by) + (it.at ? " on " + new Date(it.at).toLocaleDateString() : "") + "." : !it.auto && !it.done ? " Command signs this off." : "") + "</p>" +
         (can && (!it.done || it.manual) ? '<button class="btn ghost" data-tcheck="' + esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1") + '">' + (it.done ? "UNDO SIGN-OFF" : "SIGN OFF") + "</button>" : "") + "</div>").join("") + "</div>";
@@ -600,8 +606,8 @@
     const tabs = ranks.map(r => ({ k: "r:" + r.idx, label: r.name + " → " + r.next, n: (TRACK.officers || []).filter(o => o.listed && o.idx === r.idx).length, mine: !!(meO && meO.listed && meO.idx === r.idx) }))
       .concat(progs.map(p => ({ k: "p:" + p.id, label: p.title, prog: true, mine: !!(myProg && myProg.id === p.id) })));
     if (!tabs.some(t => t.k === TRK_TAB)) TRK_TAB = ((tabs.find(t => t.mine && t.prog) || tabs.find(t => t.mine) || tabs[0]) || {}).k || "";
-    h += '<div class="trk"><div class="trk-tabs"><i>Ranks</i>' + tabs.filter(t => !t.prog).map(t => '<button data-trktab="' + t.k + '" class="' + (t.k === TRK_TAB ? "on" : "") + (t.mine ? " mine" : "") + '">' + esc(t.label) + "<small>" + t.n + "</small></button>").join("") +
-      (progs.length ? "<i>Training</i>" + tabs.filter(t => t.prog).map(t => '<button data-trktab="' + t.k + '" class="' + (t.k === TRK_TAB ? "on" : "") + (t.mine ? " mine" : "") + '">' + esc(t.label) + "</button>").join("") : "") + "</div>";
+    h += '<div class="trk"><div class="trk-tabs"><i>Ranks</i>' + tabs.filter(t => !t.prog).map(t => '<button data-trktab="' + t.k + '" class="' + (t.k === TRK_TAB ? "on" : "") + (t.mine ? " mine" : "") + '">' + esc(t.label) + "<small>" + t.n + "</small></button>").join("") + "</div>" +
+      (progs.length ? '<div class="trk-tabs"><i>Training</i>' + tabs.filter(t => t.prog).map(t => '<button data-trktab="' + t.k + '" class="' + (t.k === TRK_TAB ? "on" : "") + (t.mine ? " mine" : "") + '">' + esc(t.label) + "</button>").join("") + "</div>" : "");
     if (!TRK_TAB) return h + '<div class="empty">Promotion requirements aren\'t set up yet.</div></div>';
     if (TRK_TAB.indexOf("p:") === 0) return h + progBoard(TRK_TAB.slice(2)) + "</div>";
     const r = ranks.find(x => "r:" + x.idx === TRK_TAB);
