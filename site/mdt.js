@@ -457,7 +457,7 @@
   }
   function promoReqs(r, marks) {
     const mk = (i) => { const m = marks && marks[i]; if (!m) return ""; return '<span class="pr-mark ' + (m.done ? "ok" : "") + '">' + (m.done ? "✓ " : "") +
-      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
+      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.auto === "gom" ? m.have + " / " + m.need + " GOM Trainings" : m.auto === "ra" ? m.have + " / " + m.need + " Academy Evaluations" : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
     return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map((q, i) => '<li class="' + (marks && marks[i] && marks[i].done ? "ok" : "") + '"><b>' + reqText(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
       (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + mk(i) + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
   }
@@ -510,6 +510,8 @@
     if (it.auto === "tig") return "Time in grade";
     if (it.auto === "reports") return it.need + " reports";
     if (it.auto === "sop") return "SOP certified";
+    if (it.auto === "gom") return "Host " + it.need + " trainings";
+    if (it.auto === "ra") return it.need + " PO RAs";
     const t = String(it.t || "");
     if (/hours?\s+logged/i.test(t)) { const h = /\((\d+)\)\s*hours/i.exec(t), d = /\((\d+)\)\s*days/i.exec(t); return (h ? h[1] + " hrs" : "Hours") + (d ? " / " + d[1] + "d" : ""); }
     const x = t.replace(/^.*?\bmust\b\s*/i, "").replace(/\(.*?\)/g, " ");
@@ -551,24 +553,25 @@
   function rankBoard(r) {
     const can = !!TRACK.canTick, list = (TRACK.officers || []).filter(o => o.listed && o.idx === r.idx);
     const items0 = (list[0] && list[0].items) || (r.reqs || []).map(t => ({ t: t.t }));
-    const tasks = items0.map(it => ({ short: reqShort(it), title: it.t, sub: it.auto === "tig" ? it.need + " days" : it.auto === "reports" ? "×" + it.need : it.auto === "sop" ? "Discord role" : "" }));
+    const tasks = items0.map(it => ({ short: reqShort(it), title: it.t, sub: it.auto === "tig" ? it.need + " days" : it.auto === "reports" ? "×" + it.need : it.auto === "sop" ? "Discord role" : it.auto === "gom" ? "×" + it.need + " · GOM Training reports" : it.auto === "ra" ? "×" + it.need + " · Academy Evaluations" : "" }));
     const rows = list.map(o => {
       const key = o.id || (o.callsign + "|" + o.name);
       const cells = o.items.map(it => {
         if (it.done) return '<span class="pb-c ok" title="' + esc(it.manual ? "Signed off by " + it.by : "Counted automatically") + '">✓</span>';
-        if (it.auto === "tig" || it.auto === "reports") { const have = it.have == null ? 0 : it.have, need = Math.max(1, it.need);
-          return '<span class="pb-c part" title="' + esc(it.auto === "tig" ? (it.have == null ? "No TIG date on the roster" : have + " of " + it.need + " days") : have + " of " + it.need + " reports") + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + (it.auto === "tig" ? (it.have == null ? "—" : have + "d") : have + "/" + it.need) + "</span>"; }
+        if (it.auto === "tig" || it.auto === "reports" || it.auto === "gom" || it.auto === "ra") { const have = it.have == null ? 0 : it.have, need = Math.max(1, it.need);
+          return '<span class="pb-c part" title="' + esc(it.auto === "tig" ? (it.have == null ? "No TIG date on the roster" : have + " of " + it.need + " days") : it.auto === "gom" ? have + " of " + it.need + " GOM Trainings tagged on" : it.auto === "ra" ? have + " of " + it.need + " Academy Evaluations tagged on" : have + " of " + it.need + " reports") + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + (it.auto === "tig" ? (it.have == null ? "—" : have + "d") : have + "/" + it.need) + "</span>"; }
         return '<span class="pb-c zero" title="Not done yet">·</span>';
       });
       const tigNeed = r.tig || 0, chip = o.tigDays == null ? { txt: "TIG —", ok: false } : { txt: "TIG " + o.tigDays + "d", ok: !tigNeed || o.tigDays >= tigNeed };
       const detail = '<div class="pb-detail">' + o.items.map((it, i) => '<div class="pd-item' + (it.done ? " ok" : "") + '"><div class="pd-h"><span class="pd-n">' + (i + 1) + "</span><b>" + reqText(it.t) + "</b><em>" + (it.done ? "Done" : "Open") + "</em></div><p>" +
-        (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)." : it.have + " of " + it.need + " days.") : it.auto === "reports" ? it.have + " of " + it.need + " reports since reaching this rank." : it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord." : "No SOP Certified role in Discord yet.") : "") +
+        (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)." : it.have + " of " + it.need + " days.") : it.auto === "reports" ? it.have + " of " + it.need + " reports since reaching this rank." : it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord." : "No SOP Certified role in Discord yet.") :
+        it.auto === "gom" ? it.have + " of " + it.need + " Global Operation Manual Trainings they're tagged on, since reaching this rank." : it.auto === "ra" ? it.have + " of " + it.need + " Academy Evaluations they're tagged on, since reaching this rank." : "") +
         (it.manual ? " Signed off by " + esc(it.by) + (it.at ? " on " + new Date(it.at).toLocaleDateString() : "") + "." : !it.auto && !it.done ? " Command signs this off." : "") + "</p>" +
         (can ? (it.done && !it.manual ? '<span class="pd-check auto"><i>✓</i>Counted automatically</span>'
           : '<button class="pd-check' + (it.done ? " on" : "") + '" data-tcheck="' + esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1") + '"><i>' + (it.done ? "✓" : "") + "</i>" + (it.done ? "Signed off · tap to undo" : "Tick to sign off") + "</button>") : "") + "</div>").join("") + "</div>";
       return { key: key, callsign: o.callsign, name: o.name, me: !!o.me, chip: chip, cells: cells, done: o.done, total: o.total, ready: !!o.ready, detail: detail };
     });
-    return boardHTML({ kick: "Promotion tracker", title: r.name + " → " + r.next, sub: "From the LSPD Promotion Guidelines. Time in grade, reports and the SOP role tick themselves" + (can ? "; open a row to sign off the rest." : "; command signs off the rest."),
+    return boardHTML({ kick: "Promotion tracker", title: r.name + " → " + r.next, sub: "From the LSPD Promotion Guidelines. Time in grade, reports, the SOP role, and GOM Trainings / Academy Evaluations they're tagged on (SGT+) tick themselves" + (can ? "; open a row to sign off the rest." : "; command signs off the rest."),
       noun: "Officer", readyWord: "Ready", tasks: tasks, rows: rows, foot: r.tig ? "Requires " + r.tig + " days time in grade." : "" });
   }
   // a Training Progression program (Onboarding, CPL -> SGT…) -> board (read-only: it fills itself from reports)

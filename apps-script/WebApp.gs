@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 100;
+const BACKEND_VERSION = 101;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2978,7 +2978,15 @@ function pchkAll_() {
 }
 function reqKey_(idx, t) { let h = 5381; const x = str_(t).toLowerCase().replace(/[^a-z0-9]/g, ""); for (let i = 0; i < x.length; i++) h = ((h * 33) ^ x.charCodeAt(i)) >>> 0; return idx + "-" + h.toString(36); }
 // what a requirement line asks for, when the portal can count it itself
-function reqAuto_(t, sopOn) {
+// SGT+ training and PO RA requirements count every report the officer is tagged on (any name box):
+// Global Operation Manual Training -> trainings, Academy Evaluation -> PO RAs
+const TAG_FORMS_ = { gom: "gomtraining", ra: "academy" };
+function reqAuto_(t, sopOn, idx) {
+  if (idx >= 4) {
+    const n = (/(?:minimum of|at least|min\.?)\s*(\d+)/i.exec(t) || /\((\d+)\)/.exec(t) || [])[1];
+    if (/training/i.test(t) && /\b(host|lead|conduct|run|teach|instruct)/i.test(t)) return { type: "gom", need: Number(n) || 1 };
+    if (/\b(RA|R\/A|ride[- ]?alongs?)\b/i.test(t) && /\bPO\b/i.test(t) && !/command/i.test(t)) return { type: "ra", need: Number(n) || 1 };
+  }
   if (/time in grade|\btig\b/i.test(t)) { const m = /\((\d+)\)\s*days/i.exec(t) || /(\d+)\s*days/i.exec(t); if (m) return { type: "tig", need: Number(m[1]) }; }
   const r = /\((\d+)\)\s*reports/i.exec(t) || /minimum of (\d+) reports/i.exec(t); if (r) return { type: "reports", need: Number(r[1]) };
   if (sopOn && /\bsop\b.*certified|certified.*\bsop\b/i.test(t)) return { type: "sop", need: 1 };   // SOP Certified role in Discord
@@ -2987,7 +2995,7 @@ function reqAuto_(t, sopOn) {
 function promoLadderKeys_() {
   const L = promoReqParse_(false);
   const dc = dutyCfg_(), sopOn = dc.on && !!dc.sopRoleId;
-  (L.ranks || []).forEach(r => r.reqs.forEach(q => { q.key = reqKey_(r.idx, q.t); const a = reqAuto_(q.t, sopOn); if (a) q.auto = a; else delete q.auto; }));
+  (L.ranks || []).forEach(r => r.reqs.forEach(q => { q.key = reqKey_(r.idx, q.t); const a = reqAuto_(q.t, sopOn, r.idx); if (a) q.auto = a; else delete q.auto; }));
   return L;
 }
 // everyone on the Personnel and Onboarding rosters, with their rank, time in grade and report count
@@ -3016,6 +3024,15 @@ function promoPeopleRead_() {
   const rows = actRows_(), byId = {};
   rows.forEach(r => (r.people || []).forEach(x => { if (x.i) (byId[x.i] = byId[x.i] || []).push(r.at); }));
   out.forEach(o => { const from = o.since || now - 28 * 864e5; o.reports = (byId[o.id] || []).filter(t => t >= from).length; o.tigDays = o.since ? Math.floor((now - o.since) / 864e5) : null; });
+  // GOM Trainings / Academy Evaluations each officer is tagged on (by Discord ID, else callsign or name), since reaching their rank
+  const tag = {};
+  rows.forEach(r => { if (r.form !== TAG_FORMS_.gom && r.form !== TAG_FORMS_.ra) return;
+    (r.people || []).forEach(x => { const ks = x.i ? ["id:" + x.i] : [callKey_(x.n) ? "cs:" + callKey_(x.n) : "", nameKey_(x.n) ? "nm:" + nameKey_(x.n) : ""].filter(Boolean);
+      ks.forEach(k => { const m = (tag[k] = tag[k] || {}); (m[r.form] = m[r.form] || {})[r.row] = r.at; }); }); });
+  out.forEach(o => { const from = o.since || now - 28 * 864e5, got = {};
+    ["id:" + o.id, o.callsign ? "cs:" + callKey_(o.callsign) : "", "nm:" + nameKey_(o.name)].filter(k => k && k !== "id:" && k !== "nm:").forEach(k => {
+      const m = tag[k] || {}; Object.keys(m).forEach(f => Object.keys(m[f]).forEach(row => { if (m[f][row] >= from) (got[f] = got[f] || {})[row] = 1; })); });
+    o.tagged = { gom: Object.keys(got[TAG_FORMS_.gom] || {}).length, ra: Object.keys(got[TAG_FORMS_.ra] || {}).length }; });
   return out;
 }
 var SOP_MEMO_ = null;
@@ -3025,6 +3042,7 @@ function promoEval_(o, rankReqs, checks) {
     const c = mine[q.key], a = q.auto; let have = null, auto = false;
     if (a && a.type === "tig") { have = o.tigDays; auto = have != null && have >= a.need; }
     if (a && a.type === "reports") { have = o.reports; auto = have >= a.need; }
+    if (a && (a.type === "gom" || a.type === "ra")) { have = (o.tagged || {})[a.type] || 0; auto = have >= a.need; }
     if (a && a.type === "sop") { have = SOP_MEMO_ ? (SOP_MEMO_[o.id] ? 1 : 0) : (sopIds_()[o.id] ? 1 : 0); auto = have >= 1; }
     return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
   });
