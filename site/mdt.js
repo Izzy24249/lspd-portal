@@ -569,7 +569,7 @@
       return { key: key, callsign: o.callsign, name: o.name, me: !!o.me, chip: chip, cells: cells, done: o.done, total: o.total, ready: !!o.ready, detail: detail };
     });
     return boardHTML({ kick: "Promotion tracker", title: r.name + " → " + r.next, sub: "From the LSPD Promotion Guidelines. Time in grade, reports and the SOP role tick themselves" + (can ? "; tap a box to sign off the rest." : "; command signs off the rest."),
-      noun: (r.name || "Officer").replace(/\s*\(.*\)$/, ""), readyWord: "Ready", tasks: tasks, rows: rows, foot: r.tig ? "Requires " + r.tig + " days time in grade." : "" });
+      noun: "Officer", readyWord: "Ready", tasks: tasks, rows: rows, foot: r.tig ? "Requires " + r.tig + " days time in grade." : "" });
   }
   // a Training Progression program (Onboarding, CPL -> SGT…) -> board (read-only: it fills itself from reports)
   function progBoard(id) {
