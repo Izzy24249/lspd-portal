@@ -1378,3 +1378,9 @@ body[data-ftheme="cru"] .fp-prev{border-color:rgba(251,146,60,.4);background:#10
 .div-asu .ofc-chip.ofc-me{background:#173a4d;border-color:#7dd3fc} .div-asu .ofc-chip.ofc-me small{color:#bae6fd}
 .div-cru .ofc-chip.ofc-me{background:#4a2a12;border-color:#fb923c} .div-cru .ofc-chip.ofc-me small{color:#fed7aa}
 .theme-dossier .ofc-chip.ofc-me{background:#d4a017;color:#111}
+
+/* My reports → Edit: banner over the form */
+.edit-bar{display:flex;align-items:center;gap:12px;margin:0 0 16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(251,191,36,.45);background:linear-gradient(90deg,rgba(251,191,36,.14),rgba(251,191,36,.04))}
+.edit-bar[hidden]{display:none!important}
+.edit-bar > span{font-size:20px}
+.edit-bar div{flex:1;min-width:0} .edit-bar b{display:block;font-size:14px;color:#fde68a} .edit-bar small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}

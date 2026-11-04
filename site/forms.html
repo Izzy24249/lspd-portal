@@ -63,6 +63,7 @@
         <button type="button" class="rb-nav gold" id="rbNew">＋ New report</button>
       </div>
     </header>
+    <div class="edit-bar" id="editBar" hidden><span>✏️</span><div><b id="editTitle">Editing your report</b><small id="editSub">Saving updates the original Discord post.</small></div><a href="myreports.html" class="btn ghost sm">Cancel</a></div>
     <div class="maint" id="formMaint" style="display:none"></div>
     <div class="fp-grid" id="fpGrid">
     <form id="theForm" novalidate autocomplete="off">
@@ -319,14 +320,41 @@ function openForm(id){
   $("copyBtn").style.display = f.copyText ? "" : "none";
   draftStatus("");
   document.body.dataset.ftheme = f.theme || "";
-  ctrl = Portal.render(f, $("formMount"), { draft: true, onStatus: draftStatus });
+  const editing = !!EDIT_ID;   // My reports → Edit: the filed answers come back from the server; drafts are left alone
+  ctrl = Portal.render(f, $("formMount"), editing ? { draft: false, manualLoad: true } : { draft: true, onStatus: draftStatus });
   // live report preview beside the form (forms with "preview": true)
   $("fpPrev").hidden = !f.preview; $("fpGrid").classList.toggle("on", !!f.preview); $("fpExample").hidden = !(f.example && f.preview); $("exBtn").hidden = !(f.example && !f.preview);
-  const t = ctrl.restoreDraft(); ctrl.fillMe();   // the signed-on officer goes in their own spot
-  drawRbHead(f);
+  const t = editing ? null : ctrl.restoreDraft();
+  if (editing && EDIT && EDIT.form === id) ctrl.load(JSON.parse(JSON.stringify(EDIT.data)));
+  ctrl.fillMe();   // the signed-on officer goes in their own spot
+  drawRbHead(f); drawEdit();
   setTimeout(drawPreview, 0);
   if(t) toast("Restored your unsaved draft from " + new Date(t).toLocaleString(), "ok");
   return true;
+}
+
+/* ---------- My reports → Edit (forms.html?edit=<log id>#<form>) ---------- */
+const EDIT_ID = new URLSearchParams(location.search).get("edit") || "";
+let EDIT = null;
+function drawEdit(){
+  const on = !!EDIT_ID && !!current;
+  $("editBar").hidden = !on; $("clearBtn").hidden = on;
+  if(!on) return;
+  $("submitBtn").textContent = "Save changes";
+  $("editTitle").textContent = EDIT ? "Editing your " + (EDIT.title || current.title) : "Loading your report…";
+  $("editSub").textContent = EDIT ? "Filed " + new Date(EDIT.at).toLocaleString() + ". Saving updates the original Discord post" + (EDIT.grade === "R" ? " and sends it back to leadership to be graded again." : ".") + (EDIT.canPost ? "" : " (Its Discord post wasn't recorded, so only the record changes.)") : "";
+  $("rbNew").textContent = "✕ Cancel edit";
+}
+if (EDIT_ID) {
+  let sess = ""; try { sess = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
+  Portal.post({ action: "myReportOpen", id: EDIT_ID, session: sess }).then(r => {
+    if(!r || !r.ok){ toast((r && r.error) || "Couldn't open that report.", "bad"); setTimeout(() => location.href = "myreports.html", 3500); return; }
+    EDIT = r;
+    const waitCfg = () => { if(!CONFIG) return setTimeout(waitCfg, 200);
+      current = null; go(r.form); if(!current || current.id !== r.form) { toast("That form isn't available to you right now.", "bad"); return; }
+      toast("Your report is open. Make your changes, then press Save changes.", "ok"); };
+    waitCfg();
+  }).catch(e => toast("Couldn't open that report: " + e.message, "bad"));
 }
 
 /* division report header (K9 / ASU / TEU / CRU / CID): builder title, the signed-on officer, completeness, shortcuts */
@@ -362,7 +390,7 @@ function drawMeter(){
 }
 ["input","change"].forEach(ev => $("formMount").addEventListener(ev, () => setTimeout(drawMeter, 0)));
 $("formMount").addEventListener("click", () => setTimeout(drawMeter, 80));
-$("rbNew").onclick = ()=>{ if(ctrl && confirm("Start a new report? This clears everything on this form.")) { ctrl.clear(); drawPreview(); drawMeter(); window.scrollTo({top:0,behavior:"smooth"}); } };
+$("rbNew").onclick = ()=>{ if(EDIT_ID) { location.href = "myreports.html"; return; } if(ctrl && confirm("Start a new report? This clears everything on this form.")) { ctrl.clear(); drawPreview(); drawMeter(); window.scrollTo({top:0,behavior:"smooth"}); } };
 
 function drawPreview(){
   drawMeter();
@@ -396,7 +424,13 @@ $("theForm").addEventListener("submit", async e=>{
   const btn = $("submitBtn"), label = btn.textContent;
   btn.disabled = true; btn.textContent = "Sending…";
   try{
-    const data = await Portal.post(ctrl.collect());
+    if(EDIT_ID && !EDIT){ toast("Your report is still loading. Try again in a moment.", "bad"); return; }
+    const data = await Portal.post(EDIT_ID ? Object.assign(ctrl.collect(), { edit: EDIT_ID }) : ctrl.collect());
+    if(data.ok && data.edited){
+      toast(data.warning ? "Saved, with a warning: " + data.warning : "Changes saved. The Discord post was updated.", data.warning ? "bad" : "ok");
+      setTimeout(() => location.href = "myreports.html", data.warning ? 4500 : 1600);
+      return;
+    }
     if(data.ok){
       if(data.logId) MyReports.add({ id: data.logId, form: current.id, title: current.title, icon: current.icon || "", at: Date.now() });
       try { if (window.parent !== window) window.parent.postMessage({ type: "lspd:filed", form: current.id, title: current.title }, location.origin); } catch (x) {}

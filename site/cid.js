@@ -148,8 +148,10 @@
     $("head").hidden = false; $("main").hidden = false;
     drawProfileChip();
     if (!FORM) { noForm(); return; }
+    // My reports → "Open in case builder" (?open=<case / Discord post id>) picks that case
+    const op = new URLSearchParams(location.search).get("open") || "";
     const want = LS.get(K.current, "");
-    CUR = CASES.find(c => c.id === want) || CASES[0] || newCase(true);
+    CUR = (op && CASES.find(c => c.id === op || c.submissionId === op || c.logId === op)) || CASES.find(c => c.id === want) || CASES[0] || newCase(true);
     mountCase();
     pollReviews(); setInterval(pollReviews, 90000);
     Idle.start();

@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 106;
+const BACKEND_VERSION = 107;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -753,6 +753,14 @@ function handleSubmit_(d) {
     if (!formAllowed_(form, acct, acctProfile_(acct))) return { ok: false, error: "This report is only for " + form.accessTabs.map(t => t.name).join(" / ") + " members." };
   }
 
+  // My reports → Edit: the officer re-sends their own filed report; the original Discord post is updated in place
+  let EDIT = null;
+  if (str_(d.edit)) {
+    const x = myReportRec_(d); if (x.error) return { ok: false, error: x.error };
+    if (x.rec.form !== form.id) return { ok: false, error: "That report belongs to a different form." };
+    EDIT = x.rec;
+  }
+
   const values = d.values || d;                 // (d itself = old-style flat payload)
   const checklists = d.checklists || {};
   const repeaters = d.repeaters || {};
@@ -999,6 +1007,7 @@ function handleSubmit_(d) {
     if (cidX.file) messages[0][0].image = { url: "attachment://case-file.png" };
     if (cidX.rec) return cidUpdate_(form, webhook, cidX, first, d);                // "Save to Discord": edit the earlier post
   }
+  if (EDIT && !cidX) return myReportSave_(form, webhook, EDIT, messages, first, values, repeaters, checklists, archiveCols);
   const r1 = discordPost_(webhook.url, first, null, cidX ? cidX.file : null);
   if (!r1.ok) return { ok: false, error: r1.error };
   const threadId = isForum && r1.body ? r1.body.channel_id : null;
@@ -2359,11 +2368,69 @@ function divMine_(d) {
   const cids = (Array.isArray(d.cidIds) ? d.cidIds : []).map(str_).filter(Boolean).slice(0, 300);
   const rows = actRows_(), forms = {}; getConfig_().forms.forEach(f => forms[f.id] = f);
   const pick = r => ({ id: r.id, at: r.at, form: r.form, formTitle: forms[r.form] ? forms[r.form].title : r.form, icon: forms[r.form] ? forms[r.form].icon || "📄" : "📄", no: r.no, title: r.title,
-    grade: r.grade, gradedBy: r.gradedBy, comments: r.comments, gradedAt: r.gradedAt });
+    grade: r.grade, gradedBy: r.gradedBy, comments: r.comments, gradedAt: r.gradedAt, canEdit: r.source === "report" && !!forms[r.form] && forms[r.form].status === "live" });
   const out = rows.filter(r => ids.indexOf(r.id) !== -1).map(pick), cid = {};
   if (cids.length) { try { cidAll_().filter(c => cids.indexOf(c.id) !== -1 && c.messageId).forEach(c => { const r = rows.find(x => x.messageId === c.messageId); if (r) cid[c.id] = pick(r); }); } catch (e) {} }
   return { ok: true, reports: out, cid: cid };
 }
+// ---- My reports → Edit: an officer reopens a report they filed, changes it, and the original Discord post is updated ----
+// Only the officer in the report's "filed by" box (the form's own officer box, or the lead/reporting officer) can edit it.
+function myReportRec_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { error: "Sign on to the MDT to edit your reports." };
+  const id = str_(d.edit || d.id), r = actRows_(true).find(x => x.id === id);
+  if (!r) return { error: "That report isn't in the report log anymore." };
+  const form = getConfig_().forms.find(f => f.id === r.form);
+  if (!form) return { error: "The form this report was filed on no longer exists." };
+  const lead = [str_(form.meField), autoAuthor_(form)].filter(Boolean);
+  if (!(r.people || []).some(p => p.i === acct.id && lead.indexOf(p.f) !== -1)) return { error: "Only the officer who filed this report can edit it." };
+  return { rec: r, acct: acct, form: form };
+}
+function myReportOpen_(d) {
+  const x = myReportRec_(d); if (x.error) return { ok: false, error: x.error };
+  let data = null; try { data = JSON.parse(x.rec.data || "null"); } catch (e) {}
+  if (!data || !data.values) return { ok: false, error: "This report was filed before editing was added, so its answers weren't saved. File it again instead." };
+  if (x.form.status !== "live") return { ok: false, error: "That form isn't accepting reports right now, so it can't be edited." };
+  return { ok: true, id: x.rec.id, form: x.rec.form, at: x.rec.at, title: x.rec.title, grade: x.rec.grade, data: data,
+    canPost: !!(x.rec.messageId && webhookById_(x.rec.webhookId)) };
+}
+function myReportSave_(form, webhook, rec, messages, first, values, repeaters, checklists, cols) {
+  const wh = webhookById_(rec.webhookId) || webhook, tz = Session.getScriptTimeZone();
+  let warning = "";
+  const embeds = JSON.parse(JSON.stringify(messages[0])), last = embeds[embeds.length - 1];
+  const note = "✏️ Edited by the filing officer · " + Utilities.formatDate(new Date(), tz, "MM/dd/yyyy h:mm a");
+  last.footer = { text: clip_(((last.footer && last.footer.text) ? last.footer.text + "  •  " : "") + note, 2000) };
+  if (wh && rec.messageId) {
+    const base = wh.url.split("?")[0], tq = rec.threadId ? "?thread_id=" + rec.threadId : "";
+    const res = UrlFetchApp.fetch(base + "/messages/" + rec.messageId + tq, { method: "patch", contentType: "application/json", muteHttpExceptions: true,
+      payload: JSON.stringify({ embeds: embeds, allowed_mentions: { parse: [] } }) });
+    const code = res.getResponseCode();
+    if (code >= 300) warning = code === 404 ? "the original Discord post was deleted, so only the record was updated" : "the record was updated, but Discord refused the edit (" + code + ")";
+    else if (messages.length > 1) {
+      if (rec.threadId) {
+        for (let i = 1; i < messages.length; i++) {
+          Utilities.sleep(350);
+          const r = discordPost_(wh.url, Object.assign({ embeds: messages[i], allowed_mentions: { parse: [] } }, i === 1 ? { content: "✏️ **Updated** (the report above was edited)" } : {}), rec.threadId);
+          if (!r.ok) { warning = "the post was updated, but part " + (i + 1) + " failed: " + r.error; break; }
+        }
+      } else warning = "the main post was updated; the longer narrative posts below it weren't changed";
+    }
+  } else warning = "the record was updated, but this report's Discord post wasn't recorded, so Discord wasn't changed";
+  const people = actPeople_(form, values, repeaters), caseF = allFields_(form).find(f => f.type === "case_number");
+  const title = first.thread_name || fillTemplate_(form.embedTitle || form.title, values) || form.title;
+  const saved = withLock_(() => {
+    const sh = actSheet_();
+    sh.getRange(rec.row, 4, 1, 4).setValues([[cellSafe_(caseF ? str_(values[caseF.id]) : rec.no), cellSafe_(clip_(title, 200)), JSON.stringify(people), cellSafe_(actSummary_(cols, people))]]);
+    if (rec.grade === "R") sh.getRange(rec.row, 12, 1, 4).setValues([["", "", "", ""]]);   // "fix & refile": back in the queue to be graded again
+    const j = JSON.stringify({ values: values, repeaters: repeaters, checklists: checklists });
+    sh.getRange(rec.row, 17, 1, 2).setValues([[cellSafe_(clip_(actFull_(cols), 45000)), j.length < 48000 ? cellSafe_(j) : ""]]);
+    ACT_MEMO_ = null; divClearCache_();
+    try { CacheService.getScriptCache().remove("promo_people"); } catch (e) {}
+    return { ok: true };
+  });
+  if (!saved.ok) return { ok: false, error: "The report log was busy. Try saving again in a moment." };
+  return warning ? { ok: true, logId: rec.id, edited: true, warning: warning } : { ok: true, logId: rec.id, edited: true };
+}
+
 // Reports filed before Division Command existed: read back from each form's sheet tab (no Discord post to reply to)
 function divImport_() {
   const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [], want = {};
@@ -4088,6 +4155,7 @@ function handleAdmin_(d) {
 
   if (/^cid(Mine|List|Review)$/.test(a)) return cidHandle_(d);
   if (a === "divMine") return divMine_(d);
+  if (a === "myReportOpen") return myReportOpen_(d);
   if (/^acct(DiscordUrl|Discord|SetPin|Pin|Me|Out)$/.test(a)) return acctHandle_(d);
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
