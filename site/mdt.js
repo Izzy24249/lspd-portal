@@ -119,7 +119,7 @@
     if (!list.length) { t.hidden = true; return; }
     t.hidden = false; t.innerHTML = '<div class="live"><i></i>LIVE</div><div class="tk-run">' + list.concat(list).map(x => "<span>" + esc(x.t) + " · " + ago(x.at) + "</span>").join("") + "</div>";
   }
-  function modal(html) { const m = $("modal"); m.classList.remove("cc"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
+  function modal(html) { const m = $("modal"); m.classList.remove("cc", "quiz"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
   // the SOP as an embeddable page: Google Docs block /edit inside frames, /preview is the read-only view that allows it
   function sopEmbed(u) {
     const g = /^(https:\/\/docs\.google\.com\/(?:document|spreadsheets|presentation)\/d\/[\w-]+)/.exec(u || "");
@@ -465,20 +465,63 @@
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-take="' + esc(c.id) + '">' + (c.best ? "RETAKE" : "START") + "</button>" + (U.canTrain ? '<button class="btn ghost" data-cclose="' + esc(c.id) + '">CLOSE</button>' : "") + "</div></div></div>").join("") + "</div>" : '<div class="empty">No knowledge checks right now.</div>';
     return h;
   }
-  // a knowledge check: random-draw checks get N questions from the server's bank; answer order is shuffled every attempt
+  // a knowledge check, one question at a time: random-draw checks get N questions from the server's bank,
+  // answer order is shuffled every attempt; review before submitting; results with a score ring and the right answers
   async function takeCheck(c) {
     let qs = c.questions, ticket = "";
     if (c.draw) { const r = await Portal.post({ action: "unitCheckStart", session: SESSION, id: c.id }).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
       if (!r.ok) { toast(r.error || "Couldn't start the check."); return; } qs = r.questions; ticket = r.ticket; }
     const order = qs.map(q => { const o = q.options.map((t, j) => j); for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = o[i]; o[i] = o[j]; o[j] = t; } return o; });
-    const m = modal("<h3>" + esc(c.title) + "</h3>" + (c.draw ? '<p class="qsub">' + qs.length + " random questions from a bank of " + c.bank + ". Pass at " + c.pass + "%.</p>" : "") + '<form id="qz">' + qs.map((q, i) => '<fieldset class="qq"><legend>' + (i + 1) + ". " + esc(q.q) + "</legend>" + order[i].map(j => '<label class="qo"><input type="radio" name="q' + i + '" value="' + j + '"> ' + esc(q.options[j]) + "</label>").join("") + "</fieldset>").join("") +
-      '<div class="md-act"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn" type="submit">SUBMIT</button></div></form>');
-    m.querySelector("#qz").onsubmit = async ev => { ev.preventDefault();
-      const ans = qs.map((q, i) => { const x = m.querySelector('input[name="q' + i + '"]:checked'); return x ? +x.value : -1; });
-      if (ans.some(a => a < 0)) { toast("Answer every question."); return; }
+    const ans = qs.map(() => -1), L = "ABCDEF";
+    let cur = 0, view = "q", busy = false;
+    const m = modal('<div class="qz" id="qz"></div>'); m.classList.add("quiz");
+    const box = m.querySelector("#qz");
+    const head = sub => '<div class="qz-top"><div><span class="qz-kick">' + esc(c.title) + "</span><b>" + sub + '</b></div><button class="qz-x" data-close title="Close">✕</button></div>' +
+      '<div class="qz-bar">' + qs.map((q, i) => '<i data-qgo="' + i + '" class="' + (ans[i] >= 0 ? "done " : "") + (view === "q" && i === cur ? "cur" : "") + '" title="Question ' + (i + 1) + '"></i>').join("") + "</div>";
+    function paint() {
+      if (view === "q") {
+        const q = qs[cur], done = ans.filter(a => a >= 0).length;
+        box.innerHTML = head("Question " + (cur + 1) + " of " + qs.length) +
+          '<p class="qz-q">' + esc(q.q) + '</p><div class="qz-opts">' + order[cur].map((j, k) => '<button type="button" class="qz-o' + (ans[cur] === j ? " on" : "") + '" data-qpick="' + j + '"><span>' + L[k] + "</span>" + esc(q.options[j]) + "</button>").join("") + "</div>" +
+          '<div class="qz-foot"><button class="btn ghost" data-qnav="-1"' + (cur ? "" : " disabled") + '>‹ BACK</button><small>' + done + " of " + qs.length + " answered · keys 1–" + q.options.length + ", Enter</small>" +
+          (cur < qs.length - 1 ? '<button class="btn" data-qnav="1"' + (ans[cur] >= 0 ? "" : " disabled") + ">NEXT ›</button>" : '<button class="btn" data-qreview' + (ans[cur] >= 0 ? "" : " disabled") + ">REVIEW ›</button>") + "</div>";
+      } else if (view === "review") {
+        const left = ans.filter(a => a < 0).length;
+        box.innerHTML = head("Review your answers") + '<div class="qz-rev">' + qs.map((q, i) => '<button type="button" class="qz-ri' + (ans[i] < 0 ? " miss" : "") + '" data-qgo="' + i + '"><em>' + (i + 1) + "</em><span><b>" + esc(q.q) + "</b><small>" + (ans[i] >= 0 ? esc(q.options[ans[i]]) : "Not answered") + "</small></span><i>EDIT</i></button>").join("") + "</div>" +
+          '<div class="qz-foot"><button class="btn ghost" data-qgo="' + (qs.length - 1) + '">‹ BACK</button><small>' + (left ? left + " still unanswered" : "Pass mark " + c.pass + "%") + '</small><button class="btn" data-qsubmit' + (left || busy ? " disabled" : "") + ">" + (busy ? "GRADING…" : "SUBMIT") + "</button></div>";
+      }
+    }
+    async function submit() {
+      busy = true; paint();
       const r = await unit("unitCheckTake", { id: c.id, answers: ans, ticket: ticket });
-      if (r.ok && r.result) { m.hidden = false; const R = r.result; modal('<h3>' + (R.passed ? "✓ Passed" : "Not quite") + '</h3><p class="qscore">' + R.score + " / " + R.of + "</p>" + qs.map((q, i) => '<div class="qr ' + (ans[i] === R.correct[i] ? "ok" : "no") + '"><b>' + (i + 1) + ". " + esc(q.q) + "</b><small>" + (ans[i] === R.correct[i] ? "✓ " : "✗ Your answer: " + esc(q.options[ans[i]]) + " · Correct: ") + esc(q.options[R.correct[i]]) + "</small></div>").join("") + '<div class="md-act">' + (c.draw ? '<button class="btn ghost" data-take="' + esc(c.id) + '">TRY A NEW SET</button>' : "") + '<button class="btn" data-close>Done</button></div>'); }
+      busy = false;
+      if (!(r.ok && r.result)) { paint(); return; }
+      m.hidden = false; m.classList.add("quiz");
+      const R = r.result, pct = Math.round(R.score / Math.max(1, R.of) * 100), C = 2 * Math.PI * 52;
+      box.innerHTML = '<div class="qz-top"><div><span class="qz-kick">' + esc(c.title) + '</span><b>Results</b></div><button class="qz-x" data-close title="Close">✕</button></div>' +
+        '<div class="qz-res ' + (R.passed ? "pass" : "fail") + '"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="bg"/><circle cx="60" cy="60" r="52" class="fg" stroke-dasharray="' + (C * pct / 100).toFixed(1) + " " + C.toFixed(1) + '"/><text x="60" y="58">' + pct + '%</text><text x="60" y="80" class="s">' + R.score + " / " + R.of + "</text></svg>" +
+        "<div><span class=\"qz-badge\">" + (R.passed ? "✓ PASSED" : "NOT PASSED") + "</span><p>" + (R.passed ? "Nice work. Your score is on file, so your FTO can attach it to your training report." : "You need " + c.pass + "% to pass. Read the manual again and try a new set.") + "</p></div></div>" +
+        '<div class="qz-list">' + qs.map((q, i) => i).sort((a, b) => (ans[a] === R.correct[a]) - (ans[b] === R.correct[b])).map(i => { const q = qs[i], ok = ans[i] === R.correct[i]; return '<div class="qz-li ' + (ok ? "ok" : "no") + '"><em>' + (ok ? "✓" : "✗") + "</em><span><b>" + esc(q.q) + "</b>" + (ok ? "<small>" + esc(q.options[ans[i]]) + "</small>" : '<small class="x">Your answer: ' + esc(q.options[ans[i]]) + '</small><small class="c">Correct: ' + esc(q.options[R.correct[i]]) + "</small>") + "</span></div>"; }).join("") + "</div>" +
+        '<div class="qz-foot">' + (c.draw ? '<button class="btn ghost" data-take="' + esc(c.id) + '">TRY A NEW SET</button>' : "<span></span>") + '<span></span><button class="btn" data-close>DONE</button></div>';
+      view = "done";
+    }
+    box.onclick = e => {
+      const p = e.target.closest("[data-qpick]"); if (p) { ans[cur] = +p.dataset.qpick; paint(); return; }
+      const n = e.target.closest("[data-qnav]"); if (n && !n.disabled) { cur = Math.max(0, Math.min(qs.length - 1, cur + +n.dataset.qnav)); paint(); return; }
+      const g = e.target.closest("[data-qgo]"); if (g && view !== "done") { cur = +g.dataset.qgo; view = "q"; paint(); return; }
+      if (e.target.closest("[data-qreview]") && ans[cur] >= 0) { view = "review"; paint(); return; }
+      if (e.target.closest("[data-qsubmit]") && !busy && ans.every(a => a >= 0)) submit();
     };
+    const key = e => {
+      if (m.hidden || !document.body.contains(box)) { document.removeEventListener("keydown", key); return; }
+      if (view !== "q" || /input|textarea|select/i.test((e.target.tagName || ""))) return;
+      const k = e.key.toUpperCase(), idx = /^[1-6]$/.test(k) ? +k - 1 : L.indexOf(k);
+      if (idx >= 0 && idx < order[cur].length && k.length === 1) { ans[cur] = order[cur][idx]; paint(); e.preventDefault(); }
+      else if (e.key === "Enter" && ans[cur] >= 0) { if (cur < qs.length - 1) cur++; else view = "review"; paint(); e.preventDefault(); }
+      else if (e.key === "ArrowLeft" && cur) { cur--; paint(); } else if (e.key === "ArrowRight" && ans[cur] >= 0 && cur < qs.length - 1) { cur++; paint(); }
+    };
+    document.addEventListener("keydown", key);
+    paint();
   }
 
   // ---------- fleet ----------
