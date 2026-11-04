@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 105;
+const BACKEND_VERSION = 106;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -405,7 +405,8 @@ function warmRosters(opts) {
   if (!opts.quick) {
     step("progression", () => { programs_(cfg).forEach(p => { if (p.on) promoCandidates_(true, p.id); }); promoSync_(); promoClearCache_(); programs_(cfg).forEach(p => { if (p.on) promoView_(false, p.id); }); });
     step("website copy", () => publishSnapshot_());
-    step("ribbons", () => ribbonStats_(true));           // copy on the website itself (only when something changed)
+    step("ribbons", () => ribbonStats_(true));
+    step("duty timer", () => { if (dutyCfg_().on) dutyTrigger_(true); });           // copy on the website itself (only when something changed)
   }
   const total = Date.now() - t0;
   console.log("warm: finished in " + total + "ms" + (stopped ? ", stopped before " + stopped : ""));
@@ -413,7 +414,7 @@ function warmRosters(opts) {
 }
 // RUN THIS ONCE FROM THE APPS SCRIPT EDITOR after pasting a new version (pick "authorizeAll" next to Run, press Run, Allow).
 // Google asks for any permission the new code needs, then the background timers are (re)installed:
-// roster warm-up every 10 minutes, roster edits, and the On Duty check every 15 minutes when it's turned on.
+// roster warm-up every 10 minutes, roster edits, and the On Duty check every 10 minutes when it's turned on.
 function authorizeAll() {
   // Google's permission screen has a checkbox per permission: this asks for ALL of them (tick "Select all" and Allow)
   try { ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL); } catch (e) {}
@@ -2840,7 +2841,7 @@ function acctHandle_(d) {
       if (mc === 404) return { ok: false, error: "This Discord account isn't in the LSPD Discord server." };
       if (mc !== 200) { const gR = UrlFetchApp.fetch("https://discord.com/api/users/@me/guilds", H); const gs = gR.getResponseCode() === 200 ? JSON.parse(gR.getContentText()) : [];
         if (!gs.some(g => str_(g.id) === st.guildId)) return { ok: false, error: "This Discord account isn't in the LSPD Discord server." }; }
-      if (mc === 200) { dlinkSave_(id, tokJ);     // lets the portal check the On Duty role every 15 minutes
+      if (mc === 200) { dlinkSave_(id, tokJ);     // lets the portal check the On Duty role every 10 minutes
         try { const mm = JSON.parse(mR.getContentText()), rl = (mm.roles || []).map(String), dc = dutyCfg_();
           if (dc.on && dc.sopRoleId) { const ch = {}; ch[id] = rl.indexOf(dc.sopRoleId) !== -1; sopApply_(ch); }
           const one = {}; one[id] = { n: str_(mm.nick), r: rl, j: str_(mm.joined_at).slice(0, 10), t: Date.now() }; dmemWrite_(one); } catch (e) {} }
@@ -3460,13 +3461,14 @@ function myForms_(acct, prof) {
 // =====================================================================
 // DUTY FROM DISCORD: the server's own bot gives officers an "On Duty" role while they're on duty in game.
 // No bot of ours: each officer's own Discord sign-in (scope guilds.members.read) lets the portal ask
-// Discord for that officer's roles in the LSPD server. A trigger checks everyone every 15 minutes.
+// Discord for that officer's roles in the LSPD server. A trigger checks everyone every 10 minutes.
 //   - sign-ins are kept in Script Properties only ("DLINK_<discordId>"), never in a sheet or a page
 //   - who is on duty right now -> Script Property "DUTY_STATE" ({ id: [startMs, lastSeenMs] })
 //   - finished duty sessions   -> "Duty Log" tab
-// Times are accurate to about one check (15 minutes); on and off are both seen late, so lengths even out.
+// Times are accurate to about one check (10 minutes); on and off are both seen late, so lengths even out.
 // =====================================================================
-const DUTY_SHEET_ = "Duty Log", DUTY_EVERY_MIN_ = 15, DUTY_STALE_MS_ = 3 * 3600000;
+const DUTY_SHEET_ = "Duty Log", DUTY_EVERY_MIN_ = 10, DUTY_STALE_MS_ = 3 * 3600000;
+const DUTY_BIG_ = 110;   // more connected officers than this: check about every 15 min instead (Google allows ~20,000 outside requests a day)
 function dutyCfg_() {
   const s = (getConfig_().settings || {}).duty || {};
   const id = v => /^\d{15,21}$/.test(str_(v)) ? str_(v) : "";
@@ -3510,16 +3512,21 @@ function dutyWho_(id) {
   const p = rosterPerson_(id); if (p) return { name: p.name || "", callsign: p.callsign || "", rank: p.rank || "" };
   const a = acctFind_(id); return { name: (a && (a.name || a.username)) || "", callsign: (a && a.callsign) || "", rank: "" };
 }
-// install or remove the 15-minute check
+// install or remove the duty check (re-made when the interval changes)
 function dutyTrigger_(on) {
-  const mine = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "dutyPoll");
-  if (on && !mine.length) ScriptApp.newTrigger("dutyPoll").timeBased().everyMinutes(DUTY_EVERY_MIN_).create();
+  const mine = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "dutyPoll"), every = String(DUTY_EVERY_MIN_);
+  if (on && mine.length && PROPS_.getProperty("DUTY_TRIGGER_MIN") !== every) { mine.forEach(t => ScriptApp.deleteTrigger(t)); mine.length = 0; }
+  if (on && !mine.length) { ScriptApp.newTrigger("dutyPoll").timeBased().everyMinutes(DUTY_EVERY_MIN_).create(); PROPS_.setProperty("DUTY_TRIGGER_MIN", every); }
   if (!on) mine.forEach(t => ScriptApp.deleteTrigger(t));
 }
 function dutyPoll() {                                            // trigger entry point
   const cfg = dutyCfg_(), st = discordStatus_();
   if (!cfg.on || !(cfg.roleId || cfg.sopRoleId) || !st.guildId) return;
-  const props = PROPS_.getProperties(), now = Date.now(), seen = {}, sop = {}, mem = {};   // id -> true (role), false (no role), null (couldn't tell)
+  const props = PROPS_.getProperties(), now = Date.now(), seen = {}, sop = {}, mem = {};
+  if (Object.keys(props).filter(k => /^DLINK_\d+$/.test(k)).length > DUTY_BIG_) {   // lots of officers connected: space checks to ~15 min
+    let lastT = 0; try { lastT = JSON.parse(props.DUTY_LAST || "{}").t || 0; } catch (e) {}
+    if (now - lastT < 14 * 60000) return;
+  }   // id -> true (role), false (no role), null (couldn't tell)
   const ready = [];
   Object.keys(props).filter(k => /^DLINK_\d+$/.test(k)).forEach(k => {
     const id = k.slice(6); let link; try { link = JSON.parse(props[k]); } catch (e) { return; }

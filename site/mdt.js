@@ -205,7 +205,7 @@
       '<div class="ackrow">' + (b.acked ? '<span class="acked">✓ Acknowledged</span>' : '<button class="btn" data-ack="' + esc(b.id) + '">ACKNOWLEDGE · ROLL CALL</button>') +
       (b.ackCount != null ? '<span class="lbl">' + b.ackCount + " acknowledged</span>" : "") + "</div>";
   }
-  // ---------- on duty now: read from the On Duty role in the LSPD Discord (checked every 15 minutes) ----------
+  // ---------- on duty now: read from the On Duty role in the LSPD Discord (checked every 10 minutes) ----------
   function durTxt(min) { const hh = Math.floor(min / 60), mm = min % 60; return hh ? hh + "h" + (mm ? " " + mm + "m" : "") : mm + "m"; }
   function dutyHTML() {
     const du = DATA.duty; if (!du) return "";
@@ -217,7 +217,7 @@
         : "No supervisor (Sergeant or above) on duty right now") + "</div>" : "") +
       (L.length ? '<div class="duty-list">' + L.map(o => '<div class="need' + (o.sup ? " sup" : "") + '"><span class="cs">' + esc(o.callsign || "—") + "</span><div><b>" + esc(o.name || "Officer") + "</b><small>" + esc(o.rank ? o.rank + " · " : "") + "on for " + durTxt(o.minutes) + "</small></div></div>").join("") + "</div>"
         : '<p style="color:var(--mute);margin:0">Nobody is on duty right now.</p>') +
-      '<p class="duty-note">From the On Duty role in Discord' + (du.checkedAt ? " · checked " + (ago(du.checkedAt) === "now" ? "just now" : ago(du.checkedAt) + " ago") : " · first check within " + (du.every || 15) + " minutes") + "</p></section>";
+      '<p class="duty-note">From the On Duty role in Discord' + (du.checkedAt ? " · checked " + (ago(du.checkedAt) === "now" ? "just now" : ago(du.checkedAt) + " ago") : " · first check within " + (du.every || 10) + " minutes") + "</p></section>";
     const M = du.linked && du.mine;
     if (M) {
       const pct = Math.min(100, Math.round(M.window / Math.max(1, M.goalMinutes) * 100)), left = Math.max(0, M.goalMinutes - M.window);
