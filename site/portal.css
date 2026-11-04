@@ -1320,6 +1320,11 @@ body[data-ftheme="teu"] .fp-dot{background:#4ade80}
 body[data-ftheme="teu"] .fp-prev pre::selection,body[data-ftheme="teu"] input::selection{background:rgba(74,222,128,.35)}
 .div-teu .ofc-chip{background:rgba(74,222,128,.14);border-color:rgba(74,222,128,.45)}
 /* TEU report builder: a wider page, with more of it for the builder (the preview keeps its own column) */
-body[data-ftheme="teu"] main:has(#view-form.active){max-width:1500px}
-body[data-ftheme="teu"] .fp-grid.on{grid-template-columns:minmax(0,1.7fr) minmax(360px,.8fr)}
+/* any form with the live report preview: a wider page, with most of it for the builder */
+main:has(#view-form.active .fp-grid.on){max-width:1500px}
+.fp-grid.on{grid-template-columns:minmax(0,1.7fr) minmax(360px,.8fr)}
+/* the preview panel in each division's colours (TEU keeps its green) */
+body[data-ftheme="k9"] .fp-prev{border-color:rgba(163,230,53,.35)} body[data-ftheme="k9"] .fp-top{color:#bef264;border-bottom-color:rgba(163,230,53,.25)} body[data-ftheme="k9"] .fp-dot{background:#a3e635} body[data-ftheme="k9"] .fp-acts{border-top-color:rgba(163,230,53,.25)}
+body[data-ftheme="asu"] .fp-prev{border-color:rgba(125,211,252,.35);background:#070c14} body[data-ftheme="asu"] .fp-top{color:#bae6fd;border-bottom-color:rgba(125,211,252,.25)} body[data-ftheme="asu"] .fp-dot{background:#7dd3fc} body[data-ftheme="asu"] .fp-acts{border-top-color:rgba(125,211,252,.25)}
+body[data-ftheme="cru"] .fp-prev{border-color:rgba(251,146,60,.4);background:#100b08} body[data-ftheme="cru"] .fp-top{color:#fdba74;border-bottom-color:rgba(251,146,60,.28)} body[data-ftheme="cru"] .fp-dot{background:#fb923c} body[data-ftheme="cru"] .fp-acts{border-top-color:rgba(251,146,60,.28)}
 .div-teu .hud-hero{gap:40px}
