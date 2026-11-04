@@ -1364,3 +1364,17 @@ body[data-ftheme="cru"] .fp-prev{border-color:rgba(251,146,60,.4);background:#10
   .rb-tools{justify-content:flex-start;gap:6px} .rb-meter{grid-template-columns:70px auto} .rb-meter small{display:none}
   .rb-nav{height:34px;padding:0 9px;font-size:12px} .rb-chip{height:36px;max-width:200px}
 }
+
+/* the signed-on officer's own box: a solid badge with their regular callsign on top (not removable) */
+.ofc.me .ofc-in{display:none}
+.ofc.me{cursor:default}
+.ofc-chip.ofc-me,.paper.hud .ofc-chip.ofc-me{flex-direction:column;align-items:flex-start;gap:1px;padding:5px 14px;border-radius:10px;line-height:1.15;user-select:none;
+  background:#334D6E;border:1px solid rgba(255,255,255,.18)}
+.paper.hud .ofc-chip.ofc-me{background:rgba(var(--hcr),.3);border-color:rgba(var(--hcr),.65)}
+.ofc-chip.ofc-me small{font:700 10.5px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.08em;opacity:.85}
+.ofc-chip.ofc-me b{font-size:13px;font-weight:700}
+.div-teu .ofc-chip.ofc-me{background:#1c4a2c;border-color:#4ade80} .div-teu .ofc-chip.ofc-me small{color:#86efac}
+.div-k9 .ofc-chip.ofc-me{background:#34461a;border-color:#a3e635} .div-k9 .ofc-chip.ofc-me small{color:#d9f99d}
+.div-asu .ofc-chip.ofc-me{background:#173a4d;border-color:#7dd3fc} .div-asu .ofc-chip.ofc-me small{color:#bae6fd}
+.div-cru .ofc-chip.ofc-me{background:#4a2a12;border-color:#fb923c} .div-cru .ofc-chip.ofc-me small{color:#fed7aa}
+.theme-dossier .ofc-chip.ofc-me{background:#d4a017;color:#111}

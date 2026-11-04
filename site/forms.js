@@ -439,11 +439,12 @@ window.Portal = (function () {
       const ofc = fieldDefs.filter(f => f.type === "officer");
       return (form.meField && ofc.find(f => f.id === form.meField)) || ofc.find(f => !/trainee|witness|supervis|suspect|victim|subject|recruit|cadet|evaluat(ed|ee)/i.test(f.label || "")) || null;
     }
-    let MEVAL = "";
+    let MEVAL = "", ME = null;   // ME: the signed-on officer {id, callsign} — their own box shows as a locked badge
     function fillMe() {
       let p = null; try { if (localStorage.getItem("lspd_sess")) p = JSON.parse(localStorage.getItem("lspd_prof") || "null"); } catch (e) {}
       if (!p || !p.discordId) return;
       const f = meField(); if (!f) return;
+      ME = { id: p.discordId, callsign: p.callsign || "", field: f.id };
       const hid = q(`[data-f="${CSS.escape(f.id)}"]`); if (!hid || hid.value) return;
       const onTab = rosterItems(f.rosterDivisions, f).find(it => it.id === p.discordId);
       if (fieldRoster(f) && !onTab) return;                       // a division box and they're not on that roster: leave it for them
@@ -1113,8 +1114,15 @@ window.Portal = (function () {
           const t = q(`[data-f="${CSS.escape(f.fillId)}"]`), want = list[0] ? list[0].id : "";
           if (t && t.value !== want && (want || t.dataset.filled)) { t.value = want; t.dataset.filled = want ? "1" : ""; t.classList.remove("err"); }
         }
+        const mine = !!(ME && f && f.id === ME.field && list.length === 1 && list[0].id === ME.id);
+        box.classList.toggle("me", mine);
         if (chips.dataset.k === hid.value) return;
         chips.dataset.k = hid.value;
+        if (mine) {   // their own spot: solid badge, regular callsign on top, can't be removed or changed
+          const o = list[0], cs = ME.callsign, nm = cs ? String(o.name || "").replace(new RegExp("^\\s*" + cs.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\|\\s*"), "") : o.name;
+          chips.innerHTML = `<span class="ofc-chip ofc-me" title="Signed on as you · set from your officer account">${cs ? `<small>${esc(cs)}</small>` : ""}<b>${esc(nm || o.name)}</b></span>`;
+          return;
+        }
         chips.innerHTML = parseOfc(hid.value).map((o, i) => `<span class="ofc-chip" title="${esc(o.id ? "Discord ID " + o.id : "No Discord ID (won't be mentioned)")}">${esc(o.name || "@" + o.id)}${o.id ? "" : " <i>no ID</i>"}<b class="ofc-x" data-i="${i}" title="Remove">×</b></span>`).join("");
       });
     }
