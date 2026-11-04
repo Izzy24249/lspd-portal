@@ -237,7 +237,7 @@
     const goals = R.guide.filter(g => g.how === "auto" && g.next).map(g => ({ g: g, left: g.next - g.have, pct: g.have / g.next }))
       .sort((a, b) => b.pct - a.pct)[0];
     const next = goals ? (goals.g.tier ? "Next device: " : "Next: ") + goals.g.name.replace(/^LSPD /, "") + " · " + goals.left + " more " + (goals.left === 1 ? String(unitWord[goals.g.unit] || "").replace(/s$/, "") : unitWord[goals.g.unit] || "") : "";
-    return '<a class="hero-rack" data-go="unit" title="Your ribbons · open the Ribbon Guide">' + (R.mine.length ? rackHTML(R.mine, 30) : '<span class="hr-none">🎖️ No ribbons yet</span>') +
+    return '<a class="hero-rack" data-go="unit" title="Your ribbons · open the Ribbon Guide">' + (R.mine.length ? rackHTML(R.mine, 40) : '<span class="hr-none">🎖️ No ribbons yet</span>') +
       '<small>' + (R.mine.length ? R.mine.length + " ribbon" + (R.mine.length === 1 ? "" : "s") : "Start earning") + (next ? " · " + esc(next) : "") + " ›</small></a>";
   }
   // top of the dashboard: the shift briefing, with a slim on-duty column beside it
