@@ -230,6 +230,16 @@
     }
     return h;
   }
+  // the officer's ribbons beside their name, and the closest next ribbon / device to aim for
+  function heroRackHTML() {
+    const R = UNIT && UNIT.rack; if (!R) return "";
+    const unitWord = { kudos: "kudos", months: "months", hours: "hours", trainings: "trainings", reports: "reports", time: "times" };
+    const goals = R.guide.filter(g => g.how === "auto" && g.next).map(g => ({ g: g, left: g.next - g.have, pct: g.have / g.next }))
+      .sort((a, b) => b.pct - a.pct)[0];
+    const next = goals ? (goals.g.tier ? "Next device: " : "Next: ") + goals.g.name.replace(/^LSPD /, "") + " · " + goals.left + " more " + (goals.left === 1 ? String(unitWord[goals.g.unit] || "").replace(/s$/, "") : unitWord[goals.g.unit] || "") : "";
+    return '<a class="hero-rack" data-go="unit" title="Your ribbons · open the Ribbon Guide">' + (R.mine.length ? rackHTML(R.mine, 30) : '<span class="hr-none">🎖️ No ribbons yet</span>') +
+      '<small>' + (R.mine.length ? R.mine.length + " ribbon" + (R.mine.length === 1 ? "" : "s") : "Start earning") + (next ? " · " + esc(next) : "") + " ›</small></a>";
+  }
   // top of the dashboard: the shift briefing, with a slim on-duty column beside it
   function topRowHTML(B) {
     const brief = '<section class="pane brief-pane"><div class="ph"><span class="lbl">Shift briefing</span>' + (B.canBrief ? '<a data-brief>Post briefing</a>' : (B.past || []).length ? '<a data-past>Past briefings</a>' : "") + "</div>" + memoHTML(B.briefing, B) + "</section>";
@@ -252,7 +262,7 @@
     const p = DATA.profile || {}, f = DATA.fleet || {}, B = DATA.board || {}, trainee = f.rank && f.rank.trainee, mine = B.mine || [];
     const waiting = mine.filter(r => !r.grade).length;
     const D0 = B.dept || {}, NB0 = B.notices || [], st = (STATUSES.find(x => x[0] === LS.get("mdt:status")) || STATUSES[0]);
-    let h = '<section class="hero"><div><div class="kick">' + esc((p.callsign ? p.callsign + " · " : "") + st[0] + " " + st[1].toUpperCase()) + "</div><h1>Good " + esc(greet().toLowerCase()) + ", " + esc(last(p.name) || "Officer") + '.<br><span>' + esc(trainee ? "Welcome to the academy." : NB0.length ? NB0.length + " active BOLO" + (NB0.length > 1 ? "s" : "") + " on the board." : "All quiet on the board.") + "</span></h1>" +
+    let h = '<section class="hero"><div><div class="kick">' + esc((p.callsign ? p.callsign + " · " : "") + st[0] + " " + st[1].toUpperCase()) + "</div><h1><span class='hero-name'>Good " + esc(greet().toLowerCase()) + ", " + esc(last(p.name) || "Officer") + "." + heroRackHTML() + '</span><br><span>' + esc(trainee ? "Welcome to the academy." : NB0.length ? NB0.length + " active BOLO" + (NB0.length > 1 ? "s" : "") + " on the board." : "All quiet on the board.") + "</span></h1>" +
       '<p>' + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · <b>" + waiting + "</b> waiting on a grade" : "") : " · no reports on file yet") + '</p><div class="acts"><button class="btn" data-go="reports">FILE A REPORT <kbd>F</kbd></button><button class="btn ghost" data-go="records">RUN A RECORD</button><button class="btn ghost" id="palHero">SEARCH <kbd>Ctrl K</kbd></button></div></div>' +
       '<div class="radar"><img src="img/lspd-badge.png" alt=""><i class="blip" style="left:30%;top:28%"></i><i class="blip" style="left:68%;top:62%;animation-delay:1.4s"></i><i class="blip" style="left:56%;top:22%;animation-delay:2.4s"></i></div></section>' +
       topRowHTML(B) +
@@ -266,7 +276,6 @@
     { const me = (p && p.discordId) || ""; const kd = UNIT && (UNIT.kudos || []).find(k => k.toId === me && Date.now() - k.at < 3 * 864e5);
       if (kd) h += '<a class="kudo-ban" data-go="unit"><span>👏</span><div><small>YOU WERE RECOGNIZED</small><b>' + esc(kd.from) + "</b><p>“" + esc(kd.msg) + "”</p></div></a>"; }
     if (UNIT && UNIT.ootm) h += '<a class="ootm mini" data-go="unit"><span>🏆</span><div><small>' + esc(UNIT.ootm.title) + "</small><b>" + esc(UNIT.ootm.to) + "</b></div></a>";
-    if (UNIT && UNIT.rack && UNIT.rack.mine.length) h += '<a class="home-rack" data-go="unit" title="Your ribbons">' + rackHTML(UNIT.rack.mine, 40) + "<small>" + UNIT.rack.mine.length + " ribbon" + (UNIT.rack.mine.length === 1 ? "" : "s") + " · see the guide ›</small></a>";
     const NB = B.notices || [];
     if (NB.length) h += '<section class="bolos">' + NB.slice(0, 3).map(n => '<a class="bolo t-' + esc(n.type.toLowerCase()) + '" data-go="records"><b>' + esc(n.type.toUpperCase()) + "</b><span>" + esc(n.title) + "</span><small>" + esc(n.from) + " · " + ago(n.at) + " ago</small></a>").join("") + (NB.length > 3 ? '<a class="bolo more" data-go="records">+' + (NB.length - 3) + " more</a>" : "") + "</section>";
     // training path | SOP (the briefing moved to the top)

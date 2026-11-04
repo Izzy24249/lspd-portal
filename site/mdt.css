@@ -758,3 +758,11 @@ mark{background:rgba(255,190,61,.35);color:#fff;padding:0 2px;border-radius:3px}
 .duty-side .shift-bar{margin-top:8px}
 .duty-side .duty-note{margin:6px 0 0;font-size:11.5px}
 @media (max-width:900px){.top-row{grid-template-columns:1fr}}
+/* ribbons beside the officer's name in the greeting */
+.hero-name{display:inline-flex;align-items:center;gap:18px;flex-wrap:wrap;color:inherit!important;font-weight:700!important}
+.hero-rack{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;text-decoration:none;color:inherit;cursor:pointer;vertical-align:middle}
+.hero-rack .rack{padding:4px;background:rgba(0,0,0,.3);box-shadow:0 6px 16px -8px rgba(0,0,0,.8)}
+.hero-rack small{font:500 11px Inter,sans-serif;letter-spacing:0;color:var(--amber);white-space:nowrap}
+.hero-rack:hover small{text-decoration:underline}
+.hr-none{font:600 12px Inter,sans-serif;color:var(--mute);padding:4px 8px;border:1px dashed var(--line2);border-radius:8px}
+@media (max-width:640px){.hero-name{gap:10px}.hero-rack small{white-space:normal}}
