@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 101;
+const BACKEND_VERSION = 102;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -404,7 +404,8 @@ function warmRosters(opts) {
   step("old roster", () => { if (usesOldRoster_(cfg.forms)) getRoster_(true); });
   if (!opts.quick) {
     step("progression", () => { programs_(cfg).forEach(p => { if (p.on) promoCandidates_(true, p.id); }); promoSync_(); promoClearCache_(); programs_(cfg).forEach(p => { if (p.on) promoView_(false, p.id); }); });
-    step("website copy", () => publishSnapshot_());           // copy on the website itself (only when something changed)
+    step("website copy", () => publishSnapshot_());
+    step("ribbons", () => ribbonStats_(true));           // copy on the website itself (only when something changed)
   }
   const total = Date.now() - t0;
   console.log("warm: finished in " + total + "ms" + (stopped ? ", stopped before " + stopped : ""));
@@ -2480,6 +2481,111 @@ function dm_(discordId, text) {
     return UrlFetchApp.fetch("https://discord.com/api/v10/channels/" + id + "/messages", { method: "post", contentType: "application/json", headers: H, payload: JSON.stringify({ content: clip_(text, 1900), allowed_mentions: { parse: [] } }), muteHttpExceptions: true }).getResponseCode() === 200;
   } catch (e) { return false; }
 }
+// =====================================================================
+// RIBBONS: the LSPD ribbon rack. One catalog, in order of precedence (first = worn top row, wearer's right).
+//   how "award": command gives it (Kudos & awards -> Award); several = devices
+//   how "auto":  the portal works it out every 15 minutes from data it already has
+// stripes: [colour, width] left to right. tiers: bar 1 = plain, 2 = bronze oak leaf, 3 = silver star, 4 = gold star
+// =====================================================================
+const RIBBONS_ = [
+  { id: "valor", name: "LSPD Medal of Valor", group: "Bravery", how: "award", desc: "Bravery above and beyond the call of duty, at great personal risk, anywhere in Los Santos.", stripes: [["#0b2a5b", 3], ["#f2c230", 2], ["#ffffff", 1], ["#0b2a5b", 8], ["#ffffff", 1], ["#f2c230", 2], ["#0b2a5b", 3]] },
+  { id: "preserve", name: "LSPD Preservation of Life Medal", group: "Bravery", how: "award", desc: "Exceptional tactics and judgement that preserved a life during a volatile encounter (hostage, barricade, armed subject).", stripes: [["#14532d", 4], ["#ffffff", 2], ["#22c55e", 6], ["#ffffff", 2], ["#14532d", 4]] },
+  { id: "dsm", name: "LSPD Distinguished Service Medal", group: "Service", how: "award", desc: "Exceptional service in a role of great responsibility for the department.", stripes: [["#b91c1c", 3], ["#ffffff", 2], ["#1e3a8a", 10], ["#ffffff", 2], ["#b91c1c", 3]] },
+  { id: "unitcit", name: "LSPD Chief's Unit Citation", group: "Unit", how: "award", desc: "A whole unit or shift that showed outstanding teamwork on a major call.", stripes: [["#1d4ed8", 6], ["#f2c230", 8], ["#1d4ed8", 6]], frame: "#f2c230" },
+  { id: "police", name: "LSPD Police Medal", group: "Bravery", how: "award", desc: "An act of heroism in the line of duty.", stripes: [["#1e3a8a", 5], ["#ffffff", 2], ["#60a5fa", 6], ["#ffffff", 2], ["#1e3a8a", 5]] },
+  { id: "purple", name: "LSPD Purple Heart", group: "Bravery", how: "award", desc: "Injured by a suspect's actions during an on-duty tactical situation.", stripes: [["#ffffff", 2], ["#5b21b6", 16], ["#ffffff", 2]] },
+  { id: "msm", name: "LSPD Meritorious Service Medal", group: "Service", how: "award", desc: "Outstanding service over time, to a lesser degree than the Distinguished Service Medal.", stripes: [["#7f1d1d", 6], ["#ffffff", 2], ["#7f1d1d", 4], ["#ffffff", 2], ["#7f1d1d", 6]] },
+  { id: "star", name: "LSPD Police Star", group: "Bravery", how: "award", desc: "Sound judgement and skilful tactics that defused a dangerous situation.", stripes: [["#f2c230", 7], ["#1e3a8a", 6], ["#f2c230", 7]] },
+  { id: "lifesave", name: "LSPD Life Saving Medal", group: "Bravery", how: "award", desc: "Saved, or tried to save, a person from imminent danger: CPR on scene, pulled from a burning vehicle, water rescue at the Del Perro Pier.", stripes: [["#dc2626", 6], ["#facc15", 2], ["#ffffff", 4], ["#facc15", 2], ["#dc2626", 6]] },
+  { id: "community", name: "LSPD Community Policing Medal", group: "Service", how: "award", desc: "Solved a real problem for the people of Los Santos, or built trust with a neighbourhood (Grove Street to Vinewood Hills).", stripes: [["#0f766e", 6], ["#fb923c", 3], ["#ffffff", 2], ["#fb923c", 3], ["#0f766e", 6]] },
+  { id: "human", name: "LSPD Human Relations Medal", group: "Service", how: "award", desc: "Great compassion and care for the public, a victim or a fellow officer.", stripes: [["#7dd3fc", 7], ["#ffffff", 6], ["#7dd3fc", 7]] },
+  { id: "mutual", name: "LSPD Blaine County Mutual Aid Ribbon", group: "Event", how: "award", desc: "Answered a mutual-aid call outside the city: Sandy Shores, Paleto Bay, Grapeseed or Mount Chiliad, alongside BCSO / SAHP.", stripes: [["#a16207", 5], ["#166534", 3], ["#e7d6a7", 4], ["#166534", 3], ["#a16207", 5]] },
+  { id: "major", name: "LSPD Major Incident Ribbon", group: "Event", how: "award", desc: "Worked a major incident to the end: a Pacific Standard, Paleto or Fleeca bank job, the Humane Labs, a jewelry store hit or a city-wide pursuit.", stripes: [["#111827", 5], ["#b91c1c", 3], ["#f2c230", 4], ["#b91c1c", 3], ["#111827", 5]] },
+  { id: "ootm", name: "LSPD Officer of the Month Ribbon", group: "Achievement", how: "auto", stat: "ootm", tiers: [1, 2, 3, 4], unit: "time", desc: "Named LSPD Officer of the Month. Each time adds a device.", stripes: [["#f2c230", 4], ["#1e3a8a", 3], ["#ffffff", 6], ["#1e3a8a", 3], ["#f2c230", 4]] },
+  { id: "commend", name: "LSPD Commendation Ribbon", group: "Achievement", how: "auto", stat: "kudos", tiers: [10, 25, 50, 100], unit: "kudos", desc: "Kudos from fellow officers on the MDT.", stripes: [["#15803d", 5], ["#ffffff", 1], ["#15803d", 8], ["#ffffff", 1], ["#15803d", 5]] },
+  { id: "service", name: "LSPD Patrol Service Ribbon", group: "Achievement", how: "auto", stat: "months", tiers: [3, 6, 12, 24], unit: "months", desc: "Time serving with the LSPD (from when they joined the LSPD Discord).", stripes: [["#1e3a8a", 4], ["#93c5fd", 2], ["#1e3a8a", 8], ["#93c5fd", 2], ["#1e3a8a", 4]] },
+  { id: "duty", name: "LSPD Duty Hours Ribbon", group: "Achievement", how: "auto", stat: "hours", tiers: [50, 100, 250, 500], unit: "hours", desc: "Hours on duty: report hours plus time with the On Duty role in Discord.", stripes: [["#334155", 4], ["#38bdf8", 3], ["#334155", 6], ["#38bdf8", 3], ["#334155", 4]] },
+  { id: "instructor", name: "LSPD Field Instructor Ribbon", group: "Achievement", how: "auto", stat: "instr", tiers: [5, 15, 30, 60], unit: "trainings", desc: "Ran trainings: Global Operation Manual Trainings as Instructor or Supervising FTO, and Academy Evaluations as Instructor.", stripes: [["#f59e0b", 4], ["#111827", 2], ["#f59e0b", 8], ["#111827", 2], ["#f59e0b", 4]] },
+  { id: "reports", name: "LSPD Field Report Ribbon", group: "Achievement", how: "auto", stat: "reports", tiers: [25, 50, 100, 200], unit: "reports", desc: "Reports filed or tagged on through the portal.", stripes: [["#475569", 6], ["#e2e8f0", 2], ["#475569", 4], ["#e2e8f0", 2], ["#475569", 6]] },
+  { id: "sop", name: "LSPD SOP Certification Ribbon", group: "Qualification", how: "auto", stat: "sop", tiers: [1], desc: "SOP certified (the SOP Certified role in the LSPD Discord).", stripes: [["#1e40af", 8], ["#ffffff", 4], ["#1e40af", 8]] },
+  { id: "academy", name: "LSPD Academy Graduate Ribbon", group: "Qualification", how: "auto", stat: "academy", tiers: [1], desc: "Graduated the LSPD Academy: on the LSPD Personnel Roster as a certified officer.", stripes: [["#0b2a5b", 9], ["#f2c230", 2], ["#0b2a5b", 9]] },
+  { id: "u_fto", name: "LSPD Field Training Officer Ribbon", group: "Unit", how: "auto", stat: "unit", match: /\bfto\b|field training/i, tiers: [1], desc: "On the FTO roster.", stripes: [["#ca8a04", 6], ["#111827", 8], ["#ca8a04", 6]] },
+  { id: "u_k9", name: "LSPD K-9 Unit Ribbon", group: "Unit", how: "auto", stat: "unit", match: /k-?9/i, tiers: [1], desc: "On the K-9 roster.", stripes: [["#3f6212", 5], ["#a3e635", 3], ["#f59e0b", 4], ["#a3e635", 3], ["#3f6212", 5]] },
+  { id: "u_asu", name: "LSPD Air Support Unit Ribbon", group: "Unit", how: "auto", stat: "unit", match: /\basu\b|air support/i, tiers: [1], desc: "On the Air Support Unit roster.", stripes: [["#0c4a6e", 5], ["#7dd3fc", 4], ["#ffffff", 2], ["#7dd3fc", 4], ["#0c4a6e", 5]] },
+  { id: "u_cru", name: "LSPD Crisis Response Unit Ribbon", group: "Unit", how: "auto", stat: "unit", match: /\bcru\b|crisis response/i, tiers: [1], desc: "On the Crisis Response Unit roster.", stripes: [["#9a3412", 5], ["#fb923c", 4], ["#facc15", 2], ["#fb923c", 4], ["#9a3412", 5]] },
+  { id: "u_cid", name: "LSPD Criminal Investigations Ribbon", group: "Unit", how: "auto", stat: "unit", match: /\bcid\b|investigat/i, tiers: [1], desc: "On the CID roster.", stripes: [["#78350f", 6], ["#f0b94a", 2], ["#78350f", 4], ["#f0b94a", 2], ["#78350f", 6]] },
+  { id: "u_teu", name: "LSPD Traffic Enforcement Ribbon", group: "Unit", how: "auto", stat: "unit", match: /\bteu\b|traffic/i, tiers: [1], desc: "On the Traffic Enforcement Unit roster.", stripes: [["#14532d", 5], ["#4ade80", 3], ["#111827", 4], ["#4ade80", 3], ["#14532d", 5]] },
+  { id: "u_swat", name: "LSPD SWAT Ribbon", group: "Unit", how: "auto", stat: "unit", match: /swat/i, tiers: [1], desc: "On the SWAT roster.", stripes: [["#111827", 7], ["#6b7280", 6], ["#111827", 7]] },
+  { id: "u_ia", name: "LSPD Internal Affairs Ribbon", group: "Unit", how: "auto", stat: "unit", match: /internal affairs|\bia\b/i, tiers: [1], desc: "On the Internal Affairs roster.", stripes: [["#1f2937", 6], ["#e5e7eb", 3], ["#991b1b", 2], ["#e5e7eb", 3], ["#1f2937", 6]] }
+];
+const RB_GROUPS_ = ["Bravery", "Service", "Unit", "Event", "Achievement", "Qualification"];
+// unit roster tabs: Division Command divisions + any roster tab whose name matches a unit ribbon (FTO, SWAT, IA…)
+function ribbonUnitTabs_() {
+  const out = {}, divs = (getConfig_().settings || {}).divisions || [];
+  let sheets = []; try { sheets = rosterBook_().getSheets().map(sh => ({ id: sh.getSheetId(), name: sh.getName() })); } catch (e) {}
+  RIBBONS_.filter(r => r.stat === "unit").forEach(r => {
+    const dv = divs.find(d => d.rosterTabId != null && (r.match.test(d.name || "") || r.match.test(d.id || "")));
+    const sh = dv ? { id: dv.rosterTabId } : sheets.find(x => r.match.test(x.name) && /roster/i.test(x.name));
+    if (sh) out[r.id] = sh.id;
+  });
+  return out;
+}
+// everything the automatic ribbons need, for every officer, worked out once (15 min)
+function ribbonStats_(fresh) {
+  const cache = CacheService.getScriptCache(), ck = "ribbon_stats_v1";
+  if (!fresh) { const hit = bigGet_(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const now = Date.now(), S = {}, get = id => (S[id] = S[id] || { kudos: 0, months: 0, hours: 0, instr: 0, reports: 0, ootm: 0, sop: 0, academy: 0, units: [], awards: [] });
+  const people = promoPeople_(); people.forEach(o => { if (o.id) { const x = get(o.id); if (!o.trainee) x.academy = 1; } });
+  const known = id => !!S[id];
+  // kudos received, command awards, Officer of the Month
+  rows_("Kudos", KUDOS_).forEach(x => { const id = str_(x.r[4]).replace(/^'/, ""); if (known(id)) get(id).kudos++; });
+  rows_("Awards", AWARDS_).forEach(x => { const id = str_(x.r[5]).replace(/^'/, ""), type = str_(x.r[2]), em = str_(x.r[4]); if (!known(id)) return;
+    if (type === "ootm") get(id).ootm++;
+    else if (/^rb:/.test(em)) get(id).awards.push({ rb: em.slice(3), at: isDate_(x.r[1]) ? x.r[1].getTime() : 0, by: str_(x.r[7]), note: str_(x.r[8]) }); });
+  // hours: report hours + On Duty time
+  [[HOURS_SHEET_, 6, 11], [DUTY_SHEET_, 3, 6]].forEach(t => { const sh = ss_().getSheetByName(t[0]); if (!sh || sh.getLastRow() < 2) return;
+    sh.getRange(2, 1, sh.getLastRow() - 1, t[2] + 1).getValues().forEach(r => { const id = str_(r[t[1]]).replace(/^'/, ""); if (known(id)) get(id).hours += (Number(r[t[2]]) || 0) / 60; }); });
+  // reports filed / tagged on, and trainings run
+  const INSTR = { gomtraining: { gtInstructor: 1, gtInstructorId: 1, gtSupervisor: 1 }, academy: { ftoCallsign: 1, ftoDiscordId: 1 } }, first = {};
+  actRows_().forEach(r => { const seen = {}, seenI = {};
+    (r.people || []).forEach(x => { if (!x.i || !known(x.i)) return;
+      if (!seen[x.i]) { seen[x.i] = 1; get(x.i).reports++; if (r.at && (!first[x.i] || r.at < first[x.i])) first[x.i] = r.at; }
+      if (INSTR[r.form] && INSTR[r.form][x.f] && !seenI[x.i]) { seenI[x.i] = 1; get(x.i).instr++; } }); });
+  // time in the LSPD: joined the LSPD Discord (when known), else the portal account / first report
+  const mem = (() => { try { return dmemAll_(); } catch (e) { return {}; } })(), accts = (() => { try { return acctAll_(); } catch (e) { return []; } })();
+  Object.keys(S).forEach(id => { const c = [];
+    const j = mem[id] && Date.parse(mem[id].j || ""); if (j) c.push(j);
+    if (!c.length) { const a = accts.find(x => x.id === id); const t = a && Date.parse(a.created || ""); if (t) c.push(t); if (first[id]) c.push(first[id]); }
+    if (c.length) S[id].months = Math.max(0, Math.floor((now - Math.min.apply(null, c)) / (30.44 * 864e5))); });
+  // SOP role, unit rosters
+  try { const sop = sopIds_(); Object.keys(sop).forEach(id => { if (known(id)) get(id).sop = 1; }); } catch (e) {}
+  const tabs = ribbonUnitTabs_(); Object.keys(tabs).forEach(rid => { tabIds_(tabs[rid], false).forEach(id => { if (known(id)) get(id).units.push(rid); }); });
+  Object.keys(S).forEach(id => { S[id].hours = Math.round(S[id].hours); });
+  try { bigPut_(ck, JSON.stringify(S), 900); } catch (e) {}
+  return S;
+}
+function rbTier_(rb, v) { let t = 0; (rb.tiers || [1]).forEach((n, i) => { if (v >= n) t = i + 1; }); return t; }
+// one officer's ribbons, in order of precedence: [{ id, tier, count, by, note, at }]
+function ribbonsFor_(id, S) {
+  const st = (S || ribbonStats_())[id]; if (!st) return [];
+  const out = [];
+  RIBBONS_.forEach(rb => {
+    if (rb.how === "award") { const got = st.awards.filter(a => a.rb === rb.id); if (got.length) { const last = got[got.length - 1]; out.push({ id: rb.id, tier: Math.min(4, got.length), count: got.length, by: last.by, note: last.note, at: last.at }); } return; }
+    const v = rb.stat === "unit" ? (st.units.indexOf(rb.id) !== -1 ? 1 : 0) : st[rb.stat] || 0, t = rbTier_(rb, v);
+    if (t) out.push({ id: rb.id, tier: t, count: v });
+  });
+  return out;
+}
+// the guide: every ribbon, with this officer's progress toward the next device
+function ribbonGuide_(id, S) {
+  const st = (S || ribbonStats_())[id] || { units: [], awards: [] };
+  return RIBBONS_.map(rb => {
+    const g = { id: rb.id, name: rb.name, group: rb.group, how: rb.how, desc: rb.desc, stripes: rb.stripes, frame: rb.frame || "", tiers: rb.tiers || null, unit: rb.unit || "" };
+    if (rb.how === "auto") { const v = rb.stat === "unit" ? (st.units.indexOf(rb.id) !== -1 ? 1 : 0) : st[rb.stat] || 0; g.have = v; g.tier = rbTier_(rb, v); g.next = (rb.tiers || []).find(n => n > v) || null; }
+    else { const n = st.awards.filter(a => a.rb === rb.id).length; g.have = n; g.tier = Math.min(4, n); }
+    return g;
+  });
+}
 function unitView_(acct) {
   const m = me_(acct), now = Date.now();
   const kudos = rows_("Kudos", KUDOS_).map(x => ({ id: str_(x.r[0]), at: isDate_(x.r[1]) ? x.r[1].getTime() : 0, fromId: str_(x.r[2]), from: str_(x.r[3]), toId: str_(x.r[4]), to: str_(x.r[5]), msg: str_(x.r[6]) })).reverse();
@@ -2493,7 +2599,8 @@ function unitView_(acct) {
     const mine = results.filter(r => r.check === str_(x.r[0]) && r.id === m.id), best = mine.sort((a, b) => b.score - a.score)[0] || null, all = results.filter(r => r.check === str_(x.r[0]));
     return { id: str_(x.r[0]), title: str_(x.r[2]), by: str_(x.r[3]), pass: Number(x.r[5]) || 80, questions: qs.map(q => ({ q: q.q, options: q.options })), best: best, takers: atLeast_(m, "fto") ? all.length : undefined, passedN: atLeast_(m, "fto") ? all.filter(r => r.passed).length : undefined }; }).reverse();
   return { ok: true, me: { id: m.id, name: m.name, level: m.level }, canAward: atLeast_(m, "command"), canTrain: atLeast_(m, "fto"),
-    kudos: kudos.slice(0, 40), mineReceived: kudos.filter(k => k.toId === m.id).length, ribbons: awards.filter(a => a.type === "ribbon" && a.toId === m.id), recentAwards: awards.slice(0, 12), ootm: ootm,
+    kudos: kudos.slice(0, 40), mineReceived: kudos.filter(k => k.toId === m.id).length, ribbons: awards.filter(a => a.type === "ribbon" && a.toId === m.id), recentAwards: awards.slice(0, 12).map(a => Object.assign(a, { rb: /^rb:/.test(a.emoji) ? a.emoji.slice(3) : "" })), ootm: ootm,
+    rack: (() => { try { const S = ribbonStats_(); return { mine: ribbonsFor_(m.id, S), guide: ribbonGuide_(m.id, S) }; } catch (e) { return null; } })(),
     sessions: sessions, checks: checks, people: builderPeople_().filter(p => p.i).map(p => ({ i: p.i, n: (p.cs ? p.cs + " | " : "") + p.n })), dm: dmOn_() };
 }
 function unitAct_(d) {
@@ -2504,16 +2611,20 @@ function unitAct_(d) {
     const to = who(d.to), msg = clip_(str_(d.msg), 300); if (!to) return { ok: false, error: "Pick an officer from the roster." }; if (to.i === m.id) return { ok: false, error: "Kudos are for someone else 🙂" }; if (msg.length < 3) return { ok: false, error: "Say what they did." };
     const ck = "kudo_" + m.id + "_" + to.i, c = CacheService.getScriptCache(); if (c.get(ck)) return { ok: false, error: "You just sent them kudos. Try again later." }; c.put(ck, "1", 3600);
     withLock_(() => { tab_("Kudos", KUDOS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), "'" + m.id, cellSafe_(m.name), "'" + to.i, cellSafe_((to.cs ? to.cs + " | " : "") + to.n), cellSafe_(msg)]); return { ok: true }; });
+    try { CacheService.getScriptCache().remove("ribbon_stats_v1_n"); } catch (e) {}
     dm_(to.i, "👏 **Kudos from " + m.name + "** on the LSPD MDT:\n> " + msg);
     return unitView_(acct);
   }
   if (a === "unitAward") {
     if (!atLeast_(m, "command")) return { ok: false, error: "Command staff give ribbons and Officer of the Month." };
     const to = who(d.to); if (!to) return { ok: false, error: "Pick an officer from the roster." };
-    const type = d.type === "ootm" ? "ootm" : "ribbon", title = type === "ootm" ? "Officer of the Month · " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMMM yyyy") : clip_(str_(d.title), 60);
-    if (!title) return { ok: false, error: "Name the ribbon." };
-    withLock_(() => { tab_("Awards", AWARDS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), type, cellSafe_(title), clip_(str_(d.emoji) || (type === "ootm" ? "🏆" : "🎖️"), 8), "'" + to.i, cellSafe_((to.cs ? to.cs + " | " : "") + to.n), cellSafe_(m.name), cellSafe_(clip_(str_(d.note), 300))]); return { ok: true }; });
-    dm_(to.i, (type === "ootm" ? "🏆 **You're LSPD Officer of the Month!**" : "🎖️ **You've been awarded the " + title + " ribbon.**") + " — " + m.name + (str_(d.note) ? "\n> " + clip_(str_(d.note), 300) : ""));
+    const type = d.type === "ootm" ? "ootm" : "ribbon", rb = type === "ribbon" ? RIBBONS_.find(x => x.id === str_(d.ribbon) && x.how === "award") : null;
+    if (type === "ribbon" && !rb) return { ok: false, error: "Pick a ribbon from the list." };
+    const title = type === "ootm" ? "Officer of the Month · " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMMM yyyy") : rb.name;
+    if (type === "ribbon" && !str_(d.note)) return { ok: false, error: "Say what it's for (the citation)." };
+    withLock_(() => { tab_("Awards", AWARDS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), type, cellSafe_(title), type === "ootm" ? "🏆" : "rb:" + rb.id, "'" + to.i, cellSafe_((to.cs ? to.cs + " | " : "") + to.n), cellSafe_(m.name), cellSafe_(clip_(str_(d.note), 300))]); return { ok: true }; });
+    try { CacheService.getScriptCache().remove("ribbon_stats_v1_n"); } catch (e) {}
+    dm_(to.i, (type === "ootm" ? "🏆 **You're LSPD Officer of the Month!**" : "🎖️ **You've been awarded the " + title + ".**") + " — " + m.name + (str_(d.note) ? "\n> " + clip_(str_(d.note), 300) : ""));
     try { CacheService.getScriptCache().remove("mdt_dept"); } catch (e) {}
     return unitView_(acct);
   }

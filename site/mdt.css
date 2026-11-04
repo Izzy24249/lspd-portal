@@ -671,3 +671,23 @@ mark{background:rgba(255,190,61,.35);color:#fff;padding:0 2px;border-radius:3px}
 .trk .pd-check.auto{cursor:default;color:var(--mute)}
 .trk .pd-check.auto i{border-color:rgba(52,217,150,.5);color:#4ade80}
 .trk .pd-check.busy{opacity:.5;pointer-events:none}
+/* ribbons: drawn ribbon bars in a rack (rows of 3, short row on top) */
+.rack{display:inline-flex;flex-direction:column;align-items:center;gap:2px;padding:6px;border-radius:6px;background:rgba(0,0,0,.25)}
+.rack-row{display:flex;gap:2px}
+.rack svg.rb,.rg svg.rb,.aw-prev svg.rb,.need svg.rb{display:block;border-radius:1px;box-shadow:0 1px 2px rgba(0,0,0,.6)}
+.home-rack{display:inline-flex;align-items:center;gap:12px;margin:-6px 0 16px;padding:6px 12px 6px 6px;border-radius:12px;border:1px solid var(--line2);background:var(--glass);cursor:pointer;color:inherit;text-decoration:none}
+.home-rack small{color:var(--mute);font-size:12px}
+.my-rack{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;margin:6px 0 10px}
+.rack-names{list-style:none;display:grid;gap:4px;font-size:13px;color:var(--tx)}
+.rack-names em{font-style:normal;font-size:11px;color:var(--amber);margin-left:4px}
+.rg-grp{margin:16px 0 8px;font:700 11px "Barlow Condensed",sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--mute)}
+.rg-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.rg{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--glass)}
+.rg:not(.got) svg.rb{filter:grayscale(.7) brightness(.8);opacity:.75}
+.rg.got{border-color:rgba(255,190,61,.4)}
+.rg b{font-size:13.5px}.rg b em{font-style:normal;color:var(--green);margin-left:4px}
+.rg p{margin:4px 0 0;color:var(--mute);font-size:12.5px;line-height:1.4}
+.rg small{display:block;margin-top:4px;color:var(--mute);font-size:11.5px}
+.rg-prog{height:4px;border-radius:4px;background:rgba(255,255,255,.07);margin-top:8px;overflow:hidden}.rg-prog i{display:block;height:100%;background:var(--amber)}
+.rg-foot{margin-top:12px;color:var(--mute);font-size:12px}
+.aw-prev{display:flex;gap:12px;align-items:center;margin:-4px 0 10px}.aw-prev p{color:var(--mute);font-size:12.5px;line-height:1.4}

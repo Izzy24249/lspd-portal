@@ -248,7 +248,7 @@
     { const me = (p && p.discordId) || ""; const kd = UNIT && (UNIT.kudos || []).find(k => k.toId === me && Date.now() - k.at < 3 * 864e5);
       if (kd) h += '<a class="kudo-ban" data-go="unit"><span>👏</span><div><small>YOU WERE RECOGNIZED</small><b>' + esc(kd.from) + "</b><p>“" + esc(kd.msg) + "”</p></div></a>"; }
     if (UNIT && UNIT.ootm) h += '<a class="ootm mini" data-go="unit"><span>🏆</span><div><small>' + esc(UNIT.ootm.title) + "</small><b>" + esc(UNIT.ootm.to) + "</b></div></a>";
-    if (UNIT && (UNIT.ribbons || []).length) h += '<div class="ribbons" style="margin:-8px 0 16px">' + UNIT.ribbons.map(r => '<span title="' + esc(r.title) + '"><i>' + esc(r.emoji) + "</i>" + esc(r.title) + "</span>").join("") + "</div>";
+    if (UNIT && UNIT.rack && UNIT.rack.mine.length) h += '<a class="home-rack" data-go="unit" title="Your ribbons">' + rackHTML(UNIT.rack.mine, 40) + "<small>" + UNIT.rack.mine.length + " ribbon" + (UNIT.rack.mine.length === 1 ? "" : "s") + " · see the guide ›</small></a>";
     const NB = B.notices || [];
     if (NB.length) h += '<section class="bolos">' + NB.slice(0, 3).map(n => '<a class="bolo t-' + esc(n.type.toLowerCase()) + '" data-go="records"><b>' + esc(n.type.toUpperCase()) + "</b><span>" + esc(n.title) + "</span><small>" + esc(n.from) + " · " + ago(n.at) + " ago</small></a>").join("") + (NB.length > 3 ? '<a class="bolo more" data-go="records">+' + (NB.length - 3) + " more</a>" : "") + "</section>";
     // briefing | path
@@ -401,16 +401,55 @@
     return r;
   }
   const dt = t => new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  // ---------- ribbons: drawn ribbon bars (stripes + devices), worn in rows of 3 ----------
+  const RB_DEV = ["", "", "oak", "silver", "gold"];
+  function rbMap() { const m = {}; ((UNIT && UNIT.rack && UNIT.rack.guide) || []).forEach(g => m[g.id] = g); return m; }
+  function ribbonSVG(g, tier, w) {
+    w = w || 54; const h = Math.round(w * 0.3), tot = g.stripes.reduce((n, s) => n + s[1], 0); let x = 0;
+    const bars = g.stripes.map(s => { const sw = s[1] / tot * w, r = '<rect x="' + x.toFixed(2) + '" y="0" width="' + (sw + .3).toFixed(2) + '" height="' + h + '" fill="' + s[0] + '"/>'; x += sw; return r; }).join("");
+    const dev = RB_DEV[Math.min(4, tier || 0)], cx = w / 2, cy = h / 2, r = h * .34;
+    const star = (c, st) => '<path transform="translate(' + cx + " " + cy + ')" d="' + (() => { let d = ""; for (let i = 0; i < 10; i++) { const a = Math.PI / 5 * i - Math.PI / 2, rr = i % 2 ? r * .45 : r; d += (i ? "L" : "M") + (Math.cos(a) * rr).toFixed(2) + " " + (Math.sin(a) * rr).toFixed(2); } return d + "Z"; })() + '" fill="' + c + '" stroke="' + st + '" stroke-width=".5"/>';
+    const devSVG = dev === "oak" ? '<g transform="translate(' + cx + " " + cy + ')"><ellipse rx="' + (r * 1.3).toFixed(2) + '" ry="' + (r * .62).toFixed(2) + '" fill="#b7791f" stroke="#5c3d0e" stroke-width=".6"/><path d="M' + (-r * 1.1).toFixed(2) + ' 0H' + (r * 1.1).toFixed(2) + '" stroke="#5c3d0e" stroke-width=".6"/></g>' : dev === "silver" ? star("#e5e7eb", "#6b7280") : dev === "gold" ? star("#facc15", "#92400e") : "";
+    return '<svg class="rb" viewBox="0 0 ' + w + " " + h + '" width="' + w + '" height="' + h + '" role="img"><title>' + esc(g.name) + "</title>" + bars + (g.frame ? '<rect x=".6" y=".6" width="' + (w - 1.2) + '" height="' + (h - 1.2) + '" fill="none" stroke="' + g.frame + '" stroke-width="1.2"/>' : "") + devSVG +
+      '<rect x=".25" y=".25" width="' + (w - .5) + '" height="' + (h - .5) + '" fill="none" stroke="rgba(0,0,0,.55)" stroke-width=".5"/><rect x="0" y="0" width="' + w + '" height="' + (h * .45).toFixed(1) + '" fill="rgba(255,255,255,.08)"/></svg>';
+  }
+  // highest precedence first; the short row goes on top, centred (how a real rack is built)
+  function rackHTML(list, w) {
+    const M = rbMap(), items = (list || []).filter(x => M[x.id]); if (!items.length) return "";
+    const rows = [], first = items.length % 3 || 3; rows.push(items.slice(0, first)); for (let i = first; i < items.length; i += 3) rows.push(items.slice(i, i + 3));
+    return '<div class="rack">' + rows.map(r => '<div class="rack-row">' + r.map(x => '<span title="' + esc(M[x.id].name + (x.tier > 1 ? " (" + ["", "", "bronze oak leaf", "silver star", "gold star"][x.tier] + ")" : "") + (x.note ? " — " + x.note : "")) + '">' + ribbonSVG(M[x.id], x.tier, w) + "</span>").join("") + "</div>").join("") + "</div>";
+  }
+  function ribbonGuideHTML() {
+    const R = UNIT.rack; if (!R) return "";
+    const groups = ["Bravery", "Service", "Unit", "Event", "Achievement", "Qualification"], unitWord = { kudos: "kudos", months: "months", hours: "hours", trainings: "trainings", reports: "reports", time: "times" };
+    let h = '<div class="sect"><span class="lbl">Ribbon guide</span><span class="lbl">' + R.mine.length + " of " + R.guide.length + " earned</span></div>";
+    groups.forEach(gr => {
+      const list = R.guide.filter(g => g.group === gr); if (!list.length) return;
+      h += '<div class="rg-grp">' + esc(gr === "Achievement" ? "Achievement · earned automatically" : gr === "Qualification" ? "Qualification · automatic" : gr === "Unit" ? "Unit · automatic from your division rosters (Unit Citation is awarded)" : gr + " · awarded by command") + '</div><div class="rg-list">' +
+        list.map(g => {
+          let prog = "";
+          if (g.how === "auto" && g.tiers && g.tiers.length > 1) { const nxt = g.next, base = nxt ? g.tiers[g.tiers.indexOf(nxt) - 1] || 0 : 0;
+            prog = '<div class="rg-prog"><i style="width:' + (nxt ? Math.min(100, Math.round((g.have - base) / Math.max(1, nxt - base) * 100)) : 100) + '%"></i></div><small>' + g.have + " " + esc(g.have === 1 ? String(unitWord[g.unit] || "").replace(/s$/, "") : unitWord[g.unit] || "") + (nxt ? " · next at " + nxt : " · top tier") + " · tiers " + g.tiers.join(" / ") + "</small>"; }
+          else if (g.how === "award" && g.have) prog = "<small>Awarded " + g.have + "×</small>";
+          return '<div class="rg' + (g.tier ? " got" : "") + '">' + ribbonSVG(g, g.tier || 1, 60) + "<div><b>" + esc(g.name) + (g.tier ? ' <em>✓</em>' : "") + "</b><p>" + esc(g.desc) + "</p>" + prog + "</div></div>";
+        }).join("") + "</div>";
+    });
+    return h + '<p class="rg-foot">Devices: second tier adds a bronze oak leaf, third a silver star, fourth a gold star. Awarded ribbons add a device each time they are given again.</p>';
+  }
   function peopleOpts() { return (UNIT.people || []).map(p => '<option value="' + esc(p.i) + '">' + esc(p.n) + "</option>").join(""); }
   function unitHTML() {
     if (!UNIT) return '<div class="boot">LOADING…</div>'; if (UNIT.error) return '<div class="empty">' + esc(UNIT.error) + "</div>";
     const U = UNIT;
     let h = '<div class="h2"><div><h1>KUDOS &amp; AWARDS</h1><p>Thank someone for good work. Command hands out ribbons and Officer of the Month.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-kudo>👏 GIVE KUDOS</button>' + (U.canAward ? '<button class="btn ghost" data-award>🎖️ AWARD</button>' : "") + "</div></div>";
     if (U.ootm) h += '<section class="ootm"><span>🏆</span><div><small>' + esc(U.ootm.title) + "</small><b>" + esc(U.ootm.to) + "</b>" + (U.ootm.note ? "<p>" + esc(U.ootm.note) + "</p>" : "") + "</div></section>";
-    if ((U.ribbons || []).length) h += '<div class="sect"><span class="lbl">Your ribbons</span></div><div class="ribbons">' + U.ribbons.map(r => '<span title="' + esc(r.note || "") + '"><i>' + esc(r.emoji) + "</i>" + esc(r.title) + "</span>").join("") + "</div>";
+    if (U.rack) {
+      h += '<div class="sect"><span class="lbl">Your ribbons</span></div>' + (U.rack.mine.length ? '<div class="my-rack">' + rackHTML(U.rack.mine, 64) + '<ul class="rack-names">' + U.rack.mine.map(x => { const g = rbMap()[x.id]; return g ? "<li>" + esc(g.name) + (x.tier > 1 ? ' <em>' + ["", "", "oak leaf", "silver star", "gold star"][x.tier] + "</em>" : "") + "</li>" : ""; }).join("") + "</ul></div>" : '<p style="color:var(--mute)">No ribbons yet. The guide below shows how to earn each one.</p>');
+      const legacy = (U.ribbons || []).filter(r => !/^rb:/.test(r.emoji)); if (legacy.length) h += '<div class="ribbons">' + legacy.map(r => '<span title="' + esc(r.note || "") + '"><i>' + esc(r.emoji) + "</i>" + esc(r.title) + "</span>").join("") + "</div>";
+    } else if ((U.ribbons || []).length) h += '<div class="sect"><span class="lbl">Your ribbons</span></div><div class="ribbons">' + U.ribbons.map(r => '<span title="' + esc(r.note || "") + '"><i>' + esc(r.emoji) + "</i>" + esc(r.title) + "</span>").join("") + "</div>";
     h += '<div class="grid" style="margin-top:18px;align-items:start"><section class="pane"><div class="ph"><span class="lbl">Kudos wall</span><span class="lbl">' + (U.mineReceived ? "You've received " + U.mineReceived : "") + "</span></div>" +
       ((U.kudos || []).length ? U.kudos.map(k => '<div class="kudo' + (k.toId === U.me.id ? " me" : "") + '"><b>' + esc(k.to) + "</b><p>“" + esc(k.msg) + '”</p><small>from ' + esc(k.from) + " · " + ago(k.at) + " ago</small></div>").join("") : '<p style="color:var(--mute)">No kudos yet. Be the first.</p>') + "</section>" +
-      '<section class="pane"><div class="ph"><span class="lbl">Recent awards</span></div>' + ((U.recentAwards || []).length ? U.recentAwards.map(a => '<div class="need"><span class="cs" style="font-size:16px">' + esc(a.emoji) + "</span><div><b>" + esc(a.to) + "</b><small>" + esc(a.title) + " · " + esc(a.by) + "</small></div><span></span></div>").join("") : '<p style="color:var(--mute)">None yet.</p>') + "</section></div>";
+      '<section class="pane"><div class="ph"><span class="lbl">Recent awards</span></div>' + ((U.recentAwards || []).length ? U.recentAwards.map(a => '<div class="need"><span class="cs" style="font-size:16px;' + (a.rb && rbMap()[a.rb] ? "padding:4px;border:0" : "") + '">' + (a.rb && rbMap()[a.rb] ? ribbonSVG(rbMap()[a.rb], 1, 40) : esc(a.emoji)) + "</span><div><b>" + esc(a.to) + "</b><small>" + esc(a.title) + " · " + esc(a.by) + "</small></div><span></span></div>").join("") : '<p style="color:var(--mute)">None yet.</p>') + "</section></div>";
+    h += ribbonGuideHTML();
     return h;
   }
   function trainHTML() {
@@ -708,9 +747,15 @@
     }
     if (e.target.closest("[data-kudo]")) { const m = modal('<h3>👏 Give kudos</h3><label>Officer<select id="kTo"><option value="">Pick from the roster…</option>' + peopleOpts() + '</select></label><label>What did they do?<textarea id="kMsg" rows="4" maxlength="300" placeholder="Great pursuit call-outs on Route 68 last night."></textarea></label>' + (UNIT.dm ? '<p class="md-note">They also get a Discord DM.</p>' : "") + '<div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="kGo">SEND</button></div>');
       m.querySelector("#kGo").onclick = async () => { const r = await unit("unitKudos", { to: m.querySelector("#kTo").value, msg: m.querySelector("#kMsg").value }, "Kudos sent 👏"); if (r.ok) m.hidden = true; }; return; }
-    if (e.target.closest("[data-award]")) { const m = modal('<h3>🎖️ Award</h3><div class="seg" id="aType"><button type="button" class="on" data-t="ribbon">RIBBON</button><button type="button" data-t="ootm">OFFICER OF THE MONTH</button></div><label>Officer<select id="aTo"><option value="">Pick from the roster…</option>' + peopleOpts() + '</select></label><label id="aTL">Ribbon name<input id="aTitle" maxlength="60" placeholder="Distinguished Service"></label><label id="aEL">Emoji<input id="aEmoji" maxlength="4" value="🎖️"></label><label>Note (optional)<textarea id="aNote" rows="3" maxlength="300"></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="aGo">AWARD</button></div>');
-      let type = "ribbon"; m.querySelector("#aType").onclick = ev => { const b = ev.target.closest("[data-t]"); if (!b) return; type = b.dataset.t; m.querySelectorAll("#aType button").forEach(x => x.classList.toggle("on", x === b)); m.querySelector("#aTL").hidden = m.querySelector("#aEL").hidden = type === "ootm"; };
-      m.querySelector("#aGo").onclick = async () => { const r = await unit("unitAward", { type: type, to: m.querySelector("#aTo").value, title: m.querySelector("#aTitle").value, emoji: m.querySelector("#aEmoji").value, note: m.querySelector("#aNote").value }, "Awarded 🎖️"); if (r.ok) m.hidden = true; }; return; }
+    if (e.target.closest("[data-award]")) {
+      const awardable = ((UNIT.rack && UNIT.rack.guide) || []).filter(g => g.how === "award");
+      const m = modal('<h3>🎖️ Award</h3><div class="seg" id="aType"><button type="button" class="on" data-t="ribbon">RIBBON</button><button type="button" data-t="ootm">OFFICER OF THE MONTH</button></div>' +
+        '<label>Officer<select id="aTo"><option value="">Pick from the roster…</option>' + peopleOpts() + "</select></label>" +
+        '<label id="aRL">Ribbon<select id="aRb">' + awardable.map(g => '<option value="' + esc(g.id) + '">' + esc(g.name) + "</option>").join("") + '</select></label><div id="aPrev" class="aw-prev"></div>' +
+        '<label><span id="aNL">Citation: what they did</span><textarea id="aNote" rows="3" maxlength="300" placeholder="Pulled a driver from a burning vehicle on the Del Perro Freeway while under fire."></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="aGo">AWARD</button></div>');
+      const prev = () => { const g = awardable.find(x => x.id === m.querySelector("#aRb").value); m.querySelector("#aPrev").innerHTML = g ? ribbonSVG(g, 1, 90) + "<p>" + esc(g.desc) + "</p>" : ""; }; prev(); m.querySelector("#aRb").onchange = prev;
+      let type = "ribbon"; m.querySelector("#aType").onclick = ev => { const b = ev.target.closest("[data-t]"); if (!b) return; type = b.dataset.t; m.querySelectorAll("#aType button").forEach(x => x.classList.toggle("on", x === b)); m.querySelector("#aRL").hidden = m.querySelector("#aPrev").hidden = type === "ootm"; m.querySelector("#aNL").textContent = type === "ootm" ? "Note (optional)" : "Citation: what they did"; };
+      m.querySelector("#aGo").onclick = async () => { const r = await unit("unitAward", { type: type, to: m.querySelector("#aTo").value, ribbon: m.querySelector("#aRb").value, note: m.querySelector("#aNote").value }, "Awarded 🎖️"); if (r.ok) m.hidden = true; }; return; }
     if (e.target.closest("[data-newsess]")) { const m = modal('<h3>Post a training session</h3><label>Training<input id="sTopic" maxlength="120" placeholder="Felony stops & radio procedure"></label><label>When<input id="sWhen" type="datetime-local"></label><label>Spots (0 = no limit)<input id="sSlots" type="number" min="0" max="50" value="4"></label><label>Details (optional)<textarea id="sDet" rows="3" maxlength="600" placeholder="Meet at Mission Row garage."></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="sGo">POST</button></div>');
       m.querySelector("#sGo").onclick = async () => { const w = m.querySelector("#sWhen").value; const r = await unit("unitSession", { topic: m.querySelector("#sTopic").value, when: w ? new Date(w).toISOString() : "", slots: m.querySelector("#sSlots").value, details: m.querySelector("#sDet").value }, "Session posted."); if (r.ok) m.hidden = true; }; return; }
     if (e.target.closest("[data-newcheck]")) { const m = modal('<h3>New knowledge check</h3><label>Title<input id="cTitle" maxlength="100" placeholder="10-codes basics"></label><label>Pass mark (%)<input id="cPass" type="number" min="1" max="100" value="80"></label><label>Questions<textarea id="cQs" rows="10" placeholder="One question per block, blank line between blocks. Mark the right answer with *.&#10;&#10;What does 10-8 mean?&#10;*In service&#10;Out of service&#10;Busy&#10;&#10;Which code is officer down?&#10;10-4&#10;*10-99"></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="cGo">SAVE</button></div>');
