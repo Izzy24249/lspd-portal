@@ -744,7 +744,7 @@ const BLOCK_TYPES = {
   banner: "Title banner", fields: "Field row (1–2 fields)", strip: "Header strip (1–4 fields)", text: "Text / rule line",
   checklist: "Checklist", repeater: "Repeating list (add rows)", longtext: "Big text box"
 };
-const FIELD_TYPES = [["text", "Text"], ["select", "Dropdown"], ["date", "Date"], ["time", "Time"], ["discord_id", "Discord user ID"], ["number", "Number"], ["case_number", "Case number (Generate button)"], ["static", "Fixed text (not an input)"], ["officer", "Officer from roster (one person)"], ["officers", "Officers from roster (several)"]];
+const FIELD_TYPES = [["text", "Text"], ["select", "Dropdown"], ["date", "Date"], ["time", "Time"], ["discord_id", "Discord user ID"], ["number", "Number"], ["case_number", "Case number (Generate button)"], ["static", "Fixed text (not an input)"], ["officer", "Officer from roster (one person)"], ["officers", "Officers from roster (several)"], ["score", "Test score (from Training knowledge checks)"]];
 
 function formKeys(form) {
   const keys = [];
@@ -994,7 +994,7 @@ function blockBody(form, b) {
         out.push(h("div", { class: "sub" },
           h("div", { class: "subhead" }, h("b", { text: "Column " + (ci + 1) }), ctrls(b.columns, ci)),
           h("div", { class: "g3" }, field("Header", bind(c, "label")), field("ID", keyInput(form, c, "id")),
-            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"], ["officer", "Officer from roster"], ["link", "Pick from another list (e.g. suspects)"]] }))),
+            field("Type", bind(c, "type", { type: "select", structural: true, options: [["text", "Text"], ["select", "Dropdown"], ["search", "Searchable list (type to filter)"], ["officer", "Officer from roster"], ["link", "Pick from another list (e.g. suspects)"], ["score", "Test score (from Training knowledge checks)"]] }))),
           field("Width (Futuristic HUD look)", bind(c, "width", { type: "select", options: [["", c.type === "search" ? "Auto (wide)" : "Auto (normal)"], ["narrow", "Narrow"], ["normal", "Normal"], ["wide", "Wide"]] })),
           c.type === "link" ? linkEditor(form, b, c) : null,
           c.type === "officer" ? rosterTabSelect(c) : null,

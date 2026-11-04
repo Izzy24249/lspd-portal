@@ -62,10 +62,24 @@ window.Portal = (function () {
   // how many of the sheet's 4 columns each item spans
   function spans(n) { return n >= 4 ? [1, 1, 1, 1] : n === 3 ? [1, 2, 1] : n === 2 ? [2, 2] : [4]; }
 
+  // "Test score" fields: a dropdown of recent knowledge-check results (FTO+), loaded once per page
+  let SCORES = null, SCORES_BUSY = false;
+  const scoreOpts = keep => (SCORES || []).concat(keep && (SCORES || []).indexOf(keep) === -1 ? [keep] : []).map(o => `<option>${esc(o)}</option>`).join("");
+  function loadScores() {
+    if (SCORES || SCORES_BUSY) return; SCORES_BUSY = true;
+    let session = ""; try { session = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
+    post({ action: "unitCheckScores", session: session }).then(r => {
+      SCORES_BUSY = false; if (!r || !r.ok) return; SCORES = r.scores || [];
+      document.querySelectorAll("select[data-scores]").forEach(sel => { const v = sel.value; sel.innerHTML = `<option value="">${SCORES.length ? "— pick a test score —" : "— no test results in the last 30 days —"}</option>` + scoreOpts(v); sel.value = v; });
+    }).catch(() => { SCORES_BUSY = false; });
+  }
   function inputHTML(f, centered) {
     const c = centered ? " c" : "";
     const ph = f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : "";
     switch (f.type) {
+      case "score":
+        loadScores();
+        return `<select class="g${c}" data-f="${esc(f.id)}" data-scores="1"><option value="">— pick a test score —</option>${scoreOpts()}</select>`;
       case "select":
         return `<select class="g${c}" data-f="${esc(f.id)}"><option value=""></option>${(f.options || []).map(o => `<option${f.default === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
       case "date":
@@ -448,6 +462,8 @@ window.Portal = (function () {
       const all = (b.columns || []).slice(0, 5), cols = hud ? all : all.slice(0, 3), extra = hud ? [] : all.slice(3), sp = cols.length === 3 ? [1, 1, 1] : cols.length === 2 ? [1, 2] : [3];
       const ctl = c => c.type === "link"
           ? `<select class="g c" data-k="${esc(c.id)}" data-link="1"></select>`
+          : c.type === "score"
+          ? (loadScores(), `<select class="g c" data-k="${esc(c.id)}" data-scores="1"><option value="">— pick a test score —</option>${scoreOpts(vals && vals[c.id])}</select>`)
           : c.type === "select"
           ? `<select class="g c" data-k="${esc(c.id)}">${c.blank ? `<option value="">— choose —</option>` : ""}${(c.options || []).map(o => `<option>${esc(o)}</option>`).join("")}</select>`
           : `<input class="g" type="text" maxlength="200" data-k="${esc(c.id)}" placeholder="${esc(c.placeholder || (c.type === "officer" ? "Search the roster…" : b.numbered ? c.label : ""))}"${c.type === "search" || c.type === "officer" ? ` data-search="1" autocomplete="off"` : ""}>`;

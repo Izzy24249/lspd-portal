@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 103;
+const BACKEND_VERSION = 104;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2662,6 +2662,17 @@ function unitAct_(d) {
     checkAdd_(title, m.name, qs, d.pass, d.draw);
     return unitView_(acct);
   }
+  if (a === "unitCheckScores") {       // for the "Test score" field on reports: recent results, newest first
+    if (!atLeast_(m, "fto")) return { ok: false, error: "FTOs and up attach test scores." };
+    const since = Date.now() - 30 * 864e5, checks = {}, who = {};
+    rows_("Knowledge Checks", CHECKS_).forEach(y => checks[str_(y.r[0])] = str_(y.r[2]));
+    try { promoPeople_().forEach(o => { if (o.id) who[o.id] = (o.callsign ? o.callsign + " | " : "") + o.name; }); } catch (e) {}
+    const tz = Session.getScriptTimeZone(), many = Object.keys(checks).length > 1;
+    const list = rows_("Check Results", RESULTS_).map(y => ({ check: str_(y.r[0]), at: isDate_(y.r[1]) ? y.r[1].getTime() : 0, id: str_(y.r[2]).replace(/^'/, ""), name: str_(y.r[3]), score: Number(y.r[4]) || 0, of: Number(y.r[5]) || 0, passed: y.r[6] === true || str_(y.r[6]).toUpperCase() === "TRUE" }))
+      .filter(x => x.at >= since && checks[x.check]).sort((a, b) => b.at - a.at).slice(0, 150)
+      .map(x => (who[x.id] || x.name) + " — " + x.score + "/" + x.of + (x.passed ? " PASSED" : " NOT PASSED") + " (" + (many ? checks[x.check] + ", " : "") + Utilities.formatDate(new Date(x.at), tz, "MMM d h:mm a") + ")");
+    return { ok: true, scores: list };
+  }
   if (a === "unitCheckStart") {        // a random draw: N questions from the bank; the server signs which ones were handed out
     const x = rows_("Knowledge Checks", CHECKS_).find(y => str_(y.r[0]) === str_(d.id)); if (!x) return { ok: false, error: "That check is gone." };
     let qs = []; try { qs = JSON.parse(str_(x.r[4]) || "[]"); } catch (e) {}
@@ -4072,7 +4083,7 @@ function handleAdmin_(d) {
   if (a === "officerHome") return officerHome_(d);
   if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
   if (a === "builderLog") return builderLog_(d);
-  if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose)$/.test(a)) return unitAct_(d);
+  if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose|CheckScores)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
   if (a === "recordsSearch") return recordsSearch_(d);
   if (a === "quickRef") return quickRef_(d);
