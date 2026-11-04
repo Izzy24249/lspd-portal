@@ -462,7 +462,7 @@
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' + (x.mine ? '<button class="btn ghost" data-join="' + esc(x.id) + '" data-leave="1">LEAVE</button>' : x.full ? "" : '<button class="btn" data-join="' + esc(x.id) + '">SIGN UP</button>') + (x.canManage ? '<button class="btn ghost" data-sclose="' + esc(x.id) + '">CLOSE</button>' : "") + "</div></div></div>").join("") + "</div>" : '<div class="empty">No sessions scheduled.' + (U.canTrain ? " Post one with + SESSION." : "") + "</div>";
     h += '<div class="sect"><span class="lbl">Knowledge checks · ' + (U.checks || []).length + "</span></div>";
     h += (U.checks || []).length ? '<div class="cards">' + U.checks.map(c => '<div class="card"><div class="bd"><span class="rk ' + (c.best && c.best.passed ? "" : "lo") + '" style="position:static;justify-self:start">' + (c.best ? (c.best.passed ? "✓ PASSED " : "LAST ") + c.best.score + "/" + c.best.of : "NOT TAKEN") + '</span><b class="bt">' + esc(c.title) + '</b><small class="bm">' + (c.draw ? c.draw + " random questions · bank of " + c.bank : c.questions.length + " questions") + " · pass at " + c.pass + "% · by " + esc(c.by) + (c.takers != null ? " · " + c.takers + " attempts, " + c.passedN + " passed" : "") + "</small>" +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-take="' + esc(c.id) + '">' + (c.best ? "RETAKE" : "START") + "</button>" + (U.canTrain ? '<button class="btn ghost" data-cclose="' + esc(c.id) + '">CLOSE</button>' : "") + "</div></div></div>").join("") + "</div>" : '<div class="empty">No knowledge checks right now.</div>';
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-take="' + esc(c.id) + '">' + (c.best ? "RETAKE" : "START") + "</button>" + (U.canTrain ? '<button class="btn ghost danger-sm" data-cclose="' + esc(c.id) + '" title="Remove this test from the Training tab for everyone">ARCHIVE</button>' : "") + "</div></div></div>").join("") + "</div>" : '<div class="empty">No knowledge checks right now.</div>';
     return h;
   }
   // a knowledge check, one question at a time: random-draw checks get N questions from the server's bank,
@@ -812,7 +812,11 @@
     const jn = e.target.closest("[data-join]"); if (jn) { unit("unitJoin", { id: jn.getAttribute("data-join"), leave: !!jn.getAttribute("data-leave") }, jn.getAttribute("data-leave") ? "You left the session." : "You're signed up."); return; }
     const sc = e.target.closest("[data-sclose]"); if (sc) { unit("unitSessionClose", { id: sc.getAttribute("data-sclose") }, "Session closed."); return; }
     const tk = e.target.closest("[data-take]"); if (tk) { takeCheck(UNIT.checks.find(c => c.id === tk.getAttribute("data-take"))); return; }
-    const cc = e.target.closest("[data-cclose]"); if (cc) { unit("unitCheckClose", { id: cc.getAttribute("data-cclose") }, "Check closed."); return; }
+    const cc = e.target.closest("[data-cclose]"); if (cc) {   // archive = hidden from everyone, so ask first
+      const ck = (UNIT.checks || []).find(x => x.id === cc.getAttribute("data-cclose")) || {};
+      const m = modal('<h3>Archive this test?</h3><p class="md-note">"' + esc(ck.title || "This test") + "\" will be removed from the Training tab for every officer. Scores already taken are kept.</p>" +
+        '<div class="md-act"><button class="btn" data-close>KEEP IT</button><button class="btn ghost" id="ccGo" style="color:var(--red);border-color:rgba(255,93,108,.5)">ARCHIVE</button></div>');
+      m.querySelector("#ccGo").onclick = async () => { const r = await unit("unitCheckClose", { id: cc.getAttribute("data-cclose") }, "Test archived."); if (r.ok) m.hidden = true; }; return; }
     const pc = e.target.closest("[data-pcat]"); if (pc) { REF_CAT = pc.getAttribute("data-pcat"); draw(); const mm = document.querySelector(".pen-main"); if (mm) mm.scrollTop = 0; return; }
     const ch = e.target.closest("[data-charge]"); if (ch) { chargeCard(ch.getAttribute("data-charge")); return; }
     const pk = e.target.closest("[data-pcls]"); if (pk) { REF_CLS = pk.getAttribute("data-pcls"); draw(); return; }
