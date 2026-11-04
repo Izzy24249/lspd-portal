@@ -766,3 +766,10 @@ mark{background:rgba(255,190,61,.35);color:#fff;padding:0 2px;border-radius:3px}
 .hero-rack:hover small{text-decoration:underline}
 .hr-none{font:600 12px Inter,sans-serif;color:var(--mute);padding:4px 8px;border:1px dashed var(--line2);border-radius:8px}
 @media (max-width:640px){.hero-name{gap:10px}.hero-rack small{white-space:normal}}
+/* ribbon rack: its own column on the right of the greeting banner, sitting straight on the banner */
+.hero{grid-template-columns:1fr auto auto}
+.hero-rack{position:relative;align-self:center;align-items:center;gap:8px;margin-right:6px}
+.hero-rack .rack{background:none;box-shadow:none;padding:0;gap:3px}
+.hero-rack .rack-row{gap:3px}
+.hero-rack small{font-size:12px;text-align:center}
+@media (max-width:900px){.hero{grid-template-columns:1fr}.hero-rack{align-self:start;align-items:flex-start;margin:0}}

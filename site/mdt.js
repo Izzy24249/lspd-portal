@@ -237,7 +237,7 @@
     const goals = R.guide.filter(g => g.how === "auto" && g.next).map(g => ({ g: g, left: g.next - g.have, pct: g.have / g.next }))
       .sort((a, b) => b.pct - a.pct)[0];
     const next = goals ? (goals.g.tier ? "Next device: " : "Next: ") + goals.g.name.replace(/^LSPD /, "") + " · " + goals.left + " more " + (goals.left === 1 ? String(unitWord[goals.g.unit] || "").replace(/s$/, "") : unitWord[goals.g.unit] || "") : "";
-    return '<a class="hero-rack" data-go="unit" title="Your ribbons · open the Ribbon Guide">' + (R.mine.length ? rackHTML(R.mine, 40) : '<span class="hr-none">🎖️ No ribbons yet</span>') +
+    return '<a class="hero-rack" data-go="unit" title="Your ribbons · open the Ribbon Guide">' + (R.mine.length ? rackHTML(R.mine, 58) : '<span class="hr-none">🎖️ No ribbons yet</span>') +
       '<small>' + (R.mine.length ? R.mine.length + " ribbon" + (R.mine.length === 1 ? "" : "s") : "Start earning") + (next ? " · " + esc(next) : "") + " ›</small></a>";
   }
   // top of the dashboard: the shift briefing, with a slim on-duty column beside it
@@ -262,9 +262,9 @@
     const p = DATA.profile || {}, f = DATA.fleet || {}, B = DATA.board || {}, trainee = f.rank && f.rank.trainee, mine = B.mine || [];
     const waiting = mine.filter(r => !r.grade).length;
     const D0 = B.dept || {}, NB0 = B.notices || [], st = (STATUSES.find(x => x[0] === LS.get("mdt:status")) || STATUSES[0]);
-    let h = '<section class="hero"><div><div class="kick">' + esc((p.callsign ? p.callsign + " · " : "") + st[0] + " " + st[1].toUpperCase()) + "</div><h1><span class='hero-name'>Good " + esc(greet().toLowerCase()) + ", " + esc(last(p.name) || "Officer") + "." + heroRackHTML() + '</span><br><span>' + esc(trainee ? "Welcome to the academy." : NB0.length ? NB0.length + " active BOLO" + (NB0.length > 1 ? "s" : "") + " on the board." : "All quiet on the board.") + "</span></h1>" +
+    let h = '<section class="hero"><div><div class="kick">' + esc((p.callsign ? p.callsign + " · " : "") + st[0] + " " + st[1].toUpperCase()) + "</div><h1><span class='hero-name'>Good " + esc(greet().toLowerCase()) + ", " + esc(last(p.name) || "Officer") + "." + '</span><br><span>' + esc(trainee ? "Welcome to the academy." : NB0.length ? NB0.length + " active BOLO" + (NB0.length > 1 ? "s" : "") + " on the board." : "All quiet on the board.") + "</span></h1>" +
       '<p>' + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · <b>" + waiting + "</b> waiting on a grade" : "") : " · no reports on file yet") + '</p><div class="acts"><button class="btn" data-go="reports">FILE A REPORT <kbd>F</kbd></button><button class="btn ghost" data-go="records">RUN A RECORD</button><button class="btn ghost" id="palHero">SEARCH <kbd>Ctrl K</kbd></button></div></div>' +
-      '<div class="radar"><img src="img/lspd-badge.png" alt=""><i class="blip" style="left:30%;top:28%"></i><i class="blip" style="left:68%;top:62%;animation-delay:1.4s"></i><i class="blip" style="left:56%;top:22%;animation-delay:2.4s"></i></div></section>' +
+      heroRackHTML() + '<div class="radar"><img src="img/lspd-badge.png" alt=""><i class="blip" style="left:30%;top:28%"></i><i class="blip" style="left:68%;top:62%;animation-delay:1.4s"></i><i class="blip" style="left:56%;top:22%;animation-delay:2.4s"></i></div></section>' +
       topRowHTML(B) +
       '<div class="stats">' +
       '<div class="stat"><svg viewBox="0 0 24 24"><use href="#i-clip"/></svg><small>Dept. reports · 7 days</small><b data-count="' + (D0.week || 0) + '">0</b>' + (D0.delta ? "<em" + (D0.delta < 0 ? ' style="color:var(--red)"' : "") + ">" + (D0.delta > 0 ? "▲ " : "▼ ") + Math.abs(D0.delta) + " vs last week</em>" : "<em>&nbsp;</em>") + "</div>" +
