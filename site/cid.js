@@ -25,12 +25,15 @@
   if (PROFILE && (!PROFILE.name || typeof PROFILE !== "object")) PROFILE = null;
   // inside the MDT terminal: the officer is already signed on, so fill in their details from the sign-on
   const EMBED = document.documentElement.classList.contains("embed");
-  if (EMBED) {
-    let sp = null; try { sp = JSON.parse(localStorage.getItem("lspd_prof") || "null"); } catch (e) {}
-    if (sp && sp.discordId) {
+  // signed on to the MDT: the officer's details come from their account and can't be changed here
+  let SIGNED = null; try { if (localStorage.getItem("lspd_sess")) SIGNED = JSON.parse(localStorage.getItem("lspd_prof") || "null"); } catch (e) {}
+  if (SIGNED && !SIGNED.discordId) SIGNED = null;
+  {
+    const sp = SIGNED;
+    if (sp) {
       const same = PROFILE && PROFILE.discordId === sp.discordId;
       PROFILE = { name: sp.name || (same && PROFILE.name) || "", rank: same && PROFILE.rank ? PROFILE.rank : (RANKS.find(r => (sp.title || "").indexOf(r) !== -1) || "Detective"),
-        badge: same ? PROFILE.badge || "" : "", callsign: sp.callsign || (same && PROFILE.callsign) || "", discordId: sp.discordId };
+        badge: same ? PROFILE.badge || "" : "", callsign: sp.callsign || "", discordId: sp.discordId };
       LS.set(K.profile, PROFILE);
     }
   }
@@ -98,9 +101,9 @@
     if (PROFILE) {
       box.innerHTML = `<div class="ci-welcome">Welcome back, <b>${esc(PROFILE.rank + " " + PROFILE.name)}</b>${PROFILE.badge ? ` · Badge ${esc(PROFILE.badge)}` : ""}${PROFILE.callsign ? ` · Callsign ${esc(PROFILE.callsign)}` : ""}</div>
         <button type="button" class="ci-btn gold big" id="openBuilder">Open case builder →</button>
-        <button type="button" class="ci-link" id="notYou">Not you? Change details</button>`;
+        ${SIGNED ? "" : '<button type="button" class="ci-link" id="notYou">Not you? Change details</button>'}`;
       $("openBuilder").onclick = enterBuilder;
-      $("notYou").onclick = () => { box.innerHTML = profileForm(true); wireProfileForm(box, enterBuilder); };
+      if ($("notYou")) $("notYou").onclick = () => { box.innerHTML = profileForm(true); wireProfileForm(box, enterBuilder); };
     } else { box.innerHTML = profileForm(true); wireProfileForm(box, enterBuilder); }
   }
   function profileForm(intro) {
@@ -264,8 +267,9 @@
   function drawCount() { $("caseCount").textContent = CASES.length; }
   function drawProfileChip() {
     const b = $("profileBtn");
-    b.innerHTML = PROFILE ? `<span class="ci-dot${isDiscordId(PROFILE.discordId) ? "" : " warn"}"></span>${esc(PROFILE.rank + " " + PROFILE.name)}${PROFILE.callsign ? ` · ${esc(PROFILE.callsign)}` : ""}` : "Sign in";
-    b.title = PROFILE && !isDiscordId(PROFILE.discordId) ? "Add your Discord ID to post cases" : "Your officer details";
+    b.innerHTML = PROFILE ? `<span class="ci-dot${isDiscordId(PROFILE.discordId) ? "" : " warn"}"></span><span class="ci-chip-t"><small>${esc(PROFILE.callsign || "NO CALLSIGN")}</small><b>${esc(PROFILE.rank + " " + PROFILE.name)}</b></span>` : "Sign in";
+    b.title = SIGNED ? "Signed on as you · set from your officer account" : PROFILE && !isDiscordId(PROFILE.discordId) ? "Add your Discord ID to post cases" : "Your officer details";
+    b.classList.toggle("locked", !!SIGNED);
     $("lockWho").innerHTML = PROFILE ? `Signed in: <b>${esc(PROFILE.rank + " " + PROFILE.name)}</b>${PROFILE.callsign ? ` · Callsign <em>${esc(PROFILE.callsign)}</em>` : ""}` : "Not signed in";
   }
 
@@ -601,6 +605,7 @@
     unlock() { clearInterval(this.clock); $("lock").hidden = true; Beat.duck(false); this.poke(); }
   };
   $("unlockBtn").onclick = () => Idle.unlock();
+  if (SIGNED) $("lockChange").hidden = true;
   $("lockChange").onclick = () => { Idle.unlock(); openProfile(); };
 
   // ---------------- background beat (made live in the browser, no audio files) ----------------
@@ -659,11 +664,10 @@
   })();
 
   // ---------------- header + output buttons ----------------
-  $("profileBtn").onclick = openProfile;
+  if (!SIGNED) $("profileBtn").onclick = openProfile;   // signed on: the chip is just a label
   $("casesBtn").onclick = openCases;
   $("dashBtn").onclick = openDash;
   $("newBtn").onclick = () => newCase();
-  $("exportBtn").onclick = () => { if (!CUR) return; afterChange(false); download(((CUR.data.values || {}).ccCaseNo || "case-file") + ".json", JSON.stringify({ kind: "cid-case-files", version: 1, cases: [CUR] }, null, 1), "application/json"); toast("Case exported: keep the file to back it up or send it to another detective.", "ok"); };
   document.querySelectorAll("[data-fmt]").forEach(b => b.onclick = () => { FMT = b.dataset.fmt; LS.set(K.fmt, FMT); drawPreview(); });
   $("copyBtn").onclick = async () => {
     const text = format(CUR.data, FMT);

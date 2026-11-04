@@ -52,7 +52,17 @@
 
   <!-- ANY FORM -->
   <section class="view" id="view-form">
-    <div class="crumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; <span id="formCrumb"></span></div>
+    <div class="crumbs" id="formCrumbs"><a onclick="go('home')">← All Forms</a> &nbsp;/&nbsp; <span id="formCrumb"></span></div>
+    <header class="rb-head" id="rbHead" hidden>
+      <a class="rb-brand" onclick="go('home')" title="Back to all forms"><span class="rb-ico" id="rbIco"></span><span><b id="rbTitle"></b><small id="rbSub"></small></span></a>
+      <div class="rb-tools">
+        <div class="rb-chip" id="rbMe"></div>
+        <div class="rb-meter" title="How complete this report is"><small>REPORT COMPLETENESS</small><div><i id="rbBar"></i></div><b id="rbPct">0%</b></div>
+        <a class="rb-nav" href="myreports.html">📋 My reports</a>
+        <a class="rb-nav" href="division.html" data-need-division hidden>📊 Dashboard</a>
+        <button type="button" class="rb-nav gold" id="rbNew">＋ New report</button>
+      </div>
+    </header>
     <div class="maint" id="formMaint" style="display:none"></div>
     <div class="fp-grid" id="fpGrid">
     <form id="theForm" novalidate autocomplete="off">
@@ -313,12 +323,49 @@ function openForm(id){
   // live report preview beside the form (forms with "preview": true)
   $("fpPrev").hidden = !f.preview; $("fpGrid").classList.toggle("on", !!f.preview); $("fpExample").hidden = !(f.example && f.preview); $("exBtn").hidden = !(f.example && !f.preview);
   const t = ctrl.restoreDraft(); ctrl.fillMe();   // the signed-on officer goes in their own spot
+  drawRbHead(f);
   setTimeout(drawPreview, 0);
   if(t) toast("Restored your unsaved draft from " + new Date(t).toLocaleString(), "ok");
   return true;
 }
 
+/* division report header (K9 / ASU / TEU / CRU / CID): builder title, the signed-on officer, completeness, shortcuts */
+const RB = {
+  k9:  ["K9 REPORT BUILDER", "K9 Unit · Field Operations", "#a3e635"],
+  asu: ["ASU FLIGHT REPORT BUILDER", "Air Support Unit · Flight Deck", "#7dd3fc"],
+  teu: ["TEU FIELD REPORT BUILDER", "Traffic Enforcement Unit", "#4ade80"],
+  cru: ["CRU REPORT BUILDER", "Crisis Response Unit · Technical Rescue", "#fb923c"],
+  ciu: ["CID CASE FILE BUILDER", "Criminal Investigations Division", "#e8b54a"]
+};
+function drawRbHead(f){
+  const d = f && RB[f.theme];
+  $("rbHead").hidden = !d; $("formCrumbs").hidden = !!d;
+  if(!d) return;
+  $("rbHead").style.setProperty("--rb", d[2]);
+  const dv = (Portal.DIVS || {})[f.theme];
+  $("rbIco").innerHTML = f.logoUrl && /^(https?:|img\/|data:image)/.test(f.logoUrl) ? `<img src="${Portal.esc(f.logoUrl)}" alt="">` : dv ? dv.svg : '<img src="img/lspd-seal.png" alt="">';
+  $("rbTitle").textContent = d[0];
+  $("rbSub").textContent = d[1] + " · Fill in the boxes, get a finished report";
+  // the officer: their regular portal callsign and name from the sign-on (not editable here)
+  let p = null; try { if (localStorage.getItem("lspd_sess")) p = JSON.parse(localStorage.getItem("lspd_prof") || "null"); } catch (e) {}
+  const nm = p ? String(p.name || "").replace(/\s+RM\b/g, "") : "";
+  $("rbMe").innerHTML = p && (p.callsign || nm)
+    ? `<span class="dot"></span><span><small>${Portal.esc(p.callsign || "NO CALLSIGN")}</small><b>${Portal.esc([p.title || p.rank || "", nm].filter(Boolean).join(" "))}</b></span>`
+    : `<a href="signon.html?next=${encodeURIComponent("forms.html#" + f.id)}">Sign on to the MDT</a>`;
+  $("rbMe").title = p ? "Signed on as you · set from your officer account" : "";
+  drawMeter();
+}
+function drawMeter(){
+  if(!ctrl || !current || $("rbHead").hidden || !ctrl.completeness) return;
+  const p = ctrl.completeness();
+  $("rbBar").style.width = p + "%"; $("rbBar").className = p >= 100 ? "full" : ""; $("rbPct").textContent = p + "%";
+}
+["input","change"].forEach(ev => $("formMount").addEventListener(ev, () => setTimeout(drawMeter, 0)));
+$("formMount").addEventListener("click", () => setTimeout(drawMeter, 80));
+$("rbNew").onclick = ()=>{ if(ctrl && confirm("Start a new report? This clears everything on this form.")) { ctrl.clear(); drawPreview(); drawMeter(); window.scrollTo({top:0,behavior:"smooth"}); } };
+
 function drawPreview(){
+  drawMeter();
   if(!ctrl || !current || !current.preview) return;
   $("fpText").textContent = ctrl.toText();
   const tf = current.previewType && ctrl.getValue(current.previewType); $("fpType").textContent = tf ? tf.toUpperCase() : "";
@@ -331,7 +378,7 @@ $("fpCopy").onclick = async ()=>{
   catch(e){ const r = document.createRange(); r.selectNodeContents($("fpText")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("Press Ctrl+C to copy the selected report.","bad"); }
 };
 $("fpExample").onclick = ()=>{ if(current && current.example){ ctrl.load(JSON.parse(JSON.stringify(current.example))); ctrl.fillMe(); drawPreview(); toast("Example loaded. Clear Form when you're done looking.","ok"); } };
-$("clearBtn").onclick = ()=>{ if(confirm("Clear everything on this form?")) { ctrl.clear(); drawPreview(); } };
+$("clearBtn").onclick = ()=>{ if(confirm("Clear everything on this form?")) { ctrl.clear(); drawPreview(); drawMeter(); } };
 $("exBtn").onclick = () => $("fpExample").onclick();
 $("copyBtn").onclick = async ()=>{
   const text = ctrl.toText();

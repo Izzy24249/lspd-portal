@@ -1457,7 +1457,14 @@ window.Portal = (function () {
     fillRows();
     setupTagBars();
     refresh();
-    return { collect, validate, clear, toText, restoreDraft, fillMe, saveDraft: () => { clearTimeout(timer); saveDraft(); },
+    // how much of the report is filled in (header meter): every visible box, plus one part per list that has a row
+    function completeness() {
+      const hid = hiddenIds(); let n = 0, ok = 0;
+      fieldDefs.forEach(f => { if (hid[f.id]) return; const el = q(`[data-f="${CSS.escape(f.id)}"]`); if (!el) return; n++; if (String(el.value || "").trim()) ok++; });
+      blocks.filter(b => b.columns && !hid[b.id]).forEach(b => { n++; if (qa(`tr.dyn[data-rep="${CSS.escape(b.id)}"]`).some(tr => [...tr.querySelectorAll("input[data-k],select[data-k]")].some(x => x.type !== "hidden" && String(x.value || "").trim()))) ok++; });
+      return n ? Math.round(ok / n * 100) : 0;
+    }
+    return { collect, validate, clear, toText, restoreDraft, fillMe, completeness, saveDraft: () => { clearTimeout(timer); saveDraft(); },
       load: d => { load(d || {}); READY = true; refresh(); },
       setValue: (id, v) => { const el = q(`[data-f="${CSS.escape(id)}"]`); if (el && el.value !== v) { el.value = v; el.classList.remove("err"); refresh(); } },
       getValue: id => { const el = q(`[data-f="${CSS.escape(id)}"]`); return el ? el.value : ""; },
@@ -1486,5 +1493,5 @@ window.Portal = (function () {
     return data.config;
   }
 
-  return { ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, setRoster, setRosters, render, post, loadConfig, esc, todayISO, sentence, chargeGroups, chargeItem };
+  return { DIVS, ENDPOINT, BACKEND_NEEDS, DEFAULT_GUIDES, withDefaults, setRoster, setRosters, render, post, loadConfig, esc, todayISO, sentence, chargeGroups, chargeItem };
 })();
