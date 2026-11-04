@@ -230,6 +230,24 @@
     }
     return h;
   }
+  // top of the dashboard: the shift briefing, with a slim on-duty column beside it
+  function topRowHTML(B) {
+    const brief = '<section class="pane brief-pane"><div class="ph"><span class="lbl">Shift briefing</span>' + (B.canBrief ? '<a data-brief>Post briefing</a>' : (B.past || []).length ? '<a data-past>Past briefings</a>' : "") + "</div>" + memoHTML(B.briefing, B) + "</section>";
+    const side = dutySideHTML();
+    return '<div class="top-row' + (side ? "" : " one") + '">' + brief + side + "</div>";
+  }
+  function dutySideHTML() {
+    const du = DATA.duty; if (!du) return "";
+    const L = du.list || [], sups = L.filter(o => o.sup), M = du.linked && du.mine;
+    let h = '<section class="pane duty-side"><div class="ph"><span class="lbl">On duty · ' + L.length + "</span>" + (du.me ? '<span class="duty-me">● YOU</span>' : "") + "</div>";
+    if (!du.linked) h += '<button class="duty-connect" data-duty-link type="button">🛰️ CONNECT DISCORD<small>so your duty time counts</small></button>';
+    h += '<div class="ds-sup ' + (sups.length ? "ok" : "no") + '">' + (sups.length ? "★ Supervisor on: <b>" + sups.map(o => esc((o.callsign ? o.callsign + " " : "") + last(o.name))).join(", ") + "</b>" : L.length ? "No supervisor on duty" : "Nobody on duty") + "</div>";
+    h += L.length ? '<div class="ds-list">' + L.map(o => '<div class="ds-row' + (o.sup ? " sup" : "") + '" title="' + esc((o.rank ? o.rank + " · " : "") + o.name) + '"><code>' + esc(o.callsign || "—") + "</code><span>" + esc(o.name || "Officer") + "</span><em>" + durTxt(o.minutes) + "</em></div>").join("") + "</div>" : "";
+    if (M) { const left = Math.max(0, M.goalMinutes - M.window), pct = Math.min(100, Math.round(M.window / Math.max(1, M.goalMinutes) * 100));
+      h += '<div class="ds-me"><div><small>' + (du.me ? "This shift" : "Last shift") + "</small><b>" + (du.me ? durTxt(M.live) : M.last ? durTxt(M.last.minutes) : "—") + "</b></div><div><small>Week</small><b>" + durTxt(M.week) + "</b></div><div><small>" + M.goalDays + " days</small><b>" + durTxt(M.window) + '</b></div></div><div class="shift-bar' + (left ? "" : " ok") + '"><i style="width:' + pct + '%"></i></div><p class="duty-note">' + (left ? durTxt(left) + " to go for " + durTxt(M.goalMinutes) : "✓ " + durTxt(M.goalMinutes) + " minimum met") + "</p>"; }
+    h += '<p class="duty-note">From the On Duty role' + (du.checkedAt ? " · checked " + (ago(du.checkedAt) === "now" ? "just now" : ago(du.checkedAt) + " ago") : "") + "</p></section>";
+    return h;
+  }
   function homeHTML() {
     const p = DATA.profile || {}, f = DATA.fleet || {}, B = DATA.board || {}, trainee = f.rank && f.rank.trainee, mine = B.mine || [];
     const waiting = mine.filter(r => !r.grade).length;
@@ -237,13 +255,13 @@
     let h = '<section class="hero"><div><div class="kick">' + esc((p.callsign ? p.callsign + " · " : "") + st[0] + " " + st[1].toUpperCase()) + "</div><h1>Good " + esc(greet().toLowerCase()) + ", " + esc(last(p.name) || "Officer") + '.<br><span>' + esc(trainee ? "Welcome to the academy." : NB0.length ? NB0.length + " active BOLO" + (NB0.length > 1 ? "s" : "") + " on the board." : "All quiet on the board.") + "</span></h1>" +
       '<p>' + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · <b>" + waiting + "</b> waiting on a grade" : "") : " · no reports on file yet") + '</p><div class="acts"><button class="btn" data-go="reports">FILE A REPORT <kbd>F</kbd></button><button class="btn ghost" data-go="records">RUN A RECORD</button><button class="btn ghost" id="palHero">SEARCH <kbd>Ctrl K</kbd></button></div></div>' +
       '<div class="radar"><img src="img/lspd-badge.png" alt=""><i class="blip" style="left:30%;top:28%"></i><i class="blip" style="left:68%;top:62%;animation-delay:1.4s"></i><i class="blip" style="left:56%;top:22%;animation-delay:2.4s"></i></div></section>' +
+      topRowHTML(B) +
       '<div class="stats">' +
       '<div class="stat"><svg viewBox="0 0 24 24"><use href="#i-clip"/></svg><small>Dept. reports · 7 days</small><b data-count="' + (D0.week || 0) + '">0</b>' + (D0.delta ? "<em" + (D0.delta < 0 ? ' style="color:var(--red)"' : "") + ">" + (D0.delta > 0 ? "▲ " : "▼ ") + Math.abs(D0.delta) + " vs last week</em>" : "<em>&nbsp;</em>") + "</div>" +
       '<div class="stat"><svg viewBox="0 0 24 24"><use href="#i-file"/></svg><small>Your recent reports</small><b data-count="' + mine.length + '">0</b><em>' + (waiting ? waiting + " awaiting grade" : "all graded") + "</em></div>" +
       '<div class="stat ' + (NB0.length ? "r" : "") + '"><svg viewBox="0 0 24 24"><use href="#i-radio"/></svg><small>Active BOLOs</small><b data-count="' + NB0.length + '">0</b><em>' + (NB0[0] ? esc(NB0[0].title).slice(0, 26) : "none posted") + "</em></div>" +
       '<div class="stat a"><svg viewBox="0 0 24 24"><use href="#i-star"/></svg><small>Officers active · 7 days</small><b data-count="' + (D0.active || 0) + '">0</b><em>avg grade ' + esc(D0.avg || "—") + "</em></div></div>";
     h += raceCardHTML();
-    h += dutyHTML();
     // a leader recognized this officer in the last 3 days
     { const me = (p && p.discordId) || ""; const kd = UNIT && (UNIT.kudos || []).find(k => k.toId === me && Date.now() - k.at < 3 * 864e5);
       if (kd) h += '<a class="kudo-ban" data-go="unit"><span>👏</span><div><small>YOU WERE RECOGNIZED</small><b>' + esc(kd.from) + "</b><p>“" + esc(kd.msg) + "”</p></div></a>"; }
@@ -251,10 +269,10 @@
     if (UNIT && UNIT.rack && UNIT.rack.mine.length) h += '<a class="home-rack" data-go="unit" title="Your ribbons">' + rackHTML(UNIT.rack.mine, 40) + "<small>" + UNIT.rack.mine.length + " ribbon" + (UNIT.rack.mine.length === 1 ? "" : "s") + " · see the guide ›</small></a>";
     const NB = B.notices || [];
     if (NB.length) h += '<section class="bolos">' + NB.slice(0, 3).map(n => '<a class="bolo t-' + esc(n.type.toLowerCase()) + '" data-go="records"><b>' + esc(n.type.toUpperCase()) + "</b><span>" + esc(n.title) + "</span><small>" + esc(n.from) + " · " + ago(n.at) + " ago</small></a>").join("") + (NB.length > 3 ? '<a class="bolo more" data-go="records">+' + (NB.length - 3) + " more</a>" : "") + "</section>";
-    // briefing | path
-    h += '<div class="grid"><section class="pane"><div class="ph"><span class="lbl">Shift briefing</span>' + (B.canBrief ? '<a data-brief>Post briefing</a>' : (B.past || []).length ? '<a data-past>Past briefings</a>' : "") + "</div>" + memoHTML(B.briefing, B) + "</section>";
+    // training path | SOP (the briefing moved to the top)
+    h += '<div class="grid' + ((DATA.paths || []).length ? "" : " one") + '">';
     if ((DATA.paths || []).length) h += pathHTML(DATA.paths[0]);
-    else h += '<section class="pane"><div class="ph"><span class="lbl">Standard Operating Procedures</span></div><div class="sop"><svg viewBox="0 0 24 24"><use href="#i-book"/></svg><div><b>LSPD SOP</b><small>Policy, radio, pursuits, use of force. Keep it handy.</small></div><a class="btn" data-go="sop" href="#sop">OPEN</a></div>' +
+    h += '<section class="pane"><div class="ph"><span class="lbl">Standard Operating Procedures</span></div><div class="sop"><svg viewBox="0 0 24 24"><use href="#i-book"/></svg><div><b>LSPD SOP</b><small>Policy, radio, pursuits, use of force. Keep it handy.</small></div><a class="btn" data-go="sop" href="#sop">OPEN</a></div>' +
       '<div class="tiles" style="grid-template-columns:1fr 1fr">' + tile("reference", "i-gavel", "Penal code", "Charges, sentences and fines") + tile("training", "i-cal", "Training", "Sessions and knowledge checks") + "</div></section>";
     h += "</div>";
     (DATA.paths || []).slice(1).forEach(pa => { h += '<div style="margin-top:18px">' + pathHTML(pa) + "</div>"; });
