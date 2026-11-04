@@ -691,3 +691,4 @@ mark{background:rgba(255,190,61,.35);color:#fff;padding:0 2px;border-radius:3px}
 .rg-prog{height:4px;border-radius:4px;background:rgba(255,255,255,.07);margin-top:8px;overflow:hidden}.rg-prog i{display:block;height:100%;background:var(--amber)}
 .rg-foot{margin-top:12px;color:var(--mute);font-size:12px}
 .aw-prev{display:flex;gap:12px;align-items:center;margin:-4px 0 10px}.aw-prev p{color:var(--mute);font-size:12.5px;line-height:1.4}
+.qsub{color:var(--mute);font-size:12.5px;margin:-4px 0 10px}

@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 102;
+const BACKEND_VERSION = 103;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2465,7 +2465,7 @@ function rows_(name, head) { const sh = tab_(name, head), n = sh.getLastRow(); r
 const KUDOS_ = ["ID", "When", "From ID", "From", "To ID", "To", "Message"];
 const AWARDS_ = ["ID", "When", "Type", "Title", "Emoji", "To ID", "To", "Awarded By", "Note"];
 const SESS_ = ["ID", "Posted", "When", "Topic", "Host ID", "Host", "Slots", "Signed Up", "Closed", "Details"];
-const CHECKS_ = ["ID", "Created", "Title", "By", "Questions (JSON)", "Pass %", "Closed"];
+const CHECKS_ = ["ID", "Created", "Title", "By", "Questions (JSON)", "Pass %", "Closed", "Draw"];   // Draw: questions per attempt, picked at random from the bank (0 = all)
 const RESULTS_ = ["Check ID", "When", "Officer ID", "Officer", "Score", "Out Of", "Passed"];
 function me_(acct) { const p = acctProfile_(acct); return { id: acct.id, name: ((p.title || "Officer") + " " + voiceLast_(p.name || "")).trim(), cs: p.callsign || "", level: p.level, lv: LEVELS_.indexOf(p.level) }; }
 const atLeast_ = (m, lv) => m.lv >= LEVELS_.indexOf(lv);
@@ -2597,11 +2597,18 @@ function unitView_(acct) {
   const results = rows_("Check Results", RESULTS_).map(x => ({ check: str_(x.r[0]), id: str_(x.r[2]), score: Number(x.r[4]) || 0, of: Number(x.r[5]) || 0, passed: x.r[6] === true || str_(x.r[6]).toUpperCase() === "TRUE" }));
   const checks = rows_("Knowledge Checks", CHECKS_).filter(x => str_(x.r[0]) && !(x.r[6] === true || str_(x.r[6]).toUpperCase() === "TRUE")).map(x => { let qs = []; try { qs = JSON.parse(str_(x.r[4]) || "[]"); } catch (e) {}
     const mine = results.filter(r => r.check === str_(x.r[0]) && r.id === m.id), best = mine.sort((a, b) => b.score - a.score)[0] || null, all = results.filter(r => r.check === str_(x.r[0]));
-    return { id: str_(x.r[0]), title: str_(x.r[2]), by: str_(x.r[3]), pass: Number(x.r[5]) || 80, questions: qs.map(q => ({ q: q.q, options: q.options })), best: best, takers: atLeast_(m, "fto") ? all.length : undefined, passedN: atLeast_(m, "fto") ? all.filter(r => r.passed).length : undefined }; }).reverse();
+    const draw = Math.min(qs.length, Number(x.r[7]) || 0);
+    return { id: str_(x.r[0]), title: str_(x.r[2]), by: str_(x.r[3]), pass: Number(x.r[5]) || 80, draw: draw, bank: qs.length, questions: draw ? [] : qs.map(q => ({ q: q.q, options: q.options })), best: best, takers: atLeast_(m, "fto") ? all.length : undefined, passedN: atLeast_(m, "fto") ? all.filter(r => r.passed).length : undefined }; }).reverse();
   return { ok: true, me: { id: m.id, name: m.name, level: m.level }, canAward: atLeast_(m, "command"), canTrain: atLeast_(m, "fto"),
     kudos: kudos.slice(0, 40), mineReceived: kudos.filter(k => k.toId === m.id).length, ribbons: awards.filter(a => a.type === "ribbon" && a.toId === m.id), recentAwards: awards.slice(0, 12).map(a => Object.assign(a, { rb: /^rb:/.test(a.emoji) ? a.emoji.slice(3) : "" })), ootm: ootm,
     rack: (() => { try { const S = ribbonStats_(); return { mine: ribbonsFor_(m.id, S), guide: ribbonGuide_(m.id, S) }; } catch (e) { return null; } })(),
     sessions: sessions, checks: checks, people: builderPeople_().filter(p => p.i).map(p => ({ i: p.i, n: (p.cs ? p.cs + " | " : "") + p.n })), dm: dmOn_() };
+}
+function checkAdd_(title, by, qs, pass, draw) {
+  const id = Utilities.getUuid().slice(0, 8);
+  withLock_(() => { const sh = tab_("Knowledge Checks", CHECKS_); if (str_(sh.getRange(1, 8).getValue()) !== "Draw") sh.getRange(1, 8).setValue("Draw").setFontWeight("bold");
+    sh.appendRow([id, new Date(), cellSafe_(title), cellSafe_(by), JSON.stringify(qs), Math.max(1, Math.min(100, Number(pass) || 80)), false, Math.max(0, Math.min(qs.length, Number(draw) || 0))]); return { ok: true }; });
+  return id;
 }
 function unitAct_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
@@ -2649,18 +2656,33 @@ function unitAct_(d) {
   }
   if (a === "unitCheckSave") {
     if (!atLeast_(m, "fto")) return { ok: false, error: "FTOs and up write knowledge checks." };
-    const title = clip_(str_(d.title), 100), qs = (Array.isArray(d.questions) ? d.questions : []).slice(0, 30).map(q => ({ q: clip_(str_(q.q), 300), options: (Array.isArray(q.options) ? q.options : []).map(o => clip_(str_(o), 160)).filter(Boolean).slice(0, 6), answer: Number(q.answer) || 0 }))
+    const title = clip_(str_(d.title), 100), qs = (Array.isArray(d.questions) ? d.questions : []).slice(0, 200).map(q => ({ q: clip_(str_(q.q), 300), options: (Array.isArray(q.options) ? q.options : []).map(o => clip_(str_(o), 160)).filter(Boolean).slice(0, 6), answer: Number(q.answer) || 0 }))
       .filter(q => q.q && q.options.length >= 2 && q.answer >= 0 && q.answer < q.options.length);
     if (!title || !qs.length) return { ok: false, error: "Give it a title and at least one question with 2+ answers." };
-    withLock_(() => { tab_("Knowledge Checks", CHECKS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), cellSafe_(title), cellSafe_(m.name), JSON.stringify(qs), Math.max(1, Math.min(100, Number(d.pass) || 80)), false]); return { ok: true }; });
+    checkAdd_(title, m.name, qs, d.pass, d.draw);
     return unitView_(acct);
+  }
+  if (a === "unitCheckStart") {        // a random draw: N questions from the bank; the server signs which ones were handed out
+    const x = rows_("Knowledge Checks", CHECKS_).find(y => str_(y.r[0]) === str_(d.id)); if (!x) return { ok: false, error: "That check is gone." };
+    let qs = []; try { qs = JSON.parse(str_(x.r[4]) || "[]"); } catch (e) {}
+    const draw = Math.min(qs.length, Number(x.r[7]) || 0) || qs.length, idx = qs.map((q, i) => i);
+    for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = idx[i]; idx[i] = idx[j]; idx[j] = t; }
+    const pick = idx.slice(0, draw), payload = Utilities.base64EncodeWebSafe(str_(x.r[0]) + "|" + m.id + "|" + pick.join(",") + "|" + (Date.now() + 3 * 3600e3)).replace(/=+$/, "");
+    return { ok: true, id: str_(x.r[0]), questions: pick.map(i => ({ q: qs[i].q, options: qs[i].options })), ticket: payload + "." + sessSign_(payload) };
   }
   if (a === "unitCheckTake") {
     const x = rows_("Knowledge Checks", CHECKS_).find(y => str_(y.r[0]) === str_(d.id)); if (!x) return { ok: false, error: "That check is gone." };
     let qs = []; try { qs = JSON.parse(str_(x.r[4]) || "[]"); } catch (e) {}
-    const ans = Array.isArray(d.answers) ? d.answers : [], score = qs.reduce((n, q, i) => n + (Number(ans[i]) === q.answer ? 1 : 0), 0), passed = score / Math.max(1, qs.length) * 100 >= (Number(x.r[5]) || 80);
-    withLock_(() => { tab_("Check Results", RESULTS_).appendRow([str_(x.r[0]), new Date(), "'" + m.id, cellSafe_(m.name), score, qs.length, passed]); return { ok: true }; });
-    return Object.assign(unitView_(acct), { result: { score: score, of: qs.length, passed: passed, correct: qs.map(q => q.answer) } });
+    let asked = qs.map((q, i) => i);
+    if (Number(x.r[7]) > 0) {           // random-draw check: only the questions this attempt was given
+      const t = str_(d.ticket), dot = t.indexOf("."), pl = t.slice(0, dot);
+      let parts = []; try { parts = Utilities.newBlob(Utilities.base64DecodeWebSafe(pl + "===".slice((pl.length + 3) % 4))).getDataAsString().split("|"); } catch (e) {}
+      if (dot < 1 || sessSign_(pl) !== t.slice(dot + 1) || parts[0] !== str_(x.r[0]) || parts[1] !== m.id || !(Number(parts[3]) > Date.now())) return { ok: false, error: "This attempt expired. Start the check again." };
+      asked = parts[2].split(",").map(Number).filter(i => i >= 0 && i < qs.length);
+    }
+    const ans = Array.isArray(d.answers) ? d.answers : [], score = asked.reduce((n, qi, k) => n + (Number(ans[k]) === qs[qi].answer ? 1 : 0), 0), passed = score / Math.max(1, asked.length) * 100 >= (Number(x.r[5]) || 80);
+    withLock_(() => { tab_("Check Results", RESULTS_).appendRow([str_(x.r[0]), new Date(), "'" + m.id, cellSafe_(m.name), score, asked.length, passed]); return { ok: true }; });
+    return Object.assign(unitView_(acct), { result: { score: score, of: asked.length, passed: passed, correct: asked.map(qi => qs[qi].answer) } });
   }
   if (a === "unitCheckClose") {
     if (!atLeast_(m, "fto")) return { ok: false, error: "FTOs and up manage knowledge checks." };
@@ -4050,7 +4072,7 @@ function handleAdmin_(d) {
   if (a === "officerHome") return officerHome_(d);
   if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
   if (a === "builderLog") return builderLog_(d);
-  if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckTake|CheckClose)$/.test(a)) return unitAct_(d);
+  if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
   if (a === "recordsSearch") return recordsSearch_(d);
   if (a === "quickRef") return quickRef_(d);
@@ -4216,6 +4238,17 @@ function handleAdmin_(d) {
       return { ok: true, duty: dutyAdmin_() };
     }
     case "dutyAdmin": return { ok: true, duty: dutyAdmin_() };
+    case "checkImport": {        // a knowledge check with a question bank (Training tab); draw = questions per attempt
+      if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can do this.");
+      const qs = (Array.isArray(d.questions) ? d.questions : []).slice(0, 200).map(q => ({ q: clip_(str_(q.q), 300), options: (Array.isArray(q.options) ? q.options : []).map(o => clip_(str_(o), 160)).filter(Boolean).slice(0, 6), answer: Number(q.answer) || 0 }))
+        .filter(q => q.q && q.options.length >= 2 && q.answer >= 0 && q.answer < q.options.length);
+      if (!str_(d.title) || !qs.length) throw new Error("Give it a title and questions.");
+      const old = rows_("Knowledge Checks", CHECKS_).filter(y => str_(y.r[2]) === str_(d.title) && !(y.r[6] === true || str_(y.r[6]).toUpperCase() === "TRUE"));
+      if (d.replace) old.forEach(y => tab_("Knowledge Checks", CHECKS_).getRange(y.row, 7).setValue(true));   // close the old version
+      const id = checkAdd_(clip_(str_(d.title), 100), clip_(str_(d.by) || "LSPD Training", 60), qs, d.pass, d.draw);
+      logAdmin_(me.username, "knowledge check", str_(d.title) + " · " + qs.length + " questions, " + (Number(d.draw) || "all") + " per attempt");
+      return { ok: true, id: id, questions: qs.length };
+    }
     case "roleMapAdmin": if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can see this."); return { ok: true, roles: roleSuggest_(), ranks: RANKS_, tabs: divTabs_(), connected: Object.keys(dmemAll_()).length };
     case "roleMapSave": {
       if (["owner", "admin"].indexOf(me.role) === -1) throw new Error("Only an owner or admin can change this.");

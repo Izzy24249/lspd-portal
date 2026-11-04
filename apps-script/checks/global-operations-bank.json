@@ -1,0 +1,1112 @@
+[
+ {
+  "q": "On a high-risk stop, which position gives all verbal commands?",
+  "options": [
+   "C1 (Contact)",
+   "C2 (Cover)",
+   "C3 (Lethal coverage)",
+   "C4 (Less-lethal)"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How many positions does a high-risk stop arrest team use?",
+  "options": [
+   "Two",
+   "Three",
+   "Four",
+   "Six"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "What is C2's job on a high-risk stop?",
+  "options": [
+   "Gives all verbal commands",
+   "Watches hands and surroundings, ready to react",
+   "Holds lethal cover with a rifle",
+   "Carries the Taser"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which position holds lethal cover with a rifle or primary weapon?",
+  "options": [
+   "C1",
+   "C2",
+   "C3",
+   "C4"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "Which position carries a Taser or other less-lethal option?",
+  "options": [
+   "C1",
+   "C4",
+   "C2",
+   "C3"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Where does C1 (Contact) set up?",
+  "options": [
+   "Closest to the centreline, behind cover",
+   "On the opposite side from C2",
+   "Offset at an angle",
+   "At the suspect's driver door"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Where is C4 positioned?",
+  "options": [
+   "Directly behind C1",
+   "Closest to the centreline",
+   "On the opposite side from C2",
+   "In front of the suspect vehicle"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "Why does C3 cover a wider angle?",
+  "options": [
+   "To control radio traffic",
+   "To prevent tunnel vision",
+   "To block traffic",
+   "To give commands"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which position controls communication on scene?",
+  "options": [
+   "C3",
+   "C2",
+   "C4",
+   "C1"
+  ],
+  "answer": 3
+ },
+ {
+  "q": "C2 (Cover) is positioned…",
+  "options": [
+   "Slightly offset from C1",
+   "On the opposite side from C4 and in front of the car",
+   "Inside the patrol car",
+   "Next to the suspect"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What must C4 do while supporting C1?",
+  "options": [
+   "Give commands when C1 is busy",
+   "Stay out of the crossfire",
+   "Approach the vehicle first",
+   "Run plates on the CAD"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "When should you know your arrest team position?",
+  "options": [
+   "After the suspect exits",
+   "Before anyone gets out of the car",
+   "When the supervisor arrives",
+   "After the stop is over"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "What is needed to detain someone?",
+  "options": [
+   "Probable cause",
+   "Reasonable suspicion",
+   "A warrant",
+   "A confession"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "What is needed to arrest someone?",
+  "options": [
+   "Reasonable suspicion",
+   "A supervisor's approval",
+   "Probable cause",
+   "Two witnesses"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "Which best describes a detention?",
+  "options": [
+   "Taking a person into custody and transporting them",
+   "A temporary stop: not free to leave, but not under arrest",
+   "A voluntary conversation",
+   "A search warrant"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which involves restraint and transport?",
+  "options": [
+   "A detention",
+   "A consensual stop",
+   "An arrest",
+   "A traffic warning"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "A detention is used to…",
+  "options": [
+   "Look into suspicious activity",
+   "Book someone into jail",
+   "Issue a citation only",
+   "End a pursuit"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "An arrest is used when…",
+  "options": [
+   "Someone looks nervous",
+   "There is enough evidence that a crime was committed",
+   "A person refuses to talk",
+   "A vehicle is parked illegally"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Force has to pass which three tests?",
+  "options": [
+   "Quick, quiet and clean",
+   "Reasonable, necessary and proportional",
+   "Legal, approved and recorded",
+   "Fast, firm and final"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "'Proportional' force means…",
+  "options": [
+   "It matches the level of threat or resistance",
+   "It is always one level above the threat",
+   "It is approved by a supervisor",
+   "It uses the least officers possible"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "'Necessary' force means…",
+  "options": [
+   "Used whenever a suspect talks back",
+   "Used only when you need it to control the situation",
+   "Used on every arrest",
+   "Used to speed up the call"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "'Reasonable' force means…",
+  "options": [
+   "Whatever stops the suspect fastest",
+   "It matches what a normal officer would do in the same situation",
+   "What the suspect agrees to",
+   "Anything below lethal force"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Use of force must be judged as…",
+  "options": [
+   "Objectively reasonable for the situation",
+   "Whatever the officer felt at the time",
+   "Acceptable if nobody complains",
+   "Acceptable if the suspect was arrested"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Code 1 means…",
+  "options": [
+   "Lights only",
+   "Lights and sirens",
+   "Normal driving, no lights, no sirens",
+   "Respond to the station"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "Code 2 means…",
+  "options": [
+   "Lights on, no siren",
+   "Lights and sirens",
+   "No lights, no sirens",
+   "Siren only"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Code 3 means…",
+  "options": [
+   "No lights, no sirens",
+   "Lights only",
+   "Full emergency response: lights and sirens",
+   "Cancel the call"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "Shots fired or an active shooter is answered…",
+  "options": [
+   "Code 1",
+   "Code 2",
+   "Code 3",
+   "Only when backup arrives"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "A home invasion where lights or sirens could spook the suspect is answered…",
+  "options": [
+   "Code 3",
+   "Code 1",
+   "Code 2",
+   "Code 4"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Backup requested with no weapons reported is usually…",
+  "options": [
+   "Code 1",
+   "Code 2",
+   "Code 3",
+   "Not answered"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "A noise complaint is answered…",
+  "options": [
+   "Code 1",
+   "Code 2",
+   "Code 3",
+   "By radio only"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "An officer calling for urgent backup is answered…",
+  "options": [
+   "Code 1",
+   "Code 2",
+   "Code 3",
+   "After the current call"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "A store robbery is listed under which code?",
+  "options": [
+   "Code 3",
+   "Code 2",
+   "Code 1",
+   "None"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "A disturbance or fight with no active threat is…",
+  "options": [
+   "Code 1",
+   "Code 2",
+   "Code 3",
+   "Code 4"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "On Code 1 you must…",
+  "options": [
+   "Follow all traffic laws",
+   "Run red lights carefully",
+   "Use the siren at intersections",
+   "Drive the wrong way if clear"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "An armed robbery in progress is answered…",
+  "options": [
+   "Code 1",
+   "Code 2",
+   "Code 3",
+   "Only with a supervisor"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "A life-threatening medical call is answered…",
+  "options": [
+   "Code 3",
+   "Code 2",
+   "Code 1",
+   "By EMS only"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "On a felony stop, how many people leave the suspect vehicle at a time?",
+  "options": [
+   "All at once",
+   "Two at a time",
+   "Only one at a time",
+   "Whoever is ready"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "On a felony stop, how many officers give orders?",
+  "options": [
+   "Every officer on scene",
+   "Only one officer",
+   "C1 and C2",
+   "Whoever is closest"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "What position do suspects end up in on a felony stop?",
+  "options": [
+   "Kneeling, hands on head",
+   "Standing against the car",
+   "Prone: face down, hands visible",
+   "Seated in the vehicle"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "Why give loud, clear commands from a safe distance?",
+  "options": [
+   "So you don't have to get close early and stay in control",
+   "So bystanders can hear",
+   "Because the radio is busy",
+   "To record it on body cam"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Why deal with one suspect at a time?",
+  "options": [
+   "It is faster",
+   "It prevents confusion and sudden movements",
+   "It saves cuffs",
+   "So the CAD can keep up"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Why is prone positioning used?",
+  "options": [
+   "It is more comfortable for the suspect",
+   "It makes it harder to run or reach for a weapon",
+   "It lets EMS check them",
+   "It is required for photos"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "How do you open the tablet?",
+  "options": [
+   "/cad",
+   "/tablet",
+   "/mdt",
+   "Press F6"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which app on the tablet is the CAD?",
+  "options": [
+   "The Police app",
+   "The Dispatch app",
+   "The Records app",
+   "The Garage app"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "In the CAD, where do you search a plate?",
+  "options": [
+   "Profiles",
+   "Vehicles",
+   "Reports",
+   "Cases"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "In the CAD, where do you search a weapon's serial number?",
+  "options": [
+   "Weapons",
+   "Offences",
+   "Profiles",
+   "Reports"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "In the CAD, where do you write citations?",
+  "options": [
+   "Cases",
+   "Reports",
+   "Offences",
+   "Profiles"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "In the CAD, where do you write arrest reports?",
+  "options": [
+   "Reports",
+   "Offences",
+   "Cases",
+   "Vehicles"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "In the CAD, where is the full list of charges?",
+  "options": [
+   "Cases",
+   "Offences",
+   "Reports",
+   "Profiles"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "In the CAD, how do you look up a person?",
+  "options": [
+   "Profiles, by name",
+   "Vehicles, by plate",
+   "Weapons, by serial",
+   "Cases, by number"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "A setup screen appears when you open the tablet. What do you do?",
+  "options": [
+   "Close it and open the Police app",
+   "Finish it first",
+   "Restart the game",
+   "Call a supervisor"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Before you can move a suspect's weapon into your inventory, your inventory must be…",
+  "options": [
+   "Empty",
+   "On (type /inventory if it's off)",
+   "Locked",
+   "Shared with C2"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "How do you get a weapon's serial number?",
+  "options": [
+   "Right-click it in your inventory and click Copy serial number",
+   "Ask the suspect",
+   "Look on the CAD Offences page",
+   "Press E on the weapon"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "After copying the serial number, where do you paste it?",
+  "options": [
+   "Profiles",
+   "Vehicles",
+   "Weapons in the CAD",
+   "The radio"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "How do you open the radio?",
+  "options": [
+   "/radio",
+   "/tablet",
+   "/comms",
+   "Press T"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "When does the radio work?",
+  "options": [
+   "Any time",
+   "Only while you're on duty",
+   "Only in a patrol car",
+   "Only on channel 911"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "How many radio channels can you be on at once?",
+  "options": [
+   "One",
+   "Two",
+   "Three",
+   "Unlimited"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "The second channel you tune is…",
+  "options": [
+   "Another talk channel",
+   "A scanner you can only listen to",
+   "The supervisor channel",
+   "Muted"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which key do you hold to talk?",
+  "options": [
+   "Caps Lock",
+   "Left Alt",
+   "N",
+   "Page Up"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "What do Page Up and Page Down do?",
+  "options": [
+   "Volume",
+   "Move your main channel up or down the list",
+   "Switch to the scanner",
+   "Turn the radio off"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which channel do you use in Los Santos?",
+  "options": [
+   "1 County",
+   "2 City",
+   "3 Highways",
+   "445 Training"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which channel do you use in Blaine County?",
+  "options": [
+   "1 County",
+   "2 City",
+   "9 SAFR",
+   "911"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Statewide units on the highway use channel…",
+  "options": [
+   "1",
+   "2",
+   "3",
+   "7"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "A pursuit takes over the main channel. What should happen?",
+  "options": [
+   "Everyone else stops talking until it ends",
+   "Move it to a free Tac channel, 4 to 6",
+   "Move it to 911",
+   "Move it to channel 445"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which channel is Training?",
+  "options": [
+   "10",
+   "445",
+   "911",
+   "9"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Which channel is open to every on-duty unit?",
+  "options": [
+   "911",
+   "445",
+   "1",
+   "11"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Channels 7 and 8 are…",
+  "options": [
+   "Tac-1 and Tac-2",
+   "Fed-1 and Fed-2",
+   "Tow",
+   "SAFR"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Channel 9 is…",
+  "options": [
+   "SAFR",
+   "Tow",
+   "FAA",
+   "Fed-1"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Channel 10 is…",
+  "options": [
+   "SAFR",
+   "Tow",
+   "County",
+   "Tac-3"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Before you key up you should…",
+  "options": [
+   "Listen, press, pause, then give your callsign and message",
+   "Start talking straight away",
+   "Say 'over' first",
+   "Switch to the scanner"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "You hear a steady tone when you key up. What does it mean?",
+  "options": [
+   "Your radio is broken",
+   "Someone else is talking: keep holding and you go out when they finish",
+   "You're on the scanner",
+   "You're off duty"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "How do you make a channel your main channel?",
+  "options": [
+   "Press MAIN on it",
+   "Tune it twice",
+   "Hold Caps Lock on it",
+   "Type /main"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How do you change to a different channel?",
+  "options": [
+   "Press X on a channel to leave it, then tune a new one",
+   "Type the channel into the CAD",
+   "Ask dispatch",
+   "Restart the radio"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "The radio screen is black. What do you do?",
+  "options": [
+   "Type /radio again",
+   "Press the power button",
+   "Go off duty and on again",
+   "It means you're on the scanner"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "10-4 means…",
+  "options": [
+   "Repeat last transmission",
+   "Affirmative",
+   "Stop transmitting",
+   "In service"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "10-8 means…",
+  "options": [
+   "Out of service",
+   "Busy",
+   "In service",
+   "Location"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "10-7 means…",
+  "options": [
+   "Out of service",
+   "In service",
+   "Shots fired",
+   "Disregard"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "10-13 means…",
+  "options": [
+   "Traffic stop",
+   "Shots fired",
+   "Subject in custody",
+   "Stolen vehicle"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "10-15 means…",
+  "options": [
+   "Subject in custody",
+   "Wanted person",
+   "Fight in progress",
+   "ETA"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "10-20 means…",
+  "options": [
+   "ETA",
+   "Location",
+   "Disregard",
+   "Name check"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "10-22 means…",
+  "options": [
+   "Disregard",
+   "Domestic dispute",
+   "Plate check",
+   "Request backup"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "10-28 means…",
+  "options": [
+   "Name check",
+   "Warrant check",
+   "Plate check",
+   "Stolen vehicle"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "10-32 means…",
+  "options": [
+   "Request backup, Code 1, 2 or 3",
+   "Not wanted, no warrants",
+   "Wanted person",
+   "Warrant check"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "10-11 means…",
+  "options": [
+   "Traffic stop",
+   "Fight in progress",
+   "Active ride-along",
+   "Frequency change"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "10-31 means…",
+  "options": [
+   "Wanted person",
+   "Not wanted, no warrants",
+   "Warrant check",
+   "Name check"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "10-3 means…",
+  "options": [
+   "Radio check",
+   "Stop transmitting",
+   "Busy",
+   "Repeat"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "10-9 means…",
+  "options": [
+   "Repeat last transmission",
+   "In service",
+   "Frequency change",
+   "Location"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "10-0 means…",
+  "options": [
+   "Crashed out of the game, or disappeared",
+   "Officer down",
+   "All clear",
+   "End of shift"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "10-26 means…",
+  "options": [
+   "Location",
+   "ETA",
+   "Disregard",
+   "Name check"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "10-16 means…",
+  "options": [
+   "Suspicious person",
+   "Stolen vehicle",
+   "Shots fired",
+   "Subject in custody"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "10-12 means…",
+  "options": [
+   "Active ride-along",
+   "Traffic stop",
+   "Fight in progress",
+   "Busy"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "10-25 means…",
+  "options": [
+   "Domestic dispute",
+   "ETA",
+   "Disregard",
+   "Contact via Discord or text"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "On the radio, a crash is called…",
+  "options": [
+   "A 10-50",
+   "An MVA (motor vehicle accident)",
+   "A TC",
+   "A 10-13"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "When setting up a traffic scene you should…",
+  "options": [
+   "Park at an angle, lights on, cones or flares out, room for EMS and Fire",
+   "Park in the middle of the lane, lights off",
+   "Leave your car at the station",
+   "Block every lane right away"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "For a single-lane closure you…",
+  "options": [
+   "Close the whole road",
+   "Use cones to taper traffic away and keep one lane open",
+   "Let traffic sort itself out",
+   "Use one officer per car"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "When working an intersection…",
+  "options": [
+   "Let all directions go together",
+   "One direction at a time, simple signals, emergency vehicles first",
+   "Wave everyone through",
+   "Stop all traffic until the scene clears"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "At a minor MVA you should…",
+  "options": [
+   "Close the full road",
+   "Move the vehicles off the road if you can and keep one lane open",
+   "Call SAFR and Tow first",
+   "Leave once names are taken"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "At a major MVA you should…",
+  "options": [
+   "Keep every lane open",
+   "Do a full or partial closure and request EMS and Fire",
+   "Wait for a supervisor before acting",
+   "Move the vehicles yourself"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "When should you close both lanes?",
+  "options": [
+   "Always",
+   "Only if you have to",
+   "Only at night",
+   "On every MVA"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "How do you open the medical assessment on a patient?",
+  "options": [
+   "Hold Left Alt on the patient and choose Medical assessment",
+   "Type /medical",
+   "Press E on the patient",
+   "Open the CAD"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Which injuries show before you examine a body part?",
+  "options": [
+   "All of them",
+   "Heavy bleeding",
+   "Fractures",
+   "None"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "How long does a tourniquet last?",
+  "options": [
+   "30 seconds",
+   "Two minutes",
+   "Ten minutes",
+   "Until EMS arrives"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "A patient has no pulse. What do you use?",
+  "options": [
+   "Narcan",
+   "A tourniquet",
+   "CPR (up to three rounds)",
+   "A splint"
+  ],
+  "answer": 2
+ },
+ {
+  "q": "What is Narcan used for?",
+  "options": [
+   "Heavy bleeding",
+   "An opioid overdose",
+   "A fracture",
+   "A gunshot wound"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "A basic bandage on a gunshot wound is…",
+  "options": [
+   "Ideal",
+   "Poor, and only holds for a few minutes",
+   "Okay for an hour",
+   "Not allowed"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Where do you collect medical supplies?",
+  "options": [
+   "From your patrol car's trunk: Left Alt, Equipment, Collect Medical Items",
+   "At Pillbox only",
+   "From the CAD",
+   "From the suspect"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "Who uses splints?",
+  "options": [
+   "Any officer",
+   "EMS: a suspected fracture needs an x-ray first",
+   "Only supervisors",
+   "Nobody"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Another officer is already doing CPR on the patient. What happens if you try?",
+  "options": [
+   "You both do CPR",
+   "You see 'Someone is already working on them'",
+   "Your CPR replaces theirs",
+   "The patient dies"
+  ],
+  "answer": 1
+ },
+ {
+  "q": "Where are pulse, responsiveness, temperature and CPR?",
+  "options": [
+   "The Checks & Resus tab",
+   "The radio",
+   "The CAD Profiles tab",
+   "Your inventory"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "A tourniquet is for…",
+  "options": [
+   "Heavy bleeding from an arm or leg",
+   "A head wound",
+   "A chest wound",
+   "An overdose"
+  ],
+  "answer": 0
+ },
+ {
+  "q": "How do you treat a wound once examined?",
+  "options": [
+   "Drag a supply onto its marker",
+   "Type /heal",
+   "Hold Caps Lock",
+   "Call EMS only"
+  ],
+  "answer": 0
+ }
+]
