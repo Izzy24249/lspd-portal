@@ -35,6 +35,7 @@
     const sop = (DATA && DATA.sop) || "https://docs.google.com/document/d/1t4vHCiHS3xH2VTfDgOKRX3L7BeZyh8YrCLaC_bZTJqw/edit?tab=t.0"; $("sopLink").href = "#sop";
     const nt = UNIT && UNIT.sessions ? UNIT.sessions.filter(x => !x.mine && !x.full).length + (UNIT.checks || []).filter(c => !c.best).length : 0; $("nTrain").textContent = nt || "";
     document.querySelectorAll("[data-need-command]").forEach(a => a.hidden = !isCommand());
+    document.querySelectorAll("[data-need-board]").forEach(a => a.hidden = !(DATA && DATA.pb));
     $("adminBtn").hidden = ["admin", "owner"].indexOf(p.level) === -1;   // portal admin: admins and the owner only
     const nb = (DATA && DATA.board && DATA.board.notices || []).length; $("nBolo").textContent = nb || ""; $("nBolo").className = nb ? "new" : "";
     if (DATA && DATA.fleet) { $("nFleet").textContent = DATA.fleet.vehicles.filter(v => v.allowed).length || ""; $("nUni").textContent = (DATA.fleet.uniforms[SEX] || []).filter(u => u.yours).length || ""; }
@@ -107,8 +108,8 @@
   addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "lspd:filed") { toast("✓ " + (e.data.title || "Report") + " filed"); blip(1400); setTimeout(load, 1500); } });
 
   // ---------- router ----------
-  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker"];
-  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["DEPARTMENT", "Promotion tracker"] };
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker", "board"];
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["DEPARTMENT", "Promotion tracker"], board: ["COMMAND", "Promotion board"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
   function go(v) { VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
@@ -119,6 +120,8 @@
     if (!list.length) { t.hidden = true; return; }
     t.hidden = false; t.innerHTML = '<div class="live"><i></i>LIVE</div><div class="tk-run">' + list.concat(list).map(x => "<span>" + esc(x.t) + " · " + ago(x.at) + "</span>").join("") + "</div>";
   }
+  // the promotion board (mdt-board.js) borrows these
+  window.MDT = { esc: esc, toast: t => toast(t), modal: h => modal(h), draw: () => draw(), blip: f => blip(f), session: SESSION };
   function modal(html) { const m = $("modal"); m.classList.remove("cc", "quiz"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
   // the SOP as an embeddable page: Google Docs block /edit inside frames, /preview is the read-only view that allows it
   function sopEmbed(u) {
@@ -168,7 +171,7 @@
       $("ticker").hidden = true; return;
     }
     m.__view = "";
-    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "tracker" ? trackHTML() : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
+    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "tracker" ? trackHTML() : VIEW === "board" ? (window.MDTBoard ? MDTBoard.html() : "") : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
     if ((VIEW === "unit" || VIEW === "training") && !UNIT) loadUnit();
     if (VIEW === "reference" && !REF) loadRef();
     m.querySelectorAll("[data-count]").forEach(el => { const to = +el.dataset.count || 0, t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); });
@@ -865,7 +868,7 @@
   function palItems(q) {
     q = q.toLowerCase().trim();
     const out = [], add = (grp, icon, title, sub, run, extra) => { const hay = (title + " " + (sub || "") + " " + (extra || "")).toLowerCase(); if (!q || hay.indexOf(q) !== -1) out.push({ grp, icon, title, sub, run }); };
-    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"], ["tracker", "✅", "Promotion tracker"]].forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
+    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"], ["tracker", "✅", "Promotion tracker"]].concat(DATA && DATA.pb ? [["board", "🎖️", "Promotion board"]] : []).forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
     add("Go to", "📋", "My reports", "", () => go("frame:myreports.html"));
     if ((((DATA && DATA.profile) || LS.json("lspd_prof") || {}).divisions || []).length) add("Go to", "🛡️", "Division Command", "Grading, activity and officers", () => go("frame:division.html"));
     myForms().filter(f => f.status === "live").forEach(f => add("File a report", f.icon, f.title, f.division ? f.division + " report" : "", () => go("form:" + f.id), f.section));

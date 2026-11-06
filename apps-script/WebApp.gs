@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 107;
+const BACKEND_VERSION = 108;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3772,6 +3772,7 @@ function officerHome_(d) {
   out.forms = myForms_(acct, prof); mark_("forms");
   out.ladder = (() => { try { return promoReqParse_(false); } catch (e) { return null; } })(); mark_("ladder");
   out.promoMe = promoMine_(acct); mark_("promo");
+  try { const A = pbAccess_(acct); out.pb = A.view ? { hc: A.hc, nominate: A.nominate, editor: A.editor } : null; } catch (e) { out.pb = null; }
   out.race = officerRace_(acct); mark_("race");
   try { const b = dutyBoard_(); if (b) { const cur = dutyState_()[acct.id]; b.linked = dlinkHas_(acct.id); b.me = !!cur; b.mine = dutyMine_(acct.id, cur); out.duty = b; } } catch (e) {} mark_("duty");
   return out;
@@ -4160,6 +4161,7 @@ function handleAdmin_(d) {
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
   if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
+  if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|Preview|Push)$/.test(a)) return pbHandle_(d);
   if (a === "builderLog") return builderLog_(d);
   if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose|CheckScores)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
@@ -5252,4 +5254,213 @@ function defaultConfig_() {
       { id: "discipline", status: "soon", icon: "⚖️", title: "Commendation / Discipline", description: "Coming soon.", webhookId: "", color: "#3498db", tags: { base: [], rules: [] }, leaderboard: { enabled: false }, blocks: [] }
     ]
   };
+}
+
+// =====================================================================================================================
+// ---- Promotion board (MDT → Promotion board) ----
+// Left: every Personnel officer with their next rank and what's still open. The terminal counts what it can
+// (on-duty hours and reports in the last 14 days, time in grade, trainings/RAs, SOP); command signs off the rest.
+// LT – Commander nominate officers into the right column; High Command (L-101 – L-107) approves and pushes.
+// A push moves each officer into the first open slot of their next rank on the LSPD Personnel Roster
+// (name + Discord ID copied into E/F, G = promotion date, old row's E:G cleared), highest ranks first so the
+// slots they leave are free for the people coming up behind them.
+// Discord names/roles can't be changed without a bot: each promotion leaves a short "Discord to-do" instead.
+// =====================================================================================================================
+const PB_SHEET_ = "Promotion Board";
+const PB_HEAD_ = ["Entry", "Discord ID", "Officer", "Callsign", "From", "To", "From #", "Status", "Nominated by", "Nominated at", "Note", "Approved by", "Approved at", "Promoted at", "New callsign", "Result", "Discord done"];
+const PB_HC_RE_ = /^L10[1-7]$/;          // High Command callsigns: Chief of Police … Watch Commander
+const PB_TOP_ = 10;                       // the board promotes up to Commander; High Command billets are appointed by hand
+const PB_ABBR_ = ["PO", "PO2", "PO3", "CPL", "SGT", "SSGT", "SGM", "LT", "CPT", "MAJ", "CMDR", "DC", "AC", "COP"];
+const PB_DEF_ = { hours: 8, weekMin: 4, reports: 5, days: 14 };
+function pbSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(PB_SHEET_);
+  if (!sh) { sh = ss.insertSheet(PB_SHEET_); sh.appendRow(PB_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, PB_HEAD_.length).setFontWeight("bold"); sh.getRange("B:B").setNumberFormat("@"); }
+  return sh;
+}
+function pbEntries_() {
+  const sh = pbSheet_(), n = sh.getLastRow(); if (n < 2) return [];
+  return sh.getRange(2, 1, n - 1, PB_HEAD_.length).getValues().map((r, i) => ({ row: i + 2, entry: str_(r[0]), id: str_(r[1]).replace(/^'/, ""), officer: str_(r[2]), callsign: str_(r[3]),
+    from: str_(r[4]), to: str_(r[5]), fromIdx: Number(r[6]), status: str_(r[7]), by: str_(r[8]), at: isDate_(r[9]) ? r[9].getTime() : 0, note: str_(r[10]),
+    apBy: str_(r[11]), apAt: isDate_(r[12]) ? r[12].getTime() : 0, doneAt: isDate_(r[13]) ? r[13].getTime() : 0, newCs: str_(r[14]), result: str_(r[15]), discord: str_(r[16]) })).filter(x => x.entry);
+}
+// rules per rank (what an officer at that rank needs before moving up), editable in the MDT by High Command and chosen editors
+function pbRules_() {
+  let r = {}; try { r = JSON.parse(PROPS_.getProperty("PB_RULES") || "{}") || {}; } catch (e) {}
+  r.ranks = r.ranks || {}; r.editors = Array.isArray(r.editors) ? r.editors : []; r.webhookId = str_(r.webhookId);
+  return r;
+}
+function pbRule_(R, idx) { const x = R.ranks[String(idx)] || {}; const n = (v, d) => v === "" || v == null || isNaN(Number(v)) ? d : Number(v);
+  return { hours: n(x.hours, PB_DEF_.hours), weekMin: n(x.weekMin, PB_DEF_.weekMin), reports: n(x.reports, PB_DEF_.reports), days: n(x.days, PB_DEF_.days), extra: (x.extra || []).map(str_).filter(Boolean) }; }
+function pbWho_(prof) { return ((prof.title || "") + " " + voiceLast_(prof.name || "")).trim() + (prof.callsign ? " (" + prof.callsign + ")" : ""); }
+function pbAccess_(acct) {
+  const prof = acctProfile_(acct), person = rosterPerson_(acct.id) || {}, cs = person.callsign || prof.callsign || "", idx = rankIndex_(person.rank || "");
+  const hc = PB_HC_RE_.test(callKey_(cs)) || prof.level === "owner";
+  const R = pbRules_(), ed = R.editors.some(e => e && (e === acct.id || (callKey_(e) && callKey_(e) === callKey_(cs))));
+  const nominate = hc || (idx >= 7 && idx <= PB_TOP_);
+  return { prof: prof, idx: idx, callsign: cs, hc: hc, nominate: nominate, editor: hc || ed, view: nominate || ed, who: pbWho_(prof) };
+}
+// everyone the board can promote: Personnel roster, Police Officer II up to Major (→ Commander), not Honorary
+function pbOfficers_() { return promoPeople_().filter(o => !o.trainee && o.idx >= 1 && o.idx < PB_TOP_ && !promoExempt_(o.rank)); }
+function pbExtraKey_(idx, t) { return "pbx" + reqKey_(idx, t); }
+function pbEval_(o, R, L, checks, duty, rep, now) {
+  const rule = pbRule_(R, o.idx), items = [];
+  // on-duty hours: total in the window, and each week of it (a light week is flagged but doesn't fail the total)
+  const ses = (duty[o.id] || []), from = now - rule.days * 864e5, mins = t0 => ses.filter(x => x[0] >= t0[0] && x[0] < t0[1]).reduce((a, x) => a + (Number(x[2]) || 0), 0);
+  const total = mins([from, now + 1]), weeks = [];
+  for (let w = 0; w < Math.ceil(rule.days / 7); w++) { const b = [now - (w + 1) * 7 * 864e5, now - w * 7 * 864e5]; weeks.push({ from: b[0], to: b[1], min: mins(b) }); }
+  const low = rule.weekMin > 0 ? weeks.filter(w => w.min < rule.weekMin * 60) : [];
+  if (rule.hours > 0) items.push({ key: "pb:hours", t: rule.hours + " hours on duty in the last " + rule.days + " days" + (rule.weekMin ? " (" + rule.weekMin + "+ each week)" : ""), auto: "hours", need: rule.hours * 60, have: total, done: total >= rule.hours * 60,
+    weeks: weeks.map(w => ({ from: w.from, min: w.min, low: rule.weekMin > 0 && w.min < rule.weekMin * 60 })), warn: total >= rule.hours * 60 && low.length ? low.length + " week" + (low.length > 1 ? "s were" : " was") + " under " + rule.weekMin + " hours" : "" });
+  if (rule.reports > 0) { const n = (rep[o.id] || []).filter(t => t >= from).length;
+    items.push({ key: "pb:reports", t: rule.reports + " reports in the last " + rule.days + " days", auto: "reports14", need: rule.reports, have: n, done: n >= rule.reports }); }
+  // the rank's requirements from the Promotion Guidelines doc (time in grade, trainings, SOP… and command sign-offs)
+  const rr = (L.ranks || []).find(x => x.idx === o.idx);
+  promoEval_(o, rr, checks).items.forEach(x => items.push(Object.assign({}, x, { doc: true })));
+  rule.extra.forEach(t => { const k = pbExtraKey_(o.idx, t), c = (checks || {})[k]; items.push({ key: k, t: t, auto: "", need: 0, have: null, done: !!c, by: c ? c.by : "", at: c ? c.at : 0, manual: !!c, extra: true }); });
+  const autos = items.filter(x => x.auto), manual = items.filter(x => !x.auto);
+  return { items: items, done: items.filter(x => x.done).length, total: items.length, terminal: autos.length > 0 && autos.every(x => x.done),
+    openManual: manual.filter(x => !x.done).length, ready: items.length > 0 && items.every(x => x.done), hoursMin: total, lowWeeks: low.length };
+}
+// the Personnel roster as slots: one per row that has a rank in column B (section headings have [x/y] in them)
+function pbSlots_() {
+  const sh = rosterBook_().getSheetByName(PERSONNEL_TAB_); if (!sh) throw new Error("The \"" + PERSONNEL_TAB_ + "\" tab wasn't found in the roster sheet.");
+  const n = sh.getLastRow(), rng = sh.getRange(1, 1, n, 7), v = rng.getValues(), d = rng.getDisplayValues(), fx = sh.getRange(1, 5, n, 3).getFormulas();
+  const rows = [];
+  for (let i = 0; i < n; i++) { const b = str_(d[i][1]).trim(); if (!b || /\[/.test(b)) continue; const idx = rankIndex_(b); if (idx < 0) continue;
+    rows.push({ r: i + 1, billet: b, idx: idx, head: /^head\b/i.test(b), cs: str_(d[i][3]).trim(), name: str_(d[i][4]).trim(), id: str_(d[i][5]).replace(/\D/g, ""), nameRaw: v[i][4], idRaw: v[i][5],
+      fx: fx[i].some(Boolean), fxG: !!fx[i][2] }); }
+  return { sh: sh, rows: rows };
+}
+function pbOpenSlot_(S, idx) { return S.rows.find(x => x.idx === idx && !x.head && !x.name && !x.id && !x.fx); }
+function pbView_(acct, A) {
+  const now = Date.now(), R = pbRules_(), L = promoLadderKeys_(), checks = pchkAll_(), duty = dutySums_(); SOP_MEMO_ = sopIds_();
+  const rep = {}; actRows_().forEach(r => { const seen = {}; (r.people || []).forEach(x => { if (x.i && !seen[x.i]) { seen[x.i] = 1; (rep[x.i] = rep[x.i] || []).push(r.at); } }); });
+  const E = pbEntries_(), active = {}; E.forEach(e => { if (e.status === "nominated" || e.status === "approved") active[e.id] = e; });
+  const officers = pbOfficers_().map(o => {
+    const ev = pbEval_(o, R, L, checks[o.id], duty, rep, now), e = active[o.id];
+    return Object.assign({ id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, next: RANKS_[o.idx + 1], tigDays: o.tigDays,
+      canNominate: A.hc || o.idx + 1 < A.idx, entry: e ? { entry: e.entry, status: e.status, by: e.by, at: e.at, note: e.note, apBy: e.apBy, apAt: e.apAt } : null }, ev);
+  });
+  let open = {}, slotErr = "";
+  try { const S = pbSlots_(); S.rows.forEach(x => { if (!x.head && !x.name && !x.id && !x.fx) open[x.idx] = (open[x.idx] || 0) + 1; }); } catch (e) { slotErr = errMsg_(e); }
+  const ranks = []; for (let i = 1; i < PB_TOP_; i++) { const ru = pbRule_(R, i); ranks.push({ idx: i, name: RANKS_[i], next: RANKS_[i + 1], abbr: PB_ABBR_[i], open: open[i + 1] || 0, rule: ru,
+    doc: ((L.ranks || []).find(x => x.idx === i) || { reqs: [] }).reqs.map(q => ({ t: q.t, auto: q.auto ? q.auto.type : "" })) }); }
+  const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
+    .map(e => ({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
+  return { ok: true, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
+    editors: A.editor ? R.editors : [], webhookId: A.editor ? R.webhookId : "", webhooks: A.editor ? getWebhooks_().map(w => ({ id: w.id, name: w.name })) : [], doc: L.doc, at: now };
+}
+function pbTodo_(e) {
+  const toIdx = rankIndex_(e.to), nm = cleanName_(e.officer.replace(/^.*\|\s*/, ""));
+  return { nick: (e.newCs ? e.newCs + " | " : "") + (PB_ABBR_[toIdx] || "") + " " + nm + " | LSPD", add: e.to, remove: e.from };
+}
+function pbHandle_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  const A = pbAccess_(acct), a = d.action;
+  if (!A.view) return { ok: false, error: "The promotion board is for Lieutenants and above." };
+  const id = str_(d.id), stamp = () => new Date(), clear = () => { try { CacheService.getScriptCache().removeAll(["promo_people", "rp_" + id]); } catch (e) {} };
+  const find = () => pbOfficers_().find(o => o.id === id);
+  if (a === "pbNominate") {
+    if (!A.nominate) return { ok: false, error: "Only Lieutenants and above can put officers up for promotion." };
+    const o = find(); if (!o) return { ok: false, error: "That officer isn't on the Personnel roster (or can't be promoted here)." };
+    if (!A.hc && !(o.idx + 1 < A.idx)) return { ok: false, error: "You can only put officers up to a rank below your own. High Command can do this one." };
+    const r = withLock_(() => {
+      if (pbEntries_().some(e => e.id === id && (e.status === "nominated" || e.status === "approved"))) return { ok: false, error: "Already on the promotion list." };
+      pbSheet_().appendRow([Utilities.getUuid().slice(0, 8), "'" + id, cellSafe_((o.callsign ? o.callsign + " | " : "") + o.name), o.callsign, RANKS_[o.idx], RANKS_[o.idx + 1], o.idx, "nominated", cellSafe_(A.who), stamp(), cellSafe_(clip_(str_(d.note), 300)), "", "", "", "", "", ""]);
+      return { ok: true };
+    }); if (!r.ok) return r;
+  } else if (a === "pbRemove" || a === "pbApprove") {
+    const r = withLock_(() => {
+      const e = pbEntries_().find(x => x.id === id && (x.status === "nominated" || x.status === "approved")); if (!e) return { ok: false, error: "They're not on the promotion list any more." };
+      const sh = pbSheet_();
+      if (a === "pbApprove") {
+        if (!A.hc) return { ok: false, error: "Only High Command can approve promotions." };
+        sh.getRange(e.row, 8).setValue(d.on === false ? "nominated" : "approved");
+        sh.getRange(e.row, 12, 1, 2).setValues(d.on === false ? [["", ""]] : [[cellSafe_(A.who), stamp()]]);
+      } else {
+        if (!A.hc && e.by !== A.who) return { ok: false, error: "Only High Command or the person who nominated them can take them off the list." };
+        sh.getRange(e.row, 8).setValue("returned"); sh.getRange(e.row, 16).setValue(cellSafe_("Returned by " + A.who + (str_(d.reason) ? ": " + clip_(str_(d.reason), 200) : "")));
+      }
+      return { ok: true };
+    }); if (!r.ok) return r;
+  } else if (a === "pbCheck") {
+    if (!A.nominate) return { ok: false, error: "Only command can sign off requirements." };
+    const o = find(); if (!o) return { ok: false, error: "That officer isn't on the roster any more." };
+    const L = promoLadderKeys_(), rr = (L.ranks || []).find(x => x.idx === o.idx), q = rr && rr.reqs.find(x => x.key === str_(d.key));
+    const ex = pbRule_(pbRules_(), o.idx).extra.find(t => pbExtraKey_(o.idx, t) === str_(d.key));
+    if (!q && !ex) return { ok: false, error: "That requirement changed. Refresh the board." };
+    if (q && q.auto) return { ok: false, error: "The terminal counts this one itself." };
+    withLock_(() => { const sh = pchkSheet_(), have = (pchkAll_()[o.id] || {})[str_(d.key)];
+      if (d.on && !have) sh.appendRow(["'" + o.id, cellSafe_((o.callsign ? o.callsign + " | " : "") + o.name), cellSafe_(RANKS_[o.idx]), str_(d.key), cellSafe_(q ? q.t : ex), cellSafe_(A.who), stamp()]);
+      if (!d.on && have) sh.deleteRow(have.row); return { ok: true }; });
+    clear();
+  } else if (a === "pbRules") {
+    if (!A.editor) return { ok: false, error: "Only High Command and the people they pick can change requirements." };
+    const R = pbRules_(), inR = d.rules || {}, num = (v, lo, hi) => v === "" || v == null ? "" : Math.max(lo, Math.min(hi, Math.round(Number(v) * 10) / 10 || 0));
+    const ranks = {}; Object.keys(inR.ranks || {}).forEach(k => { const i = Number(k); if (!(i >= 1 && i < PB_TOP_)) return; const x = inR.ranks[k] || {};
+      ranks[String(i)] = { hours: num(x.hours, 0, 200), weekMin: num(x.weekMin, 0, 100), reports: num(x.reports, 0, 200), days: num(x.days, 7, 60) || PB_DEF_.days,
+        extra: (Array.isArray(x.extra) ? x.extra : []).map(t => clip_(str_(t), 200)).filter(Boolean).slice(0, 12) }; });
+    R.ranks = ranks;
+    if (A.hc) { R.editors = (Array.isArray(inR.editors) ? inR.editors : []).map(x => clip_(str_(x), 40)).filter(Boolean).slice(0, 20); R.webhookId = str_(inR.webhookId); }
+    PROPS_.setProperty("PB_RULES", JSON.stringify(R));
+  } else if (a === "pbDiscordDone") {
+    if (!A.editor && !A.hc) return { ok: false, error: "Only High Command can tick these off." };
+    withLock_(() => { const e = pbEntries_().find(x => x.entry === str_(d.entry)); if (e) pbSheet_().getRange(e.row, 17).setValue(d.on === false ? "" : cellSafe_("Done by " + A.who)); return { ok: true }; });
+  } else if (a === "pbPreview" || a === "pbPush") {
+    if (!A.hc) return { ok: false, error: "Only High Command can push promotions." };
+    return a === "pbPush" ? pbPush_(A) : pbPlan_();
+  }
+  return pbView_(acct, A);
+}
+// what a push would do: approved officers, highest rank first, each into the first open slot of their next rank
+function pbPlan_(S) {
+  S = S || pbSlots_();
+  const list = pbEntries_().filter(e => e.status === "approved").sort((a, b) => b.fromIdx - a.fromIdx || a.apAt - b.apAt);
+  const freed = {}, taken = {}, plan = [];
+  list.forEach(e => {
+    const cur = S.rows.find(x => x.id === e.id && !freed[x.r]);
+    if (!cur) { plan.push({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, error: "Not found on the Personnel roster by Discord ID." }); return; }
+    if (cur.idx !== e.fromIdx) { plan.push({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, error: "The roster now shows them as " + cur.billet + ". Return and re-nominate them." }); return; }
+    const slot = S.rows.find(x => x.idx === e.fromIdx + 1 && !x.head && !x.fx && !taken[x.r] && ((!x.name && !x.id) || freed[x.r]));
+    if (!slot) { plan.push({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, error: "No open " + RANKS_[e.fromIdx + 1] + " slot on the roster." }); return; }
+    taken[slot.r] = 1; freed[cur.r] = 1;
+    plan.push({ entry: e.entry, id: e.id, officer: e.officer, name: cur.name, from: e.from, to: e.to, fromRow: cur.r, toRow: slot.r, oldCs: cur.cs, newCs: slot.cs, billet: slot.billet, fxG: slot.fxG });
+  });
+  return { ok: true, plan: plan };
+}
+function pbPush_(A) {
+  const out = withLock_(() => {
+    const S = pbSlots_(), P = pbPlan_(S).plan, sh = S.sh, pb = pbSheet_(), E = pbEntries_(), tz = Session.getScriptTimeZone();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const done = [];
+    P.forEach(p => {
+      const e = E.find(x => x.entry === p.entry); if (!e) return;
+      if (p.error) { pb.getRange(e.row, 16).setValue(cellSafe_("Not pushed: " + p.error)); return; }
+      const src = S.rows.find(x => x.r === p.fromRow);
+      sh.getRange(p.toRow, 6).setNumberFormat("@");                                   // Discord IDs are too long to be numbers
+      sh.getRange(p.toRow, 5, 1, 2).setValues([[src.nameRaw, typeof src.idRaw === "number" ? src.id : str_(src.idRaw)]]);   // name + Discord ID into the new slot
+      if (!p.fxG) sh.getRange(p.toRow, 7).setValue(today);                           // time in grade starts today
+      sh.getRange(p.fromRow, 5, 1, 3).clearContent();                                 // old slot: E, F, G emptied
+      pb.getRange(e.row, 8).setValue("promoted"); pb.getRange(e.row, 14, 1, 3).setValues([[new Date(), p.newCs, cellSafe_("Moved to row " + p.toRow + " (" + p.newCs + ") by " + A.who)]]);
+      done.push(Object.assign({}, p, { at: Date.now() }));
+    });
+    SpreadsheetApp.flush();
+    return { ok: true, done: done, plan: P };
+  });
+  if (!out.ok) return out;
+  // fresh roster everywhere: nameplates, fleet/uniform ranks, the tracker
+  try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "roster_calls"].concat(out.done.map(p => "rp_" + p.id))); } catch (e) {}
+  try { const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) { getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); getRosterTab_(tid, true, [RANK_COL_], false, true); getRosterTab_(tid, true); } callsignMap_(true); } catch (e) {}
+  // the announcement (if High Command picked a channel)
+  let warning = "";
+  const R = pbRules_(), wh = R.webhookId && webhookById_(R.webhookId);
+  if (out.done.length && wh) {
+    const lines = out.done.map(p => "🎖️ **" + cleanName_(p.name) + "** <@" + p.id + ">\n" + p.from + " → **" + p.to + "**" + (p.newCs ? "  ·  `" + (p.oldCs || "—") + " → " + p.newCs + "`" : ""));
+    const payload = { content: out.done.map(p => "<@" + p.id + ">").join(" "), allowed_mentions: { parse: [], users: out.done.map(p => p.id).slice(0, 100) },
+      embeds: [{ title: "📣 LSPD Promotions", description: clip_(lines.join("\n\n"), 4000), color: 0xE8B54A, footer: { text: "Approved by High Command · pushed by " + A.who }, timestamp: new Date().toISOString() }] };
+    if (wh.kind !== "text") payload.thread_name = clip_("Promotions · " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMM d, yyyy"), 100);
+    const r = discordPost_(wh.url, payload); if (!r.ok) warning = "Roster updated, but the Discord announcement failed: " + r.error;
+  }
+  const v = pbView_({ id: "" }, A); v.pushed = out.done.length; v.skipped = out.plan.filter(p => p.error).map(p => ({ officer: p.officer, error: p.error })); if (warning) v.warning = warning;
+  return v;
 }
