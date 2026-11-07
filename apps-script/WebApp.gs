@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 111;
+const BACKEND_VERSION = 112;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5299,8 +5299,8 @@ function pbAccess_(acct) {
   const nominate = hc || (idx >= 7 && idx <= PB_TOP_);
   return { prof: prof, idx: idx, callsign: cs, hc: hc, nominate: nominate, editor: hc || ed, view: nominate || ed, who: pbWho_(prof) };
 }
-// everyone the board can promote: Personnel roster, Police Officer II up to Major (→ Commander), not Honorary
-function pbOfficers_() { return promoPeople_().filter(o => !o.trainee && o.idx >= 1 && o.idx < PB_TOP_ && !promoExempt_(o.rank)); }
+// everyone the board can promote: Onboarding officers (PO → PO II) and the Personnel roster from PO II up to Major (→ Commander), not Honorary
+function pbOfficers_() { return promoPeople_().filter(o => (o.trainee ? o.idx === 0 : o.idx >= 1) && o.idx < PB_TOP_ && !promoExempt_(o.rank)); }
 function pbExtraKey_(idx, t) { return "pbx" + reqKey_(idx, t); }
 // Promotions are every Friday. The duty week runs Friday 2:00 PM Eastern → the next Friday 2:00 PM.
 // The board counts the weeks ending at the coming Friday cutoff; for the 24 hours after a cutoff (promotion day)
@@ -5348,7 +5348,12 @@ function pbSlots_() {
   for (let i = 0; i < n; i++) { const b = str_(d[i][1]).trim(); if (!b || /\[/.test(b)) continue; const idx = rankIndex_(b); if (idx < 0) continue;
     rows.push({ r: i + 1, billet: b, idx: idx, head: /^head\b/i.test(b), cs: str_(d[i][3]).trim(), name: str_(d[i][4]).trim(), id: str_(d[i][5]).replace(/\D/g, ""), nameRaw: v[i][4], idRaw: v[i][5],
       fx: fx[i].some(Boolean), fxG: !!fx[i][2] }); }
-  return { sh: sh, rows: rows };
+  // LSPD Onboarding Roster: A callsign, C name, D Discord ID, I status, J training status, K date (PO → PO II comes from here)
+  const ob = rosterBook_().getSheetByName(ONBOARD_TAB_), onb = [];
+  if (ob) { const m = ob.getLastRow(), orng = ob.getRange(1, 1, m, 11), ov = orng.getValues(), od = orng.getDisplayValues();
+    for (let i = 0; i < m; i++) { const id = str_(od[i][3]).replace(/\D/g, ""); if (id.length < 15) continue;
+      onb.push({ r: i + 1, cs: str_(od[i][0]).trim(), name: str_(od[i][2]).trim(), id: id, nameRaw: ov[i][2], idRaw: ov[i][3], idx: 0, billet: "Police Officer (Onboarding)" }); } }
+  return { sh: sh, rows: rows, ob: ob, onb: onb };
 }
 function pbOpenSlot_(S, idx) { return S.rows.find(x => x.idx === idx && !x.head && !x.name && !x.id && !x.fx); }
 function pbView_(acct, A) {
@@ -5364,7 +5369,7 @@ function pbView_(acct, A) {
   const sc = CacheService.getScriptCache(), sHit = sc.get("pb_open");
   if (sHit) open = JSON.parse(sHit);
   else try { const S = pbSlots_(); S.rows.forEach(x => { if (!x.head && !x.name && !x.id && !x.fx) open[x.idx] = (open[x.idx] || 0) + 1; }); sc.put("pb_open", JSON.stringify(open), 300); } catch (e) { slotErr = errMsg_(e); }
-  const ranks = []; for (let i = 1; i < PB_TOP_; i++) { const ru = pbRule_(R, i); ranks.push({ idx: i, name: RANKS_[i], next: RANKS_[i + 1], abbr: PB_ABBR_[i], open: open[i + 1] || 0, rule: ru,
+  const ranks = []; for (let i = 0; i < PB_TOP_; i++) { const ru = pbRule_(R, i); ranks.push({ idx: i, name: RANKS_[i], next: RANKS_[i + 1], abbr: PB_ABBR_[i], open: open[i + 1] || 0, rule: ru,
     doc: ((L.ranks || []).find(x => x.idx === i) || { reqs: [] }).reqs.map(q => ({ t: q.t, auto: q.auto ? q.auto.type : "" })) }); }
   const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
     .map(e => ({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
@@ -5421,7 +5426,7 @@ function pbHandle_(d) {
   } else if (a === "pbRules") {
     if (!A.editor) return { ok: false, error: "Only High Command and the people they pick can change requirements." };
     const R = pbRules_(), inR = d.rules || {}, num = (v, lo, hi) => v === "" || v == null ? "" : Math.max(lo, Math.min(hi, Math.round(Number(v) * 10) / 10 || 0));
-    const ranks = {}; Object.keys(inR.ranks || {}).forEach(k => { const i = Number(k); if (!(i >= 1 && i < PB_TOP_)) return; const x = inR.ranks[k] || {};
+    const ranks = {}; Object.keys(inR.ranks || {}).forEach(k => { const i = Number(k); if (!(i >= 0 && i < PB_TOP_)) return; const x = inR.ranks[k] || {};
       ranks[String(i)] = { hours: num(x.hours, 0, 200), weekMin: num(x.weekMin, 0, 100), reports: num(x.reports, 0, 200), days: num(x.days, 7, 60) || PB_DEF_.days,
         extra: (Array.isArray(x.extra) ? x.extra : []).map(t => clip_(str_(t), 200)).filter(Boolean).slice(0, 12) }; });
     R.ranks = ranks;
@@ -5442,13 +5447,13 @@ function pbPlan_(S) {
   const list = pbEntries_().filter(e => e.status === "approved").sort((a, b) => b.fromIdx - a.fromIdx || a.apAt - b.apAt);
   const freed = {}, taken = {}, plan = [];
   list.forEach(e => {
-    const cur = S.rows.find(x => x.id === e.id && !freed[x.r]);
-    if (!cur) { plan.push({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, error: "Not found on the Personnel roster by Discord ID." }); return; }
+    const onb = e.fromIdx === 0, cur = onb ? (S.onb || []).find(x => x.id === e.id) : S.rows.find(x => x.id === e.id && !freed[x.r]);
+    if (!cur) { plan.push({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, error: "Not found on the " + (onb ? "Onboarding" : "Personnel") + " roster by Discord ID." }); return; }
     if (cur.idx !== e.fromIdx) { plan.push({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, error: "The roster now shows them as " + cur.billet + ". Return and re-nominate them." }); return; }
     const slot = S.rows.find(x => x.idx === e.fromIdx + 1 && !x.head && !x.fx && !taken[x.r] && ((!x.name && !x.id) || freed[x.r]));
     if (!slot) { plan.push({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, error: "No open " + RANKS_[e.fromIdx + 1] + " slot on the roster." }); return; }
-    taken[slot.r] = 1; freed[cur.r] = 1;
-    plan.push({ entry: e.entry, id: e.id, officer: e.officer, name: cur.name, from: e.from, to: e.to, fromRow: cur.r, toRow: slot.r, oldCs: cur.cs, newCs: slot.cs, billet: slot.billet, fxG: slot.fxG });
+    taken[slot.r] = 1; if (!onb) freed[cur.r] = 1;
+    plan.push({ entry: e.entry, id: e.id, officer: e.officer, name: cur.name, from: e.from, to: e.to, fromRow: cur.r, toRow: slot.r, oldCs: cur.cs, newCs: slot.cs, billet: slot.billet, fxG: slot.fxG, onb: onb });
   });
   return { ok: true, plan: plan };
 }
@@ -5460,12 +5465,14 @@ function pbPush_(A) {
     P.forEach(p => {
       const e = E.find(x => x.entry === p.entry); if (!e) return;
       if (p.error) { pb.getRange(e.row, 16).setValue(cellSafe_("Not pushed: " + p.error)); return; }
-      const src = S.rows.find(x => x.r === p.fromRow);
+      const src = p.onb ? S.onb.find(x => x.r === p.fromRow) : S.rows.find(x => x.r === p.fromRow);
       sh.getRange(p.toRow, 6).setNumberFormat("@");                                   // Discord IDs are too long to be numbers
-      sh.getRange(p.toRow, 5, 1, 2).setValues([[src.nameRaw, typeof src.idRaw === "number" ? src.id : str_(src.idRaw)]]);   // name + Discord ID into the new slot
+      sh.getRange(p.toRow, 5, 1, 2).setValues([[src.nameRaw, typeof src.idRaw === "number" ? src.id : str_(src.idRaw)]]);   // name + Discord ID into the new slot (values only)
       if (!p.fxG) sh.getRange(p.toRow, 7).setValue(today);                           // time in grade starts today
-      sh.getRange(p.fromRow, 5, 1, 3).clearContent();                                 // old slot: E, F, G emptied
-      pb.getRange(e.row, 8).setValue("promoted"); pb.getRange(e.row, 14, 1, 3).setValues([[new Date(), p.newCs, cellSafe_("Moved to row " + p.toRow + " (" + p.newCs + ") by " + A.who)]]);
+      if (p.onb) {   // PO → PO II: empty their Onboarding row (name, Discord ID, date) and set both drop-downs back to Good
+        S.ob.getRange(p.fromRow, 3, 1, 2).clearContent(); S.ob.getRange(p.fromRow, 11).clearContent(); S.ob.getRange(p.fromRow, 9, 1, 2).setValues([["Good", "Good"]]);
+      } else sh.getRange(p.fromRow, 5, 1, 3).clearContent();                         // old slot: E, F, G emptied
+      pb.getRange(e.row, 8).setValue("promoted"); pb.getRange(e.row, 14, 1, 3).setValues([[new Date(), p.newCs, cellSafe_((p.onb ? "From Onboarding row " + p.fromRow + " to" : "Moved to") + " Personnel row " + p.toRow + " (" + p.newCs + ") by " + A.who)]]);
       done.push(Object.assign({}, p, { at: Date.now() }));
     });
     SpreadsheetApp.flush();
@@ -5477,7 +5484,10 @@ function pbPush_(A) {
   // (callsigns first, so the re-read roster shows the new ones; the other roster copies are dropped and rebuilt on next use)
   try { callsignMap_(true); const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) {
     CacheService.getScriptCache().removeAll(["roster_tab_" + tid + "_" + RANK_COL_ + "_all", "roster_tab_" + tid, "roster_tab_" + tid + "_" + RANK_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_]);
-    getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); } } catch (e) {}
+    getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); }
+    const oid = rosterTabByName_(ONBOARD_TAB_); if (oid != null && out.done.some(p => p.onb)) {
+      CacheService.getScriptCache().removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all"]);
+      getRosterTab_(oid, true, [RANK_COL_, TIG_COL_], false, true); } } catch (e) {}
   // the announcement (if High Command picked a channel)
   let warning = "";
   const R = pbRules_(), wh = R.webhookId && webhookById_(R.webhookId);

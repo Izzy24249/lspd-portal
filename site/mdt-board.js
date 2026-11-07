@@ -88,7 +88,7 @@
     if (B.slotError) h += '<div class="pbx-alert">⚠ Couldn\'t read the Personnel roster: ' + esc(B.slotError) + "</div>";
     // rank filter
     h += '<div class="pbx-ranks"><button data-pbrf="all" class="' + (RF === "all" ? "on" : "") + '">ALL RANKS <small>' + all.length + "</small></button>" +
-      B.ranks.filter(r => all.some(o => o.idx === r.idx)).map(r => '<button data-pbrf="' + r.idx + '" class="' + (String(RF) === String(r.idx) ? "on" : "") + '" title="' + r.open + " open " + esc(r.next) + ' slot(s) on the roster">' + esc(r.abbr) + " → " + esc(B.ranks[r.idx] ? B.ranks[r.idx].abbr : "CMDR") + " <small>" + all.filter(o => o.idx === r.idx).length + '</small><i class="' + (r.open ? "" : "no") + '">' + r.open + " open</i></button>").join("") + "</div>";
+      B.ranks.filter(r => all.some(o => o.idx === r.idx)).map(r => '<button data-pbrf="' + r.idx + '" class="' + (String(RF) === String(r.idx) ? "on" : "") + '" title="' + r.open + " open " + esc(r.next) + ' slot(s) on the roster">' + esc(r.abbr) + " → " + esc(nextAbbr(r.idx)) + " <small>" + all.filter(o => o.idx === r.idx).length + '</small><i class="' + (r.open ? "" : "no") + '">' + r.open + " open</i></button>").join("") + "</div>";
     const q = Q.trim().toLowerCase();
     let left = all.filter(o => !o.entry && (RF === "all" || String(o.idx) === String(RF)) && (!q || (o.name + " " + o.callsign + " " + o.rank).toLowerCase().indexOf(q) !== -1));
     if (SHOW === "term") left = left.filter(o => o.terminal); if (SHOW === "ready") left = left.filter(o => o.ready);
@@ -107,6 +107,7 @@
     h += followUps();
     return h;
   }
+  function nextAbbr(i) { const n = B.ranks.find(z => z.idx === i + 1); return n ? n.abbr : "CMDR"; }
   function groupBy(list) {
     const g = [];
     list.forEach(o => { let x = g.find(y => y.idx === o.idx); if (!x) { const r = B.ranks.find(z => z.idx === o.idx); x = { idx: o.idx, to: o.next, open: r ? r.open : 0, list: [] }; g.push(x); } x.list.push(o); });
@@ -165,9 +166,9 @@
     if (!pv.ok) return say("Couldn't plan the push", pv.error === "AUTH" ? "Your MDT session expired. Sign on again and retry." : pv.error || "No answer from the server. If you just updated WebApp.gs, check that you deployed a new version.");
     const ok = pv.plan.filter(p => !p.error);
     const m = M().modal('<h3 style="font:700 24px Barlow Condensed,sans-serif;letter-spacing:.05em">🎖️ PUSH PROMOTIONS</h3>' +
-      '<p style="color:var(--mute);font-size:13.5px">Each officer moves to the first open slot of their new rank on the <b>LSPD Personnel Roster</b>, highest ranks first. Their old row\'s name, Discord ID and date are cleared, and time in grade starts today.</p>' +
+      '<p style="color:var(--mute);font-size:13.5px">Each officer moves to the first open slot of their new rank on the <b>LSPD Personnel Roster</b>, highest ranks first. Their old row\'s name, Discord ID and date are cleared, and time in grade starts today. New PO IIs come off the <b>Onboarding Roster</b>, and their onboarding row is reset (drop-downs back to Good).</p>' +
       '<div class="pbx-plan">' + pv.plan.map(p => '<div class="' + (p.error ? "bad" : "") + '"><b>' + esc(p.officer.replace(/^.*\|\s*/, "")) + "</b><span>" + esc(p.from) + " → " + esc(p.to) + "</span>" +
-        (p.error ? "<em>✕ " + esc(p.error) + "</em>" : "<em>" + esc(p.oldCs || "—") + " → <b>" + esc(p.newCs) + "</b> · row " + p.toRow + "</em>") + "</div>").join("") + "</div>" +
+        (p.error ? "<em>✕ " + esc(p.error) + "</em>" : "<em>" + esc(p.oldCs || "—") + " → <b>" + esc(p.newCs) + "</b> · row " + p.toRow + (p.onb ? " · from the Onboarding roster" : "") + "</em>") + "</div>").join("") + "</div>" +
       '<div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" data-close>CANCEL</button><button class="btn pbx-push" id="pbGo"' + (ok.length ? "" : " disabled") + ">CONFIRM " + ok.length + " PROMOTION" + (ok.length === 1 ? "" : "S") + "</button></div>");
     const b = m.querySelector("#pbGo"); if (!b) return;
     b.onclick = async () => {
@@ -186,7 +187,7 @@
   }
   function rules() {
     const me = B.me;
-    const rows = B.ranks.map(r => '<tr data-rk="' + r.idx + '"><th>' + esc(r.abbr) + " → " + esc(B.ranks[r.idx] ? B.ranks[r.idx].abbr : "CMDR") + "<small>" + esc(r.name) + "</small></th>" +
+    const rows = B.ranks.map(r => '<tr data-rk="' + r.idx + '"><th>' + esc(r.abbr) + " → " + esc(nextAbbr(r.idx)) + "<small>" + esc(r.name) + "</small></th>" +
       ["hours", "weekMin", "reports", "days"].map(k => '<td><input type="number" min="0" step="' + (k === "hours" || k === "weekMin" ? "0.5" : "1") + '" data-k="' + k + '" value="' + esc(r.rule[k]) + '"></td>').join("") +
       '<td><textarea data-k="extra" rows="2" placeholder="One per line">' + esc((r.rule.extra || []).join("\n")) + "</textarea>" +
       (r.doc.length ? '<details><summary>' + r.doc.length + " from the guidelines doc</summary><ul>" + r.doc.map(q => "<li>" + esc(q.t) + (q.auto ? " <i>auto</i>" : "") + "</li>").join("") + "</ul></details>" : "") + "</td></tr>").join("");
