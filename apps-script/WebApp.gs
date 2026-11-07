@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 108;
+const BACKEND_VERSION = 109;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5342,7 +5342,9 @@ function pbView_(acct, A) {
       canNominate: A.hc || o.idx + 1 < A.idx, entry: e ? { entry: e.entry, status: e.status, by: e.by, at: e.at, note: e.note, apBy: e.apBy, apAt: e.apAt } : null }, ev);
   });
   let open = {}, slotErr = "";
-  try { const S = pbSlots_(); S.rows.forEach(x => { if (!x.head && !x.name && !x.id && !x.fx) open[x.idx] = (open[x.idx] || 0) + 1; }); } catch (e) { slotErr = errMsg_(e); }
+  const sc = CacheService.getScriptCache(), sHit = sc.get("pb_open");
+  if (sHit) open = JSON.parse(sHit);
+  else try { const S = pbSlots_(); S.rows.forEach(x => { if (!x.head && !x.name && !x.id && !x.fx) open[x.idx] = (open[x.idx] || 0) + 1; }); sc.put("pb_open", JSON.stringify(open), 300); } catch (e) { slotErr = errMsg_(e); }
   const ranks = []; for (let i = 1; i < PB_TOP_; i++) { const ru = pbRule_(R, i); ranks.push({ idx: i, name: RANKS_[i], next: RANKS_[i + 1], abbr: PB_ABBR_[i], open: open[i + 1] || 0, rule: ru,
     doc: ((L.ranks || []).find(x => x.idx === i) || { reqs: [] }).reqs.map(q => ({ t: q.t, auto: q.auto ? q.auto.type : "" })) }); }
   const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
@@ -5366,9 +5368,10 @@ function pbHandle_(d) {
     if (!A.hc && !(o.idx + 1 < A.idx)) return { ok: false, error: "You can only put officers up to a rank below your own. High Command can do this one." };
     const r = withLock_(() => {
       if (pbEntries_().some(e => e.id === id && (e.status === "nominated" || e.status === "approved"))) return { ok: false, error: "Already on the promotion list." };
-      pbSheet_().appendRow([Utilities.getUuid().slice(0, 8), "'" + id, cellSafe_((o.callsign ? o.callsign + " | " : "") + o.name), o.callsign, RANKS_[o.idx], RANKS_[o.idx + 1], o.idx, "nominated", cellSafe_(A.who), stamp(), cellSafe_(clip_(str_(d.note), 300)), "", "", "", "", "", ""]);
-      return { ok: true };
-    }); if (!r.ok) return r;
+      const en = Utilities.getUuid().slice(0, 8);
+      pbSheet_().appendRow([en, "'" + id, cellSafe_((o.callsign ? o.callsign + " | " : "") + o.name), o.callsign, RANKS_[o.idx], RANKS_[o.idx + 1], o.idx, "nominated", cellSafe_(A.who), stamp(), cellSafe_(clip_(str_(d.note), 300)), "", "", "", "", "", ""]);
+      return { ok: true, entry: { entry: en, status: "nominated", by: A.who, at: Date.now(), note: clip_(str_(d.note), 300) } };
+    }); return r;
   } else if (a === "pbRemove" || a === "pbApprove") {
     const r = withLock_(() => {
       const e = pbEntries_().find(x => x.id === id && (x.status === "nominated" || x.status === "approved")); if (!e) return { ok: false, error: "They're not on the promotion list any more." };
@@ -5377,12 +5380,13 @@ function pbHandle_(d) {
         if (!A.hc) return { ok: false, error: "Only High Command can approve promotions." };
         sh.getRange(e.row, 8).setValue(d.on === false ? "nominated" : "approved");
         sh.getRange(e.row, 12, 1, 2).setValues(d.on === false ? [["", ""]] : [[cellSafe_(A.who), stamp()]]);
+        return { ok: true, apBy: d.on === false ? "" : A.who };
       } else {
         if (!A.hc && e.by !== A.who) return { ok: false, error: "Only High Command or the person who nominated them can take them off the list." };
         sh.getRange(e.row, 8).setValue("returned"); sh.getRange(e.row, 16).setValue(cellSafe_("Returned by " + A.who + (str_(d.reason) ? ": " + clip_(str_(d.reason), 200) : "")));
       }
       return { ok: true };
-    }); if (!r.ok) return r;
+    }); return r;
   } else if (a === "pbCheck") {
     if (!A.nominate) return { ok: false, error: "Only command can sign off requirements." };
     const o = find(); if (!o) return { ok: false, error: "That officer isn't on the roster any more." };
@@ -5393,7 +5397,7 @@ function pbHandle_(d) {
     withLock_(() => { const sh = pchkSheet_(), have = (pchkAll_()[o.id] || {})[str_(d.key)];
       if (d.on && !have) sh.appendRow(["'" + o.id, cellSafe_((o.callsign ? o.callsign + " | " : "") + o.name), cellSafe_(RANKS_[o.idx]), str_(d.key), cellSafe_(q ? q.t : ex), cellSafe_(A.who), stamp()]);
       if (!d.on && have) sh.deleteRow(have.row); return { ok: true }; });
-    clear();
+    clear(); return { ok: true, by: d.on ? A.who : "" };
   } else if (a === "pbRules") {
     if (!A.editor) return { ok: false, error: "Only High Command and the people they pick can change requirements." };
     const R = pbRules_(), inR = d.rules || {}, num = (v, lo, hi) => v === "" || v == null ? "" : Math.max(lo, Math.min(hi, Math.round(Number(v) * 10) / 10 || 0));
@@ -5405,7 +5409,7 @@ function pbHandle_(d) {
     PROPS_.setProperty("PB_RULES", JSON.stringify(R));
   } else if (a === "pbDiscordDone") {
     if (!A.editor && !A.hc) return { ok: false, error: "Only High Command can tick these off." };
-    withLock_(() => { const e = pbEntries_().find(x => x.entry === str_(d.entry)); if (e) pbSheet_().getRange(e.row, 17).setValue(d.on === false ? "" : cellSafe_("Done by " + A.who)); return { ok: true }; });
+    return withLock_(() => { const e = pbEntries_().find(x => x.entry === str_(d.entry)); if (e) pbSheet_().getRange(e.row, 17).setValue(d.on === false ? "" : cellSafe_("Done by " + A.who)); return { ok: true }; });
   } else if (a === "pbPreview" || a === "pbPush") {
     if (!A.hc) return { ok: false, error: "Only High Command can push promotions." };
     return a === "pbPush" ? pbPush_(A) : pbPlan_();
@@ -5449,7 +5453,7 @@ function pbPush_(A) {
   });
   if (!out.ok) return out;
   // fresh roster everywhere: nameplates, fleet/uniform ranks, the tracker
-  try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "roster_calls"].concat(out.done.map(p => "rp_" + p.id))); } catch (e) {}
+  try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "roster_calls", "pb_open"].concat(out.done.map(p => "rp_" + p.id))); } catch (e) {}
   try { const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) { getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); getRosterTab_(tid, true, [RANK_COL_], false, true); getRosterTab_(tid, true); } callsignMap_(true); } catch (e) {}
   // the announcement (if High Command picked a channel)
   let warning = "";

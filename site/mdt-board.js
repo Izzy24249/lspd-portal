@@ -61,7 +61,7 @@
   }
   function listCard(o) {
     const e = o.entry, ap = e.status === "approved", me = B.me;
-    const mine = e.by && me.callsign && e.by.indexOf("(" + me.callsign + ")") !== -1;
+    const mine = e.mine || (e.by && me.callsign && e.by.indexOf("(" + me.callsign + ")") !== -1);
     return '<article class="pbx-l' + (ap ? " ap" : "") + (o.ready ? "" : " warn") + '" data-pbl="' + esc(o.id) + '">' +
       '<div class="pbx-row">' + ring(o.done, o.total, o.ready) +
       '<div class="pbx-who"><div class="pbx-nm">' + (o.callsign ? "<code>" + esc(o.callsign) + "</code>" : "") + "<b>" + esc(o.name) + "</b></div>" +
@@ -121,12 +121,29 @@
   }
 
   // ---------- actions ----------
+  // moves show on screen at once; the server saves in the background and anything it refuses is put back
+  const ME_WHO = () => "You" + (B.me.callsign ? " (" + B.me.callsign + ")" : "");
+  let PEND = 0;
+  function quick(action, extra, apply, undo, okMsg) {
+    apply(); M().draw(); PEND++;
+    call(action, extra).then(r => { PEND--;
+      if (r.ok) { if (typeof okMsg === "function") okMsg(r); return; }
+      undo(); M().draw(); M().toast(r.error === "AUTH" ? "Your MDT session expired. Sign on again." : r.error || "Couldn't save that. It's been put back.");
+    });
+  }
+  function recount(o) {
+    o.done = o.items.filter(x => x.done).length; o.total = o.items.length;
+    const au = o.items.filter(x => x.auto); o.terminal = au.length > 0 && au.every(x => x.done);
+    o.openManual = o.items.filter(x => !x.auto && !x.done).length; o.ready = o.total > 0 && o.done === o.total;
+  }
   async function nominate(id) {
-    const o = B.officers.find(x => x.id === id); if (!o || BUSY) return;
-    const go = async note => {
-      BUSY = true; M().blip(1200);
-      const r = await call("pbNominate", { id: id, note: note || "" }); BUSY = false;
-      if (r.ok) { M().toast("🎖️ " + o.name + " is up for " + o.next); M().draw(); } else M().toast(r.error || "Couldn't add them.");
+    const o = B.officers.find(x => x.id === id); if (!o || o.entry) return;
+    const go = note => {
+      M().blip(1200); M().toast("🎖️ " + o.name + " is up for " + o.next);
+      quick("pbNominate", { id: id, note: note || "" },
+        () => { o.entry = { entry: "", status: "nominated", by: ME_WHO(), at: Date.now(), note: note || "", mine: true }; },
+        () => { o.entry = null; },
+        r => { if (r.entry && o.entry) { Object.assign(o.entry, r.entry); o.entry.mine = true; } });
     };
     if (o.ready) return go("");
     const m = M().modal('<h3 style="font:700 22px Barlow Condensed,sans-serif;letter-spacing:.04em">Put ' + esc(o.name) + " up for " + esc(o.next) + "?</h3>" +
@@ -139,6 +156,7 @@
   async function push() {
     if (!B.officers.some(o => o.entry && o.entry.status === "approved")) return say("Nothing approved yet", "Press the green APPROVE button on each officer in the Promotion list first. Only approved officers are pushed to the roster.");
     const pb = document.querySelector("[data-pbpush]"); if (pb) { pb.disabled = true; pb.textContent = "CHECKING THE ROSTER…"; }
+    for (let i = 0; PEND > 0 && i < 100; i++) await new Promise(r => setTimeout(r, 150));   // let any approvals still saving land first
     const pv = await call("pbPreview");
     if (pb) { pb.disabled = false; M().draw(); }
     if (!pv.ok) return say("Couldn't plan the push", pv.error === "AUTH" ? "Your MDT session expired. Sign on again and retry." : pv.error || "No answer from the server. If you just updated WebApp.gs, check that you deployed a new version.");
@@ -190,16 +208,24 @@
     const rf = t.closest("[data-pbrf]"); if (rf) { RF = rf.dataset.pbrf; M().draw(); return; }
     const sw = t.closest("[data-pbshow]"); if (sw) { SHOW = sw.dataset.pbshow; M().draw(); return; }
     const ad = t.closest("[data-pbadd]"); if (ad) { e.stopPropagation(); nominate(ad.dataset.pbadd); return; }
-    const ap = t.closest("[data-pbapprove]"); if (ap) { if (BUSY) return; const [id, on] = ap.dataset.pbapprove.split("|"); BUSY = true; ap.disabled = true; M().blip(on === "1" ? 1500 : 700);
-      const r = await call("pbApprove", { id: id, on: on === "1" }); BUSY = false; if (!r.ok) M().toast(r.error || "Couldn't save."); M().draw(); return; }
-    const rm = t.closest("[data-pbremove]"); if (rm) { if (BUSY) return; const o = B.officers.find(x => x.id === rm.dataset.pbremove); if (!o) return;
+    const ap = t.closest("[data-pbapprove]"); if (ap) { const [id, on] = ap.dataset.pbapprove.split("|"), o = B.officers.find(x => x.id === id); if (!o || !o.entry) return;
+      const was = { status: o.entry.status, apBy: o.entry.apBy }; M().blip(on === "1" ? 1500 : 700);
+      quick("pbApprove", { id: id, on: on === "1" }, () => { o.entry.status = on === "1" ? "approved" : "nominated"; o.entry.apBy = on === "1" ? ME_WHO() : ""; }, () => Object.assign(o.entry, was),
+        r => { if (o.entry && r.apBy) o.entry.apBy = r.apBy; });
+      return; }
+    const rm = t.closest("[data-pbremove]"); if (rm) { const o = B.officers.find(x => x.id === rm.dataset.pbremove); if (!o) return;
       const m = M().modal('<h3 style="font:700 22px Barlow Condensed,sans-serif">Take ' + esc(o.name) + ' off the list?</h3><input id="pbWhy" maxlength="200" placeholder="Reason (optional)" style="height:42px;border-radius:10px;border:1px solid var(--line2);background:#0b1220;color:var(--tx);padding:0 12px;font:inherit">' +
         '<div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" data-close>KEEP</button><button class="btn" id="pbRmGo">RETURN</button></div>');
-      m.querySelector("#pbRmGo").onclick = async () => { const why = m.querySelector("#pbWhy").value; m.hidden = true; BUSY = true; const r = await call("pbRemove", { id: o.id, reason: why }); BUSY = false; if (!r.ok) M().toast(r.error || "Couldn't save."); else M().toast(o.name + " is back on the officer list"); M().draw(); };
+      m.querySelector("#pbRmGo").onclick = () => { const why = m.querySelector("#pbWhy").value, was = o.entry; m.hidden = true; M().toast(o.name + " is back on the officer list");
+        quick("pbRemove", { id: o.id, reason: why }, () => { o.entry = null; }, () => { o.entry = was; }); };
       return; }
-    const ck = t.closest("[data-pbcheck]"); if (ck) { e.stopPropagation(); if (BUSY) return; const [id, key, on] = ck.dataset.pbcheck.split("|"); BUSY = true; ck.classList.add("busy"); M().blip(on === "1" ? 1400 : 600);
-      const r = await call("pbCheck", { id: id, key: key, on: on === "1" }); BUSY = false; if (!r.ok) M().toast(r.error || "Couldn't save."); else { const o = B.officers.find(x => x.id === id); if (o && o.ready && on === "1") M().toast("★ " + o.name + " has every requirement for " + o.next); } M().draw(); return; }
-    const dn = t.closest("[data-pbdone]"); if (dn) { if (BUSY) return; const [en, on] = dn.dataset.pbdone.split("|"); BUSY = true; const r = await call("pbDiscordDone", { entry: en, on: on === "1" }); BUSY = false; if (!r.ok) M().toast(r.error || "Couldn't save."); M().draw(); return; }
+    const ck = t.closest("[data-pbcheck]"); if (ck) { e.stopPropagation(); const [id, key, on] = ck.dataset.pbcheck.split("|"), o = B.officers.find(x => x.id === id), it = o && o.items.find(x => x.key === key); if (!it) return;
+      const was = { done: it.done, by: it.by, manual: it.manual }; M().blip(on === "1" ? 1400 : 600);
+      quick("pbCheck", { id: id, key: key, on: on === "1" }, () => { it.done = on === "1"; it.manual = it.done; it.by = it.done ? ME_WHO() : ""; recount(o); if (o.ready && it.done) M().toast("★ " + o.name + " has every requirement for " + o.next); },
+        () => { Object.assign(it, was); recount(o); }, r => { if (r.by) it.by = r.by; });
+      return; }
+    const dn = t.closest("[data-pbdone]"); if (dn) { const [en, on] = dn.dataset.pbdone.split("|"), r0 = (B.recent || []).find(x => x.entry === en); if (!r0) return; const was = r0.discord;
+      quick("pbDiscordDone", { entry: en, on: on === "1" }, () => { r0.discord = on === "1" ? "Done" : ""; }, () => { r0.discord = was; }); return; }
     if (t.closest("[data-pbpush]")) { push(); return; }
     const card = t.closest("[data-pbo]"); if (card && !t.closest("button")) { OPEN[card.dataset.pbo] = !OPEN[card.dataset.pbo]; M().draw(); }
   });
