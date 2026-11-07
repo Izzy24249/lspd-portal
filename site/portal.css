@@ -1389,3 +1389,10 @@ body[data-ftheme="cru"] .fp-prev{border-color:rgba(251,146,60,.4);background:#10
 .ofc-chip.ofc-me.can-x{position:relative;padding-right:30px}
 .ofc-chip.ofc-me.can-x .ofc-x{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:15px;line-height:1;opacity:.7;cursor:pointer}
 .ofc-chip.ofc-me.can-x .ofc-x:hover{opacity:1}
+
+/* roster search boxes: what you type is clearly visible (it inherited a pale colour on the light report forms) */
+.paper:not(.hud) .ofc .ofc-in{color:#0f1d36!important;font-weight:600;caret-color:#2563eb}
+.paper:not(.hud) .ofc .ofc-in::placeholder{color:#7a8aa3;font-weight:400}
+.paper:not(.hud) .ofc:focus-within{border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.18)!important;background:#fff!important}
+.theme-dossier .ofc .ofc-in{color:#f3f5f9!important;caret-color:#d4a017}
+.paper.hud .ofc .ofc-in{color:#f1f6ff!important;font-weight:600;caret-color:var(--hc)}
