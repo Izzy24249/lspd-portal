@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 124;
+const BACKEND_VERSION = 125;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5758,6 +5758,52 @@ function obHandle_(d) {
   }
   return obView_(A);
 }
+// The lists on Onboarding Terminations: blocks of filled rows (A–E) separated by one blank line. Lists more than
+// 42 days old (column F, or worked out from the date in E) are cleared out on the next push and the newer lists
+// slide up (columns A–E only, so the formulas and anything to the right stay put), keeping the one-line gaps.
+const OB_KEEP_DAYS_ = 42;
+function obTermBlocks_(tm) {
+  const n = tm.getLastRow(); if (n < 2) return { blocks: [], first: 3 };
+  const rng = tm.getRange(1, 1, n, 6), d = rng.getDisplayValues(), v = rng.getValues();
+  const hdr = d.findIndex(r => /^unit$/i.test(str_(r[0]).trim()) || /^name$/i.test(str_(r[2]).trim())), first = (hdr === -1 ? 1 : hdr + 1) + 1;   // first data row (1-based)
+  const blocks = []; let cur = null; const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (let i = first - 1; i < n; i++) {
+    const filled = d[i].slice(0, 5).some(x => str_(x).trim());
+    if (filled) { if (!cur) { cur = { from: i + 1, to: i + 1, age: null }; blocks.push(cur); } cur.to = i + 1;
+      if (cur.age == null) { const f = Number(str_(d[i][5]).replace(/[^\d.-]/g, "")); const e = v[i][4];
+        cur.age = str_(d[i][5]).trim() !== "" && !isNaN(f) ? f : isDate_(e) ? Math.floor((today - new Date(e.getFullYear(), e.getMonth(), e.getDate())) / 864e5) : null; } }
+    else cur = null;
+  }
+  return { blocks: blocks, first: first };
+}
+function obTermExpired_(B) { return B.blocks.filter(b => b.age != null && b.age > OB_KEEP_DAYS_); }
+// clear the old lists: remove their A–E cells (and the blank line after each) with the cells below moving up.
+// Columns after E: if they're formulas (days, dates) they stay put and recalculate for whatever slides into their row;
+// if they're typed values they move up with the rest of the row.
+function obTermCleanup_(tm) {
+  const B = obTermBlocks_(tm), old = obTermExpired_(B); if (!old.length) return { lists: 0, people: 0 };
+  const lastCol = Math.max(5, tm.getLastColumn()), lastRow = tm.getLastRow(), extra = lastCol - 5;
+  const sample = B.blocks.length ? B.blocks[B.blocks.length - 1].from : 0;
+  const tmpl = extra && sample ? tm.getRange(sample, 6, 1, extra).getFormulasR1C1()[0] : [], hasFx = tmpl.some(Boolean), width = hasFx ? 5 : lastCol;
+  let removed = 0;
+  old.slice().reverse().forEach(b => {
+    const next = B.blocks.find(x => x.from > b.to), rows = (next ? next.from - 1 : b.to) - b.from + 1;   // the list plus its blank line
+    tm.getRange(b.from, 1, rows, width).deleteCells(SpreadsheetApp.Dimension.ROWS); removed += b.to - b.from + 1;
+  });
+  if (hasFx) {   // filled rows keep (or get) the formulas; rows that are now empty show nothing after E
+    const n = lastRow - B.first + 1, ae = tm.getRange(B.first, 1, n, 5).getDisplayValues(), fx = tm.getRange(B.first, 6, n, extra).getFormulasR1C1();
+    ae.forEach((r, i) => { const row = B.first + i, filled = r.some(x => str_(x).trim());
+      if (!filled) { if (fx[i].some(Boolean)) tm.getRange(row, 6, 1, extra).clearContent(); return; }
+      tmpl.forEach((f, k) => { if (f && !fx[i][k]) tm.getRange(row, 6 + k).setFormulaR1C1(f); }); });
+  }
+  return { lists: old.length, people: removed };
+}
+// where the next list starts once the old ones are gone (for the preview)
+function obTermStartAfter_(tm) {
+  const B = obTermBlocks_(tm), keep = B.blocks.filter(b => obTermExpired_(B).indexOf(b) === -1);
+  let at = B.first, end = 0; keep.forEach(b => { end = at + (b.to - b.from); at = end + 2; });
+  return { start: keep.length ? end + 2 : B.first, lists: B.blocks.length - keep.length, people: B.blocks.filter(b => keep.indexOf(b) === -1).reduce((n, b) => n + b.to - b.from + 1, 0) };
+}
 function obTermStart_(tm) {   // first row of the next batch: one blank line below the last entry
   const n = tm.getLastRow(); if (n < 1) return 3;
   const d = tm.getRange(1, 1, n, 5).getDisplayValues(); let last = 0;
@@ -5768,17 +5814,22 @@ function obPlan_(R) {
   R = R || obRows_();
   const book = rosterBook_(), tm = book.getSheetByName(OB_TERM_TAB_); if (!tm) return { ok: false, error: "The \"" + OB_TERM_TAB_ + "\" tab wasn't found in the roster sheet." };
   const csNum = c => { const m = /(\d+)/.exec(str_(c)); return m ? Number(m[1]) : 1e9; };
-  const list = obrEntries_().filter(e => e.status === "listed").sort((a, b) => csNum(a.callsign) - csNum(b.callsign)), start = obTermStart_(tm), plan = []; let at = start;   // callsign order: L-801, L-802…
+  const after = obTermStartAfter_(tm);
+  const list = obrEntries_().filter(e => e.status === "listed").sort((a, b) => csNum(a.callsign) - csNum(b.callsign)), start = after.start, plan = []; let at = start;   // callsign order: L-801, L-802…
   list.forEach(e => { const r = R.rows.find(x => callKey_(x.cs) === callKey_(e.callsign));
     if (!r) { plan.push({ entry: e.entry, callsign: e.callsign, officer: e.officer, error: "Not on the Onboarding Roster any more." }); return; }
     if (e.id && r.id && e.id !== r.id) { plan.push({ entry: e.entry, callsign: e.callsign, officer: e.officer, error: "That slot now holds someone else (" + r.name + "). Take them off the list." }); return; }
     plan.push({ entry: e.entry, callsign: r.cs, officer: r.name, id: r.id, fromRow: r.r, toRow: at++ }); });
-  return { ok: true, plan: plan, start: start };
+  return { ok: true, plan: plan, start: start, cleanup: { lists: after.lists, people: after.people, days: OB_KEEP_DAYS_ } };
 }
 function obPush_(A) {
   const out = withLock_(() => {
-    const R = obRows_(), P = obPlan_(R); if (!P.ok) return P;
-    const tm = rosterBook_().getSheetByName(OB_TERM_TAB_), ob = R.sh, log = obrSheet_(), E = obrEntries_(), today = new Date(); today.setHours(0, 0, 0, 0);
+    const R = obRows_(), tm0 = rosterBook_().getSheetByName(OB_TERM_TAB_); if (!tm0) return { ok: false, error: "The \"" + OB_TERM_TAB_ + "\" tab wasn't found in the roster sheet." };
+    const P0 = obPlan_(R); if (!P0.ok) return P0;
+    const cleaned = P0.plan.some(p => !p.error) ? obTermCleanup_(tm0) : { lists: 0, people: 0 };   // old lists out first, then the new one goes in
+    SpreadsheetApp.flush();
+    const P = obPlan_(R); if (!P.ok) return P;
+    const tm = tm0, ob = R.sh, log = obrSheet_(), E = obrEntries_(), today = new Date(); today.setHours(0, 0, 0, 0);
     const go = P.plan.filter(p => !p.error), done = [];
     if (go.length) {
       // the formulas the sheet uses after E (days, dates…) follow the last entry down
@@ -5799,10 +5850,10 @@ function obPush_(A) {
     }
     P.plan.filter(p => p.error).forEach(p => { const e = E.find(x => x.entry === p.entry); if (e) log.getRange(e.row, 10).setValue(cellSafe_("Not moved: " + p.error)); });
     SpreadsheetApp.flush();
-    return { ok: true, done: done, skipped: P.plan.filter(p => p.error) };
+    return { ok: true, done: done, skipped: P.plan.filter(p => p.error), cleaned: cleaned };
   });
   if (!out.ok) return out;
   try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "promo_view_onboard", "roster_calls"]); const oid = rosterTabByName_(ONBOARD_TAB_);
     if (oid != null) { c.removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all"]); } } catch (e) {}
-  return { ok: true, removed: out.done.length, done: out.done.map(p => ({ callsign: p.callsign, officer: p.officer, toRow: p.toRow })), skipped: out.skipped.map(p => ({ callsign: p.callsign, officer: p.officer, error: p.error })) };
+  return { ok: true, removed: out.done.length, cleaned: out.cleaned, done: out.done.map(p => ({ callsign: p.callsign, officer: p.officer, toRow: p.toRow })), skipped: out.skipped.map(p => ({ callsign: p.callsign, officer: p.officer, error: p.error })) };
 }

@@ -77,6 +77,7 @@
     const ok = pv.plan.filter(p => !p.error);
     const m = M().modal('<h3 style="font:700 24px Barlow Condensed,sans-serif;letter-spacing:.05em">🗂️ REMOVE FROM ONBOARDING</h3>' +
       '<p style="color:var(--mute);font-size:13.5px;line-height:1.5">Each officer\'s callsign, name and Discord ID are copied to <b>Onboarding Terminations</b> (a new block starting at row ' + pv.start + ", one line below the last list) with today's date. Then their Onboarding Roster slot is emptied and its Status and Training Status are reset.</p>" +
+      (pv.cleanup && pv.cleanup.lists ? '<p class="ob-clean">🧹 Also clears ' + pv.cleanup.lists + " old list" + (pv.cleanup.lists === 1 ? "" : "s") + " (" + pv.cleanup.people + " officer" + (pv.cleanup.people === 1 ? "" : "s") + ") more than " + pv.cleanup.days + " days old from Onboarding Terminations; the newer lists move up.</p>" : "") +
       '<div class="pbx-plan">' + pv.plan.map(p => '<div class="' + (p.error ? "bad" : "") + '"><b>' + esc(p.callsign + " · " + p.officer) + "</b><span>" + (p.error ? "" : "→ row " + p.toRow) + "</span>" + (p.error ? "<em>✕ " + esc(p.error) + "</em>" : "") + "</div>").join("") + "</div>" +
       '<div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" data-close>CANCEL</button><button class="btn ob-push" id="obGo"' + (ok.length ? "" : " disabled") + ">REMOVE " + ok.length + "</button></div>");
     const b = m.querySelector("#obGo"); if (!b) return;
@@ -87,7 +88,7 @@
       const gone = {}; (r.done || []).forEach(p => gone[p.callsign] = 1);
       B.officers = B.officers.filter(o => !gone[o.callsign]); B.recent = (r.done || []).map(p => ({ callsign: p.callsign, officer: p.officer, reason: "Onboarding time ran out", at: Date.now(), result: "Terminations row " + p.toRow })).concat(B.recent || []);
       call("obBoard").then(x => { if (x.ok) M().draw(); });
-      m.querySelector(".md-box").innerHTML = '<div class="pbx-done"><span>🗂️</span><h3>' + r.removed + " REMOVED</h3><p>They're on Onboarding Terminations and their slots are free.</p>" +
+      m.querySelector(".md-box").innerHTML = '<div class="pbx-done"><span>🗂️</span><h3>' + r.removed + " REMOVED</h3><p>They're on Onboarding Terminations and their slots are free." + (r.cleaned && r.cleaned.lists ? "<br>Cleared " + r.cleaned.lists + " old list" + (r.cleaned.lists === 1 ? "" : "s") + " (over 42 days)." : "") + "</p>" +
         ((r.skipped || []).length ? '<div class="pbx-plan">' + r.skipped.map(s => '<div class="bad"><b>' + esc(s.callsign + " · " + s.officer) + "</b><em>✕ " + esc(s.error) + "</em></div>").join("") + "</div>" : "") + '<button class="btn" data-close>DONE</button></div>';
       M().draw();
     };
