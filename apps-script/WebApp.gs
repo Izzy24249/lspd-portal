@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 116;
+const BACKEND_VERSION = 117;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3753,7 +3753,23 @@ function dutyMine_(id, cur) {
   return { last: L[0] ? { start: L[0][0], end: L[0][1], minutes: L[0][2] } : null, week: sum(wk0.getTime()) + live, window: sum(now - goalD * 864e5) + live, live: live, goalMinutes: goalH * 60, goalDays: goalD };
 }
 // who's on duty right now (for the MDT and admin)
+function dpOnDuty_() {
+  const DS = dpState_(), now = Date.now(); if (!DS.full || now - DS.full > 25 * 60e3) return null;
+  const c = CacheService.getScriptCache(), hit = c.get("dp_onduty"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const sh = ss_().getSheetByName(DP_OFF_); if (!sh || sh.getLastRow() < 2) return null;
+  const list = sh.getRange(2, 1, sh.getLastRow() - 1, 8).getValues().filter(r => /on duty/i.test(str_(r[3]))).map(r => {
+    const raw = str_(r[2]), parts = raw.split("|").map(x => x.trim()), cs = /^[A-Z]{1,4}-?\d{1,5}$/i.test(parts[0] || "") ? parts[0] : callsignIn_(raw) || "";
+    const mid = parts.length >= 2 ? parts[1] : raw, m = /^([A-Z]{2,5})\s+(.+)$/.exec(mid), id = str_(r[1]).replace(/^'/, "");
+    const w = id ? (dutyWho_(id) || {}) : {}, rank = w.rank || (m ? m[1] : ""), ri = rankIndex_(rank);
+    const since = isDate_(r[6]) ? r[6].getTime() : (isDate_(r[7]) ? r[7].getTime() : now);
+    return { id: id, name: w.name || (m ? m[2] : mid), callsign: w.callsign || cs, rank: rank, sup: ri >= 4, since: since, minutes: Math.max(0, Math.round((now - since) / 60000)) };
+  }).sort((a, b) => (b.sup - a.sup) || (a.since - b.since));
+  const out = { on: true, src: "dp", every: 10, checkedAt: DS.full, list: list, supervisors: list.filter(o => o.sup).length };
+  try { c.put("dp_onduty", JSON.stringify(out), 60); } catch (e) {}
+  return out;
+}
 function dutyBoard_() {
+  try { const dp = dpOnDuty_(); if (dp) return dp; } catch (e) {}
   const cfg = dutyCfg_(); if (!cfg.on || !cfg.roleId) return null;
   const state = dutyState_(), now = Date.now();
   let last = {}; try { last = JSON.parse(PROPS_.getProperty("DUTY_LAST") || "{}"); } catch (e) {}
@@ -3774,7 +3790,7 @@ function officerHome_(d) {
   out.promoMe = promoMine_(acct); mark_("promo");
   try { const A = pbAccess_(acct); out.pb = A.view ? { hc: A.hc, nominate: A.nominate, editor: A.editor } : null; } catch (e) { out.pb = null; }
   out.race = officerRace_(acct); mark_("race");
-  try { const b = dutyBoard_(); if (b) { const cur = dutyState_()[acct.id]; b.linked = dlinkHas_(acct.id); b.me = !!cur; b.mine = dutyMine_(acct.id, cur); out.duty = b; } } catch (e) {} mark_("duty");
+  try { const b = dutyBoard_(); if (b) { const cur = dutyState_()[acct.id]; b.linked = dlinkHas_(acct.id); b.me = b.src === "dp" ? b.list.some(o => o.id === acct.id) : !!cur; b.mine = dutyMine_(acct.id, cur); out.duty = b; } } catch (e) {} mark_("duty");
   return out;
 }
 
@@ -4161,7 +4177,7 @@ function handleAdmin_(d) {
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
   if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
-  if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|Preview|Push|SyncKey)$/.test(a)) return pbHandle_(d);
+  if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|Preview|Push|SyncKey|SyncKeys|SyncRevoke)$/.test(a)) return pbHandle_(d);
   if (a === "dpSync") return dpSync_(d);
   if (a === "builderLog") return builderLog_(d);
   if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose|CheckScores)$/.test(a)) return unitAct_(d);
@@ -5457,7 +5473,11 @@ function pbHandle_(d) {
     PROPS_.setProperty("PB_RULES", JSON.stringify(R));
   } else if (a === "pbSyncKey") {
     if (!A.editor) return { ok: false, error: "Only High Command and requirement editors can set up the Duty Portal sync." };
-    return { ok: true, key: dpNewKey_(A) };
+    return { ok: true, key: dpNewKey_(A), keys: dpKeyList_() };
+  } else if (a === "pbSyncKeys" || a === "pbSyncRevoke") {
+    if (!A.editor) return { ok: false, error: "Only High Command and requirement editors can manage sync keys." };
+    if (a === "pbSyncRevoke") withLock_(() => { PROPS_.setProperty("DP_KEYS", JSON.stringify(dpKeys_().filter(k => k.h.slice(0, 10) !== str_(d.id)))); return { ok: true }; });
+    return { ok: true, keys: dpKeyList_() };
   } else if (a === "pbDiscordDone") {
     if (!A.editor && !A.hc) return { ok: false, error: "Only High Command can tick these off." };
     return withLock_(() => { const e = pbEntries_().find(x => x.entry === str_(d.entry)); if (e) pbSheet_().getRange(e.row, 17).setValue(d.on === false ? "" : cellSafe_("Done by " + A.who)); return { ok: true }; });
@@ -5580,14 +5600,15 @@ function dpSync_(d) {
     // the officer list snapshot (status, total hours) — replaced whole on each full read
     if (officers && officers.length) {
       const osh = dpSheet_(DP_OFF_, DP_OFF_HEAD_), rows = officers.map(o => { const pid = str_(o.pid).slice(0, 60);
-        return [pid, pids[pid] ? "'" + pids[pid] : "", cellSafe_(clip_(str_(o.name), 80)), cellSafe_(clip_(str_(o.status), 20)), Number(o.total) || 0, Number(o.week) || 0, cellSafe_(clip_(str_(o.seen), 30)), new Date()]; });
+        return [pid, pids[pid] ? "'" + pids[pid] : "", cellSafe_(clip_(str_(o.name), 80)), cellSafe_(clip_(str_(o.status), 20)), Number(o.total) || 0, Number(o.week) || 0, (Number(o.seenAt) > 1.6e12 ? new Date(Number(o.seenAt)) : cellSafe_(clip_(str_(o.seen), 30))), new Date()]; });
       if (osh.getLastRow() > 1) osh.getRange(2, 1, osh.getLastRow() - 1, DP_OFF_HEAD_.length).clearContent();
       osh.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
     }
+    if (!who.used || now - who.used > 5 * 60e3) { who.used = now; PROPS_.setProperty("DP_KEYS", JSON.stringify(K)); }
     const st = dpState_(); st.at = now; st.by = who.label || who.by || ""; if (officers) { st.full = now; st.officers = officers.length; st.onDuty = officers.filter(o => /on duty/i.test(str_(o.status))).length; }
     if (!st.first) st.first = now;
     PROPS_.setProperty("DP_STATE", JSON.stringify(st));
-    try { CacheService.getScriptCache().removeAll(["dp_shifts", "dp_reps"]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["dp_shifts", "dp_reps", "dp_onduty"]); } catch (e) {}
     return { ok: true, shifts: nS, reports: nR, officers: officers ? officers.length : 0, at: now };
   });
 }
@@ -5610,6 +5631,7 @@ function dpReports_() {
   try { const js = JSON.stringify(out); if (js.length < 95000) c.put("dp_reps", js, 600); } catch (e) {}
   return out;
 }
+function dpKeyList_() { return dpKeys_().map(k => ({ id: k.h.slice(0, 10), by: k.by || "", at: k.at || 0, used: k.used || 0 })).reverse(); }
 // High Command / requirement editors: make a sync key (shown once) for the add-on
 function dpNewKey_(A) {
   const key = "lspd-" + Utilities.getUuid().replace(/-/g, "").slice(0, 24), K = dpKeys_().slice(-9);

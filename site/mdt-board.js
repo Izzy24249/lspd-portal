@@ -132,16 +132,23 @@
       '<p style="color:var(--mute);font-size:13.5px;line-height:1.5">A small add-on reads the Duty Portal in <b>your own browser</b>, where you\'re already signed in, and sends hours, shifts and reports here every 10 minutes while a Duty Portal tab is open. It never sees your password.</p>' +
       '<ol class="pbx-steps"><li>Install <b>Tampermonkey</b> in Chrome: <a href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" rel="noopener">Chrome Web Store</a>. Then in Chrome\'s extension settings, turn on <b>Allow user scripts</b> for Tampermonkey if Chrome asks.</li>' +
       '<li><a href="tools/lspd-duty-sync.user.js" target="_blank" rel="noopener"><b>Install the LSPD sync script</b></a> and press <b>Install</b> in Tampermonkey.</li>' +
-      '<li>Make your sync key and copy it:<div class="pbx-key"><code id="dpKey">Not made yet</code><button class="pbx-btn go" id="dpMake">MAKE A SYNC KEY</button></div><small>Keep it private: anyone with it can send duty data to the board. Making a new one doesn\'t stop older keys.</small></li>' +
+      '<li>Make your sync key and copy it:<div class="pbx-key"><code id="dpKey">Not made yet</code><button class="pbx-btn go" id="dpMake">MAKE A SYNC KEY</button></div><small>Keep it private: anyone with it can send duty data to the board. If a key ever leaks, revoke it below.</small></li>' +
       '<li>Open the <a href="https://portal.vanitydesigns.cloud/portal/lspd/officers" target="_blank" rel="noopener">Duty Portal</a>, click the <b>LSPD sync</b> badge in the bottom-right corner and paste the key. The first sync reads every active officer (a few minutes), then it keeps up on its own.</li></ol>' +
+      '<div class="pbx-keys"><b>Sync keys in use</b><div id="dpKeys"><small>Loading…</small></div></div>' +
       '<p style="color:var(--mute);font-size:12.5px">Leave a Duty Portal tab open (pinned) while you play. If the computer is off, nothing is lost: the next sync picks up the shifts it missed.</p>' +
       '<div style="display:flex;justify-content:flex-end"><button class="btn" data-close>DONE</button></div>');
     m.querySelector(".md-box").style.width = "min(640px,100%)";
+    const keysBox = m.querySelector("#dpKeys"), when = t => t ? new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "never";
+    const drawKeys = K => { keysBox.innerHTML = !K || !K.length ? "<small>No keys yet.</small>" : K.map(k => '<div class="pbx-kr"><div><code>…' + esc(k.id.slice(0, 6)) + "</code> made by " + esc(k.by || "—") + "<small>Made " + when(k.at) + " · last used " + when(k.used) + '</small></div><button class="pbx-btn ghost" data-revoke="' + esc(k.id) + '">REVOKE</button></div>').join("");
+      keysBox.querySelectorAll("[data-revoke]").forEach(b => b.onclick = async () => {
+        if (!confirm("Revoke this sync key? Any add-on using it stops syncing until it gets a new key.")) return;
+        b.disabled = true; const r = await call("pbSyncRevoke", { id: b.dataset.revoke }); if (r.ok) { drawKeys(r.keys); M().toast("Key revoked"); } else { b.disabled = false; M().toast(r.error || "Couldn't revoke."); } }); };
+    call("pbSyncKeys").then(r => { if (r.ok) drawKeys(r.keys); else keysBox.innerHTML = "<small>" + esc(r.error || "Couldn't load keys.") + "</small>"; });
     m.querySelector("#dpMake").onclick = async e => {
       e.target.disabled = true; e.target.textContent = "MAKING…";
       const r = await call("pbSyncKey");
       if (!r.ok) { e.target.disabled = false; e.target.textContent = "TRY AGAIN"; return M().toast(r.error || "Couldn't make a key."); }
-      const k = m.querySelector("#dpKey"); k.textContent = r.key; e.target.textContent = "COPY"; e.target.disabled = false;
+      const k = m.querySelector("#dpKey"); k.textContent = r.key; if (r.keys) drawKeys(r.keys); e.target.textContent = "COPY"; e.target.disabled = false;
       e.target.onclick = () => { try { navigator.clipboard.writeText(r.key); M().toast("Sync key copied"); } catch (x) {} };
       try { navigator.clipboard.writeText(r.key); M().toast("Sync key copied"); } catch (x) {}
     };
