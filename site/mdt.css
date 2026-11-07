@@ -902,3 +902,5 @@ button.pbx-box:hover{border-color:var(--green)}
 .pbx-rx label{display:grid;gap:5px;font-size:12px;color:var(--mute)}
 @media(max-width:1000px){.pbx{grid-template-columns:1fr}.pbx-col.list{position:static}.pbx-body{max-height:none}.pbx-fr{grid-template-columns:1fr}}
 @media(max-width:640px){.pbx-stats{grid-template-columns:repeat(3,1fr)}.pbx-tools input{width:100%}.pbx-rx{grid-template-columns:1fr}}
+
+.btn.pbx-push.off{filter:grayscale(1);opacity:.55}

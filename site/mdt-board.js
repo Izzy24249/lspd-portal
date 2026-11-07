@@ -98,7 +98,7 @@
       '<section class="pbx-col list" data-pbdrop><header><span class="lbl">Promotion list</span><small>' + (B.me.nominate ? "Drag officers here or press →" : "") + "</small></header>" +
       '<div class="pbx-body">' + (right.length ? groupBy(right).map(g => '<div class="pbx-grp">' + esc(g.to) + " <small>" + g.list.length + " · " + g.open + " open slot" + (g.open === 1 ? "" : "s") + "</small></div>" + g.list.map(listCard).join("")).join("")
         : '<div class="pbx-drop"><span>🎖️</span><b>No one on the list yet</b><small>' + (B.me.nominate ? "Drag an officer across to put them up for promotion." : "Command adds officers here.") + "</small></div>") + "</div>" +
-      (B.me.hc ? '<footer><button class="btn pbx-push" data-pbpush' + (ap.length ? "" : " disabled") + ">🎖️ PUSH " + ap.length + " PROMOTION" + (ap.length === 1 ? "" : "S") + "</button><small>Updates the roster, highest ranks first.</small></footer>"
+      (B.me.hc ? '<footer><button class="btn pbx-push' + (ap.length ? "" : " off") + '" data-pbpush>🎖️ PUSH ' + ap.length + " PROMOTION" + (ap.length === 1 ? "" : "S") + "</button><small>Updates the roster, highest ranks first.</small></footer>"
         : '<footer><small>' + (ap.length ? ap.length + " approved, waiting for High Command to push." : "High Command approves and pushes promotions.") + "</small></footer>") +
       "</section></div>";
     h += followUps();
@@ -135,8 +135,13 @@
       '<div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" data-close>CANCEL</button><button class="btn" id="pbNomGo">PUT ON LIST</button></div>');
     m.querySelector("#pbNomGo").onclick = () => { const n = m.querySelector("#pbNote").value; m.hidden = true; go(n); };
   }
+  function say(title, msg) { M().modal('<h3 style="font:700 22px Barlow Condensed,sans-serif;letter-spacing:.04em">' + esc(title) + '</h3><p style="color:var(--mute);font-size:14px;line-height:1.5">' + esc(msg) + '</p><div style="display:flex;justify-content:flex-end"><button class="btn" data-close>OK</button></div>'); }
   async function push() {
-    const pv = await call("pbPreview"); if (!pv.ok) return M().toast(pv.error || "Couldn't plan the push.");
+    if (!B.officers.some(o => o.entry && o.entry.status === "approved")) return say("Nothing approved yet", "Press the green APPROVE button on each officer in the Promotion list first. Only approved officers are pushed to the roster.");
+    const pb = document.querySelector("[data-pbpush]"); if (pb) { pb.disabled = true; pb.textContent = "CHECKING THE ROSTER…"; }
+    const pv = await call("pbPreview");
+    if (pb) { pb.disabled = false; M().draw(); }
+    if (!pv.ok) return say("Couldn't plan the push", pv.error === "AUTH" ? "Your MDT session expired. Sign on again and retry." : pv.error || "No answer from the server. If you just updated WebApp.gs, check that you deployed a new version.");
     const ok = pv.plan.filter(p => !p.error);
     const m = M().modal('<h3 style="font:700 24px Barlow Condensed,sans-serif;letter-spacing:.05em">🎖️ PUSH PROMOTIONS</h3>' +
       '<p style="color:var(--mute);font-size:13.5px">Each officer moves to the first open slot of their new rank on the <b>LSPD Personnel Roster</b>, highest ranks first. Their old row\'s name, Discord ID and date are cleared, and time in grade starts today.</p>' +
@@ -147,7 +152,7 @@
     b.onclick = async () => {
       b.disabled = true; b.textContent = "UPDATING THE ROSTER…";
       const r = await call("pbPush");
-      if (!r.ok) { b.disabled = false; b.textContent = "TRY AGAIN"; return M().toast(r.error || "Push failed."); }
+      if (!r.ok) return say("The push didn't go through", (r.error === "AUTH" ? "Your MDT session expired. Sign on again and retry." : r.error || "No answer from the server.") + " Nothing was changed on the roster unless it says otherwise.");
       m.querySelector(".md-box").innerHTML = '<div class="pbx-done"><span>🎖️</span><h3>' + r.pushed + " PROMOTION" + (r.pushed === 1 ? "" : "S") + " PUSHED</h3><p>The roster is updated." + (r.warning ? "<br><b style=\"color:var(--amber)\">" + esc(r.warning) + "</b>" : "") + "</p>" +
         ((r.skipped || []).length ? '<div class="pbx-plan">' + r.skipped.map(s => '<div class="bad"><b>' + esc(s.officer) + "</b><em>✕ " + esc(s.error) + "</em></div>").join("") + "</div>" : "") +
         '<p style="font-size:13px">Next: update their Discord name tags and roles from the to-do list under the board.</p><button class="btn" data-close>DONE</button></div>';
