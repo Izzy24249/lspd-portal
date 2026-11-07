@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 117;
+const BACKEND_VERSION = 118;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5413,7 +5413,7 @@ function pbView_(acct, A) {
   const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
     .map(e => ({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
   const PP = pbPeriod_(now, PB_DEF_.days);
-  return { ok: true, dp: dpOn ? { at: DS.at, full: DS.full || 0, by: DS.by || "", officers: DS.officers || 0, onDuty: DS.onDuty || 0, matched: Object.keys(dpIds).length } : null, unlinked: unlinked, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
+  return { ok: true, dp: dpOn ? { at: DS.at, full: DS.full || 0, by: DS.by || "", officers: DS.officers || 0, onDuty: DS.onDuty || 0, matched: Object.keys(dpIds).length } : null, unlinked: unlinked, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign, dpOwner: (() => { const own = PROPS_.getProperty("DP_OWNER"); return own ? own === acct.id : A.hc && dpKeys_().some(k => k.by === A.who); })() }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
     editors: A.editor ? R.editors : [], webhookId: A.editor ? R.webhookId : "", webhooks: A.editor ? getWebhooks_().map(w => ({ id: w.id, name: w.name })) : [], doc: L.doc, at: now };
 }
 function pbTodo_(e) {
@@ -5472,10 +5472,10 @@ function pbHandle_(d) {
     if (A.hc) { R.editors = (Array.isArray(inR.editors) ? inR.editors : []).map(x => clip_(str_(x), 40)).filter(Boolean).slice(0, 20); R.webhookId = str_(inR.webhookId); }
     PROPS_.setProperty("PB_RULES", JSON.stringify(R));
   } else if (a === "pbSyncKey") {
-    if (!A.editor) return { ok: false, error: "Only High Command and requirement editors can set up the Duty Portal sync." };
+    if (!dpIsOwner_(acct, A)) return { ok: false, error: "Only the portal owner can set up the Duty Portal sync." };
     return { ok: true, key: dpNewKey_(A), keys: dpKeyList_() };
   } else if (a === "pbSyncKeys" || a === "pbSyncRevoke") {
-    if (!A.editor) return { ok: false, error: "Only High Command and requirement editors can manage sync keys." };
+    if (!dpIsOwner_(acct, A)) return { ok: false, error: "Only the portal owner can manage sync keys." };
     if (a === "pbSyncRevoke") withLock_(() => { PROPS_.setProperty("DP_KEYS", JSON.stringify(dpKeys_().filter(k => k.h.slice(0, 10) !== str_(d.id)))); return { ok: true }; });
     return { ok: true, keys: dpKeyList_() };
   } else if (a === "pbDiscordDone") {
@@ -5632,7 +5632,16 @@ function dpReports_() {
   return out;
 }
 function dpKeyList_() { return dpKeys_().map(k => ({ id: k.h.slice(0, 10), by: k.by || "", at: k.at || 0, used: k.used || 0 })).reverse(); }
-// High Command / requirement editors: make a sync key (shown once) for the add-on
+// Duty Portal sync setup belongs to one person (the portal owner). It's claimed by whoever made the existing keys
+// (or, before any key exists, whoever makes the first one); change DP_OWNER in Script Properties to hand it over.
+function dpIsOwner_(acct, A) {
+  const own = PROPS_.getProperty("DP_OWNER");
+  if (own) return own === acct.id;
+  const K = dpKeys_();
+  if (!K.length || K.some(k => k.by && k.by === A.who)) { PROPS_.setProperty("DP_OWNER", acct.id); return true; }
+  return false;
+}
+// make a sync key (shown once) for the add-on
 function dpNewKey_(A) {
   const key = "lspd-" + Utilities.getUuid().replace(/-/g, "").slice(0, 24), K = dpKeys_().slice(-9);
   K.push({ h: dpHash_(key), by: A.who, label: A.who, at: Date.now() });

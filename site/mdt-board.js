@@ -119,7 +119,7 @@
   }
   // Duty Portal sync status (the browser add-on that reads portal.vanitydesigns.cloud)
   function dpBar() {
-    const D = B.dp, mins = D ? Math.round((Date.now() - D.at) / 60000) : 0, stale = D && mins > 60, can = B.me.editor;
+    const D = B.dp, mins = D ? Math.round((Date.now() - D.at) / 60000) : 0, stale = D && mins > 60, can = !!B.me.dpOwner;
     const when = !D ? "" : mins < 1 ? "just now" : mins < 60 ? mins + " min ago" : mins < 1440 ? Math.round(mins / 60) + " h ago" : Math.round(mins / 1440) + " days ago";
     return '<div class="pbx-dp' + (!D ? " off" : stale ? " stale" : "") + '"><span>' + (!D ? "🔌" : stale ? "⏳" : "🛰️") + "</span><div><b>" +
       (!D ? "Duty Portal sync isn't set up" : "Duty Portal data updated " + when + (D.by ? " · by " + esc(D.by) : "")) + "</b><small>" +
