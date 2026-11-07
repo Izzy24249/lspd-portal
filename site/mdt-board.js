@@ -28,7 +28,7 @@
   }
   function chips(o) {
     const it = k => o.items.find(x => x.auto === k), h = it("hours"), r = it("reports14"), t = it("tig"), out = [];
-    if (o.linked === false) out.push('<span class="pbx-chip nolink" title="Never signed in to the portal with Discord, so their duty hours can\'t be tracked yet. Ask them to sign in once.">🔗 NOT LINKED</span>');
+    if (o.linked === false) out.push('<span class="pbx-chip nolink" title="Not matched by the Duty Portal sync and never signed in with Discord, so their duty hours aren\'t counted yet.">🔗 NOT TRACKED</span>');
     if (h) out.push('<span class="pbx-chip ' + (h.done ? (h.warn ? "warn" : "ok") : "no") + '" title="' + esc(h.t + (h.warn ? " · " + h.warn : "")) + '">⏱ ' + H(h.have) + "/" + H(h.need) + "h" + (h.warn ? " ⚠" : "") + "</span>");
     if (r) out.push('<span class="pbx-chip ' + (r.done ? "ok" : "no") + '" title="' + esc(r.t) + '">📝 ' + r.have + "/" + r.need + "</span>");
     if (t) out.push('<span class="pbx-chip ' + (t.done ? "ok" : "no") + '" title="Time in grade">TIG ' + (t.have == null ? "—" : t.have) + "/" + t.need + "d</span>");
@@ -44,8 +44,12 @@
     return '<div class="pbx-det">' + o.items.map(x => {
       const man = !x.auto, can = man && canTick, by = x.manual && x.by ? "Signed off by " + x.by : x.auto && x.done ? "Counted by the terminal" : "";
       let extra = "";
-      if (x.auto === "hours" && o.linked === false) extra = '<div class="pbx-warn">🔗 Not linked: they\'ve never signed in to the portal with Discord, so on-duty time isn\'t being tracked. Hours will count from the day they sign in.</div>';
-      else if (x.auto === "hours" && x.weeks) extra = '<div class="pbx-wk">' + x.weeks.slice().reverse().map(w => '<span class="' + (w.low ? "low" : w.cur ? "cur" : "") + '">' + (w.to ? day(w.from) + " – " + day(w.to) : "Week of " + day(w.from)) + (w.cur ? " (this week)" : "") + ": <b>" + H(w.min) + "h</b></span>").join("") + "</div>" + (x.warn ? '<div class="pbx-warn">⚠ Total met, but ' + esc(x.warn) + ".</div>" : "");
+      if (x.auto === "reports14" && x.split) extra = '<div class="pbx-src">' + x.split.mdt + " from MDT forms · " + x.split.dp + " from the Duty Portal" + (x.split.both ? " · " + x.split.both + " in both (counted once)" : "") + "</div>" +
+        (x.list && x.list.length ? '<div class="pbx-rl">' + x.list.map(r => "<span><i>" + esc(r.src) + "</i>" + day(r.at) + " · " + esc(r.t || "Report") + "</span>").join("") + "</div>" : "");
+      else if (x.auto === "hours" && o.linked === false) extra = '<div class="pbx-warn">🔗 Not tracked: the Duty Portal sync hasn\'t matched them and they\'ve never signed in to the portal with Discord, so on-duty time isn\'t being counted yet.</div>';
+      if (x.auto === "hours" && x.src && o.linked !== false) extra = '<div class="pbx-src">' + (x.src === "dp" ? "From the Duty Portal (in-game clock-in/out)" : x.src === "role" ? "From the On Duty Discord role (Duty Portal hasn't seen them yet)" : "No duty time recorded yet") + "</div>";
+      if (x.auto === "hours" && o.linked === false) {}
+      else if (x.auto === "hours" && x.weeks) extra += '<div class="pbx-wk">' + x.weeks.slice().reverse().map(w => '<span class="' + (w.low ? "low" : w.cur ? "cur" : "") + '">' + (w.to ? day(w.from) + " – " + day(w.to) : "Week of " + day(w.from)) + (w.cur ? " (this week)" : "") + ": <b>" + H(w.min) + "h</b></span>").join("") + "</div>" + (x.warn ? '<div class="pbx-warn">⚠ Total met, but ' + esc(x.warn) + ".</div>" : "");
       const val = x.auto === "hours" ? H(x.have) + " / " + H(x.need) + " h" : x.auto && x.need ? (x.have == null ? "—" : x.have) + " / " + x.need : "";
       return '<div class="pbx-it' + (x.done ? " ok" : "") + (man ? " man" : "") + '">' +
         (can ? '<button class="pbx-box" data-pbcheck="' + esc(o.id) + "|" + esc(x.key) + "|" + (x.done ? 0 : 1) + '" title="' + (x.done ? "Undo sign-off" : "Sign off") + '">' + (x.done ? "✓" : "") + "</button>"
@@ -85,11 +89,12 @@
     if (!B.ok) return h + '<div class="empty">' + esc(B.error === "AUTH" ? "Sign on again to open the board." : B.error || "Couldn't load the board.") + "</div>";
     const all = B.officers, listed = all.filter(o => o.entry), ap = listed.filter(o => o.entry.status === "approved");
     h += '<div class="pbx-stats">' +
-      [["Officers", all.length, ""], ["Terminal ✓", all.filter(o => o.terminal).length, "term"], ["All met", all.filter(o => o.ready).length, "ready"], ["On the list", listed.length, "list"], ["Approved", ap.length, "ap"], ["Not linked", (B.unlinked || []).length, "nl"]]
+      [["Officers", all.length, ""], ["Terminal ✓", all.filter(o => o.terminal).length, "term"], ["All met", all.filter(o => o.ready).length, "ready"], ["On the list", listed.length, "list"], ["Approved", ap.length, "ap"], ["Not tracked", (B.unlinked || []).length, "nl"]]
         .map(s => '<div class="' + s[2] + '"><b>' + s[1] + "</b><small>" + s[0] + "</small></div>").join("") + "</div>";
     if (B.period) { const P = B.period, fmt = t => new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
       h += '<div class="pbx-period' + (P.review ? " review" : "") + '"><span>' + (P.review ? "🎖️" : "🗓️") + "</span><div><b>" + (P.review ? "Promotion day: reviewing the period that just closed" : "Counting toward " + fmt(P.end).replace(/,? \d+:\d+ [AP]M$/, "") + " promotions") + "</b><small>Hours and reports from " + fmt(P.start) + " to " + fmt(P.end) + " ET. Weeks run Friday 2 PM to Friday 2 PM." +
         (P.review ? " The new period starts counting tomorrow at 2 PM." : "") + "</small></div></div>"; }
+    h += dpBar();
     if (B.slotError) h += '<div class="pbx-alert">⚠ Couldn\'t read the Personnel roster: ' + esc(B.slotError) + "</div>";
     // rank filter
     h += '<div class="pbx-ranks"><button data-pbrf="all" class="' + (RF === "all" ? "on" : "") + '">ALL RANKS <small>' + all.length + "</small></button>" +
@@ -101,7 +106,7 @@
     const right = listed.filter(o => RF === "all" || String(o.idx) === String(RF)).sort((a, b) => b.idx - a.idx || a.entry.at - b.entry.at);
     h += '<div class="pbx">' +
       '<section class="pbx-col"><header><span class="lbl">Officers</span><div class="pbx-tools"><input id="pbQ" placeholder="Search name or callsign" value="' + esc(Q) + '">' +
-      '<div class="seg"><button data-pbshow="all" class="' + (SHOW === "all" ? "on" : "") + '">ALL</button><button data-pbshow="term" class="' + (SHOW === "term" ? "on" : "") + '">TERMINAL ✓</button><button data-pbshow="ready" class="' + (SHOW === "ready" ? "on" : "") + '">ALL MET</button><button data-pbshow="nl" class="' + (SHOW === "nl" ? "on" : "") + '">NOT LINKED</button></div></div></header>' +
+      '<div class="seg"><button data-pbshow="all" class="' + (SHOW === "all" ? "on" : "") + '">ALL</button><button data-pbshow="term" class="' + (SHOW === "term" ? "on" : "") + '">TERMINAL ✓</button><button data-pbshow="ready" class="' + (SHOW === "ready" ? "on" : "") + '">ALL MET</button><button data-pbshow="nl" class="' + (SHOW === "nl" ? "on" : "") + '">NOT TRACKED</button></div></div></header>' +
       '<div class="pbx-body">' + (left.length ? left.map(officerCard).join("") : '<div class="empty">No one here' + (q ? " matches that search" : "") + ".</div>") + "</div></section>" +
       '<section class="pbx-col list" data-pbdrop><header><span class="lbl">Promotion list</span><small>' + (B.me.nominate ? "Drag officers here or press →" : "") + "</small></header>" +
       '<div class="pbx-body">' + (right.length ? groupBy(right).map(g => '<div class="pbx-grp">' + esc(g.to) + " <small>" + g.list.length + " · " + g.open + " open slot" + (g.open === 1 ? "" : "s") + "</small></div>" + g.list.map(listCard).join("")).join("")
@@ -111,6 +116,35 @@
       "</section></div>";
     h += followUps() + unlinkedHTML();
     return h;
+  }
+  // Duty Portal sync status (the browser add-on that reads portal.vanitydesigns.cloud)
+  function dpBar() {
+    const D = B.dp, mins = D ? Math.round((Date.now() - D.at) / 60000) : 0, stale = D && mins > 60, can = B.me.editor;
+    const when = !D ? "" : mins < 1 ? "just now" : mins < 60 ? mins + " min ago" : mins < 1440 ? Math.round(mins / 60) + " h ago" : Math.round(mins / 1440) + " days ago";
+    return '<div class="pbx-dp' + (!D ? " off" : stale ? " stale" : "") + '"><span>' + (!D ? "🔌" : stale ? "⏳" : "🛰️") + "</span><div><b>" +
+      (!D ? "Duty Portal sync isn't set up" : "Duty Portal data updated " + when + (D.by ? " · by " + esc(D.by) : "")) + "</b><small>" +
+      (!D ? "Hours come only from the On Duty role for officers who signed in with Discord. Set up the sync to count every officer's in-game hours and Duty Portal reports."
+        : D.matched + " officers matched by Discord ID" + (D.officers ? " · " + D.onDuty + " on duty of " + D.officers + " active" : "") + (stale ? " · Open the Duty Portal in a browser with the add-on to refresh, especially before a Friday push." : "")) +
+      "</small></div>" + (can ? '<button class="pbx-btn ghost" data-dpsetup>' + (D ? "SYNC SETUP" : "SET UP") + "</button>" : "") + "</div>";
+  }
+  function dpSetup() {
+    const m = M().modal('<h3 style="font:700 24px Barlow Condensed,sans-serif;letter-spacing:.05em">DUTY PORTAL SYNC</h3>' +
+      '<p style="color:var(--mute);font-size:13.5px;line-height:1.5">A small add-on reads the Duty Portal in <b>your own browser</b>, where you\'re already signed in, and sends hours, shifts and reports here every 10 minutes while a Duty Portal tab is open. It never sees your password.</p>' +
+      '<ol class="pbx-steps"><li>Install <b>Tampermonkey</b> in Chrome: <a href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" rel="noopener">Chrome Web Store</a>. Then in Chrome\'s extension settings, turn on <b>Allow user scripts</b> for Tampermonkey if Chrome asks.</li>' +
+      '<li><a href="tools/lspd-duty-sync.user.js" target="_blank" rel="noopener"><b>Install the LSPD sync script</b></a> and press <b>Install</b> in Tampermonkey.</li>' +
+      '<li>Make your sync key and copy it:<div class="pbx-key"><code id="dpKey">Not made yet</code><button class="pbx-btn go" id="dpMake">MAKE A SYNC KEY</button></div><small>Keep it private: anyone with it can send duty data to the board. Making a new one doesn\'t stop older keys.</small></li>' +
+      '<li>Open the <a href="https://portal.vanitydesigns.cloud/portal/lspd/officers" target="_blank" rel="noopener">Duty Portal</a>, click the <b>LSPD sync</b> badge in the bottom-right corner and paste the key. The first sync reads every active officer (a few minutes), then it keeps up on its own.</li></ol>' +
+      '<p style="color:var(--mute);font-size:12.5px">Leave a Duty Portal tab open (pinned) while you play. If the computer is off, nothing is lost: the next sync picks up the shifts it missed.</p>' +
+      '<div style="display:flex;justify-content:flex-end"><button class="btn" data-close>DONE</button></div>');
+    m.querySelector(".md-box").style.width = "min(640px,100%)";
+    m.querySelector("#dpMake").onclick = async e => {
+      e.target.disabled = true; e.target.textContent = "MAKING…";
+      const r = await call("pbSyncKey");
+      if (!r.ok) { e.target.disabled = false; e.target.textContent = "TRY AGAIN"; return M().toast(r.error || "Couldn't make a key."); }
+      const k = m.querySelector("#dpKey"); k.textContent = r.key; e.target.textContent = "COPY"; e.target.disabled = false;
+      e.target.onclick = () => { try { navigator.clipboard.writeText(r.key); M().toast("Sync key copied"); } catch (x) {} };
+      try { navigator.clipboard.writeText(r.key); M().toast("Sync key copied"); } catch (x) {}
+    };
   }
   function nextAbbr(i) { const n = B.ranks.find(z => z.idx === i + 1); return n ? n.abbr : "CMDR"; }
   function groupBy(list) {
@@ -122,8 +156,8 @@
   function unlinkedHTML() {
     const U = B.unlinked || []; if (!U.length) return "";
     const txt = U.map(u => (u.callsign ? u.callsign + " | " : "") + u.name).join("\n");
-    return '<div class="sect"><span class="lbl">Not linked to Discord · ' + U.length + "</span></div>" +
-      '<details class="pbx-nl"' + (LS_NL ? " open" : "") + '><summary><span>🔗</span><div><b>' + U.length + " officer" + (U.length === 1 ? " hasn't" : "s haven't") + " signed in to the portal with Discord</b><small>Their on-duty time isn't tracked, so their hours show 0 here. Each of them needs to sign in once (portal → Sign in with Discord → set a PIN). Tracking starts from that moment.</small></div>" +
+    return '<div class="sect"><span class="lbl">Not tracked · ' + U.length + "</span></div>" +
+      '<details class="pbx-nl"' + (LS_NL ? " open" : "") + '><summary><span>🔗</span><div><b>' + U.length + " officer" + (U.length === 1 ? " isn't" : "s aren't") + " being tracked</b><small>The Duty Portal sync hasn't matched them" + (B.dp ? "" : " (it isn't set up yet)") + " and they've never signed in to the portal with Discord, so their hours show 0 here. Either fixes it: the sync matches anyone active on the Duty Portal, or they sign in once (portal → Sign in with Discord → set a PIN).</small></div>" +
       '<button class="pbx-btn ghost" data-copy="' + esc(txt) + '" data-what="Not-linked list">COPY LIST</button></summary>' +
       '<div class="pbx-nl-list">' + U.map(u => "<span>" + (u.callsign ? "<code>" + esc(u.callsign) + "</code>" : "") + esc(u.name) + "<small>" + esc(u.rank) + "</small></span>").join("") + "</div></details>";
   }
@@ -223,10 +257,11 @@
   }
 
   document.addEventListener("click", async e => {
-    if (!document.querySelector(".pbx") && !e.target.closest("[data-pbrefresh],[data-pbrules]")) return;
+    if (!document.querySelector(".pbx") && !e.target.closest("[data-pbrefresh],[data-pbrules],[data-dpsetup]")) return;
     const t = e.target;
     if (t.closest("[data-pbrefresh]")) { B = null; M().draw(); return; }
     if (t.closest("[data-pbrules]")) { if (B && B.ok) rules(); return; }
+    if (t.closest("[data-dpsetup]")) { if (B && B.ok) dpSetup(); return; }
     const rf = t.closest("[data-pbrf]"); if (rf) { RF = rf.dataset.pbrf; M().draw(); return; }
     const sw = t.closest("[data-pbshow]"); if (sw) { SHOW = sw.dataset.pbshow; M().draw(); return; }
     const ad = t.closest("[data-pbadd]"); if (ad) { e.stopPropagation(); nominate(ad.dataset.pbadd); return; }

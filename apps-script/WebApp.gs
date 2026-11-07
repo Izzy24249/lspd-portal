@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 115;
+const BACKEND_VERSION = 116;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -4161,7 +4161,8 @@ function handleAdmin_(d) {
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
   if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
-  if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|Preview|Push)$/.test(a)) return pbHandle_(d);
+  if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|Preview|Push|SyncKey)$/.test(a)) return pbHandle_(d);
+  if (a === "dpSync") return dpSync_(d);
   if (a === "builderLog") return builderLog_(d);
   if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose|CheckScores)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
@@ -5323,15 +5324,19 @@ function pbPeriod_(now, days) {
 function pbEval_(o, R, L, checks, duty, rep, now) {
   const rule = pbRule_(R, o.idx), items = [], P = pbPeriod_(now, rule.days);
   // on-duty hours: total in the promotion period, and each Friday-to-Friday week of it (a light week is flagged but doesn't fail the total)
-  const ses = (duty[o.id] || []), from = P.start, mins = t0 => ses.filter(x => x[0] >= t0[0] && x[0] < t0[1]).reduce((a, x) => a + (Number(x[2]) || 0), 0);
+  const SR = duty(o.id), ses = SR.list, from = P.start, mins = t0 => ses.filter(x => x[0] >= t0[0] && x[0] < t0[1]).reduce((a, x) => a + (Number(x[2]) || 0), 0);
   const total = mins([P.start, P.end]), weeks = [];
   for (let w = 0; w < P.bounds.length - 1; w++) { const b = [P.bounds[w + 1], P.bounds[w]]; weeks.push({ from: b[0], to: b[1], min: mins(b), cur: b[0] <= now && now < b[1] }); }
   const done = w => w.to <= now;   // a week still in progress isn't "light" yet
   const low = rule.weekMin > 0 ? weeks.filter(w => done(w) && w.min < rule.weekMin * 60) : [];
-  if (rule.hours > 0) items.push({ key: "pb:hours", t: rule.hours + " hours on duty in the " + weeks.length + " weeks before promotion day" + (rule.weekMin ? " (" + rule.weekMin + "+ each week)" : ""), auto: "hours", need: rule.hours * 60, have: total, done: total >= rule.hours * 60,
+  if (rule.hours > 0) items.push({ key: "pb:hours", t: rule.hours + " hours on duty in the " + weeks.length + " weeks before promotion day" + (rule.weekMin ? " (" + rule.weekMin + "+ each week)" : ""), auto: "hours", need: rule.hours * 60, have: total, done: total >= rule.hours * 60, src: SR.src,
     weeks: weeks.map(w => ({ from: w.from, to: w.to, min: w.min, cur: w.cur, low: rule.weekMin > 0 && done(w) && w.min < rule.weekMin * 60 })), warn: total >= rule.hours * 60 && low.length ? low.length + " week" + (low.length > 1 ? "s were" : " was") + " under " + rule.weekMin + " hours" : "" });
-  if (rule.reports > 0) { const n = (rep[o.id] || []).filter(t => t >= from && t < P.end).length;
-    items.push({ key: "pb:reports", t: rule.reports + " reports in the same " + weeks.length + " weeks", auto: "reports14", need: rule.reports, have: n, done: n >= rule.reports }); }
+  if (rule.reports > 0) {   // reports they filed themselves: MDT forms + Duty Portal, a report in both counted once (same officer, within 90 min)
+    const inP = t => t >= from && t < P.end, m = (rep.mdt[o.id] || []).filter(x => inP(x.at)), dp = (rep.dp[o.id] || []).filter(x => inP(x.at)), used = {};
+    let both = 0; dp.forEach(x => { const j = m.findIndex((y, k) => !used[k] && Math.abs(y.at - x.at) <= 90 * 60000); if (j !== -1) { used[j] = 1; both++; } });
+    const n = m.length + dp.length - both;
+    items.push({ key: "pb:reports", t: rule.reports + " reports they filed in the same " + weeks.length + " weeks", auto: "reports14", need: rule.reports, have: n, done: n >= rule.reports,
+      split: { mdt: m.length, dp: dp.length, both: both }, list: m.map(x => ({ at: x.at, t: x.title, src: "MDT" })).concat(dp.map(x => ({ at: x.at, t: x.title, src: "Duty Portal" }))).sort((a, b) => b.at - a.at).slice(0, 12) }); }
   // the rank's requirements from the Promotion Guidelines doc (time in grade, trainings, SOP… and command sign-offs)
   const rr = (L.ranks || []).find(x => x.idx === o.idx);
   promoEval_(o, rr, checks).items.forEach(x => items.push(Object.assign({}, x, { doc: true })));
@@ -5364,15 +5369,23 @@ function pbDropOpt_(cell, want) {
 function pbOpenSlot_(S, idx) { return S.rows.find(x => x.idx === idx && !x.head && !x.name && !x.id && !x.fx); }
 function pbView_(acct, A) {
   const now = Date.now(), R = pbRules_(), L = promoLadderKeys_(), checks = pchkAll_(), duty = dutySums_(); SOP_MEMO_ = sopIds_();
-  const rep = {}; actRows_().forEach(r => { const seen = {}; (r.people || []).forEach(x => { if (x.i && !seen[x.i]) { seen[x.i] = 1; (rep[x.i] = rep[x.i] || []).push(r.at); } }); });
+  // reports each officer FILED on the MDT (the form's own officer box / lead officer), and the Duty Portal's
+  const lead = {}; (getConfig_().forms || []).forEach(f => { lead[f.id] = [str_(f.meField), autoAuthor_(f)].filter(Boolean); });
+  const repM = {}; actRows_().forEach(r => { const L0 = lead[r.form] || [], x = (r.people || []).find(p => p.i && L0.indexOf(p.f) !== -1); if (x) (repM[x.i] = repM[x.i] || []).push({ at: r.at, title: r.title }); });
+  const DS = dpState_(), dpOn = !!DS.at, dps = dpOn ? dpShifts_() : {}, rep = { mdt: repM, dp: dpOn ? dpReports_() : {} };
+  const dpIds = {}; if (dpOn) { const P0 = dpPids_(); Object.keys(P0).forEach(k => dpIds[P0[k]] = 1); }
+  // hours: Duty Portal shifts where we have them (every officer, exact clock-in/out); before its first known shift, the On Duty role log
+  const role = duty, dutyOf = id => { const d0 = dps[id] || [], r0 = role[id] || [];
+    if (!d0.length) return { list: r0, src: dpIds[id] ? "dp" : r0.length ? "role" : "none" };
+    const first = Math.min.apply(null, d0.map(x => x[0])); return { list: r0.filter(x => x[0] < first).concat(d0), src: "dp" }; };
   const E = pbEntries_(), active = {}; E.forEach(e => { if (e.status === "nominated" || e.status === "approved") active[e.id] = e; });
   // who has signed in to the portal with Discord (only they can be duty-tracked until there's a bot)
   const links = {}; Object.keys(PROPS_.getProperties()).forEach(k => { const m = /^DLINK_(\d+)$/.exec(k); if (m) links[m[1]] = 1; });
-  const unlinked = promoPeople_().filter(o => !links[o.id] && !promoExempt_(o.rank)).map(o => ({ callsign: o.callsign, name: o.name, rank: o.trainee ? "Police Officer (Onboarding)" : o.rank, idx: o.idx }))
+  const unlinked = promoPeople_().filter(o => !links[o.id] && !dpIds[o.id] && !promoExempt_(o.rank)).map(o => ({ callsign: o.callsign, name: o.name, rank: o.trainee ? "Police Officer (Onboarding)" : o.rank, idx: o.idx }))
     .sort((a, b) => b.idx - a.idx || String(a.callsign).localeCompare(String(b.callsign)));
   const officers = pbOfficers_().map(o => {
-    const ev = pbEval_(o, R, L, checks[o.id], duty, rep, now), e = active[o.id];
-    return Object.assign({ id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, next: RANKS_[o.idx + 1], tigDays: o.tigDays, linked: !!links[o.id],
+    const ev = pbEval_(o, R, L, checks[o.id], dutyOf, rep, now), e = active[o.id];
+    return Object.assign({ id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, next: RANKS_[o.idx + 1], tigDays: o.tigDays, linked: !!links[o.id] || !!dpIds[o.id], dp: !!dpIds[o.id],
       canNominate: A.hc || o.idx + 1 < A.idx, entry: e ? { entry: e.entry, status: e.status, by: e.by, at: e.at, note: e.note, apBy: e.apBy, apAt: e.apAt } : null }, ev);
   });
   let open = {}, slotErr = "";
@@ -5384,7 +5397,7 @@ function pbView_(acct, A) {
   const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
     .map(e => ({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
   const PP = pbPeriod_(now, PB_DEF_.days);
-  return { ok: true, unlinked: unlinked, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
+  return { ok: true, dp: dpOn ? { at: DS.at, full: DS.full || 0, by: DS.by || "", officers: DS.officers || 0, onDuty: DS.onDuty || 0, matched: Object.keys(dpIds).length } : null, unlinked: unlinked, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
     editors: A.editor ? R.editors : [], webhookId: A.editor ? R.webhookId : "", webhooks: A.editor ? getWebhooks_().map(w => ({ id: w.id, name: w.name })) : [], doc: L.doc, at: now };
 }
 function pbTodo_(e) {
@@ -5442,6 +5455,9 @@ function pbHandle_(d) {
     R.ranks = ranks;
     if (A.hc) { R.editors = (Array.isArray(inR.editors) ? inR.editors : []).map(x => clip_(str_(x), 40)).filter(Boolean).slice(0, 20); R.webhookId = str_(inR.webhookId); }
     PROPS_.setProperty("PB_RULES", JSON.stringify(R));
+  } else if (a === "pbSyncKey") {
+    if (!A.editor) return { ok: false, error: "Only High Command and requirement editors can set up the Duty Portal sync." };
+    return { ok: true, key: dpNewKey_(A) };
   } else if (a === "pbDiscordDone") {
     if (!A.editor && !A.hc) return { ok: false, error: "Only High Command can tick these off." };
     return withLock_(() => { const e = pbEntries_().find(x => x.entry === str_(d.entry)); if (e) pbSheet_().getRange(e.row, 17).setValue(d.on === false ? "" : cellSafe_("Done by " + A.who)); return { ok: true }; });
@@ -5513,4 +5529,91 @@ function pbPush_(A) {
     todo: pbTodo_({ officer: p.officer, to: p.to, from: p.from, newCs: p.newCs }) })), skipped: out.plan.filter(p => p.error).map(p => ({ officer: p.officer, error: p.error })) };
   if (warning) v.warning = warning;
   return v;
+}
+
+// =====================================================================================================================
+// ---- Duty Portal sync (portal.vanitydesigns.cloud) ----
+// The server's Duty Portal tracks every officer's in-game shifts and reports. It has no API, so a small browser add-on
+// (site/tools/lspd-duty-sync.user.js) reads it in a command member's own logged-in browser and posts what it sees here.
+// Auth is a sync key made on the promotion board (stored hashed). Nothing here can log in to the Duty Portal.
+// =====================================================================================================================
+const DP_SHIFTS_ = "Duty Portal Shifts", DP_SHIFTS_HEAD_ = ["Discord ID", "Officer", "Start", "Minutes", "Key", "Synced"];
+const DP_REPS_ = "Duty Portal Reports", DP_REPS_HEAD_ = ["Discord ID", "Officer", "At", "Approx", "Type", "Title", "Report ID", "Key", "Synced"];
+const DP_OFF_ = "Duty Portal Officers", DP_OFF_HEAD_ = ["Portal ID", "Discord ID", "Officer", "Status", "Total h", "7d h", "Last seen", "Updated"];
+function dpSheet_(name, head) {
+  const ss = ss_(); let sh = ss.getSheetByName(name);
+  if (!sh) { sh = ss.insertSheet(name); sh.appendRow(head); sh.setFrozenRows(1); sh.getRange(1, 1, 1, head.length).setFontWeight("bold"); sh.getRange("A:B").setNumberFormat("@"); }
+  return sh;
+}
+function dpHash_(k) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, "dpsync|" + str_(k), Utilities.Charset.UTF_8).map(b => ((b + 256) % 256).toString(16).padStart(2, "0")).join(""); }
+function dpKeys_() { try { return JSON.parse(PROPS_.getProperty("DP_KEYS") || "[]") || []; } catch (e) { return []; } }
+function dpState_() { try { return JSON.parse(PROPS_.getProperty("DP_STATE") || "{}") || {}; } catch (e) { return {}; } }
+function dpPids_() { try { return JSON.parse(PROPS_.getProperty("DP_PIDS") || "{}") || {}; } catch (e) { return {}; } }
+// the add-on's post: { key, officers:[{pid,name,status,total,week,seen}], profiles:[{pid,discord,name,shifts:[{s,m}],reports:[{id,at,approx,type,title}]}] }
+function dpSync_(d) {
+  const K = dpKeys_(), h = dpHash_(d.key), who = K.find(k => k.h === h);
+  if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid. Make a new one on the MDT promotion board (⚙ Requirements → Duty Portal sync)." };
+  const now = Date.now(), officers = Array.isArray(d.officers) ? d.officers.slice(0, 600) : null, profiles = Array.isArray(d.profiles) ? d.profiles.slice(0, 200) : [];
+  return withLock_(() => {
+    const pids = dpPids_(); let nS = 0, nR = 0;
+    profiles.forEach(p => { const pid = str_(p.pid).slice(0, 60), id = str_(p.discord).replace(/\D/g, ""); if (pid && id.length >= 15) pids[pid] = id; });
+    PROPS_.setProperty("DP_PIDS", JSON.stringify(pids));
+    // shifts: one row per officer + start minute; a shift seen again (e.g. still growing) updates its minutes
+    const ssh = dpSheet_(DP_SHIFTS_, DP_SHIFTS_HEAD_), have = {}, n0 = ssh.getLastRow();
+    if (n0 > 1) { const from = Math.max(2, n0 - 6000 + 1); ssh.getRange(from, 5, n0 - from + 1, 2).getValues().forEach((r, i) => { have[str_(r[0])] = { row: from + i, m: Number(r[1]) }; }); }
+    const addS = [];
+    profiles.forEach(p => { const id = str_(p.discord).replace(/\D/g, ""); if (id.length < 15) return;
+      (Array.isArray(p.shifts) ? p.shifts.slice(0, 40) : []).forEach(s => { const st = Number(s.s), m = Math.max(0, Math.round(Number(s.m) || 0)); if (!(st > 1.6e12 && st < now + 864e5)) return;
+        const key = id + "|" + Math.round(st / 60000), h0 = have[key];
+        if (h0) { if (m > h0.m) { ssh.getRange(h0.row, 6).setValue(m); h0.m = m; nS++; } return; }
+        have[key] = { row: -1, m: m }; addS.push(["'" + id, cellSafe_(clip_(str_(p.name), 80)), new Date(st), m, key, new Date()]); nS++; }); });
+    if (addS.length) ssh.getRange(ssh.getLastRow() + 1, 1, addS.length, addS[0].length).setValues(addS);
+    // reports: by the Duty Portal's report id (else title) per officer
+    const rsh = dpSheet_(DP_REPS_, DP_REPS_HEAD_), haveR = {}, r0 = rsh.getLastRow();
+    if (r0 > 1) { const from = Math.max(2, r0 - 6000 + 1); rsh.getRange(from, 8, r0 - from + 1, 1).getValues().forEach(r => { haveR[str_(r[0])] = 1; }); }
+    const addR = [];
+    profiles.forEach(p => { const id = str_(p.discord).replace(/\D/g, ""); if (id.length < 15) return;
+      (Array.isArray(p.reports) ? p.reports.slice(0, 20) : []).forEach(x => { const at = Number(x.at); if (!(at > 1.6e12 && at < now + 864e5)) return;
+        const key = id + "|" + (str_(x.id) ? "id:" + clip_(str_(x.id), 80) : "t:" + clip_(str_(x.title), 120)); if (haveR[key]) return; haveR[key] = 1;
+        addR.push(["'" + id, cellSafe_(clip_(str_(p.name), 80)), new Date(at), x.approx ? "yes" : "", cellSafe_(clip_(str_(x.type), 20)), cellSafe_(clip_(str_(x.title), 200)), cellSafe_(clip_(str_(x.id), 80)), key, new Date()]); nR++; }); });
+    if (addR.length) rsh.getRange(rsh.getLastRow() + 1, 1, addR.length, addR[0].length).setValues(addR);
+    // the officer list snapshot (status, total hours) — replaced whole on each full read
+    if (officers && officers.length) {
+      const osh = dpSheet_(DP_OFF_, DP_OFF_HEAD_), rows = officers.map(o => { const pid = str_(o.pid).slice(0, 60);
+        return [pid, pids[pid] ? "'" + pids[pid] : "", cellSafe_(clip_(str_(o.name), 80)), cellSafe_(clip_(str_(o.status), 20)), Number(o.total) || 0, Number(o.week) || 0, cellSafe_(clip_(str_(o.seen), 30)), new Date()]; });
+      if (osh.getLastRow() > 1) osh.getRange(2, 1, osh.getLastRow() - 1, DP_OFF_HEAD_.length).clearContent();
+      osh.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+    }
+    const st = dpState_(); st.at = now; st.by = who.label || who.by || ""; if (officers) { st.full = now; st.officers = officers.length; st.onDuty = officers.filter(o => /on duty/i.test(str_(o.status))).length; }
+    if (!st.first) st.first = now;
+    PROPS_.setProperty("DP_STATE", JSON.stringify(st));
+    try { CacheService.getScriptCache().removeAll(["dp_shifts", "dp_reps"]); } catch (e) {}
+    return { ok: true, shifts: nS, reports: nR, officers: officers ? officers.length : 0, at: now };
+  });
+}
+// shifts per Discord ID as [start, end, minutes] (same shape as the On Duty role log), last 40 days
+function dpShifts_() {
+  const c = CacheService.getScriptCache(), hit = c.get("dp_shifts"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const out = {}, sh = ss_().getSheetByName(DP_SHIFTS_), since = Date.now() - 40 * 864e5;
+  if (sh && sh.getLastRow() > 1) { const n = sh.getLastRow(), from = Math.max(2, n - 6000 + 1);
+    sh.getRange(from, 1, n - from + 1, 4).getValues().forEach(r => { const id = str_(r[0]).replace(/^'/, ""), st = isDate_(r[2]) ? r[2].getTime() : 0, m = Number(r[3]) || 0;
+      if (id && st >= since) (out[id] = out[id] || []).push([st, st + m * 60000, m]); }); }
+  try { const js = JSON.stringify(out); if (js.length < 95000) c.put("dp_shifts", js, 600); } catch (e) {}
+  return out;
+}
+function dpReports_() {
+  const c = CacheService.getScriptCache(), hit = c.get("dp_reps"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const out = {}, sh = ss_().getSheetByName(DP_REPS_), since = Date.now() - 40 * 864e5;
+  if (sh && sh.getLastRow() > 1) { const n = sh.getLastRow(), from = Math.max(2, n - 6000 + 1);
+    sh.getRange(from, 1, n - from + 1, 6).getValues().forEach(r => { const id = str_(r[0]).replace(/^'/, ""), at = isDate_(r[2]) ? r[2].getTime() : 0;
+      if (id && at >= since) (out[id] = out[id] || []).push({ at: at, type: str_(r[4]), title: clip_(str_(r[5]), 90) }); }); }
+  try { const js = JSON.stringify(out); if (js.length < 95000) c.put("dp_reps", js, 600); } catch (e) {}
+  return out;
+}
+// High Command / requirement editors: make a sync key (shown once) for the add-on
+function dpNewKey_(A) {
+  const key = "lspd-" + Utilities.getUuid().replace(/-/g, "").slice(0, 24), K = dpKeys_().slice(-9);
+  K.push({ h: dpHash_(key), by: A.who, label: A.who, at: Date.now() });
+  PROPS_.setProperty("DP_KEYS", JSON.stringify(K));
+  return key;
 }
