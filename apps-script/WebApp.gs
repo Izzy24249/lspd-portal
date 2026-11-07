@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 125;
+const BACKEND_VERSION = 126;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -4575,7 +4575,7 @@ function handleAdmin_(d) {
       const n = Math.max(1, Math.min(10, parseInt(d.count, 10) || 1));
       promoAppend_([{ type: "credit", c: c, task: taskKey_(pid, t.id), count: n, form: "", report: "", date: str_(d.date) || ymd_(new Date()), note: clip_(str_(d.note), 300), by: me.username }]);
       logAdmin_(me.username, "progression credit", promoCfg_(null, pid).title + " · " + (c.callsign ? c.callsign + " " : "") + c.name + " · " + t.title + (n > 1 ? " ×" + n : ""));
-      return { ok: true, promo: promoView_(true, pid) };
+      return d.quick ? { ok: true } : { ok: true, promo: promoView_(true, pid) };
     }
     case "promoRemove": {        // take a completion back off (kept in the sheet, marked removed)
       const pid = progId_(d.program), sh = promoSheet_(), data = sh.getDataRange().getValues();
@@ -4584,13 +4584,13 @@ function handleAdmin_(d) {
       sh.getRange(i + 1, 14).setValue("removed by " + me.username + " " + ymd_(new Date()));
       promoClearCache_();
       logAdmin_(me.username, "progression credit removed", str_(data[i][4]) + " " + str_(data[i][5]) + " · " + str_(data[i][6]));
-      return { ok: true, promo: promoView_(true, pid) };
+      return d.quick ? { ok: true } : { ok: true, promo: promoView_(true, pid) };
     }
     case "promoExcuse": {
       const pid = progId_(d.program), c = promoFind_(d.key, pid), t = promoTask_(d.taskId, pid);
       promoAppend_([{ type: d.on ? "excuse" : "unexcuse", c: c, task: taskKey_(pid, t.id), count: 0, note: clip_(str_(d.note), 300), by: me.username }]);
       logAdmin_(me.username, d.on ? "progression requirement excused" : "progression excuse removed", (c.callsign || c.name) + " · " + t.title);
-      return { ok: true, promo: promoView_(true, pid) };
+      return d.quick ? { ok: true } : { ok: true, promo: promoView_(true, pid) };
     }
     case "promoSince": {         // date they started the grade (time in grade)
       const pid = progId_(d.program), c = promoFind_(d.key, pid);

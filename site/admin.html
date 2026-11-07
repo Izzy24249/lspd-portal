@@ -2203,6 +2203,21 @@ function pagePromo(page) {
   }).catch(e => { candBox.innerHTML = ""; candBox.append(h("div", { class: "sec empty-note", text: e.message })); });
 }
 function promoAct(action, data, box) {
+  // +1 / remove / excuse show on the page straight away; the server saves in the background, then the list quietly refreshes
+  const P = PROMO_ADMIN && PROMO_ADMIN.promo, quick = P && /^(promoCredit|promoRemove|promoExcuse)$/.test(action);
+  if (quick) {
+    const before = JSON.stringify(P), c = (P.candidates || []).find(x => x.key === data.key), T = P.tasks || [];
+    const recount = c => { if (!c) return; T.forEach(t => { const s = c.tasks[t.id]; if (s) s.done = s.excused || s.count >= s.need; });
+      c.done = T.filter(t => c.tasks[t.id] && c.tasks[t.id].done).length; c.complete = c.done === T.length && T.length > 0; };
+    if (action === "promoCredit" && c && c.tasks[data.taskId]) { const s = c.tasks[data.taskId]; s.count += data.count || 1; s.items = (s.items || []).concat([{ date: data.date, count: data.count || 1, source: "Added by admin (saving…)" }]); recount(c); }
+    if (action === "promoExcuse" && c && c.tasks[data.taskId]) { c.tasks[data.taskId].excused = !!data.on; recount(c); }
+    if (action === "promoRemove") (P.candidates || []).forEach(cc => Object.keys(cc.tasks || {}).forEach(k => { const s = cc.tasks[k], it = (s.items || []).find(x => x.entry === data.rowId);
+      if (it) { s.items = s.items.filter(x => x !== it); if (!it.failed && !it.expired) s.count = Math.max(0, s.count - (it.count || 1)); recount(cc); } }));
+    drawCands(box, P); toast("Saved.", "ok");
+    return api(action, Object.assign({ program: PROMO_PID, quick: 1 }, data))
+      .then(() => api("promoAdmin", { program: PROMO_PID }).then(r => { PROMO_ADMIN = Object.assign({}, PROMO_ADMIN, { promo: r.promo }); if (box.isConnected) drawCands(box, r.promo); }).catch(() => {}))
+      .catch(e => { PROMO_ADMIN.promo = JSON.parse(before); drawCands(box, PROMO_ADMIN.promo); toast("Didn't save: " + e.message, "bad"); });
+  }
   return api(action, Object.assign({ program: PROMO_PID }, data)).then(r => { PROMO_ADMIN = Object.assign({}, PROMO_ADMIN, { promo: r.promo }); drawCands(box, r.promo); toast("Saved.", "ok"); }).catch(e => toast(e.message, "bad"));
 }
 function drawCands(box, P) {

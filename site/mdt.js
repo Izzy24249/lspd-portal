@@ -767,11 +767,17 @@
     e.stopPropagation(); if (TRK_BUSY || !TRACK || !TRACK.canTick) return;
     const [id, key, turnOn] = c.dataset.tcheck.split("|"), it = ((TRACK.officers.find(o => o.id === id) || {}).items || []).find(x => x.key === key);
     if (it && it.done && !it.manual) { toast("This one is counted automatically."); return; }
-    TRK_BUSY = true; c.classList.add("busy"); blip(turnOn === "1" ? 1400 : 600);
+    // ticks show at once; the server saves in the background (and is put back if it refuses)
+    const o0 = TRACK.officers.find(o => o.id === id); if (!it || !o0) return;
+    const was = { done: it.done, manual: it.manual, by: it.by, at: it.at, oDone: o0.done, ready: o0.ready };
+    it.done = turnOn === "1"; it.manual = it.done; it.by = it.done ? (((DATA && DATA.profile) || {}).name || "You") : ""; it.at = it.done ? Date.now() : 0;
+    o0.done = o0.items.filter(x => x.done).length; o0.ready = o0.done === o0.items.length; draw(); blip(turnOn === "1" ? 1400 : 600);
+    if (o0.ready && turnOn === "1") toast("🎖️ " + o0.name + " has every requirement for " + (((TRACK.ranks || []).find(x => x.idx === o0.idx) || {}).next || "promotion") + ".");
+    TRK_BUSY = true;
     const r = await Portal.post({ action: "promoCheck", session: SESSION, id: id, key: key, on: turnOn === "1" }).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
     TRK_BUSY = false;
-    if (r.ok) { TRACK = r; const o = r.officers.find(x => x.id === id); draw(); if (o && o.ready && turnOn === "1") toast("🎖️ " + o.name + " has every requirement for " + ((r.ranks.find(x => x.idx === o.idx) || {}).next || "promotion") + "."); }
-    else { c.classList.remove("busy"); toast(r.error || "Couldn't save that."); }
+    if (r.ok) { r._t = Date.now(); TRACK = r; if (VIEW === "tracker") draw(); }
+    else { Object.assign(it, { done: was.done, manual: was.manual, by: was.by, at: was.at }); o0.done = was.oDone; o0.ready = was.ready; draw(); toast(r.error || "Couldn't save that."); }
   });
   document.addEventListener("toggle", e => { const d = e.target; if (d && d.dataset && d.dataset.prank != null) PROMO_OPEN[d.dataset.prank] = d.open; }, true);
   function fleetHTML() {
