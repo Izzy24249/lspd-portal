@@ -883,7 +883,8 @@ button.pbx-box:hover{border-color:var(--green)}
 .pbx-plan em{grid-column:1/-1;font-style:normal;font:500 12px "JetBrains Mono",monospace;color:#a7f3d0}
 .pbx-plan .bad{border-color:rgba(255,93,108,.35)} .pbx-plan .bad em{color:#ff9aa5}
 .pbx-done{display:grid;justify-items:center;text-align:center;gap:10px;padding:10px 0}
-.pbx-done span{font-size:54px;animation:pbxpop .6s var(--ease)}
+.pbx-done > span{font-size:54px;animation:pbxpop .6s var(--ease)}
+.pbx-done .pbx-plan{width:100%;text-align:left}
 .pbx-done h3{font:700 28px "Barlow Condensed",sans-serif;letter-spacing:.06em;color:#f2c766}
 .pbx-done p{color:var(--mute);font-size:14px}
 @keyframes pbxpop{0%{transform:scale(.3) rotate(-20deg);opacity:0}70%{transform:scale(1.15) rotate(6deg)}100%{transform:none;opacity:1}}

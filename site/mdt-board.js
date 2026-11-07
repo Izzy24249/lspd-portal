@@ -171,7 +171,11 @@
       b.disabled = true; b.textContent = "UPDATING THE ROSTER…";
       const r = await call("pbPush");
       if (!r.ok) return say("The push didn't go through", (r.error === "AUTH" ? "Your MDT session expired. Sign on again and retry." : r.error || "No answer from the server.") + " Nothing was changed on the roster unless it says otherwise.");
+      // show it right away: the promoted officers leave the board and land in "Recent promotions"; a fresh board loads behind
+      (r.done || []).forEach(p => { B.officers = B.officers.filter(o => o.id !== p.id); B.recent = [{ entry: p.entry, officer: p.officer, from: p.from, to: p.to, at: p.at || Date.now(), oldCs: p.oldCs, newCs: p.newCs, discord: "", todo: p.todo }].concat(B.recent || []); });
+      if (!r.officers) call("pbBoard").then(x => { if (x.ok) M().draw(); });
       m.querySelector(".md-box").innerHTML = '<div class="pbx-done"><span>🎖️</span><h3>' + r.pushed + " PROMOTION" + (r.pushed === 1 ? "" : "S") + " PUSHED</h3><p>The roster is updated." + (r.warning ? "<br><b style=\"color:var(--amber)\">" + esc(r.warning) + "</b>" : "") + "</p>" +
+        ((r.done || []).length ? '<div class="pbx-plan">' + r.done.map(p => '<div><b>' + esc(p.officer.replace(/^.*\|\s*/, "")) + "</b><span>" + esc(p.from) + " → " + esc(p.to) + "</span><em>" + esc(p.oldCs || "—") + " → <b>" + esc(p.newCs || "—") + "</b></em></div>").join("") + "</div>" : "") +
         ((r.skipped || []).length ? '<div class="pbx-plan">' + r.skipped.map(s => '<div class="bad"><b>' + esc(s.officer) + "</b><em>✕ " + esc(s.error) + "</em></div>").join("") + "</div>" : "") +
         '<p style="font-size:13px">Next: update their Discord name tags and roles from the to-do list under the board.</p><button class="btn" data-close>DONE</button></div>';
       M().blip(1600); setTimeout(() => M().blip(2000), 120); M().draw();

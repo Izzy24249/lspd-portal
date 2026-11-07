@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 109;
+const BACKEND_VERSION = 110;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5454,7 +5454,10 @@ function pbPush_(A) {
   if (!out.ok) return out;
   // fresh roster everywhere: nameplates, fleet/uniform ranks, the tracker
   try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "roster_calls", "pb_open"].concat(out.done.map(p => "rp_" + p.id))); } catch (e) {}
-  try { const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) { getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); getRosterTab_(tid, true, [RANK_COL_], false, true); getRosterTab_(tid, true); } callsignMap_(true); } catch (e) {}
+  // (callsigns first, so the re-read roster shows the new ones; the other roster copies are dropped and rebuilt on next use)
+  try { callsignMap_(true); const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) {
+    CacheService.getScriptCache().removeAll(["roster_tab_" + tid + "_" + RANK_COL_ + "_all", "roster_tab_" + tid, "roster_tab_" + tid + "_" + RANK_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_]);
+    getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); } } catch (e) {}
   // the announcement (if High Command picked a channel)
   let warning = "";
   const R = pbRules_(), wh = R.webhookId && webhookById_(R.webhookId);
@@ -5465,6 +5468,9 @@ function pbPush_(A) {
     if (wh.kind !== "text") payload.thread_name = clip_("Promotions · " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMM d, yyyy"), 100);
     const r = discordPost_(wh.url, payload); if (!r.ok) warning = "Roster updated, but the Discord announcement failed: " + r.error;
   }
-  const v = pbView_({ id: "" }, A); v.pushed = out.done.length; v.skipped = out.plan.filter(p => p.error).map(p => ({ officer: p.officer, error: p.error })); if (warning) v.warning = warning;
+  // small reply: the MDT shows the result straight away and reloads the board in the background
+  const v = { ok: true, pushed: out.done.length, done: out.done.map(p => ({ id: p.id, entry: p.entry, officer: p.officer, from: p.from, to: p.to, oldCs: p.oldCs, newCs: p.newCs, at: p.at,
+    todo: pbTodo_({ officer: p.officer, to: p.to, from: p.from, newCs: p.newCs }) })), skipped: out.plan.filter(p => p.error).map(p => ({ officer: p.officer, error: p.error })) };
+  if (warning) v.warning = warning;
   return v;
 }
