@@ -930,3 +930,16 @@ button.pbx-box:hover{border-color:var(--green)}
 .pbx-keys{display:grid;gap:6px;padding:12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.02)} .pbx-keys > b{font-size:13px}
 .pbx-kr{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.2);font-size:12.5px} .pbx-kr > div{flex:1;min-width:0}
 .pbx-kr code{font:600 12px "JetBrains Mono",monospace;color:var(--blue2)} .pbx-kr small{display:block;color:var(--mute);font-size:11.5px;margin-top:2px}
+
+/* drop-downs: dark and smooth everywhere (the open list used the system's light/tan colours) */
+:root{color-scheme:dark}
+.md-box select,.tr-sel,.pbx-rx select{-webkit-appearance:none;appearance:none;cursor:pointer;color-scheme:dark;
+  background:linear-gradient(180deg,rgba(22,32,50,.9),rgba(12,18,30,.9)) padding-box;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237ab0ff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"),linear-gradient(180deg,rgba(22,32,50,.95),rgba(12,18,30,.95));
+  background-repeat:no-repeat,no-repeat;background-position:right 14px center,0 0;background-size:12px 8px,100% 100%;
+  padding-right:38px;border:1px solid var(--line2);color:var(--tx);transition:border-color .2s,box-shadow .2s,background-color .2s}
+.md-box select:hover,.tr-sel:hover,.pbx-rx select:hover{border-color:var(--line3)}
+.md-box select:focus,.tr-sel:focus,.pbx-rx select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(76,141,255,.15)}
+.md-box select option,.tr-sel option,.pbx-rx select option,.md-box select optgroup{background:#0e1626;color:var(--tx)}
+.md-box select option:checked,.tr-sel option:checked{background:#1d3a6e;color:#fff}
+.md-box select option[value=""]{color:var(--mute)}
