@@ -48,7 +48,8 @@
     const q = Q.trim().toLowerCase();
     let left = all.filter(o => !o.entry && (!q || (o.name + " " + o.callsign).toLowerCase().indexOf(q) !== -1));
     if (SHOW === "over") left = left.filter(o => st(o) === "over"); else if (SHOW === "warn") left = left.filter(o => st(o) === "warn");
-    const right = listed;
+    const csN = o => { const m = /(\d+)/.exec(o.callsign || ""); return m ? +m[1] : 1e9; };
+    const right = listed.slice().sort((a, b) => csN(a) - csN(b));   // the order they'll land on Onboarding Terminations
     h += '<div class="pbx">' +
       '<section class="pbx-col"><header><span class="lbl">Onboarding Roster</span><div class="pbx-tools"><input id="obQ" placeholder="Search name or callsign" value="' + esc(Q) + '">' +
       '<div class="seg">' + [["over", "OUT OF TIME"], ["warn", "ENDING SOON"], ["all", "ALL"]].map(x => '<button data-obshow="' + x[0] + '" class="' + (SHOW === x[0] ? "on" : "") + '">' + x[1] + "</button>").join("") + "</div>" +

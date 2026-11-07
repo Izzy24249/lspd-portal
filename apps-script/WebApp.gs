@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 122;
+const BACKEND_VERSION = 123;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5765,7 +5765,8 @@ function obTermStart_(tm) {   // first row of the next batch: one blank line bel
 function obPlan_(R) {
   R = R || obRows_();
   const book = rosterBook_(), tm = book.getSheetByName(OB_TERM_TAB_); if (!tm) return { ok: false, error: "The \"" + OB_TERM_TAB_ + "\" tab wasn't found in the roster sheet." };
-  const list = obrEntries_().filter(e => e.status === "listed"), start = obTermStart_(tm), plan = []; let at = start;
+  const csNum = c => { const m = /(\d+)/.exec(str_(c)); return m ? Number(m[1]) : 1e9; };
+  const list = obrEntries_().filter(e => e.status === "listed").sort((a, b) => csNum(a.callsign) - csNum(b.callsign)), start = obTermStart_(tm), plan = []; let at = start;   // callsign order: L-801, L-802…
   list.forEach(e => { const r = R.rows.find(x => callKey_(x.cs) === callKey_(e.callsign));
     if (!r) { plan.push({ entry: e.entry, callsign: e.callsign, officer: e.officer, error: "Not on the Onboarding Roster any more." }); return; }
     if (e.id && r.id && e.id !== r.id) { plan.push({ entry: e.entry, callsign: e.callsign, officer: e.officer, error: "That slot now holds someone else (" + r.name + "). Take them off the list." }); return; }
