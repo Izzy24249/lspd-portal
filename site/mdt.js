@@ -111,7 +111,8 @@
   const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker", "board"];
   const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["DEPARTMENT", "Promotion tracker"], board: ["COMMAND", "Promotion board"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
-  function go(v) { VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
+  function go(v) { if (v === "tracker" && TRACK && TRACK.ok && Date.now() - (TRACK._t || 0) > 30000) loadTrack();   // fresh numbers each time it's opened
+    VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
   document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); go(a.getAttribute("data-go")); } });
   addEventListener("hashchange", () => { const h = decodeURIComponent(location.hash.slice(1)); if (h !== VIEW) go(h); });
 
@@ -582,7 +583,7 @@
   }
   function promoReqs(r, marks) {
     const mk = (i) => { const m = marks && marks[i]; if (!m) return ""; return '<span class="pr-mark ' + (m.done ? "ok" : "") + '">' + (m.done ? "✓ " : "") +
-      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.auto === "gom" ? m.have + " / " + m.need + " GOM Trainings" : m.auto === "ra" ? m.have + " / " + m.need + " Academy Evaluations" : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
+      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.auto === "gom" ? (m.split ? gomSplit(m) : m.have + " / " + m.need + " GOM Trainings") : m.auto === "ra" ? m.have + " / " + m.need + " Academy Evaluations" : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
     return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map((q, i) => '<li class="' + (marks && marks[i] && marks[i].done ? "ok" : "") + '"><b>' + reqText(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
       (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + mk(i) + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
   }
@@ -622,9 +623,11 @@
   // ---------- promotion tracker (command): every officer's checklist for their current rank ----------
   // ---------- promotion tracker: one grid per rank (from the Promotion Guidelines doc) + the Training Progression programs ----------
   // same look as the forms page's progression boards: a column per requirement, check marks, TIG days, progress bar
+  // "1 as Lead Instructor & 1 as Certified FTO" requirements: each role on its own
+  function gomSplit(it) { return it && it.split ? "Lead instructor " + it.split.lead[0] + "/" + it.split.lead[1] + " · Certified FTO for a CPL " + it.split.fto[0] + "/" + it.split.fto[1] : ""; }
   let TRACK = null, TRK_TAB = LS.get("mdt:trkTab") || "", TRK_Q = "", TRK_F = "all", TRK_SORT = LS.get("mdt:trkSort") || "callsign", TRK_OPEN = {}, TRK_BUSY = false, PROGS = {};
   const isCommand = () => { const lv = ((DATA && DATA.profile) || LS.json("lspd_prof") || {}).level; return ["command", "admin", "owner"].indexOf(lv) !== -1; };
-  async function loadTrack() { const r = await Portal.post({ action: "promoBoard", session: SESSION }).catch(() => ({ ok: false, error: "Couldn't reach the server." })); TRACK = r; if (VIEW === "tracker") draw(); }
+  async function loadTrack() { const r = await Portal.post({ action: "promoBoard", session: SESSION }).catch(() => ({ ok: false, error: "Couldn't reach the server." })); r._t = Date.now(); TRACK = r; if (VIEW === "tracker") draw(); }
   async function loadProg(id) {
     try { const r = await fetch(Portal.ENDPOINT + "?action=promo&p=" + encodeURIComponent(id) + "&t=" + Date.now()); const j = await r.json(); PROGS[id] = j.ok ? j.promo : { error: j.error || "Couldn't load it." }; }
     catch (e) { PROGS[id] = { error: "Couldn't reach the server." }; }
@@ -678,19 +681,19 @@
   function rankBoard(r) {
     const can = !!TRACK.canTick, list = (TRACK.officers || []).filter(o => o.listed && o.idx === r.idx);
     const items0 = (list[0] && list[0].items) || (r.reqs || []).map(t => ({ t: t.t }));
-    const tasks = items0.map(it => ({ short: reqShort(it), title: it.t, sub: it.auto === "tig" ? it.need + " days" : it.auto === "reports" ? "×" + it.need : it.auto === "sop" ? "Discord role" : it.auto === "gom" ? "×" + it.need + " · GOM Training reports" : it.auto === "ra" ? "×" + it.need + " · Academy Evaluations" : "" }));
+    const tasks = items0.map(it => ({ short: reqShort(it), title: it.t, sub: it.auto === "tig" ? it.need + " days" : it.auto === "reports" ? "×" + it.need : it.auto === "sop" ? "Discord role" : it.auto === "gom" ? (it.split ? it.split.lead[1] + " lead + " + it.split.fto[1] + " FTO · GOM Training" : "×" + it.need + " · GOM Training reports") : it.auto === "ra" ? "×" + it.need + " · Academy Evaluations" : "" }));
     const rows = list.map(o => {
       const key = o.id || (o.callsign + "|" + o.name);
       const cells = o.items.map(it => {
         if (it.done) return '<span class="pb-c ok" title="' + esc(it.manual ? "Signed off by " + it.by : "Counted automatically") + '">✓</span>';
         if (it.auto === "tig" || it.auto === "reports" || it.auto === "gom" || it.auto === "ra") { const have = it.have == null ? 0 : it.have, need = Math.max(1, it.need);
-          return '<span class="pb-c part" title="' + esc(it.auto === "tig" ? (it.have == null ? "No TIG date on the roster" : have + " of " + it.need + " days") : it.auto === "gom" ? have + " of " + it.need + " GOM Trainings tagged on" : it.auto === "ra" ? have + " of " + it.need + " Academy Evaluations tagged on" : have + " of " + it.need + " reports") + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + (it.auto === "tig" ? (it.have == null ? "—" : have + "d") : have + "/" + it.need) + "</span>"; }
+          return '<span class="pb-c part" title="' + esc(it.auto === "tig" ? (it.have == null ? "No TIG date on the roster" : have + " of " + it.need + " days") : it.auto === "gom" ? (it.split ? gomSplit(it) : have + " of " + it.need + " GOM Trainings led or supervised") : it.auto === "ra" ? have + " of " + it.need + " Academy Evaluations tagged on" : have + " of " + it.need + " reports") + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + (it.auto === "tig" ? (it.have == null ? "—" : have + "d") : have + "/" + it.need) + "</span>"; }
         return '<span class="pb-c zero" title="Not done yet">·</span>';
       });
       const tigNeed = r.tig || 0, chip = o.tigDays == null ? { txt: "TIG —", ok: false } : { txt: "TIG " + o.tigDays + "d", ok: !tigNeed || o.tigDays >= tigNeed };
       const detail = '<div class="pb-detail">' + o.items.map((it, i) => '<div class="pd-item' + (it.done ? " ok" : "") + '"><div class="pd-h"><span class="pd-n">' + (i + 1) + "</span><b>" + reqText(it.t) + "</b><em>" + (it.done ? "Done" : "Open") + "</em></div><p>" +
         (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)." : it.have + " of " + it.need + " days.") : it.auto === "reports" ? it.have + " of " + it.need + " reports since reaching this rank." : it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord." : "No SOP Certified role in Discord yet.") :
-        it.auto === "gom" ? it.have + " of " + it.need + " Global Operation Manual Trainings they're tagged on, since reaching this rank." : it.auto === "ra" ? it.have + " of " + it.need + " Academy Evaluations they're tagged on, since reaching this rank." : "") +
+        it.auto === "gom" ? (it.split ? gomSplit(it) + " (GOM Trainings since reaching this rank)." : it.have + " of " + it.need + " Global Operation Manual Trainings they led or supervised, since reaching this rank.") : it.auto === "ra" ? it.have + " of " + it.need + " Academy Evaluations they're tagged on, since reaching this rank." : "") +
         (it.manual ? " Signed off by " + esc(it.by) + (it.at ? " on " + new Date(it.at).toLocaleDateString() : "") + "." : !it.auto && !it.done ? " Command signs this off." : "") + "</p>" +
         (can ? (it.done && !it.manual ? '<span class="pd-check auto"><i>✓</i>Counted automatically</span>'
           : '<button class="pd-check' + (it.done ? " on" : "") + '" data-tcheck="' + esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1") + '"><i>' + (it.done ? "✓" : "") + "</i>" + (it.done ? "Signed off · tap to undo" : "Tick to sign off") + "</button>") : "") + "</div>").join("") + "</div>";

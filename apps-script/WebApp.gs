@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 119;
+const BACKEND_VERSION = 120;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3202,7 +3202,12 @@ const TAG_FORMS_ = { gom: "gomtraining", ra: "academy" };
 function reqAuto_(t, sopOn, idx) {
   if (idx >= 4) {
     const n = (/(?:minimum of|at least|min\.?)\s*(\d+)/i.exec(t) || /\((\d+)\)/.exec(t) || [])[1];
-    if (/training/i.test(t) && /\b(host|lead|conduct|run|teach|instruct)/i.test(t)) return { type: "gom", need: Number(n) || 1 };
+    if (/training/i.test(t) && /\b(host|lead|conduct|run|teach|instruct)/i.test(t)) {
+      // split wording, e.g. "(1 as Lead Instructor & 1 as Certified FTO for CPL)": each role counted on its own
+      const L = /(\d+)\s*(?:as\s+)?(?:the\s+|a\s+)?lead/i.exec(t), F = /(\d+)\s*(?:as\s+)?(?:the\s+|a\s+)?(?:certified\s+)?(?:fto|supervis)/i.exec(t);
+      if (L && F) return { type: "gom", need: Number(L[1]) + Number(F[1]), lead: Number(L[1]), fto: Number(F[1]) };
+      return { type: "gom", need: Number(n) || 1 };
+    }
     if (/\b(RA|R\/A|ride[- ]?alongs?)\b/i.test(t) && /\bPO\b/i.test(t) && !/command/i.test(t)) return { type: "ra", need: Number(n) || 1 };
   }
   if (/time in grade|\btig\b/i.test(t)) { const m = /\((\d+)\)\s*days/i.exec(t) || /(\d+)\s*days/i.exec(t); if (m) return { type: "tig", need: Number(m[1]) }; }
@@ -3243,14 +3248,19 @@ function promoPeopleRead_() {
   rows.forEach(r => (r.people || []).forEach(x => { if (x.i) (byId[x.i] = byId[x.i] || []).push(r.at); }));
   out.forEach(o => { const from = o.since || now - 28 * 864e5; o.reports = (byId[o.id] || []).filter(t => t >= from).length; o.tigDays = o.since ? Math.floor((now - o.since) / 864e5) : null; });
   // GOM Trainings / Academy Evaluations each officer is tagged on (by Discord ID, else callsign or name), since reaching their rank
+  // the role each box on the GOM Training form stands for: Instructor = lead, Supervising/Certified FTO = fto, Witness, Trainees
+  const gomForm = (getConfig_().forms || []).find(f => f.id === TAG_FORMS_.gom), role = {};
+  if (gomForm) personSlots_(gomForm).forEach(sl => { const l = sl.label + " " + sl.key; role[sl.key] = /witness/i.test(l) ? "witness" : /trainee|student/i.test(l) ? "trainee" : /supervis|fto/i.test(l) ? "fto" : /instructor|lead|host/i.test(l) ? "lead" : "other"; });
   const tag = {};
   rows.forEach(r => { if (r.form !== TAG_FORMS_.gom && r.form !== TAG_FORMS_.ra) return;
     (r.people || []).forEach(x => { const ks = x.i ? ["id:" + x.i] : [callKey_(x.n) ? "cs:" + callKey_(x.n) : "", nameKey_(x.n) ? "nm:" + nameKey_(x.n) : ""].filter(Boolean);
-      ks.forEach(k => { const m = (tag[k] = tag[k] || {}); (m[r.form] = m[r.form] || {})[r.row] = r.at; }); }); });
+      const keys = [r.form]; if (r.form === TAG_FORMS_.gom) keys.push("gom_" + (role[x.f] || "other"));
+      ks.forEach(k => { const m = (tag[k] = tag[k] || {}); keys.forEach(fk => { (m[fk] = m[fk] || {})[r.row] = r.at; }); }); }); });
   out.forEach(o => { const from = o.since || now - 28 * 864e5, got = {};
     ["id:" + o.id, o.callsign ? "cs:" + callKey_(o.callsign) : "", "nm:" + nameKey_(o.name)].filter(k => k && k !== "id:" && k !== "nm:").forEach(k => {
       const m = tag[k] || {}; Object.keys(m).forEach(f => Object.keys(m[f]).forEach(row => { if (m[f][row] >= from) (got[f] = got[f] || {})[row] = 1; })); });
-    o.tagged = { gom: Object.keys(got[TAG_FORMS_.gom] || {}).length, ra: Object.keys(got[TAG_FORMS_.ra] || {}).length }; });
+    const n = k => Object.keys(got[k] || {}).length, host = Object.assign({}, got.gom_lead || {}, got.gom_fto || {});
+    o.tagged = { gom: Object.keys(host).length, gomAny: n(TAG_FORMS_.gom), gomLead: n("gom_lead"), gomFto: n("gom_fto"), gomWitness: n("gom_witness"), ra: n(TAG_FORMS_.ra) }; });
   return out;
 }
 var SOP_MEMO_ = null;
@@ -3260,9 +3270,12 @@ function promoEval_(o, rankReqs, checks) {
     const c = mine[q.key], a = q.auto; let have = null, auto = false;
     if (a && a.type === "tig") { have = o.tigDays; auto = have != null && have >= a.need; }
     if (a && a.type === "reports") { have = o.reports; auto = have >= a.need; }
-    if (a && (a.type === "gom" || a.type === "ra")) { have = (o.tagged || {})[a.type] || 0; auto = have >= a.need; }
+    let split = null;
+    if (a && a.type === "gom" && (a.lead || a.fto)) { const T = o.tagged || {}, l = T.gomLead || 0, f = T.gomFto || 0;
+      split = { lead: [l, a.lead || 0], fto: [f, a.fto || 0] }; have = Math.min(l, a.lead || 0) + Math.min(f, a.fto || 0); auto = l >= (a.lead || 0) && f >= (a.fto || 0); }
+    else if (a && (a.type === "gom" || a.type === "ra")) { have = (o.tagged || {})[a.type] || 0; auto = have >= a.need; }
     if (a && a.type === "sop") { have = SOP_MEMO_ ? (SOP_MEMO_[o.id] ? 1 : 0) : (sopIds_()[o.id] ? 1 : 0); auto = have >= 1; }
-    return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
+    return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, split: split, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
   });
   return { items: items, done: items.filter(x => x.done).length, total: items.length, ready: items.length > 0 && items.every(x => x.done) };
 }
