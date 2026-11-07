@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 112;
+const BACKEND_VERSION = 113;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5469,8 +5469,8 @@ function pbPush_(A) {
       sh.getRange(p.toRow, 6).setNumberFormat("@");                                   // Discord IDs are too long to be numbers
       sh.getRange(p.toRow, 5, 1, 2).setValues([[src.nameRaw, typeof src.idRaw === "number" ? src.id : str_(src.idRaw)]]);   // name + Discord ID into the new slot (values only)
       if (!p.fxG) sh.getRange(p.toRow, 7).setValue(today);                           // time in grade starts today
-      if (p.onb) {   // PO → PO II: empty their Onboarding row (name, Discord ID, date) and set both drop-downs back to Good
-        S.ob.getRange(p.fromRow, 3, 1, 2).clearContent(); S.ob.getRange(p.fromRow, 11).clearContent(); S.ob.getRange(p.fromRow, 9, 1, 2).setValues([["Good", "Good"]]);
+      if (p.onb) {   // PO → PO II: empty their Onboarding row (name, Discord ID, date); Status back to Good, Training Status back to BPA Needed
+        S.ob.getRange(p.fromRow, 3, 1, 2).clearContent(); S.ob.getRange(p.fromRow, 11).clearContent(); S.ob.getRange(p.fromRow, 9, 1, 2).setValues([["Good", "BPA Needed"]]);
       } else sh.getRange(p.fromRow, 5, 1, 3).clearContent();                         // old slot: E, F, G emptied
       pb.getRange(e.row, 8).setValue("promoted"); pb.getRange(e.row, 14, 1, 3).setValues([[new Date(), p.newCs, cellSafe_((p.onb ? "From Onboarding row " + p.fromRow + " to" : "Moved to") + " Personnel row " + p.toRow + " (" + p.newCs + ") by " + A.who)]]);
       done.push(Object.assign({}, p, { at: Date.now() }));
