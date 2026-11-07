@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 110;
+const BACKEND_VERSION = 111;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5302,17 +5302,36 @@ function pbAccess_(acct) {
 // everyone the board can promote: Personnel roster, Police Officer II up to Major (→ Commander), not Honorary
 function pbOfficers_() { return promoPeople_().filter(o => !o.trainee && o.idx >= 1 && o.idx < PB_TOP_ && !promoExempt_(o.rank)); }
 function pbExtraKey_(idx, t) { return "pbx" + reqKey_(idx, t); }
+// Promotions are every Friday. The duty week runs Friday 2:00 PM Eastern → the next Friday 2:00 PM.
+// The board counts the weeks ending at the coming Friday cutoff; for the 24 hours after a cutoff (promotion day)
+// it keeps counting the weeks that just closed, so High Command reviews exactly the period that ended.
+const PB_TZ_ = "America/New_York", PB_DOW_ = 5, PB_HOUR_ = 14, PB_REVIEW_H_ = 24;
+function pbCutoffOn_(ymd) {   // 2:00 PM Eastern on that calendar day, as a timestamp (DST-correct)
+  const off = Utilities.formatDate(new Date(Date.parse(ymd + "T19:00:00Z")), PB_TZ_, "XXX");
+  return Date.parse(ymd + "T" + (PB_HOUR_ < 10 ? "0" : "") + PB_HOUR_ + ":00:00" + off);
+}
+function pbYmdPlus_(ymd, days) { const d = new Date(Date.parse(ymd + "T12:00:00Z") + days * 864e5); return d.toISOString().slice(0, 10); }
+function pbPeriod_(now, days) {
+  const ymd = Utilities.formatDate(new Date(now), PB_TZ_, "yyyy-MM-dd"), dow = Number(Utilities.formatDate(new Date(now), PB_TZ_, "u")) % 7;   // 0 = Sunday … 5 = Friday
+  let fri = pbYmdPlus_(ymd, -((dow - PB_DOW_ + 7) % 7));
+  if (pbCutoffOn_(fri) > now) fri = pbYmdPlus_(fri, -7);
+  const last = pbCutoffOn_(fri), review = now - last < PB_REVIEW_H_ * 3600e3;
+  const endYmd = review ? fri : pbYmdPlus_(fri, 7), weeks = Math.max(1, Math.round((days || 14) / 7)), bounds = [];
+  for (let w = 0; w <= weeks; w++) bounds.push(pbCutoffOn_(pbYmdPlus_(endYmd, -7 * w)));
+  return { end: bounds[0], start: bounds[weeks], bounds: bounds, review: review, next: pbCutoffOn_(pbYmdPlus_(fri, 7)), last: last };
+}
 function pbEval_(o, R, L, checks, duty, rep, now) {
-  const rule = pbRule_(R, o.idx), items = [];
-  // on-duty hours: total in the window, and each week of it (a light week is flagged but doesn't fail the total)
-  const ses = (duty[o.id] || []), from = now - rule.days * 864e5, mins = t0 => ses.filter(x => x[0] >= t0[0] && x[0] < t0[1]).reduce((a, x) => a + (Number(x[2]) || 0), 0);
-  const total = mins([from, now + 1]), weeks = [];
-  for (let w = 0; w < Math.ceil(rule.days / 7); w++) { const b = [now - (w + 1) * 7 * 864e5, now - w * 7 * 864e5]; weeks.push({ from: b[0], to: b[1], min: mins(b) }); }
-  const low = rule.weekMin > 0 ? weeks.filter(w => w.min < rule.weekMin * 60) : [];
-  if (rule.hours > 0) items.push({ key: "pb:hours", t: rule.hours + " hours on duty in the last " + rule.days + " days" + (rule.weekMin ? " (" + rule.weekMin + "+ each week)" : ""), auto: "hours", need: rule.hours * 60, have: total, done: total >= rule.hours * 60,
-    weeks: weeks.map(w => ({ from: w.from, min: w.min, low: rule.weekMin > 0 && w.min < rule.weekMin * 60 })), warn: total >= rule.hours * 60 && low.length ? low.length + " week" + (low.length > 1 ? "s were" : " was") + " under " + rule.weekMin + " hours" : "" });
-  if (rule.reports > 0) { const n = (rep[o.id] || []).filter(t => t >= from).length;
-    items.push({ key: "pb:reports", t: rule.reports + " reports in the last " + rule.days + " days", auto: "reports14", need: rule.reports, have: n, done: n >= rule.reports }); }
+  const rule = pbRule_(R, o.idx), items = [], P = pbPeriod_(now, rule.days);
+  // on-duty hours: total in the promotion period, and each Friday-to-Friday week of it (a light week is flagged but doesn't fail the total)
+  const ses = (duty[o.id] || []), from = P.start, mins = t0 => ses.filter(x => x[0] >= t0[0] && x[0] < t0[1]).reduce((a, x) => a + (Number(x[2]) || 0), 0);
+  const total = mins([P.start, P.end]), weeks = [];
+  for (let w = 0; w < P.bounds.length - 1; w++) { const b = [P.bounds[w + 1], P.bounds[w]]; weeks.push({ from: b[0], to: b[1], min: mins(b), cur: b[0] <= now && now < b[1] }); }
+  const done = w => w.to <= now;   // a week still in progress isn't "light" yet
+  const low = rule.weekMin > 0 ? weeks.filter(w => done(w) && w.min < rule.weekMin * 60) : [];
+  if (rule.hours > 0) items.push({ key: "pb:hours", t: rule.hours + " hours on duty in the " + weeks.length + " weeks before promotion day" + (rule.weekMin ? " (" + rule.weekMin + "+ each week)" : ""), auto: "hours", need: rule.hours * 60, have: total, done: total >= rule.hours * 60,
+    weeks: weeks.map(w => ({ from: w.from, to: w.to, min: w.min, cur: w.cur, low: rule.weekMin > 0 && done(w) && w.min < rule.weekMin * 60 })), warn: total >= rule.hours * 60 && low.length ? low.length + " week" + (low.length > 1 ? "s were" : " was") + " under " + rule.weekMin + " hours" : "" });
+  if (rule.reports > 0) { const n = (rep[o.id] || []).filter(t => t >= from && t < P.end).length;
+    items.push({ key: "pb:reports", t: rule.reports + " reports in the same " + weeks.length + " weeks", auto: "reports14", need: rule.reports, have: n, done: n >= rule.reports }); }
   // the rank's requirements from the Promotion Guidelines doc (time in grade, trainings, SOP… and command sign-offs)
   const rr = (L.ranks || []).find(x => x.idx === o.idx);
   promoEval_(o, rr, checks).items.forEach(x => items.push(Object.assign({}, x, { doc: true })));
@@ -5349,7 +5368,8 @@ function pbView_(acct, A) {
     doc: ((L.ranks || []).find(x => x.idx === i) || { reqs: [] }).reqs.map(q => ({ t: q.t, auto: q.auto ? q.auto.type : "" })) }); }
   const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
     .map(e => ({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
-  return { ok: true, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
+  const PP = pbPeriod_(now, PB_DEF_.days);
+  return { ok: true, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
     editors: A.editor ? R.editors : [], webhookId: A.editor ? R.webhookId : "", webhooks: A.editor ? getWebhooks_().map(w => ({ id: w.id, name: w.name })) : [], doc: L.doc, at: now };
 }
 function pbTodo_(e) {

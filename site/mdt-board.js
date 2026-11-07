@@ -40,7 +40,7 @@
     return '<div class="pbx-det">' + o.items.map(x => {
       const man = !x.auto, can = man && canTick, by = x.manual && x.by ? "Signed off by " + x.by : x.auto && x.done ? "Counted by the terminal" : "";
       let extra = "";
-      if (x.auto === "hours" && x.weeks) extra = '<div class="pbx-wk">' + x.weeks.map(w => '<span class="' + (w.low ? "low" : "") + '">Week of ' + day(w.from) + ": <b>" + H(w.min) + "h</b></span>").join("") + "</div>" + (x.warn ? '<div class="pbx-warn">⚠ Total met, but ' + esc(x.warn) + ".</div>" : "");
+      if (x.auto === "hours" && x.weeks) extra = '<div class="pbx-wk">' + x.weeks.slice().reverse().map(w => '<span class="' + (w.low ? "low" : w.cur ? "cur" : "") + '">' + (w.to ? day(w.from) + " – " + day(w.to) : "Week of " + day(w.from)) + (w.cur ? " (this week)" : "") + ": <b>" + H(w.min) + "h</b></span>").join("") + "</div>" + (x.warn ? '<div class="pbx-warn">⚠ Total met, but ' + esc(x.warn) + ".</div>" : "");
       const val = x.auto === "hours" ? H(x.have) + " / " + H(x.need) + " h" : x.auto && x.need ? (x.have == null ? "—" : x.have) + " / " + x.need : "";
       return '<div class="pbx-it' + (x.done ? " ok" : "") + (man ? " man" : "") + '">' +
         (can ? '<button class="pbx-box" data-pbcheck="' + esc(o.id) + "|" + esc(x.key) + "|" + (x.done ? 0 : 1) + '" title="' + (x.done ? "Undo sign-off" : "Sign off") + '">' + (x.done ? "✓" : "") + "</button>"
@@ -82,6 +82,9 @@
     h += '<div class="pbx-stats">' +
       [["Officers", all.length, ""], ["Terminal ✓", all.filter(o => o.terminal).length, "term"], ["All met", all.filter(o => o.ready).length, "ready"], ["On the list", listed.length, "list"], ["Approved", ap.length, "ap"]]
         .map(s => '<div class="' + s[2] + '"><b>' + s[1] + "</b><small>" + s[0] + "</small></div>").join("") + "</div>";
+    if (B.period) { const P = B.period, fmt = t => new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+      h += '<div class="pbx-period' + (P.review ? " review" : "") + '"><span>' + (P.review ? "🎖️" : "🗓️") + "</span><div><b>" + (P.review ? "Promotion day: reviewing the period that just closed" : "Counting toward " + fmt(P.end).replace(/,? \d+:\d+ [AP]M$/, "") + " promotions") + "</b><small>Hours and reports from " + fmt(P.start) + " to " + fmt(P.end) + " ET. Weeks run Friday 2 PM to Friday 2 PM." +
+        (P.review ? " The new period starts counting tomorrow at 2 PM." : "") + "</small></div></div>"; }
     if (B.slotError) h += '<div class="pbx-alert">⚠ Couldn\'t read the Personnel roster: ' + esc(B.slotError) + "</div>";
     // rank filter
     h += '<div class="pbx-ranks"><button data-pbrf="all" class="' + (RF === "all" ? "on" : "") + '">ALL RANKS <small>' + all.length + "</small></button>" +
