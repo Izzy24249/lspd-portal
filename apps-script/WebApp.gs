@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 114;
+const BACKEND_VERSION = 115;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5366,9 +5366,13 @@ function pbView_(acct, A) {
   const now = Date.now(), R = pbRules_(), L = promoLadderKeys_(), checks = pchkAll_(), duty = dutySums_(); SOP_MEMO_ = sopIds_();
   const rep = {}; actRows_().forEach(r => { const seen = {}; (r.people || []).forEach(x => { if (x.i && !seen[x.i]) { seen[x.i] = 1; (rep[x.i] = rep[x.i] || []).push(r.at); } }); });
   const E = pbEntries_(), active = {}; E.forEach(e => { if (e.status === "nominated" || e.status === "approved") active[e.id] = e; });
+  // who has signed in to the portal with Discord (only they can be duty-tracked until there's a bot)
+  const links = {}; Object.keys(PROPS_.getProperties()).forEach(k => { const m = /^DLINK_(\d+)$/.exec(k); if (m) links[m[1]] = 1; });
+  const unlinked = promoPeople_().filter(o => !links[o.id] && !promoExempt_(o.rank)).map(o => ({ callsign: o.callsign, name: o.name, rank: o.trainee ? "Police Officer (Onboarding)" : o.rank, idx: o.idx }))
+    .sort((a, b) => b.idx - a.idx || String(a.callsign).localeCompare(String(b.callsign)));
   const officers = pbOfficers_().map(o => {
     const ev = pbEval_(o, R, L, checks[o.id], duty, rep, now), e = active[o.id];
-    return Object.assign({ id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, next: RANKS_[o.idx + 1], tigDays: o.tigDays,
+    return Object.assign({ id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, next: RANKS_[o.idx + 1], tigDays: o.tigDays, linked: !!links[o.id],
       canNominate: A.hc || o.idx + 1 < A.idx, entry: e ? { entry: e.entry, status: e.status, by: e.by, at: e.at, note: e.note, apBy: e.apBy, apAt: e.apAt } : null }, ev);
   });
   let open = {}, slotErr = "";
@@ -5380,7 +5384,7 @@ function pbView_(acct, A) {
   const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
     .map(e => ({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
   const PP = pbPeriod_(now, PB_DEF_.days);
-  return { ok: true, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
+  return { ok: true, unlinked: unlinked, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
     editors: A.editor ? R.editors : [], webhookId: A.editor ? R.webhookId : "", webhooks: A.editor ? getWebhooks_().map(w => ({ id: w.id, name: w.name })) : [], doc: L.doc, at: now };
 }
 function pbTodo_(e) {

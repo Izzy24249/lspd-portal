@@ -3,6 +3,9 @@
    Right: the promotion list. LT – Commander put officers on it (drag or →); High Command approves and pushes. */
 (function () {
   "use strict";
+  let LS_NL = false;
+  document.addEventListener("click", e => { if (e.target.closest && e.target.closest(".pbx-nl summary [data-copy]")) e.preventDefault(); }, true);   // copying the list shouldn't fold it
+  document.addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("pbx-nl")) LS_NL = e.target.open; }, true);
   let B = null, LOADING = false, Q = "", RF = "all", SHOW = "all", OPEN = {}, BUSY = false, DRAG = "";
   const M = () => window.MDT;
   const esc = s => M().esc(s);
@@ -25,6 +28,7 @@
   }
   function chips(o) {
     const it = k => o.items.find(x => x.auto === k), h = it("hours"), r = it("reports14"), t = it("tig"), out = [];
+    if (o.linked === false) out.push('<span class="pbx-chip nolink" title="Never signed in to the portal with Discord, so their duty hours can\'t be tracked yet. Ask them to sign in once.">🔗 NOT LINKED</span>');
     if (h) out.push('<span class="pbx-chip ' + (h.done ? (h.warn ? "warn" : "ok") : "no") + '" title="' + esc(h.t + (h.warn ? " · " + h.warn : "")) + '">⏱ ' + H(h.have) + "/" + H(h.need) + "h" + (h.warn ? " ⚠" : "") + "</span>");
     if (r) out.push('<span class="pbx-chip ' + (r.done ? "ok" : "no") + '" title="' + esc(r.t) + '">📝 ' + r.have + "/" + r.need + "</span>");
     if (t) out.push('<span class="pbx-chip ' + (t.done ? "ok" : "no") + '" title="Time in grade">TIG ' + (t.have == null ? "—" : t.have) + "/" + t.need + "d</span>");
@@ -40,7 +44,8 @@
     return '<div class="pbx-det">' + o.items.map(x => {
       const man = !x.auto, can = man && canTick, by = x.manual && x.by ? "Signed off by " + x.by : x.auto && x.done ? "Counted by the terminal" : "";
       let extra = "";
-      if (x.auto === "hours" && x.weeks) extra = '<div class="pbx-wk">' + x.weeks.slice().reverse().map(w => '<span class="' + (w.low ? "low" : w.cur ? "cur" : "") + '">' + (w.to ? day(w.from) + " – " + day(w.to) : "Week of " + day(w.from)) + (w.cur ? " (this week)" : "") + ": <b>" + H(w.min) + "h</b></span>").join("") + "</div>" + (x.warn ? '<div class="pbx-warn">⚠ Total met, but ' + esc(x.warn) + ".</div>" : "");
+      if (x.auto === "hours" && o.linked === false) extra = '<div class="pbx-warn">🔗 Not linked: they\'ve never signed in to the portal with Discord, so on-duty time isn\'t being tracked. Hours will count from the day they sign in.</div>';
+      else if (x.auto === "hours" && x.weeks) extra = '<div class="pbx-wk">' + x.weeks.slice().reverse().map(w => '<span class="' + (w.low ? "low" : w.cur ? "cur" : "") + '">' + (w.to ? day(w.from) + " – " + day(w.to) : "Week of " + day(w.from)) + (w.cur ? " (this week)" : "") + ": <b>" + H(w.min) + "h</b></span>").join("") + "</div>" + (x.warn ? '<div class="pbx-warn">⚠ Total met, but ' + esc(x.warn) + ".</div>" : "");
       const val = x.auto === "hours" ? H(x.have) + " / " + H(x.need) + " h" : x.auto && x.need ? (x.have == null ? "—" : x.have) + " / " + x.need : "";
       return '<div class="pbx-it' + (x.done ? " ok" : "") + (man ? " man" : "") + '">' +
         (can ? '<button class="pbx-box" data-pbcheck="' + esc(o.id) + "|" + esc(x.key) + "|" + (x.done ? 0 : 1) + '" title="' + (x.done ? "Undo sign-off" : "Sign off") + '">' + (x.done ? "✓" : "") + "</button>"
@@ -80,7 +85,7 @@
     if (!B.ok) return h + '<div class="empty">' + esc(B.error === "AUTH" ? "Sign on again to open the board." : B.error || "Couldn't load the board.") + "</div>";
     const all = B.officers, listed = all.filter(o => o.entry), ap = listed.filter(o => o.entry.status === "approved");
     h += '<div class="pbx-stats">' +
-      [["Officers", all.length, ""], ["Terminal ✓", all.filter(o => o.terminal).length, "term"], ["All met", all.filter(o => o.ready).length, "ready"], ["On the list", listed.length, "list"], ["Approved", ap.length, "ap"]]
+      [["Officers", all.length, ""], ["Terminal ✓", all.filter(o => o.terminal).length, "term"], ["All met", all.filter(o => o.ready).length, "ready"], ["On the list", listed.length, "list"], ["Approved", ap.length, "ap"], ["Not linked", (B.unlinked || []).length, "nl"]]
         .map(s => '<div class="' + s[2] + '"><b>' + s[1] + "</b><small>" + s[0] + "</small></div>").join("") + "</div>";
     if (B.period) { const P = B.period, fmt = t => new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
       h += '<div class="pbx-period' + (P.review ? " review" : "") + '"><span>' + (P.review ? "🎖️" : "🗓️") + "</span><div><b>" + (P.review ? "Promotion day: reviewing the period that just closed" : "Counting toward " + fmt(P.end).replace(/,? \d+:\d+ [AP]M$/, "") + " promotions") + "</b><small>Hours and reports from " + fmt(P.start) + " to " + fmt(P.end) + " ET. Weeks run Friday 2 PM to Friday 2 PM." +
@@ -91,12 +96,12 @@
       B.ranks.filter(r => all.some(o => o.idx === r.idx)).map(r => '<button data-pbrf="' + r.idx + '" class="' + (String(RF) === String(r.idx) ? "on" : "") + '" title="' + r.open + " open " + esc(r.next) + ' slot(s) on the roster">' + esc(r.abbr) + " → " + esc(nextAbbr(r.idx)) + " <small>" + all.filter(o => o.idx === r.idx).length + '</small><i class="' + (r.open ? "" : "no") + '">' + r.open + " open</i></button>").join("") + "</div>";
     const q = Q.trim().toLowerCase();
     let left = all.filter(o => !o.entry && (RF === "all" || String(o.idx) === String(RF)) && (!q || (o.name + " " + o.callsign + " " + o.rank).toLowerCase().indexOf(q) !== -1));
-    if (SHOW === "term") left = left.filter(o => o.terminal); if (SHOW === "ready") left = left.filter(o => o.ready);
+    if (SHOW === "term") left = left.filter(o => o.terminal); if (SHOW === "ready") left = left.filter(o => o.ready); if (SHOW === "nl") left = left.filter(o => o.linked === false);
     left.sort((a, b) => (b.ready - a.ready) || (b.terminal - a.terminal) || (b.done / (b.total || 1) - a.done / (a.total || 1)) || b.idx - a.idx);
     const right = listed.filter(o => RF === "all" || String(o.idx) === String(RF)).sort((a, b) => b.idx - a.idx || a.entry.at - b.entry.at);
     h += '<div class="pbx">' +
       '<section class="pbx-col"><header><span class="lbl">Officers</span><div class="pbx-tools"><input id="pbQ" placeholder="Search name or callsign" value="' + esc(Q) + '">' +
-      '<div class="seg"><button data-pbshow="all" class="' + (SHOW === "all" ? "on" : "") + '">ALL</button><button data-pbshow="term" class="' + (SHOW === "term" ? "on" : "") + '">TERMINAL ✓</button><button data-pbshow="ready" class="' + (SHOW === "ready" ? "on" : "") + '">ALL MET</button></div></div></header>' +
+      '<div class="seg"><button data-pbshow="all" class="' + (SHOW === "all" ? "on" : "") + '">ALL</button><button data-pbshow="term" class="' + (SHOW === "term" ? "on" : "") + '">TERMINAL ✓</button><button data-pbshow="ready" class="' + (SHOW === "ready" ? "on" : "") + '">ALL MET</button><button data-pbshow="nl" class="' + (SHOW === "nl" ? "on" : "") + '">NOT LINKED</button></div></div></header>' +
       '<div class="pbx-body">' + (left.length ? left.map(officerCard).join("") : '<div class="empty">No one here' + (q ? " matches that search" : "") + ".</div>") + "</div></section>" +
       '<section class="pbx-col list" data-pbdrop><header><span class="lbl">Promotion list</span><small>' + (B.me.nominate ? "Drag officers here or press →" : "") + "</small></header>" +
       '<div class="pbx-body">' + (right.length ? groupBy(right).map(g => '<div class="pbx-grp">' + esc(g.to) + " <small>" + g.list.length + " · " + g.open + " open slot" + (g.open === 1 ? "" : "s") + "</small></div>" + g.list.map(listCard).join("")).join("")
@@ -104,7 +109,7 @@
       (B.me.hc ? '<footer><button class="btn pbx-push' + (ap.length ? "" : " off") + '" data-pbpush>🎖️ PUSH ' + ap.length + " PROMOTION" + (ap.length === 1 ? "" : "S") + "</button><small>Updates the roster, highest ranks first.</small></footer>"
         : '<footer><small>' + (ap.length ? ap.length + " approved, waiting for High Command to push." : "High Command approves and pushes promotions.") + "</small></footer>") +
       "</section></div>";
-    h += followUps();
+    h += followUps() + unlinkedHTML();
     return h;
   }
   function nextAbbr(i) { const n = B.ranks.find(z => z.idx === i + 1); return n ? n.abbr : "CMDR"; }
@@ -112,6 +117,15 @@
     const g = [];
     list.forEach(o => { let x = g.find(y => y.idx === o.idx); if (!x) { const r = B.ranks.find(z => z.idx === o.idx); x = { idx: o.idx, to: o.next, open: r ? r.open : 0, list: [] }; g.push(x); } x.list.push(o); });
     return g;
+  }
+  // everyone on the rosters who hasn't signed in with Discord (their duty hours aren't tracked until they do)
+  function unlinkedHTML() {
+    const U = B.unlinked || []; if (!U.length) return "";
+    const txt = U.map(u => (u.callsign ? u.callsign + " | " : "") + u.name).join("\n");
+    return '<div class="sect"><span class="lbl">Not linked to Discord · ' + U.length + "</span></div>" +
+      '<details class="pbx-nl"' + (LS_NL ? " open" : "") + '><summary><span>🔗</span><div><b>' + U.length + " officer" + (U.length === 1 ? " hasn't" : "s haven't") + " signed in to the portal with Discord</b><small>Their on-duty time isn't tracked, so their hours show 0 here. Each of them needs to sign in once (portal → Sign in with Discord → set a PIN). Tracking starts from that moment.</small></div>" +
+      '<button class="pbx-btn ghost" data-copy="' + esc(txt) + '" data-what="Not-linked list">COPY LIST</button></summary>' +
+      '<div class="pbx-nl-list">' + U.map(u => "<span>" + (u.callsign ? "<code>" + esc(u.callsign) + "</code>" : "") + esc(u.name) + "<small>" + esc(u.rank) + "</small></span>").join("") + "</div></details>";
   }
   function followUps() {
     const rec = B.recent || []; if (!rec.length) return "";

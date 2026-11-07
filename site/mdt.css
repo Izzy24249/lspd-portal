@@ -909,3 +909,14 @@ button.pbx-box:hover{border-color:var(--green)}
 .pbx-period > span{font-size:22px} .pbx-period b{display:block;font-size:14px} .pbx-period small{display:block;color:var(--mute);font-size:12.5px;margin-top:2px}
 .pbx-period.review{border-color:rgba(232,181,74,.45);background:linear-gradient(90deg,rgba(232,181,74,.12),rgba(232,181,74,.02))} .pbx-period.review b{color:#f2c766}
 .pbx-wk span.cur{background:rgba(76,141,255,.12);color:var(--blue2)}
+.pbx-chip.nolink{background:rgba(255,93,108,.14);color:#ffb3ba;border:1px dashed rgba(255,93,108,.45)}
+.pbx-stats{grid-template-columns:repeat(6,1fr)} .pbx-stats .nl b{color:#ff9aa5}
+.pbx-nl{border-radius:14px;border:1px solid rgba(255,93,108,.3);background:var(--glass);margin-bottom:14px}
+.pbx-nl summary{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;list-style:none}
+.pbx-nl summary::-webkit-details-marker{display:none}
+.pbx-nl summary > span{font-size:22px} .pbx-nl summary div{flex:1;min-width:0} .pbx-nl summary b{display:block;font-size:14px} .pbx-nl summary small{display:block;color:var(--mute);font-size:12.5px;margin-top:2px;line-height:1.45}
+.pbx-nl-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;padding:0 14px 14px}
+.pbx-nl-list span{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.03);font-size:13px}
+.pbx-nl-list code{font:700 11px "JetBrains Mono",monospace;color:var(--blue2);background:rgba(76,141,255,.12);border-radius:5px;padding:1px 6px}
+.pbx-nl-list small{flex-basis:100%;color:var(--mute);font-size:11px}
+@media(max-width:640px){.pbx-stats{grid-template-columns:repeat(3,1fr)}}
