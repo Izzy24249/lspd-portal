@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 126;
+const BACKEND_VERSION = 127;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3792,6 +3792,8 @@ function dutyMine_(id, cur) {
   return { last: L[0] ? { start: L[0][0], end: L[0][1], minutes: L[0][2] } : null, week: sum(wk0.getTime()) + live, window: sum(now - goalD * 864e5) + live, live: live, goalMinutes: goalH * 60, goalDays: goalD };
 }
 // who's on duty right now (for the MDT and admin)
+// on-duty lists: highest rank first, then callsign order (L-401 before L-402)
+function dutyOrder_(a, b) { const n = c => { const m = /(\d+)/.exec(str_(c)); return m ? Number(m[1]) : 1e9; }; return ((b.ri == null ? -1 : b.ri) - (a.ri == null ? -1 : a.ri)) || (n(a.callsign) - n(b.callsign)); }
 function dpOnDuty_() {
   const DS = dpState_(), now = Date.now(); if (!DS.full || now - DS.full > 25 * 60e3) return null;
   const c = CacheService.getScriptCache(), hit = c.get("dp_onduty"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
@@ -3801,8 +3803,8 @@ function dpOnDuty_() {
     const mid = parts.length >= 2 ? parts[1] : raw, m = /^([A-Z]{2,5})\s+(.+)$/.exec(mid), id = str_(r[1]).replace(/^'/, "");
     const w = id ? (dutyWho_(id) || {}) : {}, rank = w.rank || (m ? m[1] : ""), ri = rankIndex_(rank);
     const since = isDate_(r[6]) ? r[6].getTime() : (isDate_(r[7]) ? r[7].getTime() : now);
-    return { id: id, name: w.name || (m ? m[2] : mid), callsign: w.callsign || cs, rank: rank, sup: ri >= 4, since: since, minutes: Math.max(0, Math.round((now - since) / 60000)) };
-  }).sort((a, b) => (b.sup - a.sup) || (a.since - b.since));
+    return { id: id, name: w.name || (m ? m[2] : mid), callsign: w.callsign || cs, rank: rank, ri: ri, sup: ri >= 4, since: since, minutes: Math.max(0, Math.round((now - since) / 60000)) };
+  }).sort(dutyOrder_);
   const out = { on: true, src: "dp", every: 10, checkedAt: DS.full, list: list, supervisors: list.filter(o => o.sup).length };
   try { c.put("dp_onduty", JSON.stringify(out), 60); } catch (e) {}
   return out;
@@ -3813,8 +3815,8 @@ function dutyBoard_() {
   const state = dutyState_(), now = Date.now();
   let last = {}; try { last = JSON.parse(PROPS_.getProperty("DUTY_LAST") || "{}"); } catch (e) {}
   const list = Object.keys(state).map(id => { const w = dutyWho_(id), ri = rankIndex_(w.rank);
-      return { id: id, name: w.name, callsign: w.callsign, rank: w.rank, sup: ri >= 4, since: state[id][0], minutes: Math.round((now - state[id][0]) / 60000) }; })
-    .sort((a, b) => (b.sup - a.sup) || (a.since - b.since));
+      return { id: id, name: w.name, callsign: w.callsign, rank: w.rank, ri: ri, sup: ri >= 4, since: state[id][0], minutes: Math.round((now - state[id][0]) / 60000) }; })
+    .sort(dutyOrder_);
   return { on: true, every: DUTY_EVERY_MIN_, checkedAt: last.t || 0, list: list, supervisors: list.filter(o => o.sup).length };
 }
 function officerHome_(d) {
