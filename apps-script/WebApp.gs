@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 123;
+const BACKEND_VERSION = 124;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5530,7 +5530,9 @@ function pbHandle_(d) {
 // what a push would do: approved officers, highest rank first, each into the first open slot of their next rank
 function pbPlan_(S) {
   S = S || pbSlots_();
-  const list = pbEntries_().filter(e => e.status === "approved").sort((a, b) => b.fromIdx - a.fromIdx || a.apAt - b.apAt);
+  const csNum = c => { const m = /(\d+)/.exec(str_(c)); return m ? Number(m[1]) : 1e9; };
+  // highest ranks first (they free the slots below them), then callsign order within a rank: L-701, L-702…
+  const list = pbEntries_().filter(e => e.status === "approved").sort((a, b) => b.fromIdx - a.fromIdx || csNum(a.callsign) - csNum(b.callsign));
   const freed = {}, taken = {}, plan = [];
   list.forEach(e => {
     const onb = e.fromIdx === 0, cur = onb ? (S.onb || []).find(x => x.id === e.id) : S.rows.find(x => x.id === e.id && !freed[x.r]);

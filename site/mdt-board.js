@@ -103,7 +103,7 @@
     let left = all.filter(o => !o.entry && (RF === "all" || String(o.idx) === String(RF)) && (!q || (o.name + " " + o.callsign + " " + o.rank).toLowerCase().indexOf(q) !== -1));
     if (SHOW === "term") left = left.filter(o => o.terminal); if (SHOW === "ready") left = left.filter(o => o.ready); if (SHOW === "nl") left = left.filter(o => o.linked === false);
     left.sort((a, b) => (b.ready - a.ready) || (b.terminal - a.terminal) || (b.done / (b.total || 1) - a.done / (a.total || 1)) || b.idx - a.idx);
-    const right = listed.filter(o => RF === "all" || String(o.idx) === String(RF)).sort((a, b) => b.idx - a.idx || a.entry.at - b.entry.at);
+    const right = listed.filter(o => RF === "all" || String(o.idx) === String(RF)).sort((a, b) => b.idx - a.idx || csN(a) - csN(b));
     h += '<div class="pbx">' +
       '<section class="pbx-col"><header><span class="lbl">Officers</span><div class="pbx-tools"><input id="pbQ" placeholder="Search name or callsign" value="' + esc(Q) + '">' +
       '<div class="seg"><button data-pbshow="all" class="' + (SHOW === "all" ? "on" : "") + '">ALL</button><button data-pbshow="term" class="' + (SHOW === "term" ? "on" : "") + '">TERMINAL ✓</button><button data-pbshow="ready" class="' + (SHOW === "ready" ? "on" : "") + '">ALL MET</button><button data-pbshow="nl" class="' + (SHOW === "nl" ? "on" : "") + '">NOT TRACKED</button></div></div></header>' +
@@ -153,6 +153,7 @@
       try { navigator.clipboard.writeText(r.key); M().toast("Sync key copied"); } catch (x) {}
     };
   }
+  function csN(o) { const m = /(\d+)/.exec(o.callsign || ""); return m ? +m[1] : 1e9; }
   function nextAbbr(i) { const n = B.ranks.find(z => z.idx === i + 1); return n ? n.abbr : "CMDR"; }
   function groupBy(list) {
     const g = [];
