@@ -1384,3 +1384,8 @@ body[data-ftheme="cru"] .fp-prev{border-color:rgba(251,146,60,.4);background:#10
 .edit-bar[hidden]{display:none!important}
 .edit-bar > span{font-size:20px}
 .edit-bar div{flex:1;min-width:0} .edit-bar b{display:block;font-size:14px;color:#fde68a} .edit-bar small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+
+/* owner/admin: their own badge can be removed on GOM Training / Academy Evaluation */
+.ofc-chip.ofc-me.can-x{position:relative;padding-right:30px}
+.ofc-chip.ofc-me.can-x .ofc-x{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:15px;line-height:1;opacity:.7;cursor:pointer}
+.ofc-chip.ofc-me.can-x .ofc-x:hover{opacity:1}

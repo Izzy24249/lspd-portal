@@ -444,7 +444,8 @@ window.Portal = (function () {
       let p = null; try { if (localStorage.getItem("lspd_sess")) p = JSON.parse(localStorage.getItem("lspd_prof") || "null"); } catch (e) {}
       if (!p || !p.discordId) return;
       const f = meField(); if (!f) return;
-      ME = { id: p.discordId, callsign: p.callsign || "", field: f.id };
+      // owner/admin may take themselves out of the instructor/evaluator spot on the GOM Training and Academy Evaluation
+      ME = { id: p.discordId, callsign: p.callsign || "", field: f.id, canRemove: ["owner", "admin"].indexOf(p.level) !== -1 && ["gomtraining", "academy"].indexOf(form.id) !== -1 };
       const hid = q(`[data-f="${CSS.escape(f.id)}"]`); if (!hid || hid.value) return;
       const onTab = rosterItems(f.rosterDivisions, f).find(it => it.id === p.discordId);
       if (fieldRoster(f) && !onTab) return;                       // a division box and they're not on that roster: leave it for them
@@ -1120,7 +1121,7 @@ window.Portal = (function () {
         chips.dataset.k = hid.value;
         if (mine) {   // their own spot: solid badge, regular callsign on top, can't be removed or changed
           const o = list[0], cs = ME.callsign, nm = cs ? String(o.name || "").replace(new RegExp("^\\s*" + cs.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\|\\s*"), "") : o.name;
-          chips.innerHTML = `<span class="ofc-chip ofc-me" title="Signed on as you · set from your officer account">${cs ? `<small>${esc(cs)}</small>` : ""}<b>${esc(nm || o.name)}</b></span>`;
+          chips.innerHTML = `<span class="ofc-chip ofc-me${ME.canRemove ? " can-x" : ""}" title="Signed on as you · set from your officer account">${cs ? `<small>${esc(cs)}</small>` : ""}<b>${esc(nm || o.name)}</b>${ME.canRemove ? `<b class="ofc-x" data-i="0" title="Remove yourself (owner/admin)">×</b>` : ""}</span>`;
           return;
         }
         chips.innerHTML = parseOfc(hid.value).map((o, i) => `<span class="ofc-chip" title="${esc(o.id ? "Discord ID " + o.id : "No Discord ID (won't be mentioned)")}">${esc(o.name || "@" + o.id)}${o.id ? "" : " <i>no ID</i>"}<b class="ofc-x" data-i="${i}" title="Remove">×</b></span>`).join("");
