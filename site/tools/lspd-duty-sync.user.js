@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.0.0
+// @version      1.1.0
 // @description  Reads Duty Portal hours, shifts and reports in your own logged-in browser and sends them to the LSPD MDT promotion board. Never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
@@ -18,11 +18,13 @@
   "use strict";
   if (window.top !== window) return;   // never inside the hidden frames it opens itself
   const ENDPOINT = "https://script.google.com/macros/s/AKfycbyQlnEtA7DJRHnnLJsalqvsvNK3yiuOmoBAlzNWM9qk2AebZEwyHkjtfKqxW9hB65jB/exec";
-  const BASE = "/portal/lspd", EVERY = 10 * 60e3, REVISIT = 12 * 3600e3, TAB = Math.random().toString(36).slice(2);
+  const BASE = "/portal/lspd", REVISIT = 24 * 3600e3, ONDUTY_REVISIT = 3 * 3600e3, TAB = Math.random().toString(36).slice(2);
   const get = (k, d) => { try { const v = GM_getValue(k); return v === undefined ? d : v; } catch (e) { return d; } };
   const set = (k, v) => { try { GM_setValue(k, v); } catch (e) {} };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   let RUNNING = false, STATUS = "", timer = null;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const nextGap = () => Math.round(rand(11, 15) * 60e3);   // each sync waits a random 11–15 minutes
 
   // ---------- little badge in the corner ----------
   const badge = document.createElement("div");
@@ -34,7 +36,7 @@
     const key = get("key", ""), paused = get("paused", false), last = get("last", 0), err = get("err", "");
     const dot = !key ? "#ffbe3d" : paused ? "#8b99b3" : err ? "#ff5d6c" : "#34d996";
     badge.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dot + ';margin-right:7px"></span>LSPD sync · ' +
-      (!key ? "click to set up" : paused ? "paused" : RUNNING ? STATUS || "syncing…" : err ? "error: " + err : "✓ " + ago(last));
+      (!key ? "click to set up" : paused ? "paused" : RUNNING ? STATUS || "syncing…" : err ? "error: " + err : "✓ " + ago(last) + (get("next", 0) > Date.now() ? " · next in " + Math.max(1, Math.round((get("next", 0) - Date.now()) / 60000)) + " min" : ""));
   }
   badge.onclick = () => {
     const key = get("key", "");
@@ -136,28 +138,32 @@
     const key = get("key", ""); if (!key || RUNNING || (get("paused", false) && !force)) return draw();
     // only one tab syncs at a time
     const lk = get("lock", null); if (lk && lk.tab !== TAB && Date.now() - lk.at < 3 * 60e3) { STATUS = ""; return draw(); }
-    if (!force && Date.now() - get("last", 0) < EVERY - 30e3) return draw();
+    if (!force && Date.now() < get("next", 0)) return draw();
     RUNNING = true; set("lock", { tab: TAB, at: Date.now() }); const beat = setInterval(() => set("lock", { tab: TAB, at: Date.now() }), 30e3);
     try {
       STATUS = "reading officers…"; draw();
       const list = await readList(), seen = get("seen", {}), now = Date.now();
       // open a profile when they're on duty, their hours moved, or we haven't looked in 12 hours
       const active = o => /on duty/i.test(o.status) || (o.seenAt && now - o.seenAt < 21 * 864e5);   // profiles only for people active in the last 3 weeks
-      const todo = list.filter(o => active(o)).filter(o => { const s = seen[o.pid]; return !s || /on duty/i.test(o.status) || s.total !== o.total || now - s.at > REVISIT; });
+      // open a profile only when something changed: hours moved, they clocked in/out, or it's been a while (3 h while on duty, else a day)
+      const todo = list.filter(o => active(o)).filter(o => { const s = seen[o.pid], on = /on duty/i.test(o.status);
+        return !s || s.total !== o.total || s.status !== o.status || now - s.at > (on ? ONDUTY_REVISIT : REVISIT); });
       let r = await send({ action: "dpSync", key: key, officers: list, profiles: [] });
       if (!r.ok) throw new Error(r.error || "MDT refused the update");
       let batch = [];
       for (let i = 0; i < todo.length; i++) {
         STATUS = "reading profiles " + (i + 1) + "/" + todo.length; draw(); set("lock", { tab: TAB, at: Date.now() });
         const p = await readProfile(todo[i].pid).catch(() => null);
-        if (p && p.discord) { batch.push(p); seen[todo[i].pid] = { total: todo[i].total, at: Date.now() }; }
+        if (p && p.discord) { batch.push(p); seen[todo[i].pid] = { total: todo[i].total, status: todo[i].status, at: Date.now() }; }
+        await sleep(rand(1500, 4500));   // unhurried, like a person clicking through
         if (batch.length >= 15 || (i === todo.length - 1 && batch.length)) {
           r = await send({ action: "dpSync", key: key, profiles: batch }); if (!r.ok) throw new Error(r.error || "MDT refused the update");
           set("seen", seen); batch = [];
         }
       }
       set("last", Date.now()); set("err", "");
-    } catch (e) { set("err", String(e.message || e).slice(0, 80)); }
+      set("next", Date.now() + nextGap());
+    } catch (e) { set("err", String(e.message || e).slice(0, 80)); set("next", Date.now() + nextGap()); }
     finally { clearInterval(beat); RUNNING = false; STATUS = ""; if (frame) { frame.remove(); frame = null; } set("lock", null); draw(); }
   }
   draw();
