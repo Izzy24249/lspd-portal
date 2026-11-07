@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 113;
+const BACKEND_VERSION = 114;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5355,6 +5355,12 @@ function pbSlots_() {
       onb.push({ r: i + 1, cs: str_(od[i][0]).trim(), name: str_(od[i][2]).trim(), id: id, nameRaw: ov[i][2], idRaw: ov[i][3], idx: 0, billet: "Police Officer (Onboarding)" }); } }
   return { sh: sh, rows: rows, ob: ob, onb: onb };
 }
+// the drop-down's own spelling of an option (matched ignoring case), so the reset value is always a valid choice
+function pbDropOpt_(cell, want) {
+  try { const v = cell.getDataValidation(); if (v && v.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) {
+    const hit = (v.getCriteriaValues()[0] || []).find(x => str_(x).trim().toLowerCase() === want.toLowerCase()); if (hit != null) return str_(hit); } } catch (e) {}
+  return want;
+}
 function pbOpenSlot_(S, idx) { return S.rows.find(x => x.idx === idx && !x.head && !x.name && !x.id && !x.fx); }
 function pbView_(acct, A) {
   const now = Date.now(), R = pbRules_(), L = promoLadderKeys_(), checks = pchkAll_(), duty = dutySums_(); SOP_MEMO_ = sopIds_();
@@ -5470,7 +5476,7 @@ function pbPush_(A) {
       sh.getRange(p.toRow, 5, 1, 2).setValues([[src.nameRaw, typeof src.idRaw === "number" ? src.id : str_(src.idRaw)]]);   // name + Discord ID into the new slot (values only)
       if (!p.fxG) sh.getRange(p.toRow, 7).setValue(today);                           // time in grade starts today
       if (p.onb) {   // PO → PO II: empty their Onboarding row (name, Discord ID, date); Status back to Good, Training Status back to BPA Needed
-        S.ob.getRange(p.fromRow, 3, 1, 2).clearContent(); S.ob.getRange(p.fromRow, 11).clearContent(); S.ob.getRange(p.fromRow, 9, 1, 2).setValues([["Good", "BPA Needed"]]);
+        S.ob.getRange(p.fromRow, 3, 1, 2).clearContent(); S.ob.getRange(p.fromRow, 11).clearContent(); S.ob.getRange(p.fromRow, 9, 1, 2).setValues([[pbDropOpt_(S.ob.getRange(p.fromRow, 9), "GOOD"), pbDropOpt_(S.ob.getRange(p.fromRow, 10), "BPA NEEDED")]]);
       } else sh.getRange(p.fromRow, 5, 1, 3).clearContent();                         // old slot: E, F, G emptied
       pb.getRange(e.row, 8).setValue("promoted"); pb.getRange(e.row, 14, 1, 3).setValues([[new Date(), p.newCs, cellSafe_((p.onb ? "From Onboarding row " + p.fromRow + " to" : "Moved to") + " Personnel row " + p.toRow + " (" + p.newCs + ") by " + A.who)]]);
       done.push(Object.assign({}, p, { at: Date.now() }));
