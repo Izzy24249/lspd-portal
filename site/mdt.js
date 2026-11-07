@@ -425,6 +425,14 @@
   // ---------- unit life: kudos, awards, training, knowledge checks ----------
   let UNIT = LS.json("mdt:unit"), TAKING = null;
   async function loadUnit() { const r = await Portal.post({ action: "unitView", session: SESSION }).catch(() => null); if (r && r.ok) { UNIT = r; LS.set("mdt:unit", JSON.stringify(r)); } else if (!UNIT) UNIT = { error: (r && r.error) || "Couldn't load." }; if (VIEW === "unit" || VIEW === "training" || VIEW === "home") draw(); }
+  // instant: say it's done, save in the background, then quietly refresh the Unit page
+  function quickUnit(action, data, msg, undo) {
+    if (msg) toast(msg);
+    Portal.post(Object.assign({ action: action, session: SESSION, quick: true }, data)).catch(() => ({ ok: false, error: "Couldn't reach the server." })).then(r => {
+      if (!r || !r.ok) { if (undo) undo(); toast("Didn't save: " + ((r && r.error) || "something went wrong") + ""); return; }
+      Portal.post({ action: "unitView", session: SESSION }).then(v => { if (v && v.ok) { UNIT = v; LS.set("mdt:unit", JSON.stringify(v)); if (VIEW === "unit") draw(); } }).catch(() => {});
+    });
+  }
   async function unit(action, data, msg) {
     const r = await Portal.post(Object.assign({ action: action, session: SESSION }, data)).catch(() => ({ ok: false, error: "Couldn't reach the server." }));
     if (r.ok) { UNIT = r; LS.set("mdt:unit", JSON.stringify(r)); if (msg) toast(msg); draw(); } else toast(r.error || "Something went wrong.");
@@ -824,7 +832,9 @@
       return;
     }
     if (e.target.closest("[data-kudo]")) { const m = modal('<h3>👏 Give kudos</h3><label>Officer<select id="kTo"><option value="">Pick from the roster…</option>' + peopleOpts() + '</select></label><label>What did they do?<textarea id="kMsg" rows="4" maxlength="300" placeholder="Great pursuit call-outs on Route 68 last night."></textarea></label>' + (UNIT.dm ? '<p class="md-note">They also get a Discord DM.</p>' : "") + '<div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="kGo">SEND</button></div>');
-      m.querySelector("#kGo").onclick = async () => { const r = await unit("unitKudos", { to: m.querySelector("#kTo").value, msg: m.querySelector("#kMsg").value }, "Kudos sent 👏"); if (r.ok) m.hidden = true; }; return; }
+      m.querySelector("#kGo").onclick = () => { const to = m.querySelector("#kTo").value, msg = m.querySelector("#kMsg").value.trim();
+        if (!to) return toast("Pick an officer from the roster."); if (msg.length < 3) return toast("Say what they did.");
+        m.hidden = true; quickUnit("unitKudos", { to: to, msg: msg }, "Kudos sent 👏"); }; return; }
     if (e.target.closest("[data-award]")) {
       const awardable = ((UNIT.rack && UNIT.rack.guide) || []).filter(g => g.how === "award");
       const m = modal('<h3>🎖️ Award</h3><div class="seg" id="aType"><button type="button" class="on" data-t="ribbon">RIBBON</button><button type="button" data-t="ootm">OFFICER OF THE MONTH</button></div>' +
@@ -833,7 +843,14 @@
         '<label><span id="aNL">Citation: what they did</span><textarea id="aNote" rows="3" maxlength="300" placeholder="Pulled a driver from a burning vehicle on the Del Perro Freeway while under fire."></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="aGo">AWARD</button></div>');
       const prev = () => { const g = awardable.find(x => x.id === m.querySelector("#aRb").value); m.querySelector("#aPrev").innerHTML = g ? ribbonSVG(g, 1, 90) + "<p>" + esc(g.desc) + "</p>" : ""; }; prev(); m.querySelector("#aRb").onchange = prev;
       let type = "ribbon"; m.querySelector("#aType").onclick = ev => { const b = ev.target.closest("[data-t]"); if (!b) return; type = b.dataset.t; m.querySelectorAll("#aType button").forEach(x => x.classList.toggle("on", x === b)); m.querySelector("#aRL").hidden = m.querySelector("#aPrev").hidden = type === "ootm"; m.querySelector("#aNL").textContent = type === "ootm" ? "Note (optional)" : "Citation: what they did"; };
-      m.querySelector("#aGo").onclick = async () => { const r = await unit("unitAward", { type: type, to: m.querySelector("#aTo").value, ribbon: m.querySelector("#aRb").value, note: m.querySelector("#aNote").value }, "Awarded 🎖️"); if (r.ok) m.hidden = true; }; return; }
+      m.querySelector("#aGo").onclick = () => { const to = m.querySelector("#aTo").value, note = m.querySelector("#aNote").value.trim(), rbId = m.querySelector("#aRb").value;
+        if (!to) return toast("Pick an officer from the roster."); if (type === "ribbon" && !note) return toast("Say what it's for (the citation).");
+        const g = awardable.find(x => x.id === rbId), who0 = ((UNIT.people || []).find(p => p.i === to) || {}).n || "";
+        m.hidden = true; blip(1500);
+        // shows in "Recent awards" straight away; the server saves (and DMs them) in the background
+        const tmp = { id: "tmp" + Date.now(), at: Date.now(), type: type, title: type === "ootm" ? "Officer of the Month" : (g ? g.name : "Ribbon"), emoji: type === "ootm" ? "🏆" : "rb:" + rbId, rb: type === "ootm" ? "" : rbId, toId: to, to: who0, by: ((DATA && DATA.profile) || {}).name || "You", note: note };
+        UNIT.recentAwards = [tmp].concat(UNIT.recentAwards || []); draw();
+        quickUnit("unitAward", { type: type, to: to, ribbon: rbId, note: note }, "Awarded 🎖️ " + (who0.replace(/^.*\|\s*/, "") || ""), () => { UNIT.recentAwards = (UNIT.recentAwards || []).filter(x => x !== tmp); draw(); }); }; return; }
     if (e.target.closest("[data-newsess]")) { const m = modal('<h3>Post a training session</h3><label>Training<input id="sTopic" maxlength="120" placeholder="Felony stops & radio procedure"></label><label>When<input id="sWhen" type="datetime-local"></label><label>Spots (0 = no limit)<input id="sSlots" type="number" min="0" max="50" value="4"></label><label>Details (optional)<textarea id="sDet" rows="3" maxlength="600" placeholder="Meet at Mission Row garage."></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="sGo">POST</button></div>');
       m.querySelector("#sGo").onclick = async () => { const w = m.querySelector("#sWhen").value; const r = await unit("unitSession", { topic: m.querySelector("#sTopic").value, when: w ? new Date(w).toISOString() : "", slots: m.querySelector("#sSlots").value, details: m.querySelector("#sDet").value }, "Session posted."); if (r.ok) m.hidden = true; }; return; }
     if (e.target.closest("[data-newcheck]")) { const m = modal('<h3>New knowledge check</h3><label>Title<input id="cTitle" maxlength="100" placeholder="10-codes basics"></label><label>Pass mark (%)<input id="cPass" type="number" min="1" max="100" value="80"></label><label>Questions per attempt (0 = all, otherwise picked at random)<input id="cDraw" type="number" min="0" max="50" value="0"></label><label>Questions<textarea id="cQs" rows="10" placeholder="One question per block, blank line between blocks. Mark the right answer with *.&#10;&#10;What does 10-8 mean?&#10;*In service&#10;Out of service&#10;Busy&#10;&#10;Which code is officer down?&#10;10-4&#10;*10-99"></textarea></label><div class="md-act"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="cGo">SAVE</button></div>');

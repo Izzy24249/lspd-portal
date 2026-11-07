@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 118;
+const BACKEND_VERSION = 119;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2599,6 +2599,9 @@ function ribbonUnitTabs_() {
   return out;
 }
 // everything the automatic ribbons need, for every officer, worked out once (15 min)
+function ribbonBump_(id, fn) {
+  try { const hit = bigGet_("ribbon_stats_v1"); if (!hit) return; const S = JSON.parse(hit), x = S[id]; if (!x) return; fn(x); bigPut_("ribbon_stats_v1", JSON.stringify(S), 900); } catch (e) {}
+}
 function ribbonStats_(fresh) {
   const cache = CacheService.getScriptCache(), ck = "ribbon_stats_v1";
   if (!fresh) { const hit = bigGet_(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
@@ -2687,9 +2690,9 @@ function unitAct_(d) {
     const to = who(d.to), msg = clip_(str_(d.msg), 300); if (!to) return { ok: false, error: "Pick an officer from the roster." }; if (to.i === m.id) return { ok: false, error: "Kudos are for someone else 🙂" }; if (msg.length < 3) return { ok: false, error: "Say what they did." };
     const ck = "kudo_" + m.id + "_" + to.i, c = CacheService.getScriptCache(); if (c.get(ck)) return { ok: false, error: "You just sent them kudos. Try again later." }; c.put(ck, "1", 3600);
     withLock_(() => { tab_("Kudos", KUDOS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), "'" + m.id, cellSafe_(m.name), "'" + to.i, cellSafe_((to.cs ? to.cs + " | " : "") + to.n), cellSafe_(msg)]); return { ok: true }; });
-    try { CacheService.getScriptCache().remove("ribbon_stats_v1_n"); } catch (e) {}
+    ribbonBump_(to.i, x => { x.kudos = (x.kudos || 0) + 1; });
     dm_(to.i, "👏 **Kudos from " + m.name + "** on the LSPD MDT:\n> " + msg);
-    return unitView_(acct);
+    return d.quick ? { ok: true } : unitView_(acct);
   }
   if (a === "unitAward") {
     if (!atLeast_(m, "command")) return { ok: false, error: "Command staff give ribbons and Officer of the Month." };
@@ -2699,10 +2702,10 @@ function unitAct_(d) {
     const title = type === "ootm" ? "Officer of the Month · " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMMM yyyy") : rb.name;
     if (type === "ribbon" && !str_(d.note)) return { ok: false, error: "Say what it's for (the citation)." };
     withLock_(() => { tab_("Awards", AWARDS_).appendRow([Utilities.getUuid().slice(0, 8), new Date(), type, cellSafe_(title), type === "ootm" ? "🏆" : "rb:" + rb.id, "'" + to.i, cellSafe_((to.cs ? to.cs + " | " : "") + to.n), cellSafe_(m.name), cellSafe_(clip_(str_(d.note), 300))]); return { ok: true }; });
-    try { CacheService.getScriptCache().remove("ribbon_stats_v1_n"); } catch (e) {}
+    ribbonBump_(to.i, x => { if (type === "ootm") x.ootm = (x.ootm || 0) + 1; else (x.awards = x.awards || []).push({ rb: rb.id, at: Date.now(), by: m.name, note: clip_(str_(d.note), 300) }); });
     dm_(to.i, (type === "ootm" ? "🏆 **You're LSPD Officer of the Month!**" : "🎖️ **You've been awarded the " + title + ".**") + " — " + m.name + (str_(d.note) ? "\n> " + clip_(str_(d.note), 300) : ""));
     try { CacheService.getScriptCache().remove("mdt_dept"); } catch (e) {}
-    return unitView_(acct);
+    return d.quick ? { ok: true, award: { id: "", at: Date.now(), type: type, title: title, emoji: type === "ootm" ? "🏆" : "rb:" + rb.id, rb: type === "ootm" ? "" : rb.id, toId: to.i, to: (to.cs ? to.cs + " | " : "") + to.n, by: m.name, note: clip_(str_(d.note), 300) } } : unitView_(acct);
   }
   if (a === "unitSession") {
     if (!atLeast_(m, "fto")) return { ok: false, error: "FTOs and up post training sessions." };
