@@ -583,7 +583,7 @@
   }
   function promoReqs(r, marks) {
     const mk = (i) => { const m = marks && marks[i]; if (!m) return ""; return '<span class="pr-mark ' + (m.done ? "ok" : "") + '">' + (m.done ? "✓ " : "") +
-      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.auto === "gom" ? (m.split ? gomSplit(m) : m.have + " / " + m.need + " GOM Trainings") : m.auto === "ra" ? m.have + " / " + m.need + " Academy Evaluations" : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
+      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.auto === "gom" ? (m.split ? gomSplit(m) : m.have + " / " + m.need + " GOM Trainings") : m.auto === "ra" ? m.have + " / " + m.need + " Academy Evaluations" : (m.auto === "cplcert" || m.auto === "cplhost") ? esc(cplTxt(m)) : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
     return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map((q, i) => '<li class="' + (marks && marks[i] && marks[i].done ? "ok" : "") + '"><b>' + reqText(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
       (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + mk(i) + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
   }
@@ -624,6 +624,11 @@
   // ---------- promotion tracker: one grid per rank (from the Promotion Guidelines doc) + the Training Progression programs ----------
   // same look as the forms page's progression boards: a column per requirement, check marks, TIG days, progress bar
   // "1 as Lead Instructor & 1 as Certified FTO" requirements: each role on its own
+  function cplTxt(it) {
+    if (it.auto === "cplcert") return (it.parts || []).map(p => (p.done ? "✓ " : "○ ") + p.t).join(" · ");
+    if (it.auto === "cplhost") return it.locked ? "🔒 Unlocks once they're a certified Basic Training Instructor (witness + lead above)" : it.have + " of " + it.need + " Basic Trainings hosted since certifying";
+    return "";
+  }
   function gomSplit(it) { return it && it.split ? "Lead instructor " + it.split.lead[0] + "/" + it.split.lead[1] + " · Certified FTO for a CPL " + it.split.fto[0] + "/" + it.split.fto[1] : ""; }
   let TRACK = null, TRK_TAB = LS.get("mdt:trkTab") || "", TRK_Q = "", TRK_F = "all", TRK_SORT = LS.get("mdt:trkSort") || "callsign", TRK_OPEN = {}, TRK_BUSY = false, PROGS = {};
   const isCommand = () => { const lv = ((DATA && DATA.profile) || LS.json("lspd_prof") || {}).level; return ["command", "admin", "owner"].indexOf(lv) !== -1; };
@@ -639,6 +644,8 @@
     if (it.auto === "reports") return it.need + " reports";
     if (it.auto === "sop") return "SOP certified";
     if (it.auto === "gom") return "Host " + it.need + " trainings";
+    if (it.auto === "cplcert") return "BT instructor cert";
+    if (it.auto === "cplhost") return "Host " + it.need + " BTs";
     if (it.auto === "ra") return it.need + " PO RAs";
     const t = String(it.t || "");
     if (/hours?\s+logged/i.test(t)) { const h = /\((\d+)\)\s*hours/i.exec(t), d = /\((\d+)\)\s*days/i.exec(t); return (h ? h[1] + " hrs" : "Hours") + (d ? " / " + d[1] + "d" : ""); }
@@ -681,11 +688,14 @@
   function rankBoard(r) {
     const can = !!TRACK.canTick, list = (TRACK.officers || []).filter(o => o.listed && o.idx === r.idx);
     const items0 = (list[0] && list[0].items) || (r.reqs || []).map(t => ({ t: t.t }));
-    const tasks = items0.map(it => ({ short: reqShort(it), title: it.t, sub: it.auto === "tig" ? it.need + " days" : it.auto === "reports" ? "×" + it.need : it.auto === "sop" ? "Discord role" : it.auto === "gom" ? (it.split ? it.split.lead[1] + " lead + " + it.split.fto[1] + " FTO · GOM Training" : "×" + it.need + " · GOM Training reports") : it.auto === "ra" ? "×" + it.need + " · Academy Evaluations" : "" }));
+    const tasks = items0.map(it => ({ short: reqShort(it), title: it.t, sub: it.auto === "tig" ? it.need + " days" : it.auto === "reports" ? "×" + it.need : it.auto === "sop" ? "Discord role" : it.auto === "gom" ? (it.split ? it.split.lead[1] + " lead + " + it.split.fto[1] + " FTO · GOM Training" : "×" + it.need + " · GOM Training reports") : it.auto === "ra" ? "×" + it.need + " · Academy Evaluations" : it.auto === "cplcert" ? "Witness + lead" : it.auto === "cplhost" ? "×" + it.need + " · after cert" : "" }));
     const rows = list.map(o => {
       const key = o.id || (o.callsign + "|" + o.name);
       const cells = o.items.map(it => {
         if (it.done) return '<span class="pb-c ok" title="' + esc(it.manual ? "Signed off by " + it.by : "Counted automatically") + '">✓</span>';
+        if (it.auto === "cplhost" && it.locked) return '<span class="pb-c lk" title="' + esc(cplTxt(it)) + '">🔒</span>';
+        if (it.auto === "cplcert" || it.auto === "cplhost") { const need = Math.max(1, it.need), have = it.have || 0;
+          return '<span class="pb-c part" title="' + esc(cplTxt(it)) + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + have + "/" + it.need + "</span>"; }
         if (it.auto === "tig" || it.auto === "reports" || it.auto === "gom" || it.auto === "ra") { const have = it.have == null ? 0 : it.have, need = Math.max(1, it.need);
           return '<span class="pb-c part" title="' + esc(it.auto === "tig" ? (it.have == null ? "No TIG date on the roster" : have + " of " + it.need + " days") : it.auto === "gom" ? (it.split ? gomSplit(it) : have + " of " + it.need + " GOM Trainings led or supervised") : it.auto === "ra" ? have + " of " + it.need + " Academy Evaluations tagged on" : have + " of " + it.need + " reports") + '"><i style="--p:' + Math.min(100, Math.round(have / need * 100)) + '%"></i>' + (it.auto === "tig" ? (it.have == null ? "—" : have + "d") : have + "/" + it.need) + "</span>"; }
         return '<span class="pb-c zero" title="Not done yet">·</span>';
@@ -693,7 +703,8 @@
       const tigNeed = r.tig || 0, chip = o.tigDays == null ? { txt: "TIG —", ok: false } : { txt: "TIG " + o.tigDays + "d", ok: !tigNeed || o.tigDays >= tigNeed };
       const detail = '<div class="pb-detail">' + o.items.map((it, i) => '<div class="pd-item' + (it.done ? " ok" : "") + '"><div class="pd-h"><span class="pd-n">' + (i + 1) + "</span><b>" + reqText(it.t) + "</b><em>" + (it.done ? "Done" : "Open") + "</em></div><p>" +
         (it.auto === "tig" ? (it.have == null ? "No time-in-grade date on the roster (column G)." : it.have + " of " + it.need + " days.") : it.auto === "reports" ? it.have + " of " + it.need + " reports since reaching this rank." : it.auto === "sop" ? (it.have ? "Has the SOP Certified role in Discord." : "No SOP Certified role in Discord yet.") :
-        it.auto === "gom" ? (it.split ? gomSplit(it) + " (GOM Trainings since reaching this rank)." : it.have + " of " + it.need + " Global Operation Manual Trainings they led or supervised, since reaching this rank.") : it.auto === "ra" ? it.have + " of " + it.need + " Academy Evaluations they're tagged on, since reaching this rank." : "") +
+        it.auto === "gom" ? (it.split ? gomSplit(it) + " (GOM Trainings since reaching this rank)." : it.have + " of " + it.need + " Global Operation Manual Trainings they led or supervised, since reaching this rank.") : it.auto === "ra" ? it.have + " of " + it.need + " Academy Evaluations they're tagged on, since reaching this rank." : it.auto === "cplhost" ? cplTxt(it) + "." : "") +
+        (it.auto === "cplcert" ? '<span class="pd-parts">' + (it.parts || []).map(p => '<span class="' + (p.done ? "ok" : "") + '">' + (p.done ? "✓" : "○") + " " + esc(p.t) + "</span>").join("") + "</span>" : "") +
         (it.manual ? " Signed off by " + esc(it.by) + (it.at ? " on " + new Date(it.at).toLocaleDateString() : "") + "." : !it.auto && !it.done ? " Command signs this off." : "") + "</p>" +
         (can ? (it.done && !it.manual ? '<span class="pd-check auto"><i>✓</i>Counted automatically</span>'
           : '<button class="pd-check' + (it.done ? " on" : "") + '" data-tcheck="' + esc(o.id) + "|" + esc(it.key) + "|" + (it.manual ? "0" : "1") + '"><i>' + (it.done ? "✓" : "") + "</i>" + (it.done ? "Signed off · tap to undo" : "Tick to sign off") + "</button>") : "") + "</div>").join("") + "</div>";

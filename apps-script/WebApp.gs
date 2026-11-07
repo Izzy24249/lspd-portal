@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 120;
+const BACKEND_VERSION = 121;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3200,6 +3200,11 @@ function reqKey_(idx, t) { let h = 5381; const x = str_(t).toLowerCase().replace
 // Global Operation Manual Training -> trainings, Academy Evaluation -> PO RAs
 const TAG_FORMS_ = { gom: "gomtraining", ra: "academy" };
 function reqAuto_(t, sopOn, idx) {
+  if (idx === 3) {   // Corporal: Basic Training Instructor certification, then hosting on their own
+    const h = /after being certified/i.test(t) && /host\s*(?:a\s+minimum\s+of\s+)?\(?(\d+)\)?/i.exec(t);
+    if (h) return { type: "cplhost", need: Number(h[1]) || 3 };
+    if (/certified\s+basic\s+training\s+instructor/i.test(t) && /witness/i.test(t) && /lead/i.test(t)) return { type: "cplcert", need: 2 };
+  }
   if (idx >= 4) {
     const n = (/(?:minimum of|at least|min\.?)\s*(\d+)/i.exec(t) || /\((\d+)\)/.exec(t) || [])[1];
     if (/training/i.test(t) && /\b(host|lead|conduct|run|teach|instruct)/i.test(t)) {
@@ -3261,6 +3266,21 @@ function promoPeopleRead_() {
       const m = tag[k] || {}; Object.keys(m).forEach(f => Object.keys(m[f]).forEach(row => { if (m[f][row] >= from) (got[f] = got[f] || {})[row] = 1; })); });
     const n = k => Object.keys(got[k] || {}).length, host = Object.assign({}, got.gom_lead || {}, got.gom_fto || {});
     o.tagged = { gom: Object.keys(host).length, gomAny: n(TAG_FORMS_.gom), gomLead: n("gom_lead"), gomFto: n("gom_fto"), gomWitness: n("gom_witness"), ra: n(TAG_FORMS_.ra) }; });
+  // Corporals: Basic Training Instructor certification (witness one, then lead one with a SGT+ in the Supervising box),
+  // then the trainings they host after that (a SGT+ may supervise or not)
+  const pById = {}, pByCs = {}; out.forEach(o => { if (o.id) pById[o.id] = o; if (o.callsign) pByCs[callKey_(o.callsign)] = o; });
+  const isSgt = x => { const p = (x.i && pById[x.i]) || (callKey_(x.n) && pByCs[callKey_(x.n)]); return !!p && !p.trainee && p.idx >= 4; };
+  const gomRows = rows.filter(r => r.form === TAG_FORMS_.gom).sort((a, b) => a.at - b.at);
+  out.forEach(o => { if (o.trainee || o.idx !== 3) return;
+    const mine = x => x.i ? x.i === o.id : ((o.callsign && callKey_(x.n) && callKey_(x.n) === callKey_(o.callsign)) || (nameKey_(x.n) && nameKey_(x.n) === nameKey_(o.name)));
+    const W = [], Lh = [], H = [];
+    gomRows.forEach(r => { if (o.since && r.at < o.since) return; const P = r.people || [], me = P.filter(mine); if (!me.length) return;
+      const roles = me.map(x => role[x.f]), supSgt = P.some(x => role[x.f] === "fto" && isSgt(x));
+      if (roles.indexOf("witness") !== -1) W.push(r.at);
+      if (roles.indexOf("lead") !== -1) { if (supSgt) Lh.push(r.at); H.push(r.at); } });
+    const certAt = W.length && Lh.length ? Math.max(W[0], Lh[0]) : 0;
+    o.cpl = { witness: W.length, lead: Lh.length, certAt: certAt, host: certAt ? H.filter(t => t > certAt).length : 0 };
+  });
   return out;
 }
 var SOP_MEMO_ = null;
@@ -3270,12 +3290,15 @@ function promoEval_(o, rankReqs, checks) {
     const c = mine[q.key], a = q.auto; let have = null, auto = false;
     if (a && a.type === "tig") { have = o.tigDays; auto = have != null && have >= a.need; }
     if (a && a.type === "reports") { have = o.reports; auto = have >= a.need; }
-    let split = null;
+    let split = null, parts = null, locked = false;
+    if (a && a.type === "cplcert") { const C = o.cpl || {}; parts = [{ t: "Witness a Basic Training (in the Witness box)", done: (C.witness || 0) >= 1 }, { t: "Lead a Basic Training with a SGT+ in the Supervising box", done: (C.lead || 0) >= 1 }];
+      have = parts.filter(x => x.done).length; auto = have >= 2; }
+    if (a && a.type === "cplhost") { const C = o.cpl || {}; locked = !C.certAt; have = C.host || 0; auto = !locked && have >= a.need; }
     if (a && a.type === "gom" && (a.lead || a.fto)) { const T = o.tagged || {}, l = T.gomLead || 0, f = T.gomFto || 0;
       split = { lead: [l, a.lead || 0], fto: [f, a.fto || 0] }; have = Math.min(l, a.lead || 0) + Math.min(f, a.fto || 0); auto = l >= (a.lead || 0) && f >= (a.fto || 0); }
     else if (a && (a.type === "gom" || a.type === "ra")) { have = (o.tagged || {})[a.type] || 0; auto = have >= a.need; }
     if (a && a.type === "sop") { have = SOP_MEMO_ ? (SOP_MEMO_[o.id] ? 1 : 0) : (sopIds_()[o.id] ? 1 : 0); auto = have >= 1; }
-    return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, split: split, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
+    return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, split: split, parts: parts, locked: locked, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
   });
   return { items: items, done: items.filter(x => x.done).length, total: items.length, ready: items.length > 0 && items.every(x => x.done) };
 }

@@ -942,3 +942,5 @@ button.pbx-box:hover{border-color:var(--green)}
 .md-box select option,.tr-sel option,.pbx-rx select option,.md-box select optgroup{background:#0e1626;color:var(--tx)}
 .md-box select option:checked,.tr-sel option:checked{background:#1d3a6e;color:#fff}
 .md-box select option[value=""]{color:var(--mute)}
+.pd-parts{display:grid;gap:4px;margin-top:6px;font-style:normal}
+.pd-parts span{font-size:12.5px;color:var(--mute)} .pd-parts span.ok{color:#4ade80}
