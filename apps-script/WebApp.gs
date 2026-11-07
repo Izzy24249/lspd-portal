@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 121;
+const BACKEND_VERSION = 122;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -4218,6 +4218,7 @@ function handleAdmin_(d) {
   if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
   if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|Preview|Push|SyncKey|SyncKeys|SyncRevoke)$/.test(a)) return pbHandle_(d);
   if (a === "dpSync") return dpSync_(d);
+  if (/^ob(Board|Add|Unlist|Preview|Push)$/.test(a)) return obHandle_(d);
   if (a === "builderLog") return builderLog_(d);
   if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose|CheckScores)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
@@ -5686,4 +5687,119 @@ function dpNewKey_(A) {
   K.push({ h: dpHash_(key), by: A.who, label: A.who, at: Date.now() });
   PROPS_.setProperty("DP_KEYS", JSON.stringify(K));
   return key;
+}
+
+// =====================================================================================================================
+// ---- Onboarding removals (MDT → Onboarding removals) ----
+// Left: everyone on the LSPD Onboarding Roster with their onboarding deadline (out of time first).
+// Right: the removal list. LT+ add people; High Command pushes. A push, for each person:
+//   copies A–D of their Onboarding Roster row (values) to "Onboarding Terminations" — each push starts one blank line
+//   below the last entry — puts today's date in E, then empties the onboarding row (C, D, K) and resets the
+//   Status (I) to Good and Training Status (J) to BPA Needed, the same as PO → PO II.
+// =====================================================================================================================
+const OBR_SHEET_ = "Onboarding Removals", OBR_HEAD_ = ["Entry", "Callsign", "Officer", "Discord ID", "Reason", "Status", "Added by", "Added at", "Removed at", "Result"];
+const OB_TERM_TAB_ = "Onboarding Terminations";
+function obrSheet_() {
+  const ss = ss_(); let sh = ss.getSheetByName(OBR_SHEET_);
+  if (!sh) { sh = ss.insertSheet(OBR_SHEET_); sh.appendRow(OBR_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, OBR_HEAD_.length).setFontWeight("bold"); sh.getRange("D:D").setNumberFormat("@"); }
+  return sh;
+}
+function obrEntries_() {
+  const sh = obrSheet_(), n = sh.getLastRow(); if (n < 2) return [];
+  return sh.getRange(2, 1, n - 1, OBR_HEAD_.length).getValues().map((r, i) => ({ row: i + 2, entry: str_(r[0]), callsign: str_(r[1]), officer: str_(r[2]), id: str_(r[3]).replace(/^'/, ""), reason: str_(r[4]),
+    status: str_(r[5]), by: str_(r[6]), at: isDate_(r[7]) ? r[7].getTime() : 0, doneAt: isDate_(r[8]) ? r[8].getTime() : 0, result: str_(r[9]) })).filter(e => e.entry);
+}
+// the Onboarding Roster as rows: A callsign, B forced nickname, C name, D Discord ID, I status, J training status, K date
+function obRows_() {
+  const ob = rosterBook_().getSheetByName(ONBOARD_TAB_); if (!ob) throw new Error("The \"" + ONBOARD_TAB_ + "\" tab wasn't found in the roster sheet.");
+  const n = ob.getLastRow(), rng = ob.getRange(1, 1, n, 11), v = rng.getValues(), d = rng.getDisplayValues(), rows = [];
+  for (let i = 0; i < n; i++) { const cs = str_(d[i][0]).trim(), nm = str_(d[i][2]).trim(); if (!callKey_(cs) || !nm || /^name$/i.test(nm)) continue;
+    rows.push({ r: i + 1, cs: cs, name: nm, id: str_(d[i][3]).replace(/\D/g, ""), raw: v[i].slice(0, 4), disp: d[i].slice(0, 4), status: str_(d[i][8]), training: str_(d[i][9]), date: str_(d[i][10]) }); }
+  return { sh: ob, rows: rows };
+}
+function obView_(A) {
+  const P = promoView_(false, "onboard"), cand = {}; (P.candidates || []).forEach(c => { if (c.callsign) cand[callKey_(c.callsign)] = c; });
+  let rows = [], err = ""; try { rows = obRows_().rows; } catch (e) { err = errMsg_(e); }
+  const E = obrEntries_(), listed = {}; E.forEach(e => { if (e.status === "listed") listed[callKey_(e.callsign)] = e; });
+  const officers = rows.map(r => { const c = cand[callKey_(r.cs)] || {}, dl = c.deadline || null, e = listed[callKey_(r.cs)];
+    return { callsign: r.cs, name: r.name, id: r.id, status: r.status, training: r.training, since: c.since || r.date, done: c.done || 0, total: c.total || 0, complete: !!c.complete,
+      deadline: dl ? { date: dl.date, left: dl.left, state: dl.state, extended: dl.extended } : null,
+      entry: e ? { entry: e.entry, by: e.by, at: e.at, reason: e.reason } : null }; })
+    .sort((a, b) => ((a.deadline ? a.deadline.left : 999) - (b.deadline ? b.deadline.left : 999)) || String(a.callsign).localeCompare(String(b.callsign)));
+  const recent = E.filter(e => e.status === "removed" && e.doneAt > Date.now() - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 60)
+    .map(e => ({ callsign: e.callsign, officer: e.officer, reason: e.reason, at: e.doneAt, result: e.result }));
+  return { ok: true, me: { hc: A.hc, nominate: A.nominate, callsign: A.callsign }, officers: officers, recent: recent, error: err || P.error || "", deadlineDays: P.deadlineDays || 0 };
+}
+function obHandle_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  const A = pbAccess_(acct), a = d.action;
+  if (!A.view) return { ok: false, error: "Onboarding removals are for Lieutenants and above." };
+  const cs = str_(d.callsign);
+  if (a === "obAdd") {
+    if (!A.nominate) return { ok: false, error: "Only Lieutenants and above can add people to the removal list." };
+    return withLock_(() => {
+      const r = obRows_().rows.find(x => callKey_(x.cs) === callKey_(cs)); if (!r) return { ok: false, error: "They're not on the Onboarding Roster any more." };
+      if (obrEntries_().some(e => e.status === "listed" && callKey_(e.callsign) === callKey_(cs))) return { ok: true };
+      const en = Utilities.getUuid().slice(0, 8);
+      obrSheet_().appendRow([en, r.cs, cellSafe_(r.name), "'" + r.id, cellSafe_(clip_(str_(d.reason) || "Onboarding time ran out", 200)), "listed", cellSafe_(A.who), new Date(), "", ""]);
+      return { ok: true, entry: { entry: en, by: A.who, at: Date.now(), reason: clip_(str_(d.reason) || "Onboarding time ran out", 200) } };
+    });
+  }
+  if (a === "obUnlist") {
+    return withLock_(() => { const e = obrEntries_().find(x => x.status === "listed" && callKey_(x.callsign) === callKey_(cs)); if (!e) return { ok: true };
+      if (!A.hc && e.by !== A.who) return { ok: false, error: "Only High Command or whoever added them can take them off the list." };
+      obrSheet_().getRange(e.row, 6).setValue("returned"); obrSheet_().getRange(e.row, 10).setValue(cellSafe_("Taken off the list by " + A.who)); return { ok: true }; });
+  }
+  if (a === "obPreview" || a === "obPush") {
+    if (!A.hc) return { ok: false, error: "Only High Command can push removals." };
+    return a === "obPush" ? obPush_(A) : obPlan_();
+  }
+  return obView_(A);
+}
+function obTermStart_(tm) {   // first row of the next batch: one blank line below the last entry
+  const n = tm.getLastRow(); if (n < 1) return 3;
+  const d = tm.getRange(1, 1, n, 5).getDisplayValues(); let last = 0;
+  for (let i = d.length - 1; i >= 0; i--) if (d[i].some(x => str_(x).trim())) { last = i + 1; break; }
+  return last + 2;
+}
+function obPlan_(R) {
+  R = R || obRows_();
+  const book = rosterBook_(), tm = book.getSheetByName(OB_TERM_TAB_); if (!tm) return { ok: false, error: "The \"" + OB_TERM_TAB_ + "\" tab wasn't found in the roster sheet." };
+  const list = obrEntries_().filter(e => e.status === "listed"), start = obTermStart_(tm), plan = []; let at = start;
+  list.forEach(e => { const r = R.rows.find(x => callKey_(x.cs) === callKey_(e.callsign));
+    if (!r) { plan.push({ entry: e.entry, callsign: e.callsign, officer: e.officer, error: "Not on the Onboarding Roster any more." }); return; }
+    if (e.id && r.id && e.id !== r.id) { plan.push({ entry: e.entry, callsign: e.callsign, officer: e.officer, error: "That slot now holds someone else (" + r.name + "). Take them off the list." }); return; }
+    plan.push({ entry: e.entry, callsign: r.cs, officer: r.name, id: r.id, fromRow: r.r, toRow: at++ }); });
+  return { ok: true, plan: plan, start: start };
+}
+function obPush_(A) {
+  const out = withLock_(() => {
+    const R = obRows_(), P = obPlan_(R); if (!P.ok) return P;
+    const tm = rosterBook_().getSheetByName(OB_TERM_TAB_), ob = R.sh, log = obrSheet_(), E = obrEntries_(), today = new Date(); today.setHours(0, 0, 0, 0);
+    const go = P.plan.filter(p => !p.error), done = [];
+    if (go.length) {
+      // the formulas the sheet uses after E (days, dates…) follow the last entry down
+      const tn = tm.getLastRow(); let tmpl = 0; { const dv = tm.getRange(1, 1, Math.max(1, tn), 5).getDisplayValues(); for (let i = dv.length - 1; i >= 0; i--) if (str_(dv[i][0]).trim() && str_(dv[i][2]).trim()) { tmpl = i + 1; break; } }
+      const lastCol = Math.max(5, tm.getLastColumn()), tmplFx = tmpl && lastCol > 5 ? tm.getRange(tmpl, 6, 1, lastCol - 5).getFormulasR1C1()[0] : [];
+      go.forEach(p => {
+        const r = R.rows.find(x => x.r === p.fromRow);
+        tm.getRange(p.toRow, 4).setNumberFormat("@");
+        tm.getRange(p.toRow, 1, 1, 4).setValues([[r.raw[0], r.raw[1], r.raw[2], r.id || str_(r.raw[3])]]);   // A–D as values
+        tm.getRange(p.toRow, 5).setValue(today);
+        if (tmplFx.some(Boolean)) tmplFx.forEach((fx, k) => { if (fx && !str_(tm.getRange(p.toRow, 6 + k).getFormula())) tm.getRange(p.toRow, 6 + k).setFormulaR1C1(fx); });
+        // empty their onboarding row; drop-downs back to their starting values
+        ob.getRange(p.fromRow, 3, 1, 2).clearContent(); ob.getRange(p.fromRow, 11).clearContent();
+        ob.getRange(p.fromRow, 9, 1, 2).setValues([[pbDropOpt_(ob.getRange(p.fromRow, 9), "GOOD"), pbDropOpt_(ob.getRange(p.fromRow, 10), "BPA NEEDED")]]);
+        const e = E.find(x => x.entry === p.entry); if (e) { log.getRange(e.row, 6).setValue("removed"); log.getRange(e.row, 9, 1, 2).setValues([[new Date(), cellSafe_("Terminations row " + p.toRow + " · by " + A.who)]]); }
+        done.push(p);
+      });
+    }
+    P.plan.filter(p => p.error).forEach(p => { const e = E.find(x => x.entry === p.entry); if (e) log.getRange(e.row, 10).setValue(cellSafe_("Not moved: " + p.error)); });
+    SpreadsheetApp.flush();
+    return { ok: true, done: done, skipped: P.plan.filter(p => p.error) };
+  });
+  if (!out.ok) return out;
+  try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "promo_view_onboard", "roster_calls"]); const oid = rosterTabByName_(ONBOARD_TAB_);
+    if (oid != null) { c.removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all"]); } } catch (e) {}
+  return { ok: true, removed: out.done.length, done: out.done.map(p => ({ callsign: p.callsign, officer: p.officer, toRow: p.toRow })), skipped: out.skipped.map(p => ({ callsign: p.callsign, officer: p.officer, error: p.error })) };
 }

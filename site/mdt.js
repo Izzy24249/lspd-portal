@@ -108,8 +108,8 @@
   addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "lspd:filed") { toast("✓ " + (e.data.title || "Report") + " filed"); blip(1400); setTimeout(load, 1500); } });
 
   // ---------- router ----------
-  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker", "board"];
-  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["DEPARTMENT", "Promotion tracker"], board: ["COMMAND", "Promotion board"] };
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker", "board", "onbremove"];
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["DEPARTMENT", "Promotion tracker"], board: ["COMMAND", "Promotion board"], onbremove: ["COMMAND", "Onboarding removals"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
   function go(v) { if (v === "tracker" && TRACK && TRACK.ok && Date.now() - (TRACK._t || 0) > 30000) loadTrack();   // fresh numbers each time it's opened
     VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
@@ -172,7 +172,7 @@
       $("ticker").hidden = true; return;
     }
     m.__view = "";
-    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "tracker" ? trackHTML() : VIEW === "board" ? (window.MDTBoard ? MDTBoard.html() : "") : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
+    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "tracker" ? trackHTML() : VIEW === "board" ? (window.MDTBoard ? MDTBoard.html() : "") : VIEW === "onbremove" ? (window.MDTOnb ? MDTOnb.html() : "") : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
     if ((VIEW === "unit" || VIEW === "training") && !UNIT) loadUnit();
     if (VIEW === "reference" && !REF) loadRef();
     m.querySelectorAll("[data-count]").forEach(el => { const to = +el.dataset.count || 0, t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); });
@@ -899,7 +899,7 @@
   function palItems(q) {
     q = q.toLowerCase().trim();
     const out = [], add = (grp, icon, title, sub, run, extra) => { const hay = (title + " " + (sub || "") + " " + (extra || "")).toLowerCase(); if (!q || hay.indexOf(q) !== -1) out.push({ grp, icon, title, sub, run }); };
-    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"], ["tracker", "✅", "Promotion tracker"]].concat(DATA && DATA.pb ? [["board", "🎖️", "Promotion board"]] : []).forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
+    [["home", "🏠", "Dashboard"], ["records", "🔎", "Records & BOLOs"], ["reference", "⚖️", "Penal code & 10-codes"], ["fleet", "🚓", "Fleet"], ["uniforms", "👕", "Uniforms"], ["training", "📅", "Training"], ["unit", "⭐", "Kudos & awards"], ["promotions", "🎖️", "Promotions"], ["sop", "📘", "SOP"], ["tracker", "✅", "Promotion tracker"]].concat(DATA && DATA.pb ? [["board", "🎖️", "Promotion board"], ["onbremove", "🗂️", "Onboarding removals"]] : []).forEach(v => add("Go to", v[1], v[2], "", () => go(v[0])));
     add("Go to", "📋", "My reports", "", () => go("frame:myreports.html"));
     if ((((DATA && DATA.profile) || LS.json("lspd_prof") || {}).divisions || []).length) add("Go to", "🛡️", "Division Command", "Grading, activity and officers", () => go("frame:division.html"));
     myForms().filter(f => f.status === "live").forEach(f => add("File a report", f.icon, f.title, f.division ? f.division + " report" : "", () => go("form:" + f.id), f.section));
