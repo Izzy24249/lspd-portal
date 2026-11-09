@@ -10,7 +10,7 @@
 <script src="lock.js?v=1"></script>
 <title>LSPD</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="portal.css?v=202611090830">
+<link rel="stylesheet" href="portal.css?v=202611090900">
 </head>
 <body>
 <div class="lightbar"></div>
@@ -88,7 +88,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="forms.js?v=202610200937"></script>
+<script src="forms.js?v=202611090900"></script>
 <script>
 const $ = id => document.getElementById(id);
 const CFG_KEY = "lspd_portal_cfg";
@@ -335,12 +335,13 @@ function openForm(id){
   return true;
 }
 
-// nothing filled in yet except the SOP answer? (the instructor's own name/ID, dates/times and preset answers don't count)
+// nothing filled in yet except what the pop-up fills (trainee, SOP answer)? the instructor's own name/ID, dates/times and preset answers don't count
+const GATE_FIELDS = ["sopCheck", "traineeCallsign", "traineeDiscordId"];
 function sopOnly(f){
   if(!ctrl || !ctrl.collect) return false;
   const d = ctrl.collect(), defs = {};
   (f.blocks || []).forEach(b => (b.fields || []).forEach(x => defs[x.id] = x));
-  const skip = x => !x || x.id === "sopCheck" || /instructor|fto/i.test((x.label || "") + " " + x.id) || /^(date|time|static)$/.test(x.type);
+  const skip = x => !x || GATE_FIELDS.indexOf(x.id) !== -1 || /instructor|fto/i.test((x.label || "") + " " + x.id) || /^(date|time|static)$/.test(x.type);
   if(Object.keys(d.values || {}).some(k => { const x = defs[k], v = d.values[k]; return v && !(x && skip(x)) && !(x && x.default && v === x.default); })) return false;
   if(Object.values(d.checklists || {}).some(c => Object.values(c).some(Boolean))) return false;
   if(Object.values(d.repeaters || {}).some(rows => rows.some(r => Object.values(r).some(v => v)))) return false;
@@ -348,31 +349,65 @@ function sopOnly(f){
 }
 document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible" && current && $("view-form").classList.contains("active")) sopGate(current); });
 
-/* ---------- SOP gate: forms with an "sopCheck" box (Academy Evaluation) ask first, before the form can be used ---------- */
+/* ---------- Academy gate: pick the trainee -> Global Operation Manual training must be completed -> SOP Certified -> the form opens ---------- */
 function sopGate(f){
   const sel = document.querySelector('#formMount select[data-f="sopCheck"]');
   if(!sel || !current || current.id !== f.id || document.querySelector(".sop-ov")) return;
-  if(sel.value && !sopOnly(f)) return;          // answered and the training's under way: leave them be
-  if(sel.value){ sel.value = ""; sel.dispatchEvent(new Event("change", { bubbles: true })); }   // left and came back with nothing but the SOP answer: ask again
-  const yes = [...sel.options].find(o => /verified|✅|has/i.test(o.value)), old = document.querySelector(".sop-ov"); if(old) old.remove();
+  const tf = ctrl.getValue("traineeCallsign") !== undefined && document.querySelector('#formMount [data-f="traineeCallsign"]') ? "traineeCallsign" : "";
+  if(sel.value && (!tf || ctrl.getValue(tf)) && !sopOnly(f)) return;   // answered and the training's under way: leave them be
+  if(sel.value){ sel.value = ""; sel.dispatchEvent(new Event("change", { bubbles: true })); }   // left and came back with nothing else filled in: ask again
+  const yes = [...sel.options].find(o => /verified|✅|has/i.test(o.value)), E = Portal.esc;
+  const prev = tf ? (parseOne(ctrl.getValue(tf)) || null) : null;
+  let who = prev, chk = null;
   const ov = document.createElement("div"); ov.className = "sop-ov";
-  const ask = () => { ov.innerHTML = `<div class="sop-card" role="dialog" aria-modal="true" aria-label="SOP check">
-      <div class="sop-ic">📘</div><h3>SOP Check Required</h3>
-      <p>Before you begin, check the trainee in Discord.<br><b>Does the trainee have the SOP Certified role?</b></p>
+  const card = (cls, html) => { ov.innerHTML = `<div class="sop-card ${cls}" role="dialog" aria-modal="true">${html}</div>`; ov.querySelectorAll("[data-go]").forEach(b => b.onclick = () => ({ home, pick, sop, again: () => check(who) })[b.dataset.go]()); };
+  const back = `<a class="sop-back" data-go="home">← Back to all forms</a>`;
+  // 1) pick the trainee from the Onboarding roster
+  const pick = () => {
+    const list = tf ? ctrl.rosterFor(tf) : [];
+    card("", `<div class="sop-ic">🎓</div><h3>Who are you training?</h3><p>Pick the trainee first. We'll check they've completed the <b>Global Operation Manual</b> training before you begin.</p>
+      <input type="search" class="sop-q" placeholder="Search callsign or name…" autocomplete="off"><div class="sop-list"></div>${back}`);
+    const q = ov.querySelector(".sop-q"), box = ov.querySelector(".sop-list");
+    const draw = () => { const t = q.value.trim().toLowerCase(), hits = list.filter(it => !t || (it.search || it.label || "").toLowerCase().indexOf(t) !== -1).slice(0, 40);
+      box.innerHTML = hits.length ? hits.map((it, i) => `<button type="button" data-i="${list.indexOf(it)}"><b>${E(it.label)}</b>${it.id ? "" : "<small>no Discord ID</small>"}</button>`).join("") : `<div class="sop-none">No one on the Onboarding roster matches.</div>`; };
+    box.onclick = e => { const b = e.target.closest("[data-i]"); if(!b) return; const it = list[+b.dataset.i]; check({ name: it.label, id: it.id || "" }); };
+    q.oninput = draw; draw(); setTimeout(() => q.focus(), 30);
+  };
+  // 2) ask the server: Global Operation Manual training on file?
+  const check = async w => {
+    who = w; card("", `<div class="sop-ic">⏳</div><h3>Checking ${E(w.name)}…</h3><p>Looking for a completed Global Operation Manual training.</p>`);
+    try { const r = await fetch(Portal.ENDPOINT + "?action=traineeCheck&id=" + encodeURIComponent(w.id || "") + "&name=" + encodeURIComponent(w.name || "") + "&t=" + Date.now()); chk = await r.json(); }
+    catch(e){ chk = { ok: false, error: "Couldn't reach the server." }; }
+    if(!chk.ok) return card("stop", `<div class="sop-ic">⚠️</div><h3>Couldn't check</h3><p>${E(chk.error || "Something went wrong.")}</p><div class="sop-btns"><button type="button" data-go="pick">Pick again</button><button type="button" class="sop-again" data-go="again">Try again</button></div>${back}`);
+    if(!chk.found || !chk.gom) return card("stop", `<div class="sop-ic">⛔</div><h3>Do not start training</h3>
+      <p><b>${E(w.name)}</b> ${chk.found ? "hasn't completed" : "isn't on the roster yet, so there's no record of"} the <b>Global Operation Manual</b> training.</p>
+      <ol><li>The trainee must complete the Global Operation Manual training first.</li><li>It has to be logged on the GOM Training form with <b>Completed: Yes</b>.</li><li>Then come back and start the Academy Evaluation.</li></ol>
+      <div class="sop-btns"><button type="button" data-go="pick">Pick a different trainee</button><button type="button" class="sop-again" data-go="again">Check again</button></div>${back}`);
+    sop();
+  };
+  // 3) SOP Certified
+  const sop = () => {
+    const known = chk && (chk.sopRole || chk.sopAcademy);
+    card("", `<div class="sop-ok">✅ Global Operation Manual training completed</div><div class="sop-ic">📘</div><h3>SOP Check</h3>
+      <p><b>${E(who.name)}</b>${known ? ` is on file as <b>SOP Certified</b>${chk.sopRole ? " (Discord role)" : ""}. Confirm they still have the role in Discord.` : ""}<br><b>Does the trainee have the SOP Certified role?</b></p>
       <div class="sop-btns"><button type="button" class="sop-yes">✅ Yes, they have it</button><button type="button" class="sop-no">❌ No, they don't</button></div>
-      <a class="sop-back">← Back to all forms</a></div>`;
-    ov.querySelector(".sop-yes").onclick = () => { if(yes){ sel.value = yes.value; sel.dispatchEvent(new Event("change", { bubbles: true })); sel.dispatchEvent(new Event("input", { bubbles: true })); } close(); toast("SOP check recorded. You can begin the training.", "ok"); };
-    ov.querySelector(".sop-no").onclick = stop; ov.querySelector(".sop-back").onclick = home; };
-  const stop = () => { ov.innerHTML = `<div class="sop-card stop" role="dialog" aria-modal="true" aria-label="Training can't start">
-      <div class="sop-ic">⛔</div><h3>Do not start training</h3>
+      <a class="sop-back" data-go="pick">← Pick a different trainee</a>`);
+    ov.querySelector(".sop-yes").onclick = () => { if(tf) ctrl.setOfficer(tf, { name: who.name, id: who.id || "" });
+      if(yes){ sel.value = yes.value; sel.dispatchEvent(new Event("change", { bubbles: true })); sel.dispatchEvent(new Event("input", { bubbles: true })); }
+      close(); toast("Checks done. You can begin the training.", "ok"); };
+    ov.querySelector(".sop-no").onclick = stop;
+  };
+  const stop = () => card("stop", `<div class="sop-ic">⛔</div><h3>Do not start training</h3>
       <p>The trainee must be <b>SOP Certified</b> before the Academy training can begin.</p>
       <ol><li>Have them read the <b>LSPD SOP</b>.</li><li>Have them get <b>SOP Certified &amp; verified</b> in the Department Discord.</li><li>Come back to this form once they have the role.</li></ol>
-      <div class="sop-btns"><button type="button" class="sop-home">Back to all forms</button><button type="button" class="sop-again">They have it now</button></div></div>`;
-    ov.querySelector(".sop-home").onclick = home; ov.querySelector(".sop-again").onclick = ask; };
+      <div class="sop-btns"><button type="button" class="sop-home" data-go="home">Back to all forms</button><button type="button" class="sop-again" data-go="sop">They have it now</button></div>`);
   const close = () => { ov.remove(); document.documentElement.classList.remove("sop-lock"); };
   const home = () => { close(); go("home"); };
-  ask(); document.body.appendChild(ov); document.documentElement.classList.add("sop-lock");
+  document.body.appendChild(ov); document.documentElement.classList.add("sop-lock");
+  if(!tf) sop(); else pick();
 }
+// "L-801 | L. Street (5666…)" -> { name, id }
+function parseOne(v){ v = String(v || "").split(";")[0].trim(); if(!v) return null; const m = /\((\d{15,21})\)\s*$/.exec(v); return { name: m ? v.slice(0, m.index).trim() : v, id: m ? m[1] : "" }; }
 
 /* ---------- My reports → Edit (forms.html?edit=<log id>#<form>) ---------- */
 const EDIT_ID = new URLSearchParams(location.search).get("edit") || "";

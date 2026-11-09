@@ -1476,6 +1476,8 @@ window.Portal = (function () {
     return { collect, validate, clear, toText, restoreDraft, fillMe, completeness, saveDraft: () => { clearTimeout(timer); saveDraft(); },
       load: d => { load(d || {}); READY = true; refresh(); },
       setValue: (id, v) => { const el = q(`[data-f="${CSS.escape(id)}"]`); if (el && el.value !== v) { el.value = v; el.classList.remove("err"); refresh(); } },
+      rosterFor: id => { const f = fieldDefs.find(x => x.id === id); return f ? rosterItems(f.rosterDivisions, f) : []; },
+      setOfficer: (id, entry) => { const hid = q(`[data-f="${CSS.escape(id)}"]`); if (!hid) return; hid.value = entry ? fmtOfc([entry]) : ""; hid.dispatchEvent(new Event("change", { bubbles: true })); refresh(); },
       getValue: id => { const el = q(`[data-f="${CSS.escape(id)}"]`); return el ? el.value : ""; },
       root: root, form: form };
   }

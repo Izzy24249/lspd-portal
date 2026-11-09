@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 132;
+const BACKEND_VERSION = 133;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -43,6 +43,7 @@ function doGet(e) {
     if (action === "signon") return json_({ ok: true, signon: signonCfg_() });
     if (action === "builderRoster") return json_(PROPS_.getProperty("BUILDER_ON") === "1" ? { ok: true, people: builderPeople_().map(p => ({ n: p.n, cs: p.cs })) } : { ok: false });   // tiny: is the sign-on screen the front door?
     if (action === "promo") return json_({ ok: true, promo: promoView_(false, e.parameter.p) });
+    if (action === "traineeCheck") return json_(traineeCheck_(e.parameter.id, e.parameter.name));
     if (action === "wake") { try { getAdmins_(); getConfig_(); readLog_(1); } catch (x) {} return json_({ ok: true }); }   // admin sign-in page: get Google ready while they type
     return json_({ ok: true, service: "LSPD Forms Portal" });
   } catch (err) {
@@ -3319,6 +3320,16 @@ function promoPeopleRead_() {
     o.cpl = { witness: W.length, lead: Lh.length, certAt: certAt, host: certAt ? H.filter(t => t > certAt).length : 0 };
   });
   return out;
+}
+// Academy Evaluation pop-up: has this trainee finished the Global Operation Manual training? (and is the SOP role on file)
+function traineeCheck_(id, name) {
+  id = str_(id).replace(/\D/g, ""); name = str_(name);
+  if (!id && !name) return { ok: false, error: "Pick the trainee first." };
+  const ppl = promoPeople_(), ck = callKey_(name), nk = nameKey_(name);
+  const o = (id && ppl.find(x => x.id === id)) || (ck && ppl.find(x => x.callsign && callKey_(x.callsign) === ck && sameName_(x.name, name))) || (nk && ppl.find(x => nameKey_(x.name) === nk));
+  if (!o) return { ok: true, found: false };
+  const po = o.po || {};
+  return { ok: true, found: true, name: (o.callsign ? o.callsign + " | " : "") + o.name, trainee: !!o.trainee, rank: o.rank, gom: o.idx > 0 ? 1 : (po.bt || 0), sopRole: !!sopIds_()[o.id], sopAcademy: !!po.sop, ra: po.ra || 0 };
 }
 var SOP_MEMO_ = null;
 function promoEval_(o, rankReqs, checks) {

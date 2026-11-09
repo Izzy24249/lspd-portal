@@ -1417,3 +1417,12 @@ html.sop-lock,html.sop-lock body{overflow:hidden}
 .sop-btns .sop-no:hover{background:#4c1111}
 .sop-back{display:inline-block;margin-top:14px;color:#8ea2cc;font-size:13px;cursor:pointer}
 .sop-back:hover{color:#fff}
+.sop-q{width:100%;box-sizing:border-box;padding:11px 13px;border-radius:11px;border:1px solid #2b4170;background:#0b1428;color:#fff;font:500 14px "Inter",system-ui,sans-serif;outline:none;margin-bottom:10px}
+.sop-q:focus{border-color:#3b82f6}
+.sop-q::placeholder{color:#7f8fb3}
+.sop-list{max-height:min(320px,45vh);overflow:auto;display:flex;flex-direction:column;gap:6px;text-align:left}
+.sop-list button{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid #22345a;background:#111c34;color:#e8eefc;font:500 14px "Inter",system-ui,sans-serif;cursor:pointer;text-align:left}
+.sop-list button:hover{background:#1a2a4c;border-color:#3b82f6}
+.sop-list small{color:#f0b35a;font-size:11px}
+.sop-none{color:#8ea2cc;padding:12px;text-align:center}
+.sop-ok{display:inline-block;margin-bottom:12px;padding:6px 12px;border-radius:999px;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.5);color:#86efac;font-size:13px;font-weight:600}
