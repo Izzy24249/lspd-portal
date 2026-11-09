@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 131;
+const BACKEND_VERSION = 132;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3216,6 +3216,7 @@ function reqAuto_(t, sopOn, idx) {
     if (/\bR\s*\/\s*A\b|ride[- ]?along/i.test(t) && /basic|academy|field training/i.test(t)) return { type: "pora", need: 1 };
     if (/basic\s+(police\s+)?training|\bBPA\b|global operation/i.test(t)) return { type: "pobt", need: 1 };
     if (/official callsign/i.test(t) && /roster/i.test(t)) return { type: "poroster", need: 1 };
+    if (/\bsop\b.*certified|certified.*\bsop\b/i.test(t)) return { type: "sop", need: 1 };   // SOP Certified role, or an Academy Evaluation's SOP check answered Yes
   }
   if (idx === 3) {   // Corporal: Basic Training Instructor certification, then hosting on their own
     const h = /after being certified/i.test(t) && /host\s*(?:a\s+minimum\s+of\s+)?\(?(\d+)\)?/i.exec(t);
@@ -3246,7 +3247,7 @@ function promoLadderKeys_() {
 // everyone on the Personnel and Onboarding rosters, with their rank, time in grade and report count
 function promoPeople_(fresh) {
   const cache = CacheService.getScriptCache(), ck = "promo_people";
-  if (!fresh) { const hit = cache.get(ck); if (hit) { try { const o = JSON.parse(hit), now = Date.now(); if (o.some(x => x.idx === 0 && !x.po)) throw 0; o.forEach(x => { x.tigDays = x.since ? Math.floor((now - x.since) / 864e5) : null; }); return o; } catch (e) {} } }
+  if (!fresh) { const hit = cache.get(ck); if (hit) { try { const o = JSON.parse(hit), now = Date.now(); if (o.some(x => x.idx === 0 && !(x.po && "sop" in x.po))) throw 0; o.forEach(x => { x.tigDays = x.since ? Math.floor((now - x.since) / 864e5) : null; }); return o; } catch (e) {} } }
   const out = promoPeopleRead_();
   try { const js = JSON.stringify(out); if (js.length < 95000) cache.put(ck, js, 900); } catch (e) {}
   return out;
@@ -3291,12 +3292,14 @@ function promoPeopleRead_() {
   const rowFailed = r => String(r.summary || "").split("\n").some(l => { const i = l.indexOf(":"); if (i < 1) return false;
     return /complete|result|status|outcome|pass/i.test(l.slice(0, i)) && FAIL_RE_.test(l.slice(i + 1).replace(/^[\s\-–•]+/, "").trim()); });
   const poRows = rows.filter(r => poForms.indexOf(r.form) !== -1 && trSlot[r.form]);
-  out.forEach(o => { if (o.idx !== 0) return; const got = { bt: 0, ra: 0 }, csk = o.callsign ? callKey_(o.callsign) : "", nk = nameKey_(o.name);
+  const sopYes = r => String(r.summary || "").split("\n").some(l => { const i = l.indexOf(":"); return i > 0 && /\bsop\b/i.test(l.slice(0, i)) && /verified|✅|\byes\b|has\b/i.test(l.slice(i + 1)) && !/\bnot\b|❌/i.test(l.slice(i + 1)); });
+  out.forEach(o => { if (o.idx !== 0) return; const got = { bt: 0, ra: 0, sop: 0 }, csk = o.callsign ? callKey_(o.callsign) : "", nk = nameKey_(o.name);
     poRows.forEach(r => { const me = (r.people || []).some(x => { if (!trSlot[r.form][x.f]) return false;
         if (x.i) return x.i === o.id;
         const xn = nameKey_(x.n), xc = callKey_(x.n);
         if (xn && nk && xn === nk) return true;
         return !!csk && xc === csk && (!xn || !nk || sameName_(x.n, o.name)) && now - r.at < 60 * 864e5; });   // a callsign alone only for recent trainings (callsigns get reused)
+      if (me && r.form === TAG_FORMS_.ra && sopYes(r)) got.sop = 1;   // the instructor confirmed the SOP Certified role
       if (!me || rowFailed(r)) return;
       if (r.form === TAG_FORMS_.ra) got.ra++; else got.bt++; });
     o.po = got; });
@@ -3334,7 +3337,7 @@ function promoEval_(o, rankReqs, checks) {
     if (a && a.type === "pobt") { have = (o.po || {}).bt || 0; auto = have >= a.need; }
     if (a && a.type === "pora") { have = (o.po || {}).ra || 0; auto = have >= a.need; }
     if (a && a.type === "poroster") { have = o.callsign ? 1 : 0; auto = have >= 1; }
-    if (a && a.type === "sop") { have = SOP_MEMO_ ? (SOP_MEMO_[o.id] ? 1 : 0) : (sopIds_()[o.id] ? 1 : 0); auto = have >= 1; }
+    if (a && a.type === "sop") { have = (o.po && o.po.sop) ? 1 : SOP_MEMO_ ? (SOP_MEMO_[o.id] ? 1 : 0) : (sopIds_()[o.id] ? 1 : 0); auto = have >= 1; }
     return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, split: split, parts: parts, locked: locked, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
   });
   return { items: items, done: items.filter(x => x.done).length, total: items.length, ready: items.length > 0 && items.every(x => x.done) };
