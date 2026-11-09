@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 130;
+const BACKEND_VERSION = 131;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -114,6 +114,18 @@ function cellSafe_(v) { // stop "=..." text from turning into a formula in the s
 // =====================================================================
 // CONFIG STORAGE (hidden "Portal Config" tab, JSON split into chunks)
 // =====================================================================
+// Academy Evaluation: required SOP Certified role check (added to saved setups once; if it's removed in the form editor it stays removed)
+const SOP_CHECK_TEXT_ = { type: "text", style: "warning", text: "Check the trainee has the SOP Certified role in Discord before you begin.\n  - if they don't have it, do not start training. Have them read the LSPD SOP and get SOP Certified & verified in the Department Discord first." };
+const SOP_CHECK_BLOCK_ = { type: "fields", fields: [{ id: "sopCheck", label: "SOP Certified Role - Trainee Check:", type: "select", required: true, options: ["✅ Verified - Has SOP Certified role", "❌ Not SOP Certified - Sent to read the SOP (training not started)"] }] };
+function cfgPatch_(cfg) {
+  if (PROPS_.getProperty("PATCH_SOPCHECK")) return false;
+  const f = (cfg.forms || []).find(x => x.id === "academy"); if (!f) return false;
+  const has = (f.blocks || []).some(b => (b.fields || []).some(x => x.id === "sopCheck"));
+  if (!has) { const i = (f.blocks || []).findIndex(b => (b.fields || []).some(x => x.id === "cadCheck"));
+    f.blocks.splice(i === -1 ? Math.min(3, f.blocks.length) : i + 1, 0, JSON.parse(JSON.stringify(SOP_CHECK_TEXT_)), JSON.parse(JSON.stringify(SOP_CHECK_BLOCK_))); }
+  PROPS_.setProperty("PATCH_SOPCHECK", "1");
+  return !has;
+}
 function getConfig_() {
   const cache = CacheService.getScriptCache();
   const hit = cache.get("portal_cfg");
@@ -131,7 +143,7 @@ function getConfig_() {
     cfg.version = 1;
     migrateLegacy_();
     writeConfig_(cfg, "system");
-  }
+  } else { try { if (cfgPatch_(cfg)) writeConfig_(cfg, "system"); } catch (e) {} }
   cacheConfig_(cfg);
   return cfg;
 }
@@ -5214,6 +5226,7 @@ function defaultConfig_() {
           { type: "text", style: "warning", text: "Fingerprint all Trainee and Check profile record.\n  - if felon, do not continue training. Mark on drop down and submit this form" },
           { type: "fields", fields: [
             { id: "cadCheck", label: "CAD - Trainee Name Check:", type: "select", options: ["✅ Clear - No Record", "🟡 Record - Misdemeanor only", "❌ No Go - Has Felony"] } ] },
+          SOP_CHECK_TEXT_, SOP_CHECK_BLOCK_,
           { type: "text", style: "rule", text: "Rule #1 (Embrace Live Chaos): Active server calls take priority. Use them as live teaching moments. Do not penalize for server unpredictability." },
           { type: "text", style: "rule", text: "Rule #2 (Keep Moving): Except during Module 1, never stay parked for more than 3 minutes. Teach while on patrol." },
           { type: "text", style: "rule", text: "Rule #3 (Action Required): Need at least 1 arrest and 1 citation." },
