@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.1.0
+// @version      1.2.0
 // @description  Reads Duty Portal hours, shifts and reports in your own logged-in browser and sends them to the LSPD MDT promotion board. Never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
@@ -23,6 +23,7 @@
   const set = (k, v) => { try { GM_setValue(k, v); } catch (e) {} };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   let RUNNING = false, STATUS = "", timer = null;
+  const PAGE_T0 = Date.now(), FULL_EVERY = 4 * 3600e3, RELOAD_AFTER = 2 * 3600e3;   // memory: full officer list only every 4 h; the tab refreshes itself every ~2 h
   const rand = (a, b) => a + Math.random() * (b - a);
   const nextGap = () => Math.round(rand(11, 15) * 60e3);   // each sync waits a random 11–15 minutes
 
@@ -55,9 +56,10 @@
 
   // ---------- one hidden frame we load Duty Portal pages into ----------
   let frame = null;
+  function freeFrame() { if (!frame) return; try { frame.src = "about:blank"; } catch (e) {} frame.remove(); frame = null; }   // blank it first so the browser lets go of the page
   function load(path) {
     return new Promise(res => {
-      if (frame) frame.remove();
+      freeFrame();
       frame = document.createElement("iframe");
       // kept on screen (but invisible, behind the page): the Duty Portal only loads more rows for frames the browser is drawing
       frame.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;opacity:0.01;z-index:-1;pointer-events:none;border:0";
@@ -70,12 +72,13 @@
   async function waitFor(fn, ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { const v = fn(); if (v) return v; } catch (e) {} await sleep(400); } return null; }
 
   // ---------- officer list (scrolls to the end so every officer is loaded) ----------
-  async function readList() {
-    const d = await load(BASE + "/officers");
+  // full = every officer (scrolls to the end, heavy: every few hours); otherwise just who's on duty right now (light)
+  async function readList(full) {
+    const d = await load(BASE + "/officers" + (full ? "" : "?status=active"));
     const rows = () => { const m = {}; d.querySelectorAll('main a[href*="/officers/"]').forEach(a => { const h = (a.getAttribute("href") || "").split("?")[0], pid = h.split("/officers/")[1]; if (pid && /^[a-z0-9]{16,}$/i.test(pid) && texts(a).length >= 4) m[pid] = a; }); return m; };
     if (!(await waitFor(() => Object.keys(rows()).length, 20000))) throw new Error("couldn't read the officer list (signed out?)");
     let n = 0, same = 0;
-    for (let i = 0; i < 80 && same < 4; i++) {
+    for (let i = 0; i < (full ? 80 : 6) && same < (full ? 4 : 2); i++) {
       d.querySelectorAll("main *").forEach(el => { if (el.scrollHeight > el.clientHeight + 40 && /auto|scroll/.test(getComputedStyle(el).overflowY)) el.scrollTop = el.scrollHeight; });
       await sleep(1100);
       const k = Object.keys(rows()).length; same = k === n ? same + 1 : 0; n = k; STATUS = "reading officers… " + n; draw();
@@ -89,7 +92,7 @@
       return { pid: pid, name: t.find(x => x.indexOf("|") !== -1) || t.find(x => x.length > 2 && !/duty|ago|^\d|^h$|^\+/i.test(x)) || "",
         status: (all.match(/\b(on|off) duty\b/i) || [""])[0], seen: seen, seenAt: /never/i.test(seen) ? 0 : relTime(seen),
         total: parseFloat((rest.match(/(\d+(?:\.\d+)?)\s*h\b/) || [])[1]) || 0, week: parseFloat(week) || 0 };
-    }).filter(o => /on duty/i.test(o.status) || (o.seenAt && Date.now() - o.seenAt < 60 * 864e5));   // skip people not seen in 60 days
+    }).filter(o => /on duty/i.test(o.status) || (full && o.seenAt && Date.now() - o.seenAt < 60 * 864e5));   // skip people not seen in 60 days
   }
   // ---------- one officer's profile: Discord ID, recent shifts, recent reports ----------
   function relTime(s) {
@@ -142,19 +145,25 @@
     RUNNING = true; set("lock", { tab: TAB, at: Date.now() }); const beat = setInterval(() => set("lock", { tab: TAB, at: Date.now() }), 30e3);
     try {
       STATUS = "reading officers…"; draw();
-      const list = await readList(), seen = get("seen", {}), now = Date.now();
+      const seen = get("seen", {}), full = Date.now() - get("fullAt", 0) > FULL_EVERY || !Object.keys(seen).length;
+      STATUS = full ? "reading every officer…" : "checking who's on duty…"; draw();
+      const list = await readList(full), now = Date.now();
+      // light check: anyone who was on duty last time and isn't now has just finished a shift, so read their profile
+      const wasOn = get("onduty", []), nowOn = list.filter(o => /on duty/i.test(o.status)).map(o => o.pid);
+      if (!full) wasOn.filter(pid => nowOn.indexOf(pid) === -1).forEach(pid => { const s0 = seen[pid] || {}; list.push({ pid: pid, name: s0.name || "", status: "Off Duty", seen: "", seenAt: now, total: -1, week: 0, left: true }); });
       // open a profile when they're on duty, their hours moved, or we haven't looked in 12 hours
       const active = o => /on duty/i.test(o.status) || (o.seenAt && now - o.seenAt < 21 * 864e5);   // profiles only for people active in the last 3 weeks
       // open a profile only when something changed: hours moved, they clocked in/out, or it's been a while (3 h while on duty, else a day)
       const todo = list.filter(o => active(o)).filter(o => { const s = seen[o.pid], on = /on duty/i.test(o.status);
         return !s || s.total !== o.total || s.status !== o.status || now - s.at > (on ? ONDUTY_REVISIT : REVISIT); });
-      let r = await send({ action: "dpSync", key: key, officers: list, profiles: [] });
+      let r = await send({ action: "dpSync", key: key, officers: list.filter(o => !o.left), partial: !full, profiles: [] });
+      set("onduty", nowOn); if (full) set("fullAt", Date.now());
       if (!r.ok) throw new Error(r.error || "MDT refused the update");
       let batch = [];
       for (let i = 0; i < todo.length; i++) {
         STATUS = "reading profiles " + (i + 1) + "/" + todo.length; draw(); set("lock", { tab: TAB, at: Date.now() });
         const p = await readProfile(todo[i].pid).catch(() => null);
-        if (p && p.discord) { batch.push(p); seen[todo[i].pid] = { total: todo[i].total, status: todo[i].status, at: Date.now() }; }
+        if (p && p.discord) { batch.push(p); seen[todo[i].pid] = { total: todo[i].total, status: todo[i].status, name: todo[i].name, at: Date.now() }; }
         await sleep(rand(1500, 4500));   // unhurried, like a person clicking through
         if (batch.length >= 15 || (i === todo.length - 1 && batch.length)) {
           r = await send({ action: "dpSync", key: key, profiles: batch }); if (!r.ok) throw new Error(r.error || "MDT refused the update");
@@ -164,7 +173,8 @@
       set("last", Date.now()); set("err", "");
       set("next", Date.now() + nextGap());
     } catch (e) { set("err", String(e.message || e).slice(0, 80)); set("next", Date.now() + nextGap()); }
-    finally { clearInterval(beat); RUNNING = false; STATUS = ""; if (frame) { frame.remove(); frame = null; } set("lock", null); draw(); }
+    finally { clearInterval(beat); RUNNING = false; STATUS = ""; freeFrame(); set("lock", null); draw();
+      if (Date.now() - PAGE_T0 > RELOAD_AFTER) setTimeout(() => { if (!RUNNING) location.reload(); }, 8000); }   // a fresh page every couple of hours keeps memory down
   }
   draw();
   setTimeout(() => run(false), 4000);

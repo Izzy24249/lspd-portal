@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 128;
+const BACKEND_VERSION = 129;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5642,14 +5642,22 @@ function dpSync_(d) {
         addR.push(["'" + id, cellSafe_(clip_(str_(p.name), 80)), new Date(at), x.approx ? "yes" : "", cellSafe_(clip_(str_(x.type), 20)), cellSafe_(clip_(str_(x.title), 200)), cellSafe_(clip_(str_(x.id), 80)), key, new Date()]); nR++; }); });
     if (addR.length) rsh.getRange(rsh.getLastRow() + 1, 1, addR.length, addR[0].length).setValues(addR);
     // the officer list snapshot (status, total hours) — replaced whole on each full read
-    if (officers && officers.length) {
+    if (officers && d.partial) {   // light check from the add-on: only who's on duty now; everyone else on the snapshot goes off duty
+      const osh = dpSheet_(DP_OFF_, DP_OFF_HEAD_), n = osh.getLastRow(), cur = n > 1 ? osh.getRange(2, 1, n - 1, DP_OFF_HEAD_.length).getValues() : [], on = {};
+      officers.forEach(o => { on[str_(o.pid).slice(0, 60)] = o; });
+      const rows = cur.map(r => { const o = on[str_(r[0])]; if (o) { delete on[str_(r[0])];
+          return [r[0], pids[r[0]] ? "'" + pids[r[0]] : r[1], cellSafe_(clip_(str_(o.name) || str_(r[2]), 80)), "On Duty", Number(o.total) || r[4], Number(o.week) || r[5], Number(o.seenAt) > 1.6e12 ? new Date(Number(o.seenAt)) : r[6], new Date()]; }
+        return [r[0], r[1], r[2], /on duty/i.test(str_(r[3])) ? "Off Duty" : r[3], r[4], r[5], r[6], r[7]]; });
+      Object.keys(on).forEach(pid => { const o = on[pid]; rows.push([pid, pids[pid] ? "'" + pids[pid] : "", cellSafe_(clip_(str_(o.name), 80)), "On Duty", Number(o.total) || 0, Number(o.week) || 0, Number(o.seenAt) > 1.6e12 ? new Date(Number(o.seenAt)) : "", new Date()]); });
+      if (rows.length) osh.getRange(2, 1, rows.length, DP_OFF_HEAD_.length).setValues(rows);
+    } else if (officers && officers.length) {
       const osh = dpSheet_(DP_OFF_, DP_OFF_HEAD_), rows = officers.map(o => { const pid = str_(o.pid).slice(0, 60);
         return [pid, pids[pid] ? "'" + pids[pid] : "", cellSafe_(clip_(str_(o.name), 80)), cellSafe_(clip_(str_(o.status), 20)), Number(o.total) || 0, Number(o.week) || 0, (Number(o.seenAt) > 1.6e12 ? new Date(Number(o.seenAt)) : cellSafe_(clip_(str_(o.seen), 30))), new Date()]; });
       if (osh.getLastRow() > 1) osh.getRange(2, 1, osh.getLastRow() - 1, DP_OFF_HEAD_.length).clearContent();
       osh.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
     }
     if (!who.used || now - who.used > 5 * 60e3) { who.used = now; PROPS_.setProperty("DP_KEYS", JSON.stringify(K)); }
-    const st = dpState_(); st.at = now; st.by = who.label || who.by || ""; if (officers) { st.full = now; st.officers = officers.length; st.onDuty = officers.filter(o => /on duty/i.test(str_(o.status))).length; }
+    const st = dpState_(); st.at = now; st.by = who.label || who.by || ""; if (officers) { st.full = now; if (!d.partial) st.officers = officers.length; st.onDuty = officers.filter(o => /on duty/i.test(str_(o.status))).length; }
     if (!st.first) st.first = now;
     PROPS_.setProperty("DP_STATE", JSON.stringify(st));
     try { CacheService.getScriptCache().removeAll(["dp_shifts", "dp_reps", "dp_onduty"]); } catch (e) {}
