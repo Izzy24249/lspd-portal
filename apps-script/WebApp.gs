@@ -5678,7 +5678,7 @@ function pbPush_(A) {
     CacheService.getScriptCache().removeAll(["roster_tab_" + tid + "_" + RANK_COL_ + "_all", "roster_tab_" + tid, "roster_tab_" + tid + "_" + RANK_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_ + "_all"]);
     getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); }
     const oid = rosterTabByName_(ONBOARD_TAB_); if (oid != null && out.done.some(p => p.onb)) {
-      CacheService.getScriptCache().removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all"]);
+      CacheService.getScriptCache().removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all", "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_ + "_all", "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_ + OB_DATE_COL_ + "_all"]);
       getRosterTab_(oid, true, [RANK_COL_, TIG_COL_], false, true); } } catch (e) {}
   // the announcement (if High Command picked a channel)
   let warning = "";
@@ -5999,6 +5999,6 @@ function obPush_(A) {
   });
   if (!out.ok) return out;
   try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "promo_view_onboard", "roster_calls"]); const oid = rosterTabByName_(ONBOARD_TAB_);
-    if (oid != null) { c.removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all"]); } } catch (e) {}
+    if (oid != null) { c.removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all", "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_ + "_all", "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_ + OB_DATE_COL_ + "_all"]); } } catch (e) {}
   return { ok: true, removed: out.done.length, cleaned: out.cleaned, done: out.done.map(p => ({ callsign: p.callsign, officer: p.officer, toRow: p.toRow })), skipped: out.skipped.map(p => ({ callsign: p.callsign, officer: p.officer, error: p.error })) };
 }
