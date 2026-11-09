@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 134;
+const BACKEND_VERSION = 135;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -68,6 +68,7 @@ function doPost(e) {
   let d;
   try { d = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "Bad request." }); }
   try {
+    if (d.session && (!d.action || !PV_READ_[d.action]) && previewOf_(d.session)) return json_({ ok: false, error: "Preview mode is view-only, so nothing was saved or sent." });
     if (d.action) {
       const out = WRITE_ACTIONS_[d.action] ? withLock_(() => handleAdmin_(d)) : handleAdmin_(d);
       if (out && out.ok && /^promo(Credit|Remove|Excuse|Since)$/.test(d.action)) snapshotSoon_();
@@ -2898,7 +2899,20 @@ function acctProfile_(acct) {
   return { discordId: acct.id, username: acct.username, callsign: person.callsign || acct.callsign, name: person.name || acct.name, rank: person.rank || "", title: str_(acct.rankAs) || voiceTitleFor_(person), level: level, rank_i: LEVELS_.indexOf(level), divisions: acctDivisions_(acct, level),
     forms: (() => { try { const pr = { level: level }; return getConfig_().forms.filter(f => (f.accessTabs || []).length && formAllowed_(f, acct, pr)).map(f => f.id); } catch (e) { return []; } })() };
 }
+// "View the MDT as…" (Admin → MDT Preview): a 1-hour read-only session that sees exactly what that officer sees
+const PV_READ_ = { officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
+function previewOf_(token) {
+  const t = offRead_(token, "PV"); if (!t) return null;
+  const b = t.id.split(":"); return { id: b[0], level: LEVELS_.indexOf(b[1]) !== -1 ? b[1] : "", by: b.slice(2).join(":") };
+}
+function previewAcct_(pv) {
+  const a = acctFind_(pv.id), p = a ? Object.assign({}, a) : { id: pv.id, username: "", name: "", callsign: "", divisions: [] };
+  if (pv.level) p.override = pv.level;
+  p.preview = true; p.locked = false;
+  return p;
+}
 function officerSession_(token) {
+  const pv = previewOf_(token); if (pv) return previewAcct_(pv);
   const t = offRead_(token, "OFF"); if (!t) return null;
   const a = acctFind_(t.id); if (!a || a.locked || !a.hash || (a.signedOut && t.issued < a.signedOut)) return null;
   return a;
@@ -4331,6 +4345,19 @@ function handleAdmin_(d) {
       const r = divImport_();
       logAdmin_(me.username, "division logs", "imported " + r.added + " past reports");
       return Object.assign({ ok: true }, r);
+    }
+    case "previewPeople": {      // Admin → MDT Preview: everyone on the rosters, by rank
+      if (["owner", "admin"].indexOf(me.role) === -1) return { ok: false, error: "Only an owner or admin can preview the MDT." };
+      const accts = {}; acctAll_().forEach(a => accts[a.id] = a);
+      const ppl = promoPeople_().map(o => { const a = accts[o.id]; return { id: o.id, callsign: o.callsign, name: o.name, rank: o.rank, idx: o.idx, trainee: !!o.trainee, acct: !!a, level: acctLevel_(a || {}, { trainee: o.trainee }) }; });
+      return { ok: true, people: ppl, levels: LEVELS_.filter(l => l !== "owner") };
+    }
+    case "previewStart": {
+      if (["owner", "admin"].indexOf(me.role) === -1) return { ok: false, error: "Only an owner or admin can preview the MDT." };
+      const id = str_(d.discordId).replace(/\D/g, ""), lv = LEVELS_.indexOf(str_(d.level)) !== -1 && d.level !== "owner" ? str_(d.level) : "";
+      if (!id) return { ok: false, error: "Pick an officer to preview." };
+      logAdmin_(me.username, "MDT preview", "viewed the MDT as " + id + (lv ? " (" + lv + ")" : ""));
+      return { ok: true, session: offToken_("PV", id + ":" + lv + ":" + me.username, 3600e3) };
     }
     case "acctList": return { ok: true, accounts: acctList_(), discord: discordStatus_(), voice: voiceStatus_(), signon: signonCfg_(), divisionList: divList_() };
     case "acctDivisions": {      // which divisions a Leader runs in Division Command

@@ -5,7 +5,7 @@
    Also keeps the officer's profile fresh (level, rank, divisions) and shows "Division Command" links to those allowed. */
 (function () {
   "use strict";
-  var IDLE_MS = 10 * 60 * 1000;
+  var IDLE_MS = window.LSPD_PREVIEW ? 1e12 : 10 * 60 * 1000;   // an MDT preview never locks
   var EMBED = false; try { EMBED = window.top !== window; } catch (e) { EMBED = true; }   // a page shown inside the MDT: the MDT draws the lock
   var LS = {
     get: function (k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },

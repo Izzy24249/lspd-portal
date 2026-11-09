@@ -277,6 +277,21 @@
   .rpill.owner{color:var(--gold);border-color:rgba(242,182,50,.4)}
   .role-sel{width:auto;height:32px;padding:0 10px;font-size:.8rem}
   @media(max-width:700px){.ulist .urow{grid-template-columns:40px 1fr}.ulist .urow>.acts,.ulist .urow>select,.ulist .urow>.rpill{grid-column:2}}
+  /* MDT Preview */
+  .pv-top{display:grid;gap:8px}
+  .pv-ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .pv-ctl .acct-q{flex:1 1 260px}
+  .pv-lv{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.8rem}
+  .pv-group+.pv-group{border-top:1px solid rgba(255,255,255,.06)}
+  .pv-gh{display:flex;align-items:center;gap:10px;padding:14px 20px 8px;position:sticky;top:0;background:inherit}
+  .pv-gh b{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--blue2)}
+  .pv-gh small{color:var(--muted);font-size:.74rem;margin-right:auto}
+  .pv-row{display:grid;grid-template-columns:70px 1fr auto;gap:12px;align-items:center;padding:9px 20px;border-top:1px solid rgba(255,255,255,.04)}
+  .pv-row:hover{background:rgba(47,123,255,.06)}
+  .pv-cs{font:700 .8rem ui-monospace,Consolas,monospace;color:var(--blue2)}
+  .pv-n{display:flex;flex-direction:column;min-width:0}
+  .pv-n small{color:var(--muted);font-size:.74rem}
+  @media(max-width:600px){.pv-row{grid-template-columns:56px 1fr}.pv-row>.btn{grid-column:2;justify-self:start}}
   /* Activity timeline */
   .tlwrap{margin-bottom:12px}
   .tl-day{padding:10px 20px;font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;font-weight:800;color:var(--muted);background:rgba(255,255,255,.02);border-bottom:1px solid var(--line)}
@@ -402,6 +417,7 @@
         <div class="ng">Administration</div>
 <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Portal Settings</span></button>
 <button data-tab="perms"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Permissions</span></button>
+<button data-tab="mdtview"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>MDT Preview</span></button>
 <button data-tab="fleet"><svg viewBox="0 0 24 24"><path d="M4 16v-4l2-5h12l2 5v4M4 16h16M4 16v2h3v-2M17 16v2h3v-2M7 12h10"/></svg><span>Fleet &amp; Uniforms</span></button>
 <button data-tab="accounts"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg><span>Officer Accounts</span></button>
 <button data-tab="discord"><svg viewBox="0 0 24 24"><path d="M8 7.5c2.6-1 5.4-1 8 0M7 16.5c3.2 1.2 6.8 1.2 10 0M6.5 7.5 4 15.5c1.4 1.3 3 2 4.5 2.3l1-2M17.5 7.5l2.5 8c-1.4 1.3-3 2-4.5 2.3l-1-2"/><circle cx="9.5" cy="12" r="1.2"/><circle cx="14.5" cy="12" r="1.2"/></svg><span>Discord</span></button>
@@ -656,10 +672,10 @@ function renderPage(keepScroll) {
   const y = window.scrollY;
   document.querySelectorAll("#nav [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === TAB));
   const page = $("page"); page.innerHTML = ""; page.className = "pg pg-" + TAB;
-  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, fleet: pageFleet, discord: pageDiscord, perms: pagePerms, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
+  ({ forms: EDIT ? pageEditor : pageForms, webhooks: pageWebhooks, settings: pageSettings, hours: pageHours, promo: pagePromo, divisions: pageDivisions, accounts: pageAccounts, fleet: pageFleet, discord: pageDiscord, perms: pagePerms, mdtview: pageMdtView, admins: pageAdmins, activity: pageActivity, account: pageAccount })[TAB](page);
   if (keepScroll) window.scrollTo(0, y); else window.scrollTo(0, 0);
 }
-const TAB_GROUP = { hours: "Operations", promo: "Operations", settings: "Administration", admins: "Administration", activity: "Administration", account: "Account" };
+const TAB_GROUP = { mdtview: "Administration", hours: "Operations", promo: "Operations", settings: "Administration", admins: "Administration", activity: "Administration", account: "Account" };
 function head(title, desc, ...right) {
   const kick = TAB_GROUP[TAB] ? h("span", { class: "ph-kicker", text: TAB_GROUP[TAB] }) : null;
   return h("div", { class: "pagehead" + (kick ? " v2" : "") }, kick ? h("div", { class: "ph-t" }, kick, h("h2", { text: title })) : h("h2", { text: title }), h("div", { class: "spacer" }), right, desc ? h("p", { text: desc }) : null);
@@ -1720,6 +1736,56 @@ function drawAccounts(box) {
     h("div", { class: "kpi" }, h("small", { text: "Locked" }), h("b", { text: String((ACCTS || []).filter(a => a.locked).length) })),
     h("div", { class: "kpi" }, h("small", { text: "Signed in this week" }), h("b", { text: String((ACCTS || []).filter(a => a.last && Date.now() - new Date(a.last) < 7 * 864e5).length) }))),
     h("div", { class: "sec flush" }, h("div", { style: "padding:14px 16px 4px" }, q), list));
+  draw();
+}
+/* ---------------- MDT PREVIEW: see the MDT exactly as any officer (and so any rank) sees it ---------------- */
+let PV_PEOPLE = null;
+function pageMdtView(page) {
+  page.append(head("MDT Preview", "Open the MDT as any officer to see exactly what their rank and level can see: the pages in the menu, the boards, Division Command, the promotion tools. It opens in a new tab, view-only (nothing can be saved, filed or sent), and lasts an hour. Your own sign-on isn't touched.",
+    h("button", { class: "btn ghost sm", onclick: () => { PV_PEOPLE = null; renderPage(true); } }, "Refresh")));
+  if (!["owner", "admin"].includes(ME.role)) { page.append(h("div", { class: "sec empty-note", text: "Only an owner or admin can preview the MDT." })); return; }
+  const box = h("div", {}, h("div", { class: "sec empty-note", text: "Loading the rosters…" })); page.append(box);
+  (PV_PEOPLE ? Promise.resolve() : api("previewPeople", {}).then(r => { PV_PEOPLE = r.people || []; }))
+    .then(() => drawMdtView(box))
+    .catch(e => { box.innerHTML = ""; box.append(h("div", { class: "sec empty-note", text: BACKEND_HAVE < 135 ? "Paste the new WebApp.gs (version 135 or newer) and deploy a new version to use MDT Preview." : e.message })); });
+}
+function drawMdtView(box) {
+  box.innerHTML = "";
+  const LVN = { trainee: "Trainee", officer: "Officer", fto: "FTO / Trainer", leader: "Division leader", command: "Command", admin: "Admin" };
+  const lvSel = h("select", { class: "role-sel" }, h("option", { value: "", text: "Their own level" }), Object.keys(LVN).map(k => h("option", { value: k, text: "As " + LVN[k] })));
+  const q = h("input", { type: "search", class: "acct-q", placeholder: "Search name, callsign or rank…" });
+  const list = h("div", { class: "pv-list" });
+  const open = async p => {
+    const w = window.open("about:blank", "_blank");   // opened right away so the browser doesn't block it
+    try { const r = await api("previewStart", { discordId: p.id, level: lvSel.value });
+      const who = (p.callsign ? p.callsign + " | " : "") + p.name + " (" + (p.trainee ? "Onboarding" : p.rank || "?") + (lvSel.value ? ", as " + LVN[lvSel.value] : "") + ")";
+      const url = "mdt.html?preview=" + encodeURIComponent(r.session) + "&pvwho=" + encodeURIComponent(who);
+      if (w) w.location.href = url; else location.href = url;
+    } catch (e) { if (w) w.close(); toast(e.message, "err"); }
+  };
+  const draw = () => {
+    list.innerHTML = "";
+    const t = q.value.trim().toLowerCase();
+    const ppl = PV_PEOPLE.filter(p => !t || [p.callsign, p.name, p.rank, p.trainee ? "onboarding trainee" : ""].join(" ").toLowerCase().includes(t));
+    const groups = new Map();
+    ppl.slice().sort((a, b) => (b.trainee ? -1 : b.idx) - (a.trainee ? -1 : a.idx) || String(a.callsign).localeCompare(String(b.callsign), undefined, { numeric: true }))
+      .forEach(p => { const g = p.trainee ? "Onboarding (trainees)" : p.rank || "No rank"; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(p); });
+    if (!groups.size) { list.append(h("div", { class: "empty-note", style: "padding:20px", text: "No one matches." })); return; }
+    groups.forEach((rows, g) => {
+      list.append(h("div", { class: "pv-group" },
+        h("div", { class: "pv-gh" }, h("b", { text: g }), h("small", { text: rows.length + (rows.length === 1 ? " officer" : " officers") }),
+          h("button", { class: "btn ghost sm", title: "Preview the first officer of this rank", onclick: () => open(rows[0]) }, "👁 View this rank")),
+        rows.map(p => h("div", { class: "pv-row" },
+          h("span", { class: "pv-cs", text: p.callsign || "—" }),
+          h("span", { class: "pv-n" }, h("b", { text: p.name }), h("small", { text: (LVN[p.level] || p.level) + " level" + (p.acct ? "" : " · hasn't signed in to the MDT yet") })),
+          h("button", { class: "btn primary sm", onclick: () => open(p) }, "👁 View as")))));
+    });
+  };
+  q.oninput = draw;
+  box.append(h("div", { class: "sec pv-top" },
+      h("div", { class: "pv-ctl" }, q, h("label", { class: "pv-lv" }, h("span", { text: "Level" }), lvSel)),
+      h("p", { class: "help", text: "Level: \"Their own level\" shows exactly what that officer gets. Pick another level to see that rank with more or less access (for example a Sergeant set up as a Division leader)." })),
+    h("div", { class: "sec flush" }, list));
   draw();
 }
 function signonSec() {
