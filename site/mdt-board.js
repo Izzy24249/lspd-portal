@@ -190,10 +190,19 @@
     });
     return ANN_HEAD + body.replace(/\n+$/, "") + ANN_FOOT;
   }
+  // PO → PO II during the week (not the Friday promotions): FTO Command's "Probationary Move Up"
+  const PROB_HEAD = "# Probationary Move UP *!* \n\n### Congratulations to the following Officer for successfully completing all training requirements! \n\n\n", PROB_FOOT = "\n\n\n**Welcome to full duty!**\n\nEveryone (<@&1176588748016848957>) , please join us in congratulating them and wishing them the best as they hit the streets. Stay safe out there! \ud83d\ude94\n\nSigned,\n_LSPD FTO Command_\n\n\nCongratulations! <a:Yay:1542189362890940556> <a:clap:1063927446124113970>";
+  function probAnnouncement(list) {
+    const num = c => { const m = /(\d+)/.exec(c || ""); return m ? +m[1] : 1e9; };
+    const po = list.filter(r => annIdx(r) === 0).sort((a, b) => num(a.oldCs) - num(b.oldCs));
+    return PROB_HEAD + po.map(r => { const name = String(r.officer || "").replace(/^.*\|\s*/, "").trim().replace(/([a-z])\s?R[AM]$/, "$1");
+      return "- " + (r.oldCs ? r.oldCs + " | " : "") + "PO " + name + " | LSPD                               <a:mwrp_arrow_right:1393248238592720986>                         " + (r.id ? "<@" + r.id + ">" : "") + "     "; }).join("\n\n") + PROB_FOOT;
+  }
   function lastBatch() { const R = (B.recent || []).slice().sort((a, b) => b.at - a.at); if (!R.length) return []; const t = R[0].at; return R.filter(r => t - r.at < 20 * 60e3); }
-  function copyAnn(list) {
+  function copyAnn(list, kind) {
+    if (kind === "prob") list = list.filter(r => annIdx(r) === 0);
     if (!list.length) return M().toast("No promotions to announce yet.");
-    const txt = announcement(list);
+    const txt = kind === "prob" ? probAnnouncement(list) : announcement(list);
     const done = () => M().toast("📋 Announcement copied (" + list.length + " officer" + (list.length === 1 ? "" : "s") + "). Paste it in Discord.");
     try { navigator.clipboard.writeText(txt).then(done, () => annBox(txt)); } catch (e) { annBox(txt); }
   }
@@ -202,7 +211,8 @@
     const rec = B.recent || []; if (!rec.length) return "";
     const pend = rec.filter(r => !r.discord), canTick = B.me.hc || B.me.editor;
     const lb = lastBatch();
-    return '<div class="sect"><span class="lbl">Recent promotions · Discord to-do</span>' + (lb.length ? '<button class="pbx-btn go ann-btn" data-pbann>📋 COPY ANNOUNCEMENT · ' + lb.length + "</button>" : "") + '</div><div class="pbx-fu">' +
+    return '<div class="sect"><span class="lbl">Recent promotions · Discord to-do</span>' + (lb.length ? '<button class="pbx-btn go ann-btn" data-pbann>📋 FRIDAY ANNOUNCEMENT · ' + lb.length + "</button>" : "") +
+      (lb.some(r => annIdx(r) === 0) ? '<button class="pbx-btn ghost ann-btn" data-pbann="prob" title="PO → PO II during the week">📋 PROBATIONARY MOVE UP · ' + lb.filter(r => annIdx(r) === 0).length + "</button>" : "") + '</div><div class="pbx-fu">' +
       '<p class="pbx-fu-h">' + (pend.length ? "Until the bot is approved, someone with Discord permissions updates each officer's name tag and rank role by hand. Tick each one off when it's done." : "All caught up. Every recent promotion has been updated in Discord.") + "</p>" +
       rec.map(r => '<div class="pbx-fr' + (r.discord ? " done" : "") + '"><div><b>' + esc(r.officer.replace(/^.*\|\s*/, "")) + "</b><small>" + esc(r.from) + " → " + esc(r.to) + " · " + day(r.at) + (r.oldCs || r.newCs ? " · " + esc(r.oldCs || "—") + " → " + esc(r.newCs || "—") : "") + "</small></div>" +
         '<button class="pbx-nick" data-copy="' + esc(r.todo.nick) + '" data-what="Nickname" title="Copy nickname"><span>' + esc(r.todo.nick) + "</span><em>COPY</em></button>" +
@@ -267,8 +277,9 @@
       m.querySelector(".md-box").innerHTML = '<div class="pbx-done"><span>🎖️</span><h3>' + r.pushed + " PROMOTION" + (r.pushed === 1 ? "" : "S") + " PUSHED</h3><p>The roster is updated." + (r.warning ? "<br><b style=\"color:var(--amber)\">" + esc(r.warning) + "</b>" : "") + "</p>" +
         ((r.done || []).length ? '<div class="pbx-plan">' + r.done.map(p => '<div><b>' + esc(p.officer.replace(/^.*\|\s*/, "")) + "</b><span>" + esc(p.from) + " → " + esc(p.to) + "</span><em>" + esc(p.oldCs || "—") + " → <b>" + esc(p.newCs || "—") + "</b></em></div>").join("") + "</div>" : "") +
         ((r.skipped || []).length ? '<div class="pbx-plan">' + r.skipped.map(s => '<div class="bad"><b>' + esc(s.officer) + "</b><em>✕ " + esc(s.error) + "</em></div>").join("") + "</div>" : "") +
-        '<p style="font-size:13px">Next: post the announcement, then update their Discord name tags and roles from the to-do list under the board.</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn pbx-push" id="pbAnnNow">📋 COPY ANNOUNCEMENT</button><button class="btn ghost" data-close>DONE</button></div></div>';
+        '<p style="font-size:13px">Next: post the announcement, then update their Discord name tags and roles from the to-do list under the board.</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn pbx-push" id="pbAnnNow">📋 FRIDAY ANNOUNCEMENT</button>' + ((r.done || []).some(p => annIdx(p) === 0) ? '<button class="btn ghost" id="pbProbNow">📋 PROBATIONARY MOVE UP</button>' : "") + '<button class="btn ghost" data-close>DONE</button></div></div>';
       const an = m.querySelector("#pbAnnNow"); if (an) an.onclick = () => copyAnn((r.done || []).map(p => Object.assign({}, p)));
+      const pn = m.querySelector("#pbProbNow"); if (pn) pn.onclick = () => copyAnn((r.done || []).map(p => Object.assign({}, p)), "prob");
       M().blip(1600); setTimeout(() => M().blip(2000), 120); M().draw();
     };
   }
@@ -323,7 +334,7 @@
     const dn = t.closest("[data-pbdone]"); if (dn) { const [en, on] = dn.dataset.pbdone.split("|"), r0 = (B.recent || []).find(x => x.entry === en); if (!r0) return; const was = r0.discord;
       quick("pbDiscordDone", { entry: en, on: on === "1" }, () => { r0.discord = on === "1" ? "Done" : ""; }, () => { r0.discord = was; }); return; }
     if (t.closest("[data-pbpush]")) { push(); return; }
-    if (t.closest("[data-pbann]")) { copyAnn(lastBatch()); return; }
+    const an0 = t.closest("[data-pbann]"); if (an0) { copyAnn(lastBatch(), an0.dataset.pbann); return; }
     const card = t.closest("[data-pbo]"); if (card && !t.closest("button")) { OPEN[card.dataset.pbo] = !OPEN[card.dataset.pbo]; M().draw(); }
   });
   document.addEventListener("input", e => { if (e.target.id === "pbQ") { Q = e.target.value; const pos = e.target.selectionStart; M().draw(); const n = document.getElementById("pbQ"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } } });
