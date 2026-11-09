@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 137;
+const BACKEND_VERSION = 138;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3209,6 +3209,7 @@ function promoReqParse_(fresh) {
 // Ticks themselves:  time in grade (roster column G: a date or a day count)  ·  "N reports" (every report that credits the
 // officer since they reached their rank, division reports included).  Everything else is ticked by command.
 // Ticks live in the "Promotion Checks" tab; a promotion starts a fresh checklist (the rank is part of each key).
+const OB_DATE_COL_ = "K";   // Onboarding roster: date the trainee was added
 const PCHK_SHEET_ = "Promotion Checks", PCHK_HEAD_ = ["Discord ID", "Officer", "Rank", "Key", "Requirement", "Checked by", "Checked at"], TIG_COL_ = "G";
 function pchkSheet_() {
   const ss = ss_(); let sh = ss.getSheetByName(PCHK_SHEET_);
@@ -3262,7 +3263,7 @@ function promoLadderKeys_() {
 // everyone on the Personnel and Onboarding rosters, with their rank, time in grade and report count
 function promoPeople_(fresh) {
   const cache = CacheService.getScriptCache(), ck = "promo_people";
-  if (!fresh) { const hit = cache.get(ck); if (hit) { try { const o = JSON.parse(hit), now = Date.now(); if (o.some(x => x.idx === 0 && !(x.po && "sop" in x.po))) throw 0; o.forEach(x => { x.tigDays = x.since ? Math.floor((now - x.since) / 864e5) : null; }); return o; } catch (e) {} } }
+  if (!fresh) { const hit = cache.get(ck); if (hit) { try { const o = JSON.parse(hit), now = Date.now(); if (o.some(x => x.idx === 0 && !(x.po && "sop" in x.po)) || !o.some(x => x.v138)) throw 0; o.forEach(x => { x.tigDays = x.since ? Math.floor((now - x.since) / 864e5) : null; }); return o; } catch (e) {} } }
   const out = promoPeopleRead_();
   try { const js = JSON.stringify(out); if (js.length < 95000) cache.put(ck, js, 900); } catch (e) {}
   return out;
@@ -3271,14 +3272,14 @@ function promoPeopleRead_() {
   const out = [], seen = {}, now = Date.now();
   [[PERSONNEL_TAB_, false], [ONBOARD_TAB_, true]].forEach(pair => {
     const tid = rosterTabByName_(pair[0]); if (tid == null) return;
-    let people = []; try { people = getRosterTab_(tid, false, [RANK_COL_, TIG_COL_], false, true).people || []; } catch (e) {}
+    let people = []; try { people = getRosterTab_(tid, false, pair[1] ? [RANK_COL_, TIG_COL_, OB_DATE_COL_] : [RANK_COL_, TIG_COL_], false, true).people || []; } catch (e) {}
     people.forEach(p => {
       if (!p.id || seen[p.id]) return; seen[p.id] = 1;
       const cs = p.name.indexOf("|") !== -1 ? p.name.split("|")[0].trim() : "", name = cleanName_(cs ? p.name.split("|").slice(1).join("|").trim() : p.name);
       const idx = pair[1] ? 0 : rankIndex_(str_(p.more && p.more[RANK_COL_]) || p.extra || "");
-      const raw = str_(p.more && p.more[TIG_COL_]).trim(); let since = 0;
+      const raw = str_(p.more && p.more[pair[1] ? OB_DATE_COL_ : TIG_COL_]).trim(); let since = 0;   // trainees (PO): the date they were added to the Onboarding roster (column K)
       if (/^\d{1,4}$/.test(raw)) since = now - Number(raw) * 864e5; else if (raw) { const d = new Date(raw); if (!isNaN(d)) since = d.getTime(); }
-      out.push({ id: p.id, callsign: cs || (pair[1] ? callsignIn_(p.more && p.more[RANK_COL_]) : ""), name: name, rank: pair[1] ? rankShown_(p.more && p.more[RANK_COL_], true) : str_(p.more && p.more[RANK_COL_]), idx: idx, trainee: pair[1], since: since });
+      out.push({ v138: 1, id: p.id, callsign: cs || (pair[1] ? callsignIn_(p.more && p.more[RANK_COL_]) : ""), name: name, rank: pair[1] ? rankShown_(p.more && p.more[RANK_COL_], true) : str_(p.more && p.more[RANK_COL_]), idx: idx, trainee: pair[1], since: since });
     });
   });
   // reports that credit each officer
@@ -5674,7 +5675,7 @@ function pbPush_(A) {
   try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "roster_calls", "pb_open"].concat(out.done.map(p => "rp_" + p.id))); } catch (e) {}
   // (callsigns first, so the re-read roster shows the new ones; the other roster copies are dropped and rebuilt on next use)
   try { callsignMap_(true); const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) {
-    CacheService.getScriptCache().removeAll(["roster_tab_" + tid + "_" + RANK_COL_ + "_all", "roster_tab_" + tid, "roster_tab_" + tid + "_" + RANK_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_]);
+    CacheService.getScriptCache().removeAll(["roster_tab_" + tid + "_" + RANK_COL_ + "_all", "roster_tab_" + tid, "roster_tab_" + tid + "_" + RANK_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_ + "_all"]);
     getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); }
     const oid = rosterTabByName_(ONBOARD_TAB_); if (oid != null && out.done.some(p => p.onb)) {
       CacheService.getScriptCache().removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all"]);
