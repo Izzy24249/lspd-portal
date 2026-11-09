@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.3.0
+// @version      1.3.1
 // @description  Reads Duty Portal hours, shifts and reports for the LSPD MDT promotion board, and updates the Duty Portal roster after promotions are marked done in the MDT. Runs in your own logged-in browser; never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
@@ -11,8 +11,8 @@
 // @connect      script.googleusercontent.com
 // @run-at       document-idle
 // @noframes
-// @downloadURL  https://lspdisthebest.net/tools/lspd-duty-sync.user.js
-// @updateURL    https://lspdisthebest.net/tools/lspd-duty-sync.user.js
+// @downloadURL  https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/tools/lspd-duty-sync.user.js
+// @updateURL    https://raw.githubusercontent.com/Izzy24249/lspd-portal/main/site/tools/lspd-duty-sync.user.js
 // ==/UserScript==
 (function () {
   "use strict";
