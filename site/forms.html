@@ -102,6 +102,7 @@ function draftStatus(msg){ const el = $("draftStatus"); el.textContent = msg; el
 
 /* ---------- routing ---------- */
 function go(view){
+  const sopOv = document.querySelector(".sop-ov"); if(sopOv){ sopOv.remove(); document.documentElement.classList.remove("sop-lock"); }   // switching forms: the Academy check pop-up goes with it (it comes back when the Academy form is opened again)
   const isProg = /^promo(:[a-z0-9-]+)?$/.test(view);
   if(isProg){ PID = view.split(":")[1] || "cpl"; if(!(CONFIG && progList().some(p => p.id === PID))) view = "home"; }
   const prog = /^promo(:[a-z0-9-]+)?$/.test(view);
