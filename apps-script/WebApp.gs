@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 136;
+const BACKEND_VERSION = 137;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5719,7 +5719,7 @@ function dpPids_() { try { return JSON.parse(PROPS_.getProperty("DP_PIDS") || "{
 //  "move"   (everyone else): Main roster -> their spot -> Move spot -> the new callsign
 function dpJobsAll_() { try { return JSON.parse(PROPS_.getProperty("DP_JOBS") || "[]") || []; } catch (e) { return []; } }
 function dpJobsPut_(J) { const keep = J.filter(j => j.st === "queued" || j.st === "working" || Date.now() - (j.at || 0) < 14 * 864e5).slice(-80); PROPS_.setProperty("DP_JOBS", JSON.stringify(keep)); }
-function dpJobPub_(j) { return j ? { st: j.st, msg: j.msg || "", at: j.at || 0, kind: j.kind } : null; }
+function dpJobPub_(j) { return j ? { st: j.st, msg: j.msg || "", at: j.at || 0, kind: j.kind, step: j.step || "", tries: j.tries || 0 } : null; }
 function dpJobAdd_(e, who) {
   if (!dpKeys_().length || !e.newCs || !e.id) return null;   // no Duty Portal sync set up, or nothing to move
   const J = dpJobsAll_(); let j = J.find(x => x.id === e.entry);
@@ -5735,14 +5735,15 @@ function dpJobsApi_(d) {
   if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid." };
   if (d.action === "dpJobs") {
     const J = dpJobsAll_(), now = Date.now(); let changed = false;
-    J.forEach(j => { if (j.st === "working" && now - (j.at || 0) > 10 * 60000) { j.st = j.tries >= 2 ? "failed" : "queued"; if (j.st === "failed") j.msg = j.msg || "The add-on stopped before finishing."; changed = true; } });
+    J.forEach(j => { if (j.st === "working" && now - (j.at || 0) > 10 * 60000) { const where = j.step ? " (last step: " + j.step + ")" : ""; j.st = j.tries >= 2 ? "failed" : "queued"; j.msg = "The add-on went quiet for 10 minutes" + where + (j.st === "failed" ? ". Keep the Duty Portal tab in front (a background tab gets slowed down by the browser), then press Retry." : ", trying again."); j.step = ""; changed = true; } });
     const todo = J.filter(j => j.st === "queued").slice(0, 5);
-    if (todo.length) { todo.forEach(j => { j.st = "working"; j.at = now; j.tries = (j.tries || 0) + 1; }); changed = true; }
+    if (todo.length) { todo.forEach(j => { j.st = "working"; j.at = now; j.step = "picked up by the add-on"; j.tries = (j.tries || 0) + 1; }); changed = true; }
     if (changed) withLock_(() => { const cur = dpJobsAll_(); J.forEach(j => { const i = cur.findIndex(x => x.id === j.id); if (i !== -1) cur[i] = j; }); dpJobsPut_(cur); return { ok: true }; });
     return { ok: true, jobs: todo.map(j => ({ id: j.id, kind: j.kind, discord: j.discord, name: j.name, from: j.from, to: j.to })) };
   }
   return withLock_(() => { const J = dpJobsAll_(), j = J.find(x => x.id === str_(d.id)); if (!j) return { ok: true };
-    j.st = d.st === "done" ? "done" : "failed"; j.msg = clip_(str_(d.msg), 300); j.at = Date.now(); dpJobsPut_(J);
+    if (d.st === "working") { if (j.st === "working") { j.step = clip_(str_(d.msg), 160); j.at = Date.now(); dpJobsPut_(J); } return { ok: true }; }   // progress: which step it's on (also keeps the job from timing out)
+    j.st = d.st === "done" ? "done" : "failed"; j.msg = clip_(str_(d.msg), 300); j.step = ""; j.at = Date.now(); dpJobsPut_(J);
     try { CacheService.getScriptCache().remove("pb_view"); } catch (e) {}
     return { ok: true }; });
 }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.3.1
+// @version      1.4.0
 // @description  Reads Duty Portal hours, shifts and reports for the LSPD MDT promotion board, and updates the Duty Portal roster after promotions are marked done in the MDT. Runs in your own logged-in browser; never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
@@ -21,7 +21,10 @@
   const BASE = "/portal/lspd", REVISIT = 24 * 3600e3, ONDUTY_REVISIT = 3 * 3600e3, TAB = Math.random().toString(36).slice(2);
   const get = (k, d) => { try { const v = GM_getValue(k); return v === undefined ? d : v; } catch (e) { return d; } };
   const set = (k, v) => { try { GM_setValue(k, v); } catch (e) {} };
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // timers from a tiny worker: a Duty Portal tab in the background gets its own timers slowed to once a minute by the browser, workers don't
+  const WT = (() => { try { const w = new Worker(URL.createObjectURL(new Blob(["onmessage=e=>setTimeout(()=>postMessage(e.data[0]),e.data[1])"], { type: "text/javascript" }))), cb = {}; let n = 0;
+    w.onmessage = e => { const f = cb[e.data]; delete cb[e.data]; if (f) f(); }; return (f, ms) => { cb[++n] = f; w.postMessage([n, ms]); }; } catch (e) { return null; } })();
+  const sleep = ms => new Promise(r => (WT || setTimeout)(r, ms));
   let RUNNING = false, STATUS = "", timer = null;
   const PAGE_T0 = Date.now(), FULL_EVERY = 4 * 3600e3, RELOAD_AFTER = 2 * 3600e3;   // memory: full officer list only every 4 h; the tab refreshes itself every ~2 h
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -63,7 +66,8 @@
       frame = document.createElement("iframe");
       // kept on screen (but invisible, behind the page): the Duty Portal only loads more rows for frames the browser is drawing
       frame.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;opacity:0.01;z-index:-1;pointer-events:none;border:0";
-      frame.onload = () => res(frame.contentDocument);
+      const t = setTimeout(() => res(frame ? frame.contentDocument : document), 30000);   // never wait forever for a page
+      frame.onload = () => { clearTimeout(t); res(frame.contentDocument); };
       frame.src = path;
       document.body.appendChild(frame);
     });
@@ -170,39 +174,43 @@
     press(opt); await confirmAny(d);
     if (!(await waitFor(() => { const r = spotRow(d, job.to); return r && r.innerText.indexOf(job.discord) !== -1; }, 15000))) throw new Error("moved, but " + job.to + " doesn't show them yet");
   }
+  let JOBKEY = "", JOBID = "";
+  const step = t => { STATUS = "roster: " + t; draw(); if (JOBID) send({ action: "dpJob", key: JOBKEY, id: JOBID, st: "working", msg: t }); };
   async function doJob(job) {
     const notes = [];
+    step("opening the Main roster");
     let d = await openRoster("main");
     const mine = idRows(d, job.discord), at = mine.map(rowCs);
     if (at.some(c => c.toUpperCase() === job.to.toUpperCase())) notes.push("already in " + job.to);
     else if (job.kind === "move" || mine.length) {
       // on the main roster already: Actions -> Move spot -> the new callsign
       if (!mine.length) throw new Error("couldn't find them on the main roster (Discord ID " + job.discord + ")");
-      await moveTo(d, job, mine[0]); notes.push("moved " + at[0] + " → " + job.to);
+      step("moving " + at[0] + " to " + job.to + " (Actions → Move spot)"); await moveTo(d, job, mine[0]); notes.push("moved " + at[0] + " → " + job.to);
     } else {
       // PO -> PO II: the new callsign's spot -> Assign -> the officer (found by Discord ID)
       const row = spotRow(d, job.to); if (!row) throw new Error(job.to + " isn't on the main roster");
       if (!/\bAssign\b/.test(row.innerText)) throw new Error(job.to + " is already taken by someone else");
-      press(btnIn(row, /^Assign$/));
+      step("pressing Assign on " + job.to); press(btnIn(row, /^Assign$/));
       const x = await waitFor(() => dialog(d), 6000); if (!x) throw new Error("the Assign window didn't open");
       const inp = x.querySelector("input"); if (!inp) { await escape(d); throw new Error("no search box in the Assign window"); }
-      typeIn(inp, job.discord);
+      step("searching for " + job.name + " by Discord ID"); typeIn(inp, job.discord);
       await sleep(1200);
       const opts = await waitFor(() => { const o = [...x.querySelectorAll("[role=option],[cmdk-item]")].filter(e => (e.innerText || "").trim()); return o.length ? o : null; }, 8000);
       if (!opts) { await escape(d); throw new Error("no member with Discord ID " + job.discord + " in the Duty Portal"); }
       if (opts.length > 1) { await escape(d); throw new Error("more than one member matched Discord ID " + job.discord); }
       if (/already on this roster/i.test(opts[0].innerText)) { await escape(d); throw new Error("they're already on the main roster at another spot"); }
-      press(opts[0]); await confirmAny(d);
+      step("picking " + job.name + " for " + job.to); press(opts[0]); await confirmAny(d);
+      step("checking " + job.to + " shows " + job.name);
       if (!(await waitFor(() => { const r = spotRow(d, job.to); return r && r.innerText.indexOf(job.discord) !== -1; }, 15000))) throw new Error("assigned, but " + job.to + " doesn't show them yet");
       notes.push("assigned " + job.to);
     }
     if (job.kind === "assign") {
       // Cadets roster: clear their old spot (only rows that really are theirs, by Discord ID)
-      d = await openRoster("cadets");
+      step("opening the Cadets roster"); d = await openRoster("cadets");
       const old = idRows(d, job.discord);
       if (!old.length) { const r = job.from && spotRow(d, job.from); notes.push(r && !/\bAssign\b/.test(r.innerText) ? job.from + " belongs to someone else, left alone" : "no cadet spot to clear"); }
       for (const r0 of old) {
-        const cs = rowCs(r0); await menuPick(d, r0, /Clear assignment/i); await confirmAny(d);
+        const cs = rowCs(r0); step("clearing cadet spot " + cs); await menuPick(d, r0, /Clear assignment/i); await confirmAny(d);
         if (!(await waitFor(() => { const r = spotRow(d, cs); return r && r.innerText.indexOf(job.discord) === -1; }, 15000))) throw new Error("couldn't clear cadet spot " + cs);
         notes.push("cleared cadet " + cs);
       }
@@ -218,7 +226,9 @@
       for (const job of r.jobs) {
         STATUS = "roster: " + job.name + " → " + job.to; draw();
         let st = "done", msg = "";
+        JOBKEY = key; JOBID = job.id;
         try { msg = await doJob(job); } catch (e) { st = "failed"; msg = String(e.message || e); }
+        JOBID = "";
         try { if (frame) await escape(frame.contentDocument); } catch (e) {}
         await send({ action: "dpJob", key: key, id: job.id, st: st, msg: msg });
         await sleep(rand(1500, 3000));

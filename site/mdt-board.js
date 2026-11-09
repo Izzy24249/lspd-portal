@@ -211,7 +211,7 @@
   function dpChip(r, canTick) {
     const j = r.dpJob; if (!j) return "";
     const what = j.kind === "move" ? "move to " + (r.newCs || "the new spot") : "assign " + (r.newCs || "") + " · clear " + (r.oldCs || "cadet spot");
-    const T = { queued: ["wait", "🤖 Duty Portal roster: waiting for the add-on (" + what + ")"], working: ["work", "🤖 Duty Portal roster: updating now…"],
+    const T = { queued: ["wait", "🤖 Duty Portal roster: waiting for the add-on (" + what + ")" + (j.msg ? " · " + j.msg : "")], working: ["work", "🤖 Duty Portal roster: updating now" + (j.step ? " · " + j.step : "…") + (j.at ? " (" + Math.max(0, Math.round((Date.now() - j.at) / 1000)) + "s ago)" : "")],
       done: ["ok", "🤖 Duty Portal roster updated" + (j.msg ? " · " + j.msg : "")], failed: ["bad", "🤖 Duty Portal roster: couldn't finish · " + (j.msg || "unknown problem")] }[j.st] || ["wait", j.st];
     return '<div class="pbx-dp ' + T[0] + '"><span>' + esc(T[1]) + "</span>" + (j.st === "failed" && canTick ? '<button class="pbx-btn ghost" data-dpretry="' + esc(r.entry) + '">RETRY</button>' : "") + "</div>";
   }
@@ -223,7 +223,7 @@
       const busy = (B.recent || []).some(r => r.dpJob && (r.dpJob.st === "queued" || r.dpJob.st === "working"));
       if (!busy || !document.querySelector(".pbx-fu")) { clearInterval(DPW); DPW = null; return; }
       if (!PEND) call("pbBoard", {}).then(r => { if (r && r.ok) M().draw(); });
-    }, 20000);
+    }, 10000);
   }
   function followUps() {
     const rec = B.recent || []; if (!rec.length) return "";
