@@ -107,6 +107,7 @@ function go(view){
   const prog = /^promo(:[a-z0-9-]+)?$/.test(view);
   if(view === "home" || prog) document.body.dataset.ftheme = "";
   if(view !== "home" && !prog && !openForm(view)) { view = "home"; document.body.dataset.ftheme = ""; }
+  else if(view !== "home" && !prog && current && !/[?&]edit=/.test(location.search)) setTimeout(() => sopGate(current), 0);   // coming back to the form
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   $(view === "home" ? "view-home" : prog ? "view-promo" : "view-form").classList.add("active");
   if(prog){ promoOpen = new Set(); promoQuery = ""; promoFilter = "all"; loadPromo(); }
@@ -334,10 +335,25 @@ function openForm(id){
   return true;
 }
 
+// nothing filled in yet except the SOP answer? (the instructor's own name/ID, dates/times and preset answers don't count)
+function sopOnly(f){
+  if(!ctrl || !ctrl.collect) return false;
+  const d = ctrl.collect(), defs = {};
+  (f.blocks || []).forEach(b => (b.fields || []).forEach(x => defs[x.id] = x));
+  const skip = x => !x || x.id === "sopCheck" || /instructor|fto/i.test((x.label || "") + " " + x.id) || /^(date|time|static)$/.test(x.type);
+  if(Object.keys(d.values || {}).some(k => { const x = defs[k], v = d.values[k]; return v && !(x && skip(x)) && !(x && x.default && v === x.default); })) return false;
+  if(Object.values(d.checklists || {}).some(c => Object.values(c).some(Boolean))) return false;
+  if(Object.values(d.repeaters || {}).some(rows => rows.some(r => Object.values(r).some(v => v)))) return false;
+  return true;
+}
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible" && current && $("view-form").classList.contains("active")) sopGate(current); });
+
 /* ---------- SOP gate: forms with an "sopCheck" box (Academy Evaluation) ask first, before the form can be used ---------- */
 function sopGate(f){
   const sel = document.querySelector('#formMount select[data-f="sopCheck"]');
-  if(!sel || sel.value || !current || current.id !== f.id) return;   // no SOP box, or already answered (restored draft)
+  if(!sel || !current || current.id !== f.id || document.querySelector(".sop-ov")) return;
+  if(sel.value && !sopOnly(f)) return;          // answered and the training's under way: leave them be
+  if(sel.value){ sel.value = ""; sel.dispatchEvent(new Event("change", { bubbles: true })); }   // left and came back with nothing but the SOP answer: ask again
   const yes = [...sel.options].find(o => /verified|✅|has/i.test(o.value)), old = document.querySelector(".sop-ov"); if(old) old.remove();
   const ov = document.createElement("div"); ov.className = "sop-ov";
   const ask = () => { ov.innerHTML = `<div class="sop-card" role="dialog" aria-modal="true" aria-label="SOP check">
