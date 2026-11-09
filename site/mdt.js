@@ -583,7 +583,7 @@
   }
   function promoReqs(r, marks) {
     const mk = (i) => { const m = marks && marks[i]; if (!m) return ""; return '<span class="pr-mark ' + (m.done ? "ok" : "") + '">' + (m.done ? "✓ " : "") +
-      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.auto === "gom" ? (m.split ? gomSplit(m) : m.have + " / " + m.need + " GOM Trainings") : m.auto === "ra" ? m.have + " / " + m.need + " Academy Evaluations" : (m.auto === "cplcert" || m.auto === "cplhost") ? esc(cplTxt(m)) : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
+      (m.auto === "tig" ? (m.have == null ? "No TIG date on roster" : m.have + " / " + m.need + " days") : m.auto === "reports" ? m.have + " / " + m.need + " reports" : m.auto === "sop" ? (m.done ? "SOP Certified role in Discord" : "Waiting for the SOP Certified role in Discord") : m.auto === "gom" ? (m.split ? gomSplit(m) : m.have + " / " + m.need + " GOM Trainings") : m.auto === "ra" ? m.have + " / " + m.need + " Academy Evaluations" : m.auto === "pobt" ? (m.done ? "Basic Training on file" : "No completed Basic Training (GOM) on file yet") : m.auto === "pora" ? (m.done ? "Academy Evaluation on file (passed)" : "No passed Academy Evaluation on file yet") : m.auto === "poroster" ? (m.done ? "On the roster with a callsign" : "No callsign on the roster") : (m.auto === "cplcert" || m.auto === "cplhost") ? esc(cplTxt(m)) : m.done ? "Signed off" + (m.by ? " by " + esc(m.by) : "") : "Waiting for command sign-off") + "</span>"; };
     return r.reqs.length ? '<ol class="pr-reqs">' + r.reqs.map((q, i) => '<li class="' + (marks && marks[i] && marks[i].done ? "ok" : "") + '"><b>' + reqText(q.t) + (q.star ? ' <i class="pr-star" title="' + esc(r.note || "Time-limited") + '">✱</i>' : "") + "</b>" +
       (q.d ? "<small>" + q.d.split("\n").map(esc).join("<br>") + "</small>" : "") + mk(i) + "</li>").join("") + "</ol>" + (r.note ? '<p class="pr-note">✱ ' + esc(r.note) + "</p>" : "") : '<p class="pr-none">No requirements listed yet.</p>';
   }
@@ -647,6 +647,9 @@
     if (it.auto === "cplcert") return "BT instructor cert";
     if (it.auto === "cplhost") return "Host " + it.need + " BTs";
     if (it.auto === "ra") return it.need + " PO RAs";
+    if (it.auto === "pobt") return "Basic Training";
+    if (it.auto === "pora") return "Basic R/A";
+    if (it.auto === "poroster") return "Callsign";
     const t = String(it.t || "");
     if (/hours?\s+logged/i.test(t)) { const h = /\((\d+)\)\s*hours/i.exec(t), d = /\((\d+)\)\s*days/i.exec(t); return (h ? h[1] + " hrs" : "Hours") + (d ? " / " + d[1] + "d" : ""); }
     const x = t.replace(/^.*?\bmust\b\s*/i, "").replace(/\(.*?\)/g, " ");

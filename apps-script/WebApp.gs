@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 129;
+const BACKEND_VERSION = 130;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3200,6 +3200,11 @@ function reqKey_(idx, t) { let h = 5381; const x = str_(t).toLowerCase().replace
 // Global Operation Manual Training -> trainings, Academy Evaluation -> PO RAs
 const TAG_FORMS_ = { gom: "gomtraining", ra: "academy" };
 function reqAuto_(t, sopOn, idx) {
+  if (idx === 0) {   // Police Officer: the onboarding steps tick themselves from the training forms
+    if (/\bR\s*\/\s*A\b|ride[- ]?along/i.test(t) && /basic|academy|field training/i.test(t)) return { type: "pora", need: 1 };
+    if (/basic\s+(police\s+)?training|\bBPA\b|global operation/i.test(t)) return { type: "pobt", need: 1 };
+    if (/official callsign/i.test(t) && /roster/i.test(t)) return { type: "poroster", need: 1 };
+  }
   if (idx === 3) {   // Corporal: Basic Training Instructor certification, then hosting on their own
     const h = /after being certified/i.test(t) && /host\s*(?:a\s+minimum\s+of\s+)?\(?(\d+)\)?/i.exec(t);
     if (h) return { type: "cplhost", need: Number(h[1]) || 3 };
@@ -3229,7 +3234,7 @@ function promoLadderKeys_() {
 // everyone on the Personnel and Onboarding rosters, with their rank, time in grade and report count
 function promoPeople_(fresh) {
   const cache = CacheService.getScriptCache(), ck = "promo_people";
-  if (!fresh) { const hit = cache.get(ck); if (hit) { try { const o = JSON.parse(hit), now = Date.now(); o.forEach(x => { x.tigDays = x.since ? Math.floor((now - x.since) / 864e5) : null; }); return o; } catch (e) {} } }
+  if (!fresh) { const hit = cache.get(ck); if (hit) { try { const o = JSON.parse(hit), now = Date.now(); if (o.some(x => x.idx === 0 && !x.po)) throw 0; o.forEach(x => { x.tigDays = x.since ? Math.floor((now - x.since) / 864e5) : null; }); return o; } catch (e) {} } }
   const out = promoPeopleRead_();
   try { const js = JSON.stringify(out); if (js.length < 95000) cache.put(ck, js, 900); } catch (e) {}
   return out;
@@ -3266,6 +3271,23 @@ function promoPeopleRead_() {
       const m = tag[k] || {}; Object.keys(m).forEach(f => Object.keys(m[f]).forEach(row => { if (m[f][row] >= from) (got[f] = got[f] || {})[row] = 1; })); });
     const n = k => Object.keys(got[k] || {}).length, host = Object.assign({}, got.gom_lead || {}, got.gom_fto || {});
     o.tagged = { gom: Object.keys(host).length, gomAny: n(TAG_FORMS_.gom), gomLead: n("gom_lead"), gomFto: n("gom_fto"), gomWitness: n("gom_witness"), ra: n(TAG_FORMS_.ra) }; });
+  // Police Officers: Basic Police Training (GOM Training / BPA log, in a Trainee box, completed) and the Basic Police R/A
+  // (Academy Evaluation, in the Trainee box, passed). A training marked No / FAILED / Half Way doesn't count.
+  const poForms = [TAG_FORMS_.gom, TAG_FORMS_.ra, "bpalog"], trSlot = {};
+  (getConfig_().forms || []).forEach(f => { if (poForms.indexOf(f.id) === -1) return; trSlot[f.id] = {};
+    personSlots_(f).forEach(sl => { if (TRAINEE_RE_.test(sl.label + " " + sl.key) && !/instructor|fto|witness|supervis/i.test(sl.label)) trSlot[f.id][sl.key] = 1; }); });
+  const rowFailed = r => String(r.summary || "").split("\n").some(l => { const i = l.indexOf(":"); if (i < 1) return false;
+    return /complete|result|status|outcome|pass/i.test(l.slice(0, i)) && FAIL_RE_.test(l.slice(i + 1).replace(/^[\s\-–•]+/, "").trim()); });
+  const poRows = rows.filter(r => poForms.indexOf(r.form) !== -1 && trSlot[r.form]);
+  out.forEach(o => { if (o.idx !== 0) return; const got = { bt: 0, ra: 0 }, csk = o.callsign ? callKey_(o.callsign) : "", nk = nameKey_(o.name);
+    poRows.forEach(r => { const me = (r.people || []).some(x => { if (!trSlot[r.form][x.f]) return false;
+        if (x.i) return x.i === o.id;
+        const xn = nameKey_(x.n), xc = callKey_(x.n);
+        if (xn && nk && xn === nk) return true;
+        return !!csk && xc === csk && (!xn || !nk || sameName_(x.n, o.name)) && now - r.at < 60 * 864e5; });   // a callsign alone only for recent trainings (callsigns get reused)
+      if (!me || rowFailed(r)) return;
+      if (r.form === TAG_FORMS_.ra) got.ra++; else got.bt++; });
+    o.po = got; });
   // Corporals: Basic Training Instructor certification (witness one, then lead one with a SGT+ in the Supervising box),
   // then the trainings they host after that (a SGT+ may supervise or not)
   const pById = {}, pByCs = {}; out.forEach(o => { if (o.id) pById[o.id] = o; if (o.callsign) pByCs[callKey_(o.callsign)] = o; });
@@ -3297,6 +3319,9 @@ function promoEval_(o, rankReqs, checks) {
     if (a && a.type === "gom" && (a.lead || a.fto)) { const T = o.tagged || {}, l = T.gomLead || 0, f = T.gomFto || 0;
       split = { lead: [l, a.lead || 0], fto: [f, a.fto || 0] }; have = Math.min(l, a.lead || 0) + Math.min(f, a.fto || 0); auto = l >= (a.lead || 0) && f >= (a.fto || 0); }
     else if (a && (a.type === "gom" || a.type === "ra")) { have = (o.tagged || {})[a.type] || 0; auto = have >= a.need; }
+    if (a && a.type === "pobt") { have = (o.po || {}).bt || 0; auto = have >= a.need; }
+    if (a && a.type === "pora") { have = (o.po || {}).ra || 0; auto = have >= a.need; }
+    if (a && a.type === "poroster") { have = o.callsign ? 1 : 0; auto = have >= 1; }
     if (a && a.type === "sop") { have = SOP_MEMO_ ? (SOP_MEMO_[o.id] ? 1 : 0) : (sopIds_()[o.id] ? 1 : 0); auto = have >= 1; }
     return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, split: split, parts: parts, locked: locked, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
   });
