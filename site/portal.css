@@ -1443,3 +1443,9 @@ html.sop-lock,html.sop-lock body{overflow:hidden}
 .sop-scan{position:relative;height:56px;margin:4px auto 12px;width:56px;border-radius:50%;border:2px solid rgba(var(--hcr),.25);border-top-color:var(--hc);border-right-color:var(--hv);animation:sopSpin .9s linear infinite;box-shadow:0 0 24px -6px rgba(var(--hcr),.8)}
 @keyframes sopSpin{to{transform:rotate(360deg)}}
 @media (max-width:560px){.sop-card{padding:18px 16px 14px}.sop-btns button{flex-basis:100%}}
+.sop-badge{display:flex;align-items:center;gap:12px;text-align:left;margin:0 0 14px;padding:12px 14px;border-radius:12px;background:linear-gradient(135deg,rgba(16,185,129,.14),rgba(34,211,238,.08));border:1px solid rgba(52,211,153,.5);box-shadow:0 0 26px -10px rgba(52,211,153,.8)}
+.sop-badge>span{font-size:26px;filter:drop-shadow(0 0 10px rgba(52,211,153,.6))}
+.sop-badge b{display:block;color:#a7f3d0;font-size:14.5px}
+.sop-badge small{display:block;color:#9fb4d6;font-size:12px;margin-top:2px;line-height:1.4}
+.sop-btns .sop-next{flex-basis:100%;padding:14px;font-size:14.5px}
+.sop-btns button:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(52,211,153,.55),0 0 26px -4px rgba(52,211,153,.8)}

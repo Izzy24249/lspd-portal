@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 133;
+const BACKEND_VERSION = 134;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3328,8 +3328,22 @@ function traineeCheck_(id, name) {
   const ppl = promoPeople_(), ck = callKey_(name), nk = nameKey_(name);
   const o = (id && ppl.find(x => x.id === id)) || (ck && ppl.find(x => x.callsign && callKey_(x.callsign) === ck && sameName_(x.name, name))) || (nk && ppl.find(x => nameKey_(x.name) === nk));
   if (!o) return { ok: true, found: false };
-  const po = o.po || {};
-  return { ok: true, found: true, name: (o.callsign ? o.callsign + " | " : "") + o.name, trainee: !!o.trainee, rank: o.rank, gom: o.idx > 0 ? 1 : (po.bt || 0), sopRole: !!sopIds_()[o.id], sopAcademy: !!po.sop, ra: po.ra || 0 };
+  const po = o.po || {}, sop = sopLive_(o.id);
+  return { ok: true, found: true, linked: sop.linked, sopLive: sop.has, name: (o.callsign ? o.callsign + " | " : "") + o.name, trainee: !!o.trainee, rank: o.rank, gom: o.idx > 0 ? 1 : (po.bt || 0), sopRole: sop.has === true || (sop.has == null && !!sopIds_()[o.id]), sopAcademy: !!po.sop, ra: po.ra || 0 };
+}
+// the SOP Certified role right now, through the officer's own MDT Discord sign-in: has = true / false / null (couldn't tell)
+function sopLive_(id) {
+  const out = { linked: false, has: null }, dc = dutyCfg_(), st = discordStatus_();
+  if (!id || !dc.sopRoleId || !st.guildId) return out;
+  const raw = PROPS_.getProperty("DLINK_" + id); if (!raw) return out;
+  out.linked = true;
+  try { const a = dlinkAccess_(id, JSON.parse(raw)); if (!a) return out;
+    const r = UrlFetchApp.fetch("https://discord.com/api/v10/users/@me/guilds/" + st.guildId + "/member", { headers: { Authorization: "Bearer " + a }, muteHttpExceptions: true }), c = r.getResponseCode();
+    if (c === 200) out.has = (JSON.parse(r.getContentText()).roles || []).map(String).indexOf(dc.sopRoleId) !== -1;
+    else if (c === 404) out.has = false;
+    if (out.has != null) { const ch = {}; ch[id] = out.has; sopApply_(ch); }
+  } catch (e) {}
+  return out;
 }
 var SOP_MEMO_ = null;
 function promoEval_(o, rankReqs, checks) {

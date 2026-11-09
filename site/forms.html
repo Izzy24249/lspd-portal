@@ -10,7 +10,7 @@
 <script src="lock.js?v=1"></script>
 <title>LSPD</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="portal.css?v=202611090915">
+<link rel="stylesheet" href="portal.css?v=202611090930">
 </head>
 <body>
 <div class="lightbar"></div>
@@ -401,14 +401,28 @@ function sopGate(f){
   };
   // 3) SOP Certified
   const sop = () => {
-    const known = chk && (chk.sopRole || chk.sopAcademy);
-    card("", `<div class="sop-tag">LSPD ACADEMY · PRE-TRAINING CHECK <i>3 / 3</i></div><div class="sop-ok">✅ Global Operation Manual training completed</div><h3>SOP Check</h3>
-      <p><b>${E(who.name)}</b>${known ? ` is on file as <b>SOP Certified</b>${chk.sopRole ? " (Discord role)" : ""}. Confirm they still have the role in Discord.` : ""}<br><b>Does the trainee have the SOP Certified role?</b></p>
-      <div class="sop-btns"><button type="button" class="sop-yes">✅ Yes, they have it</button><button type="button" class="sop-no">❌ No, they don't</button></div>
-      <a class="sop-back" data-go="pick">← Pick a different trainee</a>`);
-    ov.querySelector(".sop-yes").onclick = () => { if(tf) ctrl.setOfficer(tf, { name: who.name, id: who.id || "" });
+    const tag = `<div class="sop-tag">LSPD ACADEMY · PRE-TRAINING CHECK <i>3 / 3</i></div><div class="sop-ok">✅ Global Operation Manual training completed</div>`;
+    const proceed = () => { if(tf) ctrl.setOfficer(tf, { name: who.name, id: who.id || "" });
       if(yes){ sel.value = yes.value; sel.dispatchEvent(new Event("change", { bubbles: true })); sel.dispatchEvent(new Event("input", { bubbles: true })); }
       close(); toast("Checks done. You can begin the training.", "ok"); };
+    // the trainee signed in to the MDT with Discord: the portal read their roles itself
+    if(chk && chk.linked && chk.sopLive === true){
+      card("", `${tag}<div class="sop-badge"><span>📘</span><div><b>SOP Certified role confirmed</b><small>Checked live in the LSPD Discord through ${E(who.name)}'s MDT sign-in.</small></div></div>
+        <h3>All checks passed</h3><p><b>${E(who.name)}</b> is cleared to start the Academy training.</p>
+        <div class="sop-btns"><button type="button" class="sop-yes sop-next">Next: start the Academy form →</button></div>
+        <a class="sop-back" data-go="pick">← Pick a different trainee</a>`);
+      ov.querySelector(".sop-next").onclick = proceed; setTimeout(() => { const n = ov.querySelector(".sop-next"); if(n) n.focus(); }, 30); return;
+    }
+    if(chk && chk.linked && chk.sopLive === false) return card("stop", `<div class="sop-ic">⛔</div><h3>No SOP Certified role</h3>
+      <p>We checked the LSPD Discord through <b>${E(who.name)}</b>'s MDT sign-in, and they <b>don't have the SOP Certified role</b> yet.</p>
+      <ol><li>Have them read the <b>LSPD SOP</b>.</li><li>Have them get <b>SOP Certified &amp; verified</b> in the Department Discord.</li><li>Press <b>Check again</b> once they have the role.</li></ol>
+      <div class="sop-btns"><button type="button" class="sop-home" data-go="home">Back to all forms</button><button type="button" class="sop-again" data-go="again">Check again</button></div>`);
+    // not signed in to the MDT yet (or Discord didn't answer): the instructor checks Discord themselves
+    card("", `${tag}<h3>SOP Check</h3>
+      <p><b>${E(who.name)}</b> ${chk && chk.linked ? "— Discord didn't answer just now, so check their roles yourself." : "hasn't signed in to the MDT with Discord yet, so we can't read their roles. Check Discord yourself."}<br><b>Does the trainee have the SOP Certified role?</b></p>
+      <div class="sop-btns"><button type="button" class="sop-yes">✅ Yes, they have it</button><button type="button" class="sop-no">❌ No, they don't</button></div>
+      <a class="sop-back" data-go="pick">← Pick a different trainee</a>`);
+    ov.querySelector(".sop-yes").onclick = proceed;
     ov.querySelector(".sop-no").onclick = stop;
   };
   const stop = () => card("stop", `<div class="sop-ic">⛔</div><h3>Do not start training</h3>
