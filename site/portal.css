@@ -1397,32 +1397,49 @@ body[data-ftheme="cru"] .fp-prev{border-color:rgba(251,146,60,.4);background:#10
 .theme-dossier .ofc .ofc-in{color:#f3f5f9!important;caret-color:#d4a017}
 .paper.hud .ofc .ofc-in{color:#f1f6ff!important;font-weight:600;caret-color:var(--hc)}
 
-/* SOP gate before the Academy Evaluation */
-.sop-ov{position:fixed;inset:0;z-index:320;background:rgba(3,6,12,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:16px;animation:chgIn .15s ease-out}
+/* Academy pre-training check pop-up (HUD look, same family as the roster search list) */
+.sop-ov{position:fixed;inset:0;z-index:320;background:radial-gradient(ellipse at 50% 30%,rgba(34,211,238,.10),transparent 60%),rgba(2,6,14,.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:16px;animation:chgIn .15s ease-out}
 html.sop-lock,html.sop-lock body{overflow:hidden}
-.sop-card{width:min(460px,100%);background:linear-gradient(160deg,#121d33,#0b1324);border:1px solid #24365c;border-radius:18px;box-shadow:0 30px 80px -20px rgba(0,0,0,.8);color:#e8eefc;font-family:"Inter",system-ui,sans-serif;padding:26px 24px 20px;text-align:center}
-.sop-card.stop{border-color:#7f1d1d}
-.sop-ic{font-size:38px;line-height:1;margin-bottom:8px}
-.sop-card h3{margin:0 0 8px;font-size:20px;letter-spacing:.02em}
-.sop-card.stop h3{color:#fca5a5}
-.sop-card p{margin:0 0 14px;color:#b9c6e4;line-height:1.5}
+.sop-card{--hc:#22d3ee;--hv:#8b5cf6;--hcr:34,211,238;--hvr:139,92,246;--hlr:110,170,255;position:relative;width:min(500px,100%);max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;
+  background:linear-gradient(160deg,rgba(10,20,42,.97),rgba(5,11,24,.98));color:#e6f0ff;border:1px solid rgba(var(--hlr),.3);border-radius:16px;padding:22px 22px 18px;text-align:center;font-family:"Inter",system-ui,sans-serif;
+  box-shadow:0 30px 80px -20px rgba(0,0,0,.9),0 0 60px -18px rgba(var(--hcr),.55),inset 0 1px 0 rgba(255,255,255,.05);animation:pkin .18s ease}
+.sop-card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px)}
+.sop-card::after{content:"";position:absolute;left:18px;right:18px;top:0;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--hc),var(--hv),transparent);opacity:.9}
+.sop-card.stop{--hc:#f43f5e;--hv:#f97316;--hcr:244,63,94;border-color:rgba(244,63,94,.45)}
+.sop-tag{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:-4px -4px 14px;padding:7px 11px;border-radius:9px;font:700 10.5px ui-monospace,Consolas,monospace;letter-spacing:.14em;color:var(--hc);
+  background:linear-gradient(90deg,rgba(var(--hcr),.10),rgba(var(--hvr),.07));border:1px solid rgba(var(--hlr),.16)}
+.sop-tag i{font-style:normal;opacity:.75;letter-spacing:.08em}
+.sop-ic{font-size:36px;line-height:1;margin-bottom:8px;filter:drop-shadow(0 0 14px rgba(var(--hcr),.45))}
+.sop-card h3{margin:0 0 8px;font-size:20px;font-weight:800;letter-spacing:.02em;color:#fff;text-shadow:0 0 18px rgba(var(--hcr),.35)}
+.sop-card.stop h3{color:#fda4af}
+.sop-card p{margin:0 0 14px;color:#a9bbdc;line-height:1.55;font-size:14px}
 .sop-card p b{color:#fff}
-.sop-card ol{text-align:left;margin:0 0 16px;padding-left:22px;color:#d6def0;line-height:1.7}
+.sop-card ol{text-align:left;margin:0 0 16px;padding:12px 14px 12px 34px;color:#d6e2f7;line-height:1.7;font-size:13.5px;border-radius:11px;background:rgba(var(--hcr),.06);border:1px solid rgba(var(--hcr),.2)}
 .sop-btns{display:flex;gap:10px;flex-wrap:wrap}
-.sop-btns button{flex:1 1 160px;padding:12px 14px;border-radius:12px;border:1px solid #2b4170;background:#16233f;color:#e8eefc;font:600 14px "Inter",system-ui,sans-serif;cursor:pointer;transition:background .15s,border-color .15s}
-.sop-btns button:hover{background:#1d2e52}
-.sop-btns .sop-yes,.sop-btns .sop-again{background:#14532d;border-color:#22c55e}
-.sop-btns .sop-yes:hover,.sop-btns .sop-again:hover{background:#166534}
-.sop-btns .sop-no{background:#3b0d0d;border-color:#b91c1c}
-.sop-btns .sop-no:hover{background:#4c1111}
-.sop-back{display:inline-block;margin-top:14px;color:#8ea2cc;font-size:13px;cursor:pointer}
-.sop-back:hover{color:#fff}
-.sop-q{width:100%;box-sizing:border-box;padding:11px 13px;border-radius:11px;border:1px solid #2b4170;background:#0b1428;color:#fff;font:500 14px "Inter",system-ui,sans-serif;outline:none;margin-bottom:10px}
-.sop-q:focus{border-color:#3b82f6}
-.sop-q::placeholder{color:#7f8fb3}
-.sop-list{max-height:min(320px,45vh);overflow:auto;display:flex;flex-direction:column;gap:6px;text-align:left}
-.sop-list button{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid #22345a;background:#111c34;color:#e8eefc;font:500 14px "Inter",system-ui,sans-serif;cursor:pointer;text-align:left}
-.sop-list button:hover{background:#1a2a4c;border-color:#3b82f6}
-.sop-list small{color:#f0b35a;font-size:11px}
-.sop-none{color:#8ea2cc;padding:12px;text-align:center}
-.sop-ok{display:inline-block;margin-bottom:12px;padding:6px 12px;border-radius:999px;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.5);color:#86efac;font-size:13px;font-weight:600}
+.sop-btns button{flex:1 1 160px;padding:12px 14px;border-radius:11px;border:1px solid rgba(var(--hlr),.3);background:rgba(16,28,54,.9);color:#e6f0ff;font:700 13.5px "Inter",system-ui,sans-serif;letter-spacing:.02em;cursor:pointer;transition:background .15s,box-shadow .15s,transform .1s}
+.sop-btns button:hover{background:rgba(26,42,78,.95);box-shadow:0 0 22px -6px rgba(var(--hcr),.6)}
+.sop-btns button:active{transform:translateY(1px)}
+.sop-btns .sop-yes,.sop-btns .sop-again{background:linear-gradient(135deg,rgba(16,185,129,.28),rgba(34,211,238,.18));border-color:rgba(52,211,153,.7);color:#d1fae5}
+.sop-btns .sop-yes:hover,.sop-btns .sop-again:hover{box-shadow:0 0 24px -4px rgba(52,211,153,.7)}
+.sop-btns .sop-no{background:linear-gradient(135deg,rgba(244,63,94,.26),rgba(249,115,22,.14));border-color:rgba(244,63,94,.7);color:#ffe4e6}
+.sop-btns .sop-no:hover{box-shadow:0 0 24px -4px rgba(244,63,94,.7)}
+.sop-back{display:inline-block;margin-top:14px;color:#7f93ba;font:600 12px ui-monospace,Consolas,monospace;letter-spacing:.06em;cursor:pointer;text-transform:uppercase}
+.sop-back:hover{color:var(--hc)}
+.sop-ok{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;padding:6px 13px;border-radius:999px;background:rgba(16,185,129,.12);border:1px solid rgba(52,211,153,.55);color:#86efac;font:700 12px "Inter",system-ui,sans-serif;box-shadow:0 0 18px -6px rgba(52,211,153,.7)}
+/* the roster list: same panel as the forms' roster search */
+.sop-pk{position:relative;display:flex;flex-direction:column;text-align:left;border-radius:13px;overflow:hidden;background:rgba(8,15,32,.97);border:1px solid rgba(var(--hlr),.3);box-shadow:0 0 40px -18px rgba(var(--hcr),.6)}
+.sop-pk .pk-head{display:flex;justify-content:space-between;gap:10px;padding:8px 13px}
+.sop-pk .pk-head em{font-style:normal}
+.sop-pk .pk-list{max-height:min(300px,42vh)}
+.sop-pk .pk-item{position:relative}
+.sop-pk .pk-av{width:34px;height:26px;font:800 11px ui-monospace,Consolas,monospace}
+.sop-go{margin-left:auto;color:var(--hc);opacity:0;font-size:18px;transition:opacity .12s,transform .12s}
+.sop-pk .pk-item:hover .sop-go,.sop-pk .pk-item.on .sop-go{opacity:1;transform:translateX(2px)}
+.sop-in{display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid rgba(var(--hlr),.16);background:rgba(var(--hcr),.04)}
+.sop-in svg{width:16px;height:16px;flex:none;fill:none;stroke:var(--hc);stroke-width:2.2;stroke-linecap:round}
+.sop-q{flex:1;min-width:0;border:0;outline:none;background:transparent;color:#fff;font:500 14px "Inter",system-ui,sans-serif}
+.sop-q::placeholder{color:#6f83ab}
+.sop-q::-webkit-search-cancel-button{filter:invert(1) opacity(.5)}
+.sop-scan{position:relative;height:56px;margin:4px auto 12px;width:56px;border-radius:50%;border:2px solid rgba(var(--hcr),.25);border-top-color:var(--hc);border-right-color:var(--hv);animation:sopSpin .9s linear infinite;box-shadow:0 0 24px -6px rgba(var(--hcr),.8)}
+@keyframes sopSpin{to{transform:rotate(360deg)}}
+@media (max-width:560px){.sop-card{padding:18px 16px 14px}.sop-btns button{flex-basis:100%}}

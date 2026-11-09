@@ -10,7 +10,7 @@
 <script src="lock.js?v=1"></script>
 <title>LSPD</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="portal.css?v=202611090900">
+<link rel="stylesheet" href="portal.css?v=202611090915">
 </head>
 <body>
 <div class="lightbar"></div>
@@ -365,17 +365,30 @@ function sopGate(f){
   // 1) pick the trainee from the Onboarding roster
   const pick = () => {
     const list = tf ? ctrl.rosterFor(tf) : [];
-    card("", `<div class="sop-ic">🎓</div><h3>Who are you training?</h3><p>Pick the trainee first. We'll check they've completed the <b>Global Operation Manual</b> training before you begin.</p>
-      <input type="search" class="sop-q" placeholder="Search callsign or name…" autocomplete="off"><div class="sop-list"></div>${back}`);
-    const q = ov.querySelector(".sop-q"), box = ov.querySelector(".sop-list");
-    const draw = () => { const t = q.value.trim().toLowerCase(), hits = list.filter(it => !t || (it.search || it.label || "").toLowerCase().indexOf(t) !== -1).slice(0, 40);
-      box.innerHTML = hits.length ? hits.map((it, i) => `<button type="button" data-i="${list.indexOf(it)}"><b>${E(it.label)}</b>${it.id ? "" : "<small>no Discord ID</small>"}</button>`).join("") : `<div class="sop-none">No one on the Onboarding roster matches.</div>`; };
-    box.onclick = e => { const b = e.target.closest("[data-i]"); if(!b) return; const it = list[+b.dataset.i]; check({ name: it.label, id: it.id || "" }); };
-    q.oninput = draw; draw(); setTimeout(() => q.focus(), 30);
+    card("", `<div class="sop-tag">LSPD ACADEMY · PRE-TRAINING CHECK <i>1 / 3</i></div><h3>Who are you training?</h3><p>Pick the trainee first. We'll check they've completed the <b>Global Operation Manual</b> training before you begin.</p>
+      <div class="sop-pk pk-hud"><div class="sop-in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" class="sop-q" placeholder="Search callsign or name…" autocomplete="off"></div>
+      <div class="pk-head"><em></em><span>↑↓ Enter</span></div><div class="pk-list"></div></div>${back}`);
+    const q = ov.querySelector(".sop-q"), box = ov.querySelector(".pk-list"), head = ov.querySelector(".pk-head em");
+    let shown = [], idx = -1;
+    const hl = (t, toks) => { let h = E(t); toks.forEach(k => { const i = h.toLowerCase().indexOf(E(k).toLowerCase()); if(i !== -1) h = h.slice(0, i) + "<mark>" + h.slice(i, i + E(k).length) + "</mark>" + h.slice(i + E(k).length); }); return h; };
+    const draw = () => { const t = q.value.trim().toLowerCase(), toks = t.split(/\s+/).filter(Boolean);
+      shown = list.filter(it => toks.every(k => (it.search || it.label || "").toLowerCase().indexOf(k) !== -1)).slice(0, 60);
+      if(idx >= shown.length) idx = shown.length - 1; if(idx < 0 && toks.length && shown.length) idx = 0;
+      head.textContent = toks.length ? shown.length + " match" + (shown.length === 1 ? "" : "es") : list.length + " on the Onboarding roster · type to filter";
+      box.innerHTML = shown.length ? shown.map((it, i) => { const cs = (/^([A-Z]{1,3}-?\d{2,4})/i.exec(it.label) || [])[1] || "", nm = it.label.split("|").pop().trim();
+          return `<div class="pk-item${i === idx ? " on" : ""}" data-i="${i}"><span class="pk-av">${E(cs ? cs.replace(/\D/g, "") : (nm[0] || "?"))}</span>
+            <span class="pk-t"><span class="pk-l">${hl(it.label, toks)}</span><span class="pk-s">${it.id ? "ID " + E(it.id) : "⚠ no Discord ID"}</span></span><span class="sop-go">›</span></div>`; }).join("")
+        : `<div class="pk-none">No one on the Onboarding roster matches.</div>`;
+      const on = box.querySelector(".pk-item.on"); if(on) on.scrollIntoView({ block: "nearest" }); };
+    const choose = i => { const it = shown[i]; if(it) check({ name: it.label, id: it.id || "" }); };
+    box.onclick = e => { const b = e.target.closest("[data-i]"); if(b) choose(+b.dataset.i); };
+    q.oninput = () => { idx = -1; draw(); };
+    q.onkeydown = e => { if(e.key === "ArrowDown"){ idx = Math.min(shown.length - 1, idx + 1); draw(); e.preventDefault(); } else if(e.key === "ArrowUp"){ idx = Math.max(0, idx - 1); draw(); e.preventDefault(); } else if(e.key === "Enter"){ e.preventDefault(); choose(idx < 0 ? 0 : idx); } };
+    draw(); setTimeout(() => q.focus(), 30);
   };
   // 2) ask the server: Global Operation Manual training on file?
   const check = async w => {
-    who = w; card("", `<div class="sop-ic">⏳</div><h3>Checking ${E(w.name)}…</h3><p>Looking for a completed Global Operation Manual training.</p>`);
+    who = w; card("", `<div class="sop-tag">LSPD ACADEMY · PRE-TRAINING CHECK <i>2 / 3</i></div><div class="sop-scan"></div><h3>Checking ${E(w.name)}…</h3><p>Looking for a completed Global Operation Manual training.</p>`);
     try { const r = await fetch(Portal.ENDPOINT + "?action=traineeCheck&id=" + encodeURIComponent(w.id || "") + "&name=" + encodeURIComponent(w.name || "") + "&t=" + Date.now()); chk = await r.json(); }
     catch(e){ chk = { ok: false, error: "Couldn't reach the server." }; }
     if(!chk.ok) return card("stop", `<div class="sop-ic">⚠️</div><h3>Couldn't check</h3><p>${E(chk.error || "Something went wrong.")}</p><div class="sop-btns"><button type="button" data-go="pick">Pick again</button><button type="button" class="sop-again" data-go="again">Try again</button></div>${back}`);
@@ -388,7 +401,7 @@ function sopGate(f){
   // 3) SOP Certified
   const sop = () => {
     const known = chk && (chk.sopRole || chk.sopAcademy);
-    card("", `<div class="sop-ok">✅ Global Operation Manual training completed</div><div class="sop-ic">📘</div><h3>SOP Check</h3>
+    card("", `<div class="sop-tag">LSPD ACADEMY · PRE-TRAINING CHECK <i>3 / 3</i></div><div class="sop-ok">✅ Global Operation Manual training completed</div><h3>SOP Check</h3>
       <p><b>${E(who.name)}</b>${known ? ` is on file as <b>SOP Certified</b>${chk.sopRole ? " (Discord role)" : ""}. Confirm they still have the role in Discord.` : ""}<br><b>Does the trainee have the SOP Certified role?</b></p>
       <div class="sop-btns"><button type="button" class="sop-yes">✅ Yes, they have it</button><button type="button" class="sop-no">❌ No, they don't</button></div>
       <a class="sop-back" data-go="pick">← Pick a different trainee</a>`);
