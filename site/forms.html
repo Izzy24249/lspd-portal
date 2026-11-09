@@ -10,7 +10,7 @@
 <script src="lock.js?v=1"></script>
 <title>LSPD</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Black+Ops+One&family=Rajdhani:wght@600;700&family=Saira+Condensed:wght@700;800&family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="portal.css?v=202610200937">
+<link rel="stylesheet" href="portal.css?v=202611090830">
 </head>
 <body>
 <div class="lightbar"></div>
@@ -330,7 +330,32 @@ function openForm(id){
   drawRbHead(f); drawEdit();
   setTimeout(drawPreview, 0);
   if(t) toast("Restored your unsaved draft from " + new Date(t).toLocaleString(), "ok");
+  if(!editing) setTimeout(() => sopGate(f), 0);
   return true;
+}
+
+/* ---------- SOP gate: forms with an "sopCheck" box (Academy Evaluation) ask first, before the form can be used ---------- */
+function sopGate(f){
+  const sel = document.querySelector('#formMount select[data-f="sopCheck"]');
+  if(!sel || sel.value || !current || current.id !== f.id) return;   // no SOP box, or already answered (restored draft)
+  const yes = [...sel.options].find(o => /verified|✅|has/i.test(o.value)), old = document.querySelector(".sop-ov"); if(old) old.remove();
+  const ov = document.createElement("div"); ov.className = "sop-ov";
+  const ask = () => { ov.innerHTML = `<div class="sop-card" role="dialog" aria-modal="true" aria-label="SOP check">
+      <div class="sop-ic">📘</div><h3>SOP Check Required</h3>
+      <p>Before you begin, check the trainee in Discord.<br><b>Does the trainee have the SOP Certified role?</b></p>
+      <div class="sop-btns"><button type="button" class="sop-yes">✅ Yes, they have it</button><button type="button" class="sop-no">❌ No, they don't</button></div>
+      <a class="sop-back">← Back to all forms</a></div>`;
+    ov.querySelector(".sop-yes").onclick = () => { if(yes){ sel.value = yes.value; sel.dispatchEvent(new Event("change", { bubbles: true })); sel.dispatchEvent(new Event("input", { bubbles: true })); } close(); toast("SOP check recorded. You can begin the training.", "ok"); };
+    ov.querySelector(".sop-no").onclick = stop; ov.querySelector(".sop-back").onclick = home; };
+  const stop = () => { ov.innerHTML = `<div class="sop-card stop" role="dialog" aria-modal="true" aria-label="Training can't start">
+      <div class="sop-ic">⛔</div><h3>Do not start training</h3>
+      <p>The trainee must be <b>SOP Certified</b> before the Academy training can begin.</p>
+      <ol><li>Have them read the <b>LSPD SOP</b>.</li><li>Have them get <b>SOP Certified &amp; verified</b> in the Department Discord.</li><li>Come back to this form once they have the role.</li></ol>
+      <div class="sop-btns"><button type="button" class="sop-home">Back to all forms</button><button type="button" class="sop-again">They have it now</button></div></div>`;
+    ov.querySelector(".sop-home").onclick = home; ov.querySelector(".sop-again").onclick = ask; };
+  const close = () => { ov.remove(); document.documentElement.classList.remove("sop-lock"); };
+  const home = () => { close(); go("home"); };
+  ask(); document.body.appendChild(ov); document.documentElement.classList.add("sop-lock");
 }
 
 /* ---------- My reports → Edit (forms.html?edit=<log id>#<form>) ---------- */

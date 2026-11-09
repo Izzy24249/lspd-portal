@@ -1396,3 +1396,24 @@ body[data-ftheme="cru"] .fp-prev{border-color:rgba(251,146,60,.4);background:#10
 .paper:not(.hud) .ofc:focus-within{border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.18)!important;background:#fff!important}
 .theme-dossier .ofc .ofc-in{color:#f3f5f9!important;caret-color:#d4a017}
 .paper.hud .ofc .ofc-in{color:#f1f6ff!important;font-weight:600;caret-color:var(--hc)}
+
+/* SOP gate before the Academy Evaluation */
+.sop-ov{position:fixed;inset:0;z-index:320;background:rgba(3,6,12,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:16px;animation:chgIn .15s ease-out}
+html.sop-lock,html.sop-lock body{overflow:hidden}
+.sop-card{width:min(460px,100%);background:linear-gradient(160deg,#121d33,#0b1324);border:1px solid #24365c;border-radius:18px;box-shadow:0 30px 80px -20px rgba(0,0,0,.8);color:#e8eefc;font-family:"Inter",system-ui,sans-serif;padding:26px 24px 20px;text-align:center}
+.sop-card.stop{border-color:#7f1d1d}
+.sop-ic{font-size:38px;line-height:1;margin-bottom:8px}
+.sop-card h3{margin:0 0 8px;font-size:20px;letter-spacing:.02em}
+.sop-card.stop h3{color:#fca5a5}
+.sop-card p{margin:0 0 14px;color:#b9c6e4;line-height:1.5}
+.sop-card p b{color:#fff}
+.sop-card ol{text-align:left;margin:0 0 16px;padding-left:22px;color:#d6def0;line-height:1.7}
+.sop-btns{display:flex;gap:10px;flex-wrap:wrap}
+.sop-btns button{flex:1 1 160px;padding:12px 14px;border-radius:12px;border:1px solid #2b4170;background:#16233f;color:#e8eefc;font:600 14px "Inter",system-ui,sans-serif;cursor:pointer;transition:background .15s,border-color .15s}
+.sop-btns button:hover{background:#1d2e52}
+.sop-btns .sop-yes,.sop-btns .sop-again{background:#14532d;border-color:#22c55e}
+.sop-btns .sop-yes:hover,.sop-btns .sop-again:hover{background:#166534}
+.sop-btns .sop-no{background:#3b0d0d;border-color:#b91c1c}
+.sop-btns .sop-no:hover{background:#4c1111}
+.sop-back{display:inline-block;margin-top:14px;color:#8ea2cc;font-size:13px;cursor:pointer}
+.sop-back:hover{color:#fff}
