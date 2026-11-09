@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 127;
+const BACKEND_VERSION = 128;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5329,7 +5329,7 @@ const PB_SHEET_ = "Promotion Board";
 const PB_HEAD_ = ["Entry", "Discord ID", "Officer", "Callsign", "From", "To", "From #", "Status", "Nominated by", "Nominated at", "Note", "Approved by", "Approved at", "Promoted at", "New callsign", "Result", "Discord done"];
 const PB_HC_RE_ = /^L10[1-7]$/;          // High Command callsigns: Chief of Police … Watch Commander
 const PB_TOP_ = 10;                       // the board promotes up to Commander; High Command billets are appointed by hand
-const PB_ABBR_ = ["PO", "PO2", "PO3", "CPL", "SGT", "SSGT", "SGM", "LT", "CPT", "MAJ", "CMDR", "DC", "AC", "COP"];
+const PB_ABBR_ = ["PO", "PO2", "PO3", "CPL", "SGT", "SSGT", "SGM", "LT", "CPT", "MJR", "CMDR", "DC", "AC", "COP"];
 const PB_DEF_ = { hours: 8, weekMin: 4, reports: 5, days: 14 };
 function pbSheet_() {
   const ss = ss_(); let sh = ss.getSheetByName(PB_SHEET_);
@@ -5453,7 +5453,7 @@ function pbView_(acct, A) {
   const ranks = []; for (let i = 0; i < PB_TOP_; i++) { const ru = pbRule_(R, i); ranks.push({ idx: i, name: RANKS_[i], next: RANKS_[i + 1], abbr: PB_ABBR_[i], open: open[i + 1] || 0, rule: ru,
     doc: ((L.ranks || []).find(x => x.idx === i) || { reqs: [] }).reqs.map(q => ({ t: q.t, auto: q.auto ? q.auto.type : "" })) }); }
   const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
-    .map(e => ({ entry: e.entry, officer: e.officer, from: e.from, to: e.to, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
+    .map(e => ({ entry: e.entry, id: e.id, officer: e.officer, from: e.from, to: e.to, fromIdx: e.fromIdx, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
   const PP = pbPeriod_(now, PB_DEF_.days);
   return { ok: true, dp: dpOn ? { at: DS.at, full: DS.full || 0, by: DS.by || "", officers: DS.officers || 0, onDuty: DS.onDuty || 0, matched: Object.keys(dpIds).length } : null, unlinked: unlinked, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign, dpOwner: (() => { const own = PROPS_.getProperty("DP_OWNER"); return own ? own === acct.id : A.hc && dpKeys_().some(k => k.by === A.who); })() }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
     editors: A.editor ? R.editors : [], webhookId: A.editor ? R.webhookId : "", webhooks: A.editor ? getWebhooks_().map(w => ({ id: w.id, name: w.name })) : [], doc: L.doc, at: now };
@@ -5589,7 +5589,7 @@ function pbPush_(A) {
     const r = discordPost_(wh.url, payload); if (!r.ok) warning = "Roster updated, but the Discord announcement failed: " + r.error;
   }
   // small reply: the MDT shows the result straight away and reloads the board in the background
-  const v = { ok: true, pushed: out.done.length, done: out.done.map(p => ({ id: p.id, entry: p.entry, officer: p.officer, from: p.from, to: p.to, oldCs: p.oldCs, newCs: p.newCs, at: p.at,
+  const v = { ok: true, pushed: out.done.length, done: out.done.map(p => ({ id: p.id, entry: p.entry, officer: p.officer, from: p.from, to: p.to, fromIdx: rankIndex_(p.from) === -1 ? null : rankIndex_(p.from), oldCs: p.oldCs, newCs: p.newCs, at: p.at,
     todo: pbTodo_({ officer: p.officer, to: p.to, from: p.from, newCs: p.newCs }) })), skipped: out.plan.filter(p => p.error).map(p => ({ officer: p.officer, error: p.error })) };
   if (warning) v.warning = warning;
   return v;

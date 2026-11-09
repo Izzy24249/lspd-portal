@@ -169,10 +169,40 @@
       '<button class="pbx-btn ghost" data-copy="' + esc(txt) + '" data-what="Not-linked list">COPY LIST</button></summary>' +
       '<div class="pbx-nl-list">' + U.map(u => "<span>" + (u.callsign ? "<code>" + esc(u.callsign) + "</code>" : "") + esc(u.name) + "<small>" + esc(u.rank) + "</small></span>").join("") + "</div></details>";
   }
+
+  // ---------- Discord promotion announcement (the department's own layout) ----------
+  const ANN_HEAD = ".                                                                     **==================================================**\n                                                                                 <:LSPD:1307846633160966265> ** LOS SANTOS POLICE DEPARTMENT ** <:LSPD:1307846633160966265>\n                                                                                             ** PROMOTION ANNOUNCEMENT**\n                                                                      **==================================================**\n\nCongratulations to all the officers below that have dedicated time and effort to our department. Your efforts do not go unnoticed, and I am extremely happy to see you continue moving up the ranks. These promotions and your new ranks mean increased responsibilities, and the standards to which you are being held accountable also go up.\n\n## All, join me in congratulating these officers on their well-deserved promotions!\n\n", ANN_FOOT = "\n\n> ### Keep setting the bar, stay hungry, and lead from the front.\n> \n> ###  \"Leadership in this department isn't defined by a badge or a stripe, but by the standards you hold when no one is watching\"\n\n> **If you think that you have met the requirements but we might have missed you, or forgot to log the reports on Discord, please open a https://discord.com/channels/1176588747991699536/1428779501055246498 and one of our COMMAND+ members will gladly assist you (Supervisor+ open a High Command Ticket). Before you do that, make sure you review the Promotion Guidelines, found here.**\n\n <@&1176588748016848957> \n\n__*Signed,*__\n__**LSPD Executive Oversight High Command Team & Command Team**__ <:Americanflagpins__1_r:1441901624032362538>";
+  const ANN_ABBR = ["PO", "PO2", "PO3", "CPL", "SGT", "SSGT", "SGM", "LT", "CPT", "MJR", "CMDR"];
+  const ANN_LBL = ["PO", "PO2", "PO3", "CPL", "SGT", "SSGT", "SGM", "Lieutenant", "Captain", "Major", "Commander"];
+  const ANN_ARROW = "<a:55607redarrowright:1441883493574508665>";
+  function annIdx(r) { if (r.fromIdx != null && !isNaN(r.fromIdx)) return Number(r.fromIdx); const k = (B.ranks || []).find(x => x.name === r.from); return k ? k.idx : 0; }
+  function announcement(list) {
+    const cats = [["Command Promotions", i => i >= 7], ["Supervisory Promotions", i => i >= 4 && i <= 6], ["Supervisor in Training", i => i === 3], ["Officer Promotions", i => i <= 2]];
+    const num = c => { const m = /(\d+)/.exec(c || ""); return m ? +m[1] : 1e9; };
+    const rows = list.map(r => { const f = annIdx(r), name = String(r.officer || "").replace(/^.*\|\s*/, "").trim().replace(/([a-z])\s?R[AM]$/, "$1");   // roster tags like "RM"/"RA" aren't part of the name
+      return { f: f, t: f + 1, cs: r.oldCs || "", line: (r.oldCs ? r.oldCs + " | " : "") + ANN_ABBR[f] + " " + name + " | LSPD  " + ANN_ARROW + " " + (r.id ? "<@" + r.id + ">" : "") }; });
+    let body = "";
+    cats.forEach(([title, test]) => {
+      const C = rows.filter(r => test(r.t)); if (!C.length) return;
+      body += "\n__" + title + ":__\n\n";
+      const steps = [...new Set(C.map(r => r.f))].sort((a, b) => b - a);
+      steps.forEach(f => { body += ANN_LBL[f] + " ---> " + (ANN_LBL[f + 1] || "") + "\n" + C.filter(r => r.f === f).sort((a, b) => num(a.cs) - num(b.cs)).map(r => r.line).join("\n\n") + "\n\n"; });
+    });
+    return ANN_HEAD + body.replace(/\n+$/, "") + ANN_FOOT;
+  }
+  function lastBatch() { const R = (B.recent || []).slice().sort((a, b) => b.at - a.at); if (!R.length) return []; const t = R[0].at; return R.filter(r => t - r.at < 20 * 60e3); }
+  function copyAnn(list) {
+    if (!list.length) return M().toast("No promotions to announce yet.");
+    const txt = announcement(list);
+    const done = () => M().toast("📋 Announcement copied (" + list.length + " officer" + (list.length === 1 ? "" : "s") + "). Paste it in Discord.");
+    try { navigator.clipboard.writeText(txt).then(done, () => annBox(txt)); } catch (e) { annBox(txt); }
+  }
+  function annBox(txt) { const m = M().modal('<h3 style="font:700 22px Barlow Condensed,sans-serif">PROMOTION ANNOUNCEMENT</h3><textarea style="width:100%;height:50vh;border-radius:10px;background:#0b1220;color:var(--tx);border:1px solid var(--line2);padding:10px;font:12px JetBrains Mono,monospace">' + esc(txt) + '</textarea><div style="display:flex;justify-content:flex-end"><button class="btn" data-close>DONE</button></div>'); const t = m.querySelector("textarea"); t.focus(); t.select(); }
   function followUps() {
     const rec = B.recent || []; if (!rec.length) return "";
     const pend = rec.filter(r => !r.discord), canTick = B.me.hc || B.me.editor;
-    return '<div class="sect"><span class="lbl">Recent promotions · Discord to-do</span></div><div class="pbx-fu">' +
+    const lb = lastBatch();
+    return '<div class="sect"><span class="lbl">Recent promotions · Discord to-do</span>' + (lb.length ? '<button class="pbx-btn go ann-btn" data-pbann>📋 COPY ANNOUNCEMENT · ' + lb.length + "</button>" : "") + '</div><div class="pbx-fu">' +
       '<p class="pbx-fu-h">' + (pend.length ? "Until the bot is approved, someone with Discord permissions updates each officer's name tag and rank role by hand. Tick each one off when it's done." : "All caught up. Every recent promotion has been updated in Discord.") + "</p>" +
       rec.map(r => '<div class="pbx-fr' + (r.discord ? " done" : "") + '"><div><b>' + esc(r.officer.replace(/^.*\|\s*/, "")) + "</b><small>" + esc(r.from) + " → " + esc(r.to) + " · " + day(r.at) + (r.oldCs || r.newCs ? " · " + esc(r.oldCs || "—") + " → " + esc(r.newCs || "—") : "") + "</small></div>" +
         '<button class="pbx-nick" data-copy="' + esc(r.todo.nick) + '" data-what="Nickname" title="Copy nickname"><span>' + esc(r.todo.nick) + "</span><em>COPY</em></button>" +
@@ -237,7 +267,8 @@
       m.querySelector(".md-box").innerHTML = '<div class="pbx-done"><span>🎖️</span><h3>' + r.pushed + " PROMOTION" + (r.pushed === 1 ? "" : "S") + " PUSHED</h3><p>The roster is updated." + (r.warning ? "<br><b style=\"color:var(--amber)\">" + esc(r.warning) + "</b>" : "") + "</p>" +
         ((r.done || []).length ? '<div class="pbx-plan">' + r.done.map(p => '<div><b>' + esc(p.officer.replace(/^.*\|\s*/, "")) + "</b><span>" + esc(p.from) + " → " + esc(p.to) + "</span><em>" + esc(p.oldCs || "—") + " → <b>" + esc(p.newCs || "—") + "</b></em></div>").join("") + "</div>" : "") +
         ((r.skipped || []).length ? '<div class="pbx-plan">' + r.skipped.map(s => '<div class="bad"><b>' + esc(s.officer) + "</b><em>✕ " + esc(s.error) + "</em></div>").join("") + "</div>" : "") +
-        '<p style="font-size:13px">Next: update their Discord name tags and roles from the to-do list under the board.</p><button class="btn" data-close>DONE</button></div>';
+        '<p style="font-size:13px">Next: post the announcement, then update their Discord name tags and roles from the to-do list under the board.</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn pbx-push" id="pbAnnNow">📋 COPY ANNOUNCEMENT</button><button class="btn ghost" data-close>DONE</button></div></div>';
+      const an = m.querySelector("#pbAnnNow"); if (an) an.onclick = () => copyAnn((r.done || []).map(p => Object.assign({}, p)));
       M().blip(1600); setTimeout(() => M().blip(2000), 120); M().draw();
     };
   }
@@ -292,6 +323,7 @@
     const dn = t.closest("[data-pbdone]"); if (dn) { const [en, on] = dn.dataset.pbdone.split("|"), r0 = (B.recent || []).find(x => x.entry === en); if (!r0) return; const was = r0.discord;
       quick("pbDiscordDone", { entry: en, on: on === "1" }, () => { r0.discord = on === "1" ? "Done" : ""; }, () => { r0.discord = was; }); return; }
     if (t.closest("[data-pbpush]")) { push(); return; }
+    if (t.closest("[data-pbann]")) { copyAnn(lastBatch()); return; }
     const card = t.closest("[data-pbo]"); if (card && !t.closest("button")) { OPEN[card.dataset.pbo] = !OPEN[card.dataset.pbo]; M().draw(); }
   });
   document.addEventListener("input", e => { if (e.target.id === "pbQ") { Q = e.target.value; const pos = e.target.selectionStart; M().draw(); const n = document.getElementById("pbQ"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } } });
