@@ -961,3 +961,14 @@ button.pbx-box:hover{border-color:var(--green)}
 @media(max-width:640px){.ob-stats{grid-template-columns:repeat(2,1fr)}}
 .ob-clean{font-size:13px;color:#fcd34d;background:rgba(255,190,61,.08);border:1px solid rgba(255,190,61,.3);border-radius:10px;padding:9px 12px}
 .sect .ann-btn{order:2;height:30px;font-size:11px}
+
+/* Duty Portal roster update status (promotion follow-ups) */
+.pbx-dp{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;padding:7px 11px;border-radius:9px;font:600 12px Inter,system-ui,sans-serif;border:1px solid var(--line2,rgba(255,255,255,.12));background:rgba(255,255,255,.03);color:#b9c6e4}
+.pbx-dp span{flex:1;min-width:0}
+.pbx-dp.wait{border-color:rgba(250,204,21,.35);color:#fde68a}
+.pbx-dp.work{border-color:rgba(34,211,238,.45);color:#a5f3fc}
+.pbx-dp.work span::after{content:"";display:inline-block;width:10px;height:10px;margin-left:8px;border-radius:50%;border:2px solid rgba(34,211,238,.3);border-top-color:#22d3ee;animation:pbxSpin .8s linear infinite;vertical-align:-1px}
+.pbx-dp.ok{border-color:rgba(52,211,153,.45);color:#86efac}
+.pbx-dp.bad{border-color:rgba(244,63,94,.5);color:#fda4af}
+.pbx-dp .pbx-btn{padding:5px 10px;font-size:11px}
+@keyframes pbxSpin{to{transform:rotate(360deg)}}

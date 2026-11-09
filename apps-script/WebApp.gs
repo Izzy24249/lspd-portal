@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 135;
+const BACKEND_VERSION = 136;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -4297,8 +4297,9 @@ function handleAdmin_(d) {
   if (a === "acctVoice") return voiceForDevice_(d);
   if (a === "officerHome") return officerHome_(d);
   if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
-  if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|Preview|Push|SyncKey|SyncKeys|SyncRevoke)$/.test(a)) return pbHandle_(d);
+  if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|DpRetry|Preview|Push|SyncKey|SyncKeys|SyncRevoke)$/.test(a)) return pbHandle_(d);
   if (a === "dpSync") return dpSync_(d);
+  if (a === "dpJobs" || a === "dpJob") return dpJobsApi_(d);
   if (/^ob(Board|Add|Unlist|Preview|Push)$/.test(a)) return obHandle_(d);
   if (a === "builderLog") return builderLog_(d);
   if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose|CheckScores)$/.test(a)) return unitAct_(d);
@@ -5545,8 +5546,9 @@ function pbView_(acct, A) {
   else try { const S = pbSlots_(); S.rows.forEach(x => { if (!x.head && !x.name && !x.id && !x.fx) open[x.idx] = (open[x.idx] || 0) + 1; }); sc.put("pb_open", JSON.stringify(open), 300); } catch (e) { slotErr = errMsg_(e); }
   const ranks = []; for (let i = 0; i < PB_TOP_; i++) { const ru = pbRule_(R, i); ranks.push({ idx: i, name: RANKS_[i], next: RANKS_[i + 1], abbr: PB_ABBR_[i], open: open[i + 1] || 0, rule: ru,
     doc: ((L.ranks || []).find(x => x.idx === i) || { reqs: [] }).reqs.map(q => ({ t: q.t, auto: q.auto ? q.auto.type : "" })) }); }
+  const JOBS = {}; dpJobsAll_().forEach(j => JOBS[j.id] = j);
   const recent = E.filter(e => e.status === "promoted" && e.doneAt > now - 30 * 864e5).sort((a, b) => b.doneAt - a.doneAt).slice(0, 40)
-    .map(e => ({ entry: e.entry, id: e.id, officer: e.officer, from: e.from, to: e.to, fromIdx: e.fromIdx, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e) }));
+    .map(e => ({ entry: e.entry, id: e.id, officer: e.officer, from: e.from, to: e.to, fromIdx: e.fromIdx, at: e.doneAt, newCs: e.newCs, oldCs: e.callsign, result: e.result, discord: e.discord, todo: pbTodo_(e), dpJob: dpJobPub_(JOBS[e.entry]) }));
   const PP = pbPeriod_(now, PB_DEF_.days);
   return { ok: true, dp: dpOn ? { at: DS.at, full: DS.full || 0, by: DS.by || "", officers: DS.officers || 0, onDuty: DS.onDuty || 0, matched: Object.keys(dpIds).length } : null, unlinked: unlinked, period: { start: PP.start, end: PP.end, review: PP.review, next: PP.next, last: PP.last }, me: { hc: A.hc, nominate: A.nominate, editor: A.editor, idx: A.idx, callsign: A.callsign, dpOwner: (() => { const own = PROPS_.getProperty("DP_OWNER"); return own ? own === acct.id : A.hc && dpKeys_().some(k => k.by === A.who); })() }, officers: officers, ranks: ranks, recent: recent, slotError: slotErr,
     editors: A.editor ? R.editors : [], webhookId: A.editor ? R.webhookId : "", webhooks: A.editor ? getWebhooks_().map(w => ({ id: w.id, name: w.name })) : [], doc: L.doc, at: now };
@@ -5615,7 +5617,13 @@ function pbHandle_(d) {
     return { ok: true, keys: dpKeyList_() };
   } else if (a === "pbDiscordDone") {
     if (!A.editor && !A.hc) return { ok: false, error: "Only High Command can tick these off." };
-    return withLock_(() => { const e = pbEntries_().find(x => x.entry === str_(d.entry)); if (e) pbSheet_().getRange(e.row, 17).setValue(d.on === false ? "" : cellSafe_("Done by " + A.who)); return { ok: true }; });
+    return withLock_(() => { const e = pbEntries_().find(x => x.entry === str_(d.entry)); if (e) pbSheet_().getRange(e.row, 17).setValue(d.on === false ? "" : cellSafe_("Done by " + A.who));
+      let job = null; if (e) job = d.on === false ? dpJobDrop_(e.entry) : dpJobAdd_(e, A.who);
+      return { ok: true, dpJob: job }; });
+  } else if (a === "pbDpRetry") {
+    if (!A.editor && !A.hc) return { ok: false, error: "Only High Command can do this." };
+    return withLock_(() => { const J = dpJobsAll_(), j = J.find(x => x.id === str_(d.entry)); if (!j) return { ok: false, error: "That Duty Portal update isn't in the queue any more." };
+      j.st = "queued"; j.msg = ""; j.tries = 0; j.at = Date.now(); dpJobsPut_(J); return { ok: true, dpJob: dpJobPub_(j) }; });
   } else if (a === "pbPreview" || a === "pbPush") {
     if (!A.hc) return { ok: false, error: "Only High Command can push promotions." };
     return a === "pbPush" ? pbPush_(A) : pbPlan_();
@@ -5706,6 +5714,38 @@ function dpHash_(k) { return Utilities.computeDigest(Utilities.DigestAlgorithm.S
 function dpKeys_() { try { return JSON.parse(PROPS_.getProperty("DP_KEYS") || "[]") || []; } catch (e) { return []; } }
 function dpState_() { try { return JSON.parse(PROPS_.getProperty("DP_STATE") || "{}") || {}; } catch (e) { return {}; } }
 function dpPids_() { try { return JSON.parse(PROPS_.getProperty("DP_PIDS") || "{}") || {}; } catch (e) { return {}; } }
+// ---- Duty Portal roster jobs: after a promotion is marked done, the add-on updates the Duty Portal roster for us ----
+//  "assign" (PO -> PO II): Main roster -> the new callsign's spot -> Assign -> the officer; then Cadets roster -> their old spot -> Clear assignment
+//  "move"   (everyone else): Main roster -> their spot -> Move spot -> the new callsign
+function dpJobsAll_() { try { return JSON.parse(PROPS_.getProperty("DP_JOBS") || "[]") || []; } catch (e) { return []; } }
+function dpJobsPut_(J) { const keep = J.filter(j => j.st === "queued" || j.st === "working" || Date.now() - (j.at || 0) < 14 * 864e5).slice(-80); PROPS_.setProperty("DP_JOBS", JSON.stringify(keep)); }
+function dpJobPub_(j) { return j ? { st: j.st, msg: j.msg || "", at: j.at || 0, kind: j.kind } : null; }
+function dpJobAdd_(e, who) {
+  if (!dpKeys_().length || !e.newCs || !e.id) return null;   // no Duty Portal sync set up, or nothing to move
+  const J = dpJobsAll_(); let j = J.find(x => x.id === e.entry);
+  if (j && (j.st === "done" || j.st === "working")) return dpJobPub_(j);
+  if (!j) { j = { id: e.entry }; J.push(j); }
+  Object.assign(j, { kind: e.fromIdx === 0 ? "assign" : "move", discord: e.id, name: e.officer.replace(/^.*\|\s*/, ""), from: e.callsign, to: e.newCs, st: "queued", msg: "", by: who, at: Date.now(), tries: 0 });
+  dpJobsPut_(J); return dpJobPub_(j);
+}
+function dpJobDrop_(entry) { const J = dpJobsAll_(), j = J.find(x => x.id === entry); if (j && j.st !== "done" && j.st !== "working") { dpJobsPut_(J.filter(x => x !== j)); return null; } return dpJobPub_(j); }
+// the add-on asks for work (dpJobs) and reports each result (dpJob)
+function dpJobsApi_(d) {
+  const who = dpKeys_().find(k => k.h === dpHash_(d.key));
+  if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid." };
+  if (d.action === "dpJobs") {
+    const J = dpJobsAll_(), now = Date.now(); let changed = false;
+    J.forEach(j => { if (j.st === "working" && now - (j.at || 0) > 10 * 60000) { j.st = j.tries >= 2 ? "failed" : "queued"; if (j.st === "failed") j.msg = j.msg || "The add-on stopped before finishing."; changed = true; } });
+    const todo = J.filter(j => j.st === "queued").slice(0, 5);
+    if (todo.length) { todo.forEach(j => { j.st = "working"; j.at = now; j.tries = (j.tries || 0) + 1; }); changed = true; }
+    if (changed) withLock_(() => { const cur = dpJobsAll_(); J.forEach(j => { const i = cur.findIndex(x => x.id === j.id); if (i !== -1) cur[i] = j; }); dpJobsPut_(cur); return { ok: true }; });
+    return { ok: true, jobs: todo.map(j => ({ id: j.id, kind: j.kind, discord: j.discord, name: j.name, from: j.from, to: j.to })) };
+  }
+  return withLock_(() => { const J = dpJobsAll_(), j = J.find(x => x.id === str_(d.id)); if (!j) return { ok: true };
+    j.st = d.st === "done" ? "done" : "failed"; j.msg = clip_(str_(d.msg), 300); j.at = Date.now(); dpJobsPut_(J);
+    try { CacheService.getScriptCache().remove("pb_view"); } catch (e) {}
+    return { ok: true }; });
+}
 // the add-on's post: { key, officers:[{pid,name,status,total,week,seen}], profiles:[{pid,discord,name,shifts:[{s,m}],reports:[{id,at,approx,type,title}]}] }
 function dpSync_(d) {
   const K = dpKeys_(), h = dpHash_(d.key), who = K.find(k => k.h === h);

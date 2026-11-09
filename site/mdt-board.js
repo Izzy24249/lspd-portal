@@ -207,8 +207,27 @@
     try { navigator.clipboard.writeText(txt).then(done, () => annBox(txt)); } catch (e) { annBox(txt); }
   }
   function annBox(txt) { const m = M().modal('<h3 style="font:700 22px Barlow Condensed,sans-serif">PROMOTION ANNOUNCEMENT</h3><textarea style="width:100%;height:50vh;border-radius:10px;background:#0b1220;color:var(--tx);border:1px solid var(--line2);padding:10px;font:12px JetBrains Mono,monospace">' + esc(txt) + '</textarea><div style="display:flex;justify-content:flex-end"><button class="btn" data-close>DONE</button></div>'); const t = m.querySelector("textarea"); t.focus(); t.select(); }
+  // the Duty Portal add-on updating the Duty Portal roster after "Mark done"
+  function dpChip(r, canTick) {
+    const j = r.dpJob; if (!j) return "";
+    const what = j.kind === "move" ? "move to " + (r.newCs || "the new spot") : "assign " + (r.newCs || "") + " · clear " + (r.oldCs || "cadet spot");
+    const T = { queued: ["wait", "🤖 Duty Portal roster: waiting for the add-on (" + what + ")"], working: ["work", "🤖 Duty Portal roster: updating now…"],
+      done: ["ok", "🤖 Duty Portal roster updated" + (j.msg ? " · " + j.msg : "")], failed: ["bad", "🤖 Duty Portal roster: couldn't finish · " + (j.msg || "unknown problem")] }[j.st] || ["wait", j.st];
+    return '<div class="pbx-dp ' + T[0] + '"><span>' + esc(T[1]) + "</span>" + (j.st === "failed" && canTick ? '<button class="pbx-btn ghost" data-dpretry="' + esc(r.entry) + '">RETRY</button>' : "") + "</div>";
+  }
+  // while an update is waiting, check back every 20 s so the chip turns green by itself
+  let DPW = null;
+  function dpWatch() {
+    if (DPW) return;
+    DPW = setInterval(() => {
+      const busy = (B.recent || []).some(r => r.dpJob && (r.dpJob.st === "queued" || r.dpJob.st === "working"));
+      if (!busy || !document.querySelector(".pbx-fu")) { clearInterval(DPW); DPW = null; return; }
+      if (!PEND) call("pbBoard", {}).then(r => { if (r && r.ok) M().draw(); });
+    }, 20000);
+  }
   function followUps() {
     const rec = B.recent || []; if (!rec.length) return "";
+    if (rec.some(r => r.dpJob && (r.dpJob.st === "queued" || r.dpJob.st === "working"))) setTimeout(dpWatch, 0);
     const pend = rec.filter(r => !r.discord), canTick = B.me.hc || B.me.editor;
     const lb = lastBatch();
     return '<div class="sect"><span class="lbl">Recent promotions · Discord to-do</span>' + (lb.length ? '<button class="pbx-btn go ann-btn" data-pbann>📋 FRIDAY ANNOUNCEMENT · ' + lb.length + "</button>" : "") +
@@ -217,7 +236,8 @@
       rec.map(r => '<div class="pbx-fr' + (r.discord ? " done" : "") + '"><div><b>' + esc(r.officer.replace(/^.*\|\s*/, "")) + "</b><small>" + esc(r.from) + " → " + esc(r.to) + " · " + day(r.at) + (r.oldCs || r.newCs ? " · " + esc(r.oldCs || "—") + " → " + esc(r.newCs || "—") : "") + "</small></div>" +
         '<button class="pbx-nick" data-copy="' + esc(r.todo.nick) + '" data-what="Nickname" title="Copy nickname"><span>' + esc(r.todo.nick) + "</span><em>COPY</em></button>" +
         '<div class="pbx-roles"><span class="rm">− ' + esc(r.todo.remove) + '</span><span class="ad">+ ' + esc(r.todo.add) + "</span></div>" +
-        (canTick ? '<button class="pbx-btn ' + (r.discord ? "on" : "ghost") + '" data-pbdone="' + esc(r.entry) + "|" + (r.discord ? 0 : 1) + '">' + (r.discord ? "✓ DONE" : "MARK DONE") + "</button>" : '<span class="pbx-wait">' + (r.discord ? "✓ Done" : "Pending") + "</span>") + "</div>").join("") + "</div>";
+        (canTick ? '<button class="pbx-btn ' + (r.discord ? "on" : "ghost") + '" data-pbdone="' + esc(r.entry) + "|" + (r.discord ? 0 : 1) + '">' + (r.discord ? "✓ DONE" : "MARK DONE") + "</button>" : '<span class="pbx-wait">' + (r.discord ? "✓ Done" : "Pending") + "</span>") +
+        dpChip(r, canTick) + "</div>").join("") + "</div>";
   }
 
   // ---------- actions ----------
@@ -332,7 +352,10 @@
         () => { Object.assign(it, was); recount(o); }, r => { if (r.by) it.by = r.by; });
       return; }
     const dn = t.closest("[data-pbdone]"); if (dn) { const [en, on] = dn.dataset.pbdone.split("|"), r0 = (B.recent || []).find(x => x.entry === en); if (!r0) return; const was = r0.discord;
-      quick("pbDiscordDone", { entry: en, on: on === "1" }, () => { r0.discord = on === "1" ? "Done" : ""; }, () => { r0.discord = was; }); return; }
+      quick("pbDiscordDone", { entry: en, on: on === "1" }, () => { r0.discord = on === "1" ? "Done" : ""; if (on === "1" && B.dp && r0.newCs) r0.dpJob = { st: "queued" }; else if (on !== "1" && r0.dpJob && r0.dpJob.st !== "done") r0.dpJob = null; }, () => { r0.discord = was; },
+        r => { r0.dpJob = r.dpJob || null; M().draw(); if (r.dpJob) dpWatch(); }); return; }
+    const rt = t.closest("[data-dpretry]"); if (rt) { const r0 = (B.recent || []).find(x => x.entry === rt.dataset.dpretry); if (!r0) return; const was = r0.dpJob;
+      quick("pbDpRetry", { entry: r0.entry }, () => { r0.dpJob = { st: "queued" }; }, () => { r0.dpJob = was; }, r => { r0.dpJob = r.dpJob || r0.dpJob; M().draw(); dpWatch(); }); return; }
     if (t.closest("[data-pbpush]")) { push(); return; }
     const an0 = t.closest("[data-pbann]"); if (an0) { copyAnn(lastBatch(), an0.dataset.pbann); return; }
     const card = t.closest("[data-pbo]"); if (card && !t.closest("button")) { OPEN[card.dataset.pbo] = !OPEN[card.dataset.pbo]; M().draw(); }
