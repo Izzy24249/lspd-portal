@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.4.0
+// @version      1.4.1
 // @description  Reads Duty Portal hours, shifts and reports for the LSPD MDT promotion board, and updates the Duty Portal roster after promotions are marked done in the MDT. Runs in your own logged-in browser; never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
@@ -80,7 +80,10 @@
   async function readList(full) {
     const d = await load(BASE + "/officers" + (full ? "" : "?status=active"));
     const rows = () => { const m = {}; d.querySelectorAll('main a[href*="/officers/"]').forEach(a => { const h = (a.getAttribute("href") || "").split("?")[0], pid = h.split("/officers/")[1]; if (pid && /^[a-z0-9]{16,}$/i.test(pid) && texts(a).length >= 4) m[pid] = a; }); return m; };
-    if (!(await waitFor(() => Object.keys(rows()).length, 20000))) throw new Error("couldn't read the officer list (signed out?)");
+    const empty = () => /no officers found/i.test((d.querySelector("main") || d.body || {}).innerText || "");
+    const got = await waitFor(() => Object.keys(rows()).length ? "rows" : empty() ? "empty" : null, 25000);
+    if (got === "empty") return [];   // nobody on duty right now (or nobody matches): that's fine, not an error
+    if (!got) throw new Error(/sign[- ]?in|log ?in/i.test((d.location && d.location.pathname) || "") ? "signed out of the Duty Portal: sign in again in this tab" : "couldn't read the officer list (signed out?)");
     let n = 0, same = 0;
     for (let i = 0; i < (full ? 80 : 6) && same < (full ? 4 : 2); i++) {
       d.querySelectorAll("main *").forEach(el => { if (el.scrollHeight > el.clientHeight + 40 && /auto|scroll/.test(getComputedStyle(el).overflowY)) el.scrollTop = el.scrollHeight; });
