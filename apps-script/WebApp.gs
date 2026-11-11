@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 138;
+const BACKEND_VERSION = 139;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -4300,6 +4300,7 @@ function handleAdmin_(d) {
   if (a === "promoBoard" || a === "promoCheck") return promoTrack_(d);
   if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|DpRetry|Preview|Push|SyncKey|SyncKeys|SyncRevoke)$/.test(a)) return pbHandle_(d);
   if (a === "dpSync") return dpSync_(d);
+  if (a === "rbReport") return rbReport_(d);
   if (a === "dpJobs" || a === "dpJob") return dpJobsApi_(d);
   if (/^ob(Board|Add|Unlist|Preview|Push)$/.test(a)) return obHandle_(d);
   if (a === "builderLog") return builderLog_(d);
@@ -5485,11 +5486,13 @@ function pbEval_(o, R, L, checks, duty, rep, now) {
   if (rule.hours > 0) items.push({ key: "pb:hours", t: rule.hours + " hours on duty in the " + weeks.length + " weeks before promotion day" + (rule.weekMin ? " (" + rule.weekMin + "+ each week)" : ""), auto: "hours", need: rule.hours * 60, have: total, done: total >= rule.hours * 60, src: SR.src,
     weeks: weeks.map(w => ({ from: w.from, to: w.to, min: w.min, cur: w.cur, low: rule.weekMin > 0 && done(w) && w.min < rule.weekMin * 60 })), warn: total >= rule.hours * 60 && low.length ? low.length + " week" + (low.length > 1 ? "s were" : " was") + " under " + rule.weekMin + " hours" : "" });
   if (rule.reports > 0) {   // reports they filed themselves: MDT forms + Duty Portal, a report in both counted once (same officer, within 90 min)
-    const inP = t => t >= from && t < P.end, m = (rep.mdt[o.id] || []).filter(x => inP(x.at)), dp = (rep.dp[o.id] || []).filter(x => inP(x.at)), used = {};
-    let both = 0; dp.forEach(x => { const j = m.findIndex((y, k) => !used[k] && Math.abs(y.at - x.at) <= 90 * 60000); if (j !== -1) { used[j] = 1; both++; } });
-    const n = m.length + dp.length - both;
+    const inP = t => t >= from && t < P.end, m = (rep.mdt[o.id] || []).filter(x => inP(x.at)), dp = (rep.dp[o.id] || []).filter(x => inP(x.at)), rb = ((rep.rb || {})[o.id] || []).filter(x => inP(x.at));
+    // the same report showing up from more than one place (Report Builder copy -> CAD/Duty Portal -> MDT) counts once: same officer, within 90 min, different sources
+    const ev = m.map(x => ({ at: x.at, s: "mdt" })).concat(dp.map(x => ({ at: x.at, s: "dp" })), rb.map(x => ({ at: x.at, s: "rb" }))).sort((a, b) => a.at - b.at), G = [];
+    ev.forEach(x => { const g = G.find(g0 => !g0.s[x.s] && Math.abs(g0.at - x.at) <= 90 * 60000); if (g) g.s[x.s] = 1; else { const s0 = {}; s0[x.s] = 1; G.push({ at: x.at, s: s0 }); } });
+    const n = G.length, both = m.length + dp.length + rb.length - n;
     items.push({ key: "pb:reports", t: rule.reports + " reports they filed in the same " + weeks.length + " weeks", auto: "reports14", need: rule.reports, have: n, done: n >= rule.reports,
-      split: { mdt: m.length, dp: dp.length, both: both }, list: m.map(x => ({ at: x.at, t: x.title, src: "MDT" })).concat(dp.map(x => ({ at: x.at, t: x.title, src: "Duty Portal" }))).sort((a, b) => b.at - a.at).slice(0, 12) }); }
+      split: { mdt: m.length, dp: dp.length, rb: rb.length, both: both }, list: m.map(x => ({ at: x.at, t: x.title, src: "MDT" })).concat(dp.map(x => ({ at: x.at, t: x.title, src: "Duty Portal" })), rb.map(x => ({ at: x.at, t: x.title, src: "Report Builder" }))).sort((a, b) => b.at - a.at).slice(0, 12) }); }
   // the rank's requirements from the Promotion Guidelines doc (time in grade, trainings, SOP… and command sign-offs)
   const rr = (L.ranks || []).find(x => x.idx === o.idx);
   promoEval_(o, rr, checks).items.forEach(x => items.push(Object.assign({}, x, { doc: true })));
@@ -5525,7 +5528,7 @@ function pbView_(acct, A) {
   // reports each officer FILED on the MDT (the form's own officer box / lead officer), and the Duty Portal's
   const lead = {}; (getConfig_().forms || []).forEach(f => { lead[f.id] = [str_(f.meField), autoAuthor_(f)].filter(Boolean); });
   const repM = {}; actRows_().forEach(r => { const L0 = lead[r.form] || [], x = (r.people || []).find(p => p.i && L0.indexOf(p.f) !== -1); if (x) (repM[x.i] = repM[x.i] || []).push({ at: r.at, title: r.title }); });
-  const DS = dpState_(), dpOn = !!DS.at, dps = dpOn ? dpShifts_() : {}, rep = { mdt: repM, dp: dpOn ? dpReports_() : {} };
+  const DS = dpState_(), dpOn = !!DS.at, dps = dpOn ? dpShifts_() : {}, rep = { mdt: repM, dp: dpOn ? dpReports_() : {}, rb: rbReports_() };
   const dpIds = {}; if (dpOn) { const P0 = dpPids_(); Object.keys(P0).forEach(k => dpIds[P0[k]] = 1); }
   // hours: Duty Portal shifts where we have them (every officer, exact clock-in/out); before its first known shift, the On Duty role log
   const role = duty, dutyOf = id => { const d0 = dps[id] || [], r0 = role[id] || [];
@@ -5807,6 +5810,35 @@ function dpShifts_() {
     sh.getRange(from, 1, n - from + 1, 4).getValues().forEach(r => { const id = str_(r[0]).replace(/^'/, ""), st = isDate_(r[2]) ? r[2].getTime() : 0, m = Number(r[3]) || 0;
       if (id && st >= since) (out[id] = out[id] || []).push([st, st + m * 60000, m]); }); }
   try { const js = JSON.stringify(out); if (js.length < 95000) c.put("dp_shifts", js, 600); } catch (e) {}
+  return out;
+}
+// ---- the Chief's Report Builder (Netlify): each report an officer copies there is sent here by report-link.js ----
+const RB_REPS_ = "Report Builder Reports", RB_REPS_HEAD_ = ["Discord ID", "Callsign", "Officer", "At", "Type", "Title", "Hash", "Report"];
+function rbReport_(d) {
+  const body = str_(d.body).trim(), badge = str_(d.badge).trim(), name = str_(d.name).trim();
+  if (body.length < 60 || body.length > 20000) return { ok: false, error: "That doesn't look like a report." };
+  const ck = callKey_(badge); if (!ck) return { ok: false, error: "No callsign on the report." };
+  const c = CacheService.getScriptCache(), hash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, body.replace(/\s+/g, " ")).map(b => ("0" + (b & 255).toString(16)).slice(-2)).join("").slice(0, 20);
+  if (c.get("rb_h_" + hash)) return { ok: true, dup: true };
+  const day = Utilities.formatDate(new Date(), "America/New_York", "yyyyMMdd"), rk = "rb_n_" + ck + day, n = Number(c.get(rk) || 0);
+  if (n >= 40) return { ok: false, error: "Too many reports from one callsign today." };
+  const o = promoPeople_().find(x => x.callsign && callKey_(x.callsign) === ck);
+  const id = o && (!name || !nameKey_(name) || sameName_(name, o.name) || nameKey_(name).indexOf(nameKey_(o.name)) !== -1 || nameKey_(o.name).indexOf(nameKey_(name)) !== -1) ? o.id : "";   // callsign + name have to agree
+  return withLock_(() => {
+    const sh = dpSheet_(RB_REPS_, RB_REPS_HEAD_), last = sh.getLastRow();
+    if (last > 1) { const from = Math.max(2, last - 400 + 1); if (sh.getRange(from, 7, last - from + 1, 1).getValues().some(r => str_(r[0]) === hash)) { c.put("rb_h_" + hash, "1", 21600); return { ok: true, dup: true }; } }
+    sh.appendRow([id ? "'" + id : "", cellSafe_(clip_(badge, 20)), cellSafe_(clip_(name, 60)), new Date(), cellSafe_(clip_(str_(d.type), 40)), cellSafe_(clip_(str_(d.header), 150)), hash, cellSafe_(clip_(body, 4000))]);
+    c.put("rb_h_" + hash, "1", 21600); c.put(rk, String(n + 1), 86400); c.remove("rb_reps");
+    return { ok: true, matched: !!id };
+  });
+}
+function rbReports_() {
+  const c = CacheService.getScriptCache(), hit = c.get("rb_reps"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const out = {}, sh = ss_().getSheetByName(RB_REPS_), since = Date.now() - 40 * 864e5;
+  if (sh && sh.getLastRow() > 1) { const n = sh.getLastRow(), from = Math.max(2, n - 6000 + 1);
+    sh.getRange(from, 1, n - from + 1, 6).getValues().forEach(r => { const id = str_(r[0]).replace(/^'/, ""), at = isDate_(r[3]) ? r[3].getTime() : 0;
+      if (id && at >= since) (out[id] = out[id] || []).push({ at: at, type: str_(r[4]), title: clip_(str_(r[5]), 90) }); }); }
+  try { const js = JSON.stringify(out); if (js.length < 95000) c.put("rb_reps", js, 600); } catch (e) {}
   return out;
 }
 function dpReports_() {

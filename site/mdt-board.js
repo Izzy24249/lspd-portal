@@ -44,7 +44,7 @@
     return '<div class="pbx-det">' + o.items.map(x => {
       const man = !x.auto, can = man && canTick, by = x.manual && x.by ? "Signed off by " + x.by : x.auto && x.done ? "Counted by the terminal" : "";
       let extra = "";
-      if (x.auto === "reports14" && x.split) extra = '<div class="pbx-src">' + x.split.mdt + " from MDT forms · " + x.split.dp + " from the Duty Portal" + (x.split.both ? " · " + x.split.both + " in both (counted once)" : "") + "</div>" +
+      if (x.auto === "reports14" && x.split) extra = '<div class="pbx-src">' + x.split.mdt + " from MDT forms · " + x.split.dp + " from the Duty Portal" + (x.split.rb ? " · " + x.split.rb + " from the Report Builder" : "") + (x.split.both ? " · " + x.split.both + " seen twice (counted once)" : "") + "</div>" +
         (x.list && x.list.length ? '<div class="pbx-rl">' + x.list.map(r => "<span><i>" + esc(r.src) + "</i>" + day(r.at) + " · " + esc(r.t || "Report") + "</span>").join("") + "</div>" : "");
       else if (x.auto === "hours" && o.linked === false) extra = '<div class="pbx-warn">🔗 Not tracked: the Duty Portal sync hasn\'t matched them and they\'ve never signed in to the portal with Discord, so on-duty time isn\'t being counted yet.</div>';
       if (x.auto === "hours" && x.src && o.linked !== false) extra = '<div class="pbx-src">' + (x.src === "dp" ? "From the Duty Portal (in-game clock-in/out)" : x.src === "role" ? "From the On Duty Discord role (Duty Portal hasn't seen them yet)" : "No duty time recorded yet") + "</div>";
