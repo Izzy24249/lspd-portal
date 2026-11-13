@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 139;
+const BACKEND_VERSION = 140;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3910,6 +3910,7 @@ function officerHome_(d) {
   out.ladder = (() => { try { return promoReqParse_(false); } catch (e) { return null; } })(); mark_("ladder");
   out.promoMe = promoMine_(acct); mark_("promo");
   try { const A = pbAccess_(acct); out.pb = A.view ? { hc: A.hc, nominate: A.nominate, editor: A.editor } : null; } catch (e) { out.pb = null; }
+  out.cdOwner = cdOwner_(acct);
   out.race = officerRace_(acct); mark_("race");
   try { const b = dutyBoard_(); if (b) { const cur = dutyState_()[acct.id]; b.linked = dlinkHas_(acct.id); b.me = b.src === "dp" ? b.list.some(o => o.id === acct.id) : !!cur; b.mine = dutyMine_(acct.id, cur); out.duty = b; } } catch (e) {} mark_("duty");
   return out;
@@ -4301,8 +4302,10 @@ function handleAdmin_(d) {
   if (/^pb(Board|Nominate|Remove|Approve|Check|Rules|DiscordDone|DpRetry|Preview|Push|SyncKey|SyncKeys|SyncRevoke)$/.test(a)) return pbHandle_(d);
   if (a === "dpSync") return dpSync_(d);
   if (a === "rbReport") return rbReport_(d);
+  if (a === "dpCadets") return cdScanSave_(d);
   if (a === "dpJobs" || a === "dpJob") return dpJobsApi_(d);
   if (/^ob(Board|Add|Unlist|Preview|Push)$/.test(a)) return obHandle_(d);
+  if (/^cd(Board|Scan|Apply)$/.test(a)) return cdHandle_(d);
   if (a === "builderLog") return builderLog_(d);
   if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose|CheckScores)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
@@ -5740,10 +5743,10 @@ function dpJobsApi_(d) {
   if (d.action === "dpJobs") {
     const J = dpJobsAll_(), now = Date.now(); let changed = false;
     J.forEach(j => { if (j.st === "working" && now - (j.at || 0) > 10 * 60000) { const where = j.step ? " (last step: " + j.step + ")" : ""; j.st = j.tries >= 2 ? "failed" : "queued"; j.msg = "The add-on went quiet for 10 minutes" + where + (j.st === "failed" ? ". Keep the Duty Portal tab in front (a background tab gets slowed down by the browser), then press Retry." : ", trying again."); j.step = ""; changed = true; } });
-    const todo = J.filter(j => j.st === "queued").slice(0, 5);
+    const todo = J.filter(j => j.st === "queued").sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, 8);
     if (todo.length) { todo.forEach(j => { j.st = "working"; j.at = now; j.step = "picked up by the add-on"; j.tries = (j.tries || 0) + 1; }); changed = true; }
     if (changed) withLock_(() => { const cur = dpJobsAll_(); J.forEach(j => { const i = cur.findIndex(x => x.id === j.id); if (i !== -1) cur[i] = j; }); dpJobsPut_(cur); return { ok: true }; });
-    return { ok: true, jobs: todo.map(j => ({ id: j.id, kind: j.kind, discord: j.discord, name: j.name, from: j.from, to: j.to })) };
+    return { ok: true, jobs: todo.map(j => ({ id: j.id, kind: j.kind, discord: j.discord, name: j.name, from: j.from, to: j.to, op: j.op || null })) };
   }
   return withLock_(() => { const J = dpJobsAll_(), j = J.find(x => x.id === str_(d.id)); if (!j) return { ok: true };
     if (d.st === "working") { if (j.st === "working") { j.step = clip_(str_(d.msg), 160); j.at = Date.now(); dpJobsPut_(J); } return { ok: true }; }   // progress: which step it's on (also keeps the job from timing out)
@@ -5889,6 +5892,81 @@ function obrEntries_() {
     status: str_(r[5]), by: str_(r[6]), at: isDate_(r[7]) ? r[7].getTime() : 0, doneAt: isDate_(r[8]) ? r[8].getTime() : 0, result: str_(r[9]) })).filter(e => e.entry);
 }
 // the Onboarding Roster as rows: A callsign, B forced nickname, C name, D Discord ID, I status, J training status, K date
+// ---- Cadet roster check (owner only): the Google Sheet's Onboarding roster is the truth, the Duty Portal's Cadets roster is fixed to match ----
+//  the add-on reads the Cadets roster (cadetScan), the owner reviews the differences here, then the add-on makes each change (cadet jobs)
+const DPC_SHEET_ = "Duty Portal Cadets", DPC_HEAD_ = ["Callsign", "Holder", "Discord ID", "State", "Seen"];
+function cdOwner_(acct) { const own = PROPS_.getProperty("DP_OWNER"); return !!(acct && own && own === acct.id); }
+function cdSheetRows_() {   // every L-8## spot on the Onboarding roster, filled or empty
+  const ob = rosterBook_().getSheetByName(ONBOARD_TAB_); if (!ob) throw new Error("The \"" + ONBOARD_TAB_ + "\" tab wasn't found in the roster sheet.");
+  const d = ob.getRange(1, 1, ob.getLastRow(), 4).getDisplayValues(), out = [];
+  d.forEach(r => { const cs = str_(r[0]).trim(); if (!/^L-?8\d\d$/i.test(cs)) return; const nm = str_(r[2]).trim(); out.push({ cs: cs.toUpperCase(), name: /^name$/i.test(nm) ? "" : nm, id: str_(r[3]).replace(/\D/g, "") }); });
+  return out;
+}
+function cdScanSave_(d) {   // from the add-on: what the Duty Portal's Cadets roster shows right now
+  const who = dpKeys_().find(k => k.h === dpHash_(d.key)); if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid." };
+  const rows = (Array.isArray(d.rows) ? d.rows : []).slice(0, 300).map(r => [cellSafe_(clip_(str_(r.cs).toUpperCase(), 10)), cellSafe_(clip_(str_(r.who), 80)), str_(r.id).replace(/\D/g, "") ? "'" + str_(r.id).replace(/\D/g, "") : "", clip_(str_(r.st), 12), new Date()]);
+  return withLock_(() => { const sh = dpSheet_(DPC_SHEET_, DPC_HEAD_); if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, DPC_HEAD_.length).clearContent();
+    if (rows.length) sh.getRange(2, 1, rows.length, DPC_HEAD_.length).setValues(rows);
+    PROPS_.setProperty("DP_CADETS_META", JSON.stringify({ at: Date.now(), n: rows.length, menu: (d.menu || []).slice(0, 12).map(x => clip_(str_(x), 40)), fmenu: (d.fmenu || []).slice(0, 12).map(x => clip_(str_(x), 40)) }));
+    return { ok: true }; });
+}
+function cdScan_() {
+  const sh = ss_().getSheetByName(DPC_SHEET_), out = {}; if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues().forEach(r => { const cs = str_(r[0]).toUpperCase(); if (cs) out[cs] = { cs: cs, who: str_(r[1]), id: str_(r[2]).replace(/\D/g, ""), st: str_(r[3]) }; });
+  return out;
+}
+function cdPlan_(sheet, scan) {
+  const byId = {}; Object.keys(scan).forEach(k => { const x = scan[k]; if (x.id) (byId[x.id] = byId[x.id] || []).push(k); });
+  const want = {}; sheet.forEach(s => { if (s.id) want[s.id] = s.cs; });
+  const rows = [], ops = [];
+  sheet.forEach(s => {
+    const dp = scan[s.cs] || null, row = { cs: s.cs, sheet: { name: s.name, id: s.id }, dp: dp ? { who: dp.who, id: dp.id, st: dp.st } : null, ok: false, ops: [] };
+    const add = (type, extra, why) => { const op = Object.assign({ id: type + ":" + s.cs, type: type, cs: s.cs, why: why }, extra); row.ops.push(op.id); ops.push(op); };
+    if (!dp) { row.note = Object.keys(scan).length ? "Not on the Duty Portal's Cadets roster" : ""; rows.push(row); return; }
+    if (s.id) {
+      if (dp.id === s.id) { row.ok = true; if (s.name && dp.who && nameKey_(dp.who).indexOf(nameKey_(s.name.replace(/^.*\|\s*/, ""))) === -1 && !sameName_(dp.who, s.name)) row.note = "Same person; the Duty Portal shows their Discord name"; rows.push(row); return; }
+      if (dp.id && !want[dp.id]) add("clear", { discord: dp.id, name: dp.who }, "Wrong person in " + s.cs + " (" + (dp.who || dp.id) + "), not on the Onboarding roster");
+      else if (dp.id) row.note = (dp.who || dp.id) + " is moved out to " + want[dp.id] + " first";
+      const other = (byId[s.id] || []).find(k => k !== s.cs);
+      if (other) add("move", { from: other, discord: s.id, name: s.name }, s.name + " is in " + other + " on the Duty Portal: move them to " + s.cs);
+      else add("assign", { discord: s.id, name: s.name }, "Assign " + s.name + " to " + s.cs + " (if they're not in the Duty Portal, the spot is put on hold)");
+    } else if (s.name) {
+      if (!/hold|reserv/i.test(dp.st)) add("hold", { name: s.name }, s.name + " has no Discord ID on the sheet: hold " + s.cs);
+      else row.ok = true;
+    } else if (dp.id && want[dp.id]) { row.note = (dp.who || dp.id) + " is moved from here to " + want[dp.id];
+    } else if (dp.id) {
+      add("clear", { discord: dp.id, name: dp.who }, s.cs + " is empty on the sheet but the Duty Portal has " + (dp.who || dp.id));
+    } else row.ok = true;
+    rows.push(row);
+  });
+  const order = { clear: 0, move: 1, assign: 2, hold: 3 }; ops.sort((a, b) => order[a.type] - order[b.type]);
+  return { rows: rows, ops: ops };
+}
+function cdHandle_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  if (!cdOwner_(acct)) return { ok: false, error: "The cadet roster check is for the portal owner only." };
+  const a = d.action, J = dpJobsAll_(), mine = J.filter(j => /^cd/.test(j.kind || ""));
+  if (a === "cdScan") return withLock_(() => { const J2 = dpJobsAll_(); let j = J2.find(x => x.id === "cdscan");
+    if (j && (j.st === "queued" || j.st === "working")) return { ok: true, queued: true };
+    if (!j) { j = { id: "cdscan" }; J2.push(j); } Object.assign(j, { kind: "cdscan", name: "Cadets roster", st: "queued", msg: "", step: "", at: Date.now(), tries: 0, by: acct.username || "" });
+    dpJobsPut_(J2); return { ok: true, queued: true }; });
+  if (a === "cdApply") {
+    let sheet; try { sheet = cdSheetRows_(); } catch (e) { return { ok: false, error: errMsg_(e) }; }
+    const plan = cdPlan_(sheet, cdScan_()), pick = {}; (d.ops || []).forEach(x => pick[str_(x)] = 1);
+    const ops = plan.ops.filter(o => pick[o.id]); if (!ops.length) return { ok: false, error: "Nothing picked to change." };
+    return withLock_(() => { const J2 = dpJobsAll_(), now = Date.now();
+      ops.forEach((o, i) => { const id = "cd:" + o.id; let j = J2.find(x => x.id === id); if (j && (j.st === "queued" || j.st === "working")) return;
+        if (!j) { j = { id: id }; J2.push(j); } Object.assign(j, { kind: "cdop", op: o, name: o.name || o.cs, to: o.cs, from: o.from || "", discord: o.discord || "", st: "queued", msg: "", step: "", at: now + i, tries: 0, by: acct.username || "" }); });
+      let sc = J2.find(x => x.id === "cdscan"); if (!sc) { sc = { id: "cdscan" }; J2.push(sc); }   // check again once the changes are made
+      Object.assign(sc, { kind: "cdscan", name: "Cadets roster", st: "queued", msg: "", step: "", at: now + 100, tries: 0 });
+      dpJobsPut_(J2); return { ok: true, queued: ops.length }; });
+  }
+  // cdBoard
+  let sheet = [], err = ""; try { sheet = cdSheetRows_(); } catch (e) { err = errMsg_(e); }
+  const meta = JSON.parse(PROPS_.getProperty("DP_CADETS_META") || "{}"), plan = cdPlan_(sheet, cdScan_()), jobs = {};
+  mine.forEach(j => jobs[j.id] = dpJobPub_(j));
+  return { ok: true, error: err, scan: meta, rows: plan.rows, ops: plan.ops, jobs: jobs, sync: dpKeys_().length > 0 };
+}
 function obRows_() {
   const ob = rosterBook_().getSheetByName(ONBOARD_TAB_); if (!ob) throw new Error("The \"" + ONBOARD_TAB_ + "\" tab wasn't found in the roster sheet.");
   const n = ob.getLastRow(), rng = ob.getRange(1, 1, n, 11), v = rng.getValues(), d = rng.getDisplayValues(), rows = [];

@@ -36,6 +36,7 @@
     const nt = UNIT && UNIT.sessions ? UNIT.sessions.filter(x => !x.mine && !x.full).length + (UNIT.checks || []).filter(c => !c.best).length : 0; $("nTrain").textContent = nt || "";
     document.querySelectorAll("[data-need-command]").forEach(a => a.hidden = !isCommand());
     document.querySelectorAll("[data-need-board]").forEach(a => a.hidden = !(DATA && DATA.pb));
+    document.querySelectorAll("[data-need-owner]").forEach(a => a.hidden = !(DATA && DATA.cdOwner));
     $("adminBtn").hidden = ["admin", "owner"].indexOf(p.level) === -1;   // portal admin: admins and the owner only
     const nb = (DATA && DATA.board && DATA.board.notices || []).length; $("nBolo").textContent = nb || ""; $("nBolo").className = nb ? "new" : "";
     if (DATA && DATA.fleet) { $("nFleet").textContent = DATA.fleet.vehicles.filter(v => v.allowed).length || ""; $("nUni").textContent = (DATA.fleet.uniforms[SEX] || []).filter(u => u.yours).length || ""; }
@@ -108,8 +109,8 @@
   addEventListener("message", e => { if (e.origin === location.origin && e.data && e.data.type === "lspd:filed") { toast("✓ " + (e.data.title || "Report") + " filed"); blip(1400); setTimeout(load, 1500); } });
 
   // ---------- router ----------
-  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker", "board", "onbremove"];
-  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["DEPARTMENT", "Promotion tracker"], board: ["COMMAND", "Promotion board"], onbremove: ["COMMAND", "Onboarding removals"] };
+  const VIEWS = ["home", "fleet", "uniforms", "records", "reference", "unit", "training", "reports", "sop", "promotions", "tracker", "board", "onbremove", "cadets"];
+  const TITLES = { home: ["TERMINAL", "Dashboard"], fleet: ["DEPARTMENT", "Fleet"], uniforms: ["DEPARTMENT", "Uniforms"], records: ["TERMINAL", "Records & BOLOs"], reference: ["TERMINAL", "Penal code"], unit: ["DEPARTMENT", "Kudos & awards"], training: ["DEPARTMENT", "Training"], reports: ["REPORTS", "File a report"], sop: ["DEPARTMENT", "Standard Operating Procedures"], promotions: ["DEPARTMENT", "Promotions"], tracker: ["DEPARTMENT", "Promotion tracker"], board: ["COMMAND", "Promotion board"], onbremove: ["COMMAND", "Onboarding removals"], cadets: ["OWNER", "Cadet roster check"] };
   const okView = v => VIEWS.indexOf(v) >= 0 || /^form:[\w-]+$/.test(v) || /^frame:[\w.-]+\.html$/.test(v);
   function go(v) { if (v === "tracker" && TRACK && TRACK.ok && Date.now() - (TRACK._t || 0) > 30000) loadTrack();   // fresh numbers each time it's opened
     VIEW = okView(v) ? v : "home"; if (decodeURIComponent(location.hash.slice(1)) !== VIEW) history.replaceState(null, "", "#" + VIEW); side.classList.remove("open"); draw(); window.scrollTo(0, 0); blip(); }
@@ -172,7 +173,7 @@
       $("ticker").hidden = true; return;
     }
     m.__view = "";
-    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "tracker" ? trackHTML() : VIEW === "board" ? (window.MDTBoard ? MDTBoard.html() : "") : VIEW === "onbremove" ? (window.MDTOnb ? MDTOnb.html() : "") : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
+    m.innerHTML = '<div class="view">' + (VIEW === "fleet" ? fleetHTML() : VIEW === "uniforms" ? uniformsHTML() : VIEW === "records" ? recordsHTML() : VIEW === "reference" ? refHTML() : VIEW === "promotions" ? promoHTML() : VIEW === "tracker" ? trackHTML() : VIEW === "board" ? (window.MDTBoard ? MDTBoard.html() : "") : VIEW === "onbremove" ? (window.MDTOnb ? MDTOnb.html() : "") : VIEW === "cadets" ? (window.MDTCadets ? MDTCadets.html() : "") : VIEW === "unit" ? unitHTML() : VIEW === "training" ? trainHTML() : VIEW === "reports" ? reportsHTML() : homeHTML()) + "</div>";
     if ((VIEW === "unit" || VIEW === "training") && !UNIT) loadUnit();
     if (VIEW === "reference" && !REF) loadRef();
     m.querySelectorAll("[data-count]").forEach(el => { const to = +el.dataset.count || 0, t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 900); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); });

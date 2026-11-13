@@ -972,3 +972,33 @@ button.pbx-box:hover{border-color:var(--green)}
 .pbx-dp.bad{border-color:rgba(244,63,94,.5);color:#fda4af}
 .pbx-dp .pbx-btn{padding:5px 10px;font-size:11px}
 @keyframes pbxSpin{to{transform:rotate(360deg)}}
+
+/* Cadet roster check (owner) */
+.cd-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 12px}
+.cd-meta{color:#9fb0cf;font-size:12.5px}
+.cd-tg{margin-left:auto;display:flex;align-items:center;gap:6px;color:#9fb0cf;font-size:12.5px;cursor:pointer}
+.cd-warn{margin:0 0 12px;padding:10px 13px;border-radius:10px;border:1px solid rgba(250,204,21,.4);background:rgba(250,204,21,.07);color:#fde68a;font-size:13px;line-height:1.45}
+.cd-sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pbx-chip.info{color:#93c5fd;border-color:rgba(96,165,250,.45)}
+.pbx-chip.hold{color:#c4b5fd;border-color:rgba(167,139,250,.45)}
+.cd-tbl{border:1px solid rgba(110,170,255,.18);border-radius:12px;overflow:hidden;background:rgba(8,15,32,.55)}
+.cd-hd,.cd-r{display:grid;grid-template-columns:70px minmax(140px,1fr) minmax(140px,1fr) minmax(260px,1.6fr);gap:12px;padding:10px 14px;align-items:start}
+.cd-hd{font:700 10.5px ui-monospace,Consolas,monospace;letter-spacing:.12em;color:#7f93ba;background:rgba(110,170,255,.06);border-bottom:1px solid rgba(110,170,255,.14)}
+.cd-r{border-top:1px solid rgba(255,255,255,.05);font-size:13px}
+.cd-r.ok{opacity:.65}
+.cd-r code{font:700 13px ui-monospace,Consolas,monospace;color:#7dd3fc;padding-top:2px}
+.cd-r b{display:block;color:#e6f0ff;font-weight:600}
+.cd-r small{display:block;color:#7f93ba;font-size:11.5px;margin-top:2px;word-break:break-all}
+.cd-mt{color:#64748b;font-style:italic}
+.cd-hold{color:#c4b5fd!important;letter-spacing:.08em;font-size:11.5px}
+.cd-do{display:flex;flex-direction:column;gap:6px}
+.cd-okt{color:#86efac;font-weight:600}
+.cd-op{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:start;padding:7px 9px;border-radius:9px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);cursor:pointer;line-height:1.4}
+.cd-op input{margin-top:3px;accent-color:#22d3ee}
+.cd-op b{display:inline;font-weight:700}
+.cd-op.no b{color:#fda4af}.cd-op.warn b{color:#fde68a}.cd-op.info b{color:#93c5fd}.cd-op.hold b{color:#c4b5fd}
+.cd-op .cd-job{grid-column:2}
+.cd-job{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);color:#b9c6e4}
+.cd-job.wait{color:#fde68a;border-color:rgba(250,204,21,.35)}.cd-job.work{color:#a5f3fc;border-color:rgba(34,211,238,.45)}.cd-job.ok{color:#86efac;border-color:rgba(52,211,153,.45)}.cd-job.bad{color:#fda4af;border-color:rgba(244,63,94,.5)}
+.cd-foot{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(8,15,32,.95);border:1px solid rgba(34,211,238,.3);color:#b9c6e4;font-size:13px;backdrop-filter:blur(8px)}
+@media(max-width:820px){.cd-hd{display:none}.cd-r{grid-template-columns:60px 1fr}.cd-r>span:nth-child(3){grid-column:2}.cd-do{grid-column:1/-1}}

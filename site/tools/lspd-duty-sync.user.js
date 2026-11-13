@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.4.1
+// @version      1.5.0
 // @description  Reads Duty Portal hours, shifts and reports for the LSPD MDT promotion board, and updates the Duty Portal roster after promotions are marked done in the MDT. Runs in your own logged-in browser; never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
@@ -220,6 +220,70 @@
     }
     return notes.join(" · ");
   }
+  // ---------- Cadets roster check (owner, from the MDT): read the Cadets roster, then fix spots one at a time ----------
+  const idIn = r => (((r.innerText || "").match(/\b\d{17,20}\b/) || [])[0]) || "";
+  const holderOf = r => { const t = (r.innerText || "").replace(/\s+/g, " ").trim(), cs = rowCs(r); let w = t.slice(cs.length).trim(); if (w.indexOf(cs) === 0) w = w.slice(cs.length).trim(); return w.split(/ · | Last on duty| Active| On leave| Inactive|\b\d+ days?\b| Assign| (?:Police Officer|Probationary|Cadet|Recruit)\b/)[0].trim().slice(0, 80); };
+  const stateOf = r => { const t = r.innerText || ""; return /\bon hold\b|\bheld\b|\breserved\b|\bhold\b/i.test(t) ? "hold" : idIn(r) ? "filled" : /\bAssign\b/.test(t) ? "open" : "other"; };
+  async function menuItems(d, row) {
+    const b = btnIn(row, /^Actions for/); if (!b) return [];
+    press(b); const ok = await waitFor(() => d.querySelectorAll("[role=menuitem]").length, 4000);
+    const items = ok ? [...d.querySelectorAll("[role=menuitem]")].map(i => (i.innerText || "").trim()).filter(Boolean) : [];
+    await escape(d); return items;
+  }
+  async function cadetScan(key) {
+    step("reading the Cadets roster"); const d = await openRoster("cadets");
+    const rows = rowsOf(d).filter(r => /^\s*L-?8\d\d\b/i.test(r.innerText || "")).map(r => ({ cs: rowCs(r).toUpperCase(), who: stateOf(r) === "open" ? "" : holderOf(r), id: idIn(r), st: stateOf(r) }));
+    const seen = {}, list = rows.filter(x => !seen[x.cs] && (seen[x.cs] = 1));
+    const open = rowsOf(d).find(r => /^\s*L-?8\d\d\b/i.test(r.innerText || "") && stateOf(r) === "open"), full = rowsOf(d).find(r => /^\s*L-?8\d\d\b/i.test(r.innerText || "") && stateOf(r) === "filled");
+    step("checking the spot menus"); const menu = open ? await menuItems(d, open) : [], fmenu = full ? await menuItems(d, full) : [];
+    const r = await send({ action: "dpCadets", key: key, rows: list, menu: menu, fmenu: fmenu });
+    if (!r || !r.ok) throw new Error((r && r.error) || "couldn't save the Cadets roster");
+    return list.length + " cadet spots read (" + list.filter(x => x.id).length + " filled, " + list.filter(x => x.st === "hold").length + " on hold)";
+  }
+  async function holdSpot(d, cs, name) {
+    const row = spotRow(d, cs); if (!row) throw new Error(cs + " isn't on the Cadets roster");
+    if (stateOf(row) === "hold") return "already on hold";
+    await menuPick(d, row, /hold|reserve/i);
+    const x = await waitFor(() => dialog(d), 2500);
+    if (x) { const inp = x.querySelector("input:not([type=checkbox]):not([type=radio]), textarea"); if (inp) typeIn(inp, name || "Reserved"); await sleep(300);
+      const b = [...x.querySelectorAll("button")].filter(b => !b.disabled && !/cancel|close|back/i.test(b.innerText || "")).find(b => /hold|reserve|save|confirm|done|ok/i.test((b.innerText || "").trim())); if (b) press(b); }
+    await confirmAny(d);
+    if (!(await waitFor(() => { const r = spotRow(d, cs); return r && stateOf(r) === "hold"; }, 12000))) throw new Error("pressed hold on " + cs + " but it doesn't show as held");
+    return "held " + cs;
+  }
+  async function cadetOp(op) {
+    let d = await openRoster("cadets"); const cs = op.cs;
+    if (op.type === "clear") {
+      const row = spotRow(d, cs); if (!row || idIn(row) !== op.discord) return cs + " already changed, left alone";
+      step("clearing " + cs + " (" + (op.name || op.discord) + ")"); await menuPick(d, row, /Clear assignment/i); await confirmAny(d);
+      if (!(await waitFor(() => { const r = spotRow(d, cs); return r && idIn(r) !== op.discord; }, 15000))) throw new Error("couldn't clear " + cs);
+      return "cleared " + cs;
+    }
+    if (op.type === "move") {
+      const row = spotRow(d, op.from); if (!row || idIn(row) !== op.discord) return op.name + " isn't in " + op.from + " any more, left alone";
+      step("moving " + op.name + " " + op.from + " → " + cs); await moveTo(d, { to: cs, discord: op.discord }, row); return "moved " + op.from + " → " + cs;
+    }
+    if (op.type === "hold") { step("holding " + cs + " for " + (op.name || "")); return await holdSpot(d, cs, op.name); }
+    // assign (falls back to a hold when the officer isn't in the Duty Portal at all)
+    let row = spotRow(d, cs); if (!row) throw new Error(cs + " isn't on the Cadets roster");
+    if (idIn(row) === op.discord) return "already in " + cs;
+    if (idIn(row)) throw new Error(cs + " has someone else in it now; check again first");
+    if (!btnIn(row, /^Assign$/)) {   // held: release it first
+      step("releasing the hold on " + cs); await menuPick(d, row, /release|remove hold|clear hold|unhold|clear assignment|cancel hold/i); await confirmAny(d);
+      row = await waitFor(() => { const r = spotRow(d, cs); return r && btnIn(r, /^Assign$/) ? r : null; }, 12000); if (!row) throw new Error("couldn't release the hold on " + cs);
+    }
+    step("searching for " + op.name + " by Discord ID"); press(btnIn(row, /^Assign$/));
+    const x = await waitFor(() => dialog(d), 6000); if (!x) throw new Error("the Assign window didn't open");
+    const inp = x.querySelector("input"); if (!inp) { await escape(d); throw new Error("no search box in the Assign window"); }
+    typeIn(inp, op.discord); await sleep(1500);
+    const opts = await waitFor(() => { const o = [...x.querySelectorAll("[role=option],[cmdk-item]")].filter(e => (e.innerText || "").trim()); return o.length ? o : null; }, 6000);
+    if (!opts) { await escape(d); step(op.name + " isn't in the Duty Portal: holding " + cs); const h = await holdSpot(await openRoster("cadets"), cs, op.name); return "not in the Duty Portal yet · " + h; }
+    if (opts.length > 1) { await escape(d); throw new Error("more than one member matched Discord ID " + op.discord); }
+    if (/already on this roster/i.test(opts[0].innerText)) { await escape(d); throw new Error(op.name + " is already on the Cadets roster in another spot; check again"); }
+    step("assigning " + op.name + " to " + cs); press(opts[0]); await confirmAny(d);
+    if (!(await waitFor(() => { const r = spotRow(d, cs); return r && idIn(r) === op.discord; }, 15000))) throw new Error("assigned, but " + cs + " doesn't show them yet");
+    return "assigned " + cs;
+  }
   async function runJobs() {
     const key = get("key", ""); if (!key || RUNNING || get("paused", false)) return;
     const lk = get("lock", null); if (lk && lk.tab !== TAB && Date.now() - lk.at < 3 * 60e3) return;
@@ -227,10 +291,10 @@
     RUNNING = true; set("lock", { tab: TAB, at: Date.now() }); const beat = setInterval(() => set("lock", { tab: TAB, at: Date.now() }), 30e3);
     try {
       for (const job of r.jobs) {
-        STATUS = "roster: " + job.name + " → " + job.to; draw();
+        STATUS = "roster: " + (job.kind === "cdscan" ? "reading Cadets" : job.name + " → " + (job.to || "")); draw();
         let st = "done", msg = "";
         JOBKEY = key; JOBID = job.id;
-        try { msg = await doJob(job); } catch (e) { st = "failed"; msg = String(e.message || e); }
+        try { msg = job.kind === "cdscan" ? await cadetScan(key) : job.kind === "cdop" ? await cadetOp(job.op || {}) : await doJob(job); } catch (e) { st = "failed"; msg = String(e.message || e); }
         JOBID = "";
         try { if (frame) await escape(frame.contentDocument); } catch (e) {}
         await send({ action: "dpJob", key: key, id: job.id, st: st, msg: msg });
