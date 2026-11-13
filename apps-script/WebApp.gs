@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 140;
+const BACKEND_VERSION = 141;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5895,7 +5895,11 @@ function obrEntries_() {
 // ---- Cadet roster check (owner only): the Google Sheet's Onboarding roster is the truth, the Duty Portal's Cadets roster is fixed to match ----
 //  the add-on reads the Cadets roster (cadetScan), the owner reviews the differences here, then the add-on makes each change (cadet jobs)
 const DPC_SHEET_ = "Duty Portal Cadets", DPC_HEAD_ = ["Callsign", "Holder", "Discord ID", "State", "Seen"];
-function cdOwner_(acct) { const own = PROPS_.getProperty("DP_OWNER"); return !!(acct && own && own === acct.id); }
+function cdOwner_(acct) {   // the Duty Portal add-on's owner (DP_OWNER), or, before that's recorded, whoever made the add-on's sync keys
+  if (!acct) return false; const own = PROPS_.getProperty("DP_OWNER"); if (own) return own === acct.id;
+  try { const K = dpKeys_(), who = pbAccess_(acct).who; if (K.length && who && K.some(k => k.by && k.by === who)) { PROPS_.setProperty("DP_OWNER", acct.id); return true; } } catch (e) {}
+  return false;
+}
 function cdSheetRows_() {   // every L-8## spot on the Onboarding roster, filled or empty
   const ob = rosterBook_().getSheetByName(ONBOARD_TAB_); if (!ob) throw new Error("The \"" + ONBOARD_TAB_ + "\" tab wasn't found in the roster sheet.");
   const d = ob.getRange(1, 1, ob.getLastRow(), 4).getDisplayValues(), out = [];
