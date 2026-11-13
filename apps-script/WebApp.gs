@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 141;
+const BACKEND_VERSION = 142;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -5743,7 +5743,8 @@ function dpJobsApi_(d) {
   if (d.action === "dpJobs") {
     const J = dpJobsAll_(), now = Date.now(); let changed = false;
     J.forEach(j => { if (j.st === "working" && now - (j.at || 0) > 10 * 60000) { const where = j.step ? " (last step: " + j.step + ")" : ""; j.st = j.tries >= 2 ? "failed" : "queued"; j.msg = "The add-on went quiet for 10 minutes" + where + (j.st === "failed" ? ". Keep the Duty Portal tab in front (a background tab gets slowed down by the browser), then press Retry." : ", trying again."); j.step = ""; changed = true; } });
-    const todo = J.filter(j => j.st === "queued").sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, 8);
+    const cdOk = Number(d.v || 0) >= 150;   // cadet roster jobs only go to add-on 1.5.0+ (older ones don't know them)
+    const todo = J.filter(j => j.st === "queued" && (cdOk || !/^cd/.test(j.kind || ""))).sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, 8);
     if (todo.length) { todo.forEach(j => { j.st = "working"; j.at = now; j.step = "picked up by the add-on"; j.tries = (j.tries || 0) + 1; }); changed = true; }
     if (changed) withLock_(() => { const cur = dpJobsAll_(); J.forEach(j => { const i = cur.findIndex(x => x.id === j.id); if (i !== -1) cur[i] = j; }); dpJobsPut_(cur); return { ok: true }; });
     return { ok: true, jobs: todo.map(j => ({ id: j.id, kind: j.kind, discord: j.discord, name: j.name, from: j.from, to: j.to, op: j.op || null })) };

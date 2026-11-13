@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.5.0
+// @version      1.5.1
 // @description  Reads Duty Portal hours, shifts and reports for the LSPD MDT promotion board, and updates the Duty Portal roster after promotions are marked done in the MDT. Runs in your own logged-in browser; never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
@@ -287,7 +287,7 @@
   async function runJobs() {
     const key = get("key", ""); if (!key || RUNNING || get("paused", false)) return;
     const lk = get("lock", null); if (lk && lk.tab !== TAB && Date.now() - lk.at < 3 * 60e3) return;
-    const r = await send({ action: "dpJobs", key: key }); if (!r || !r.ok || !(r.jobs || []).length) return;
+    const r = await send({ action: "dpJobs", key: key, v: 151 }); if (!r || !r.ok || !(r.jobs || []).length) return;
     RUNNING = true; set("lock", { tab: TAB, at: Date.now() }); const beat = setInterval(() => set("lock", { tab: TAB, at: Date.now() }), 30e3);
     try {
       for (const job of r.jobs) {
