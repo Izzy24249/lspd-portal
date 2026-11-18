@@ -64,6 +64,8 @@
         (r.ahead ? " · " + (r.ahead.points - r.points) + " behind " + esc(r.ahead.name) : r.points ? " · leading the race" : "") + " · last week " + r.last + "</small>" +
         '<div class="md-race">' + r.standings.map(x => '<div class="' + (x.me ? "me" : "") + '" style="--c:' + esc(x.color || "#888") + '"><span>' + esc(x.name) + "</span><i style=\"width:" + Math.round(x.points / Math.max(1, r.standings[0].points) * 100) + '%"></i><b>' + x.points + "</b></div>").join("") + "</div>"
         : "<small>The race isn't running right now.</small>") + "</section></div>" +
+      ((R.certNames || []).length ? '<section class="md-card md-certs"><span class="md-k">MY CERTIFICATIONS · ' + (R.myCerts || []).length + " OF " + R.certNames.length + '</span><div class="md-cl">' +
+        R.certNames.map(n => '<span class="' + ((R.myCerts || []).indexOf(n) !== -1 ? "on" : "") + '">' + ((R.myCerts || []).indexOf(n) !== -1 ? "✓ " : "") + esc(n) + "</span>").join("") + "</div><small>Ask your division leaders about getting certified.</small></section>" : "") +
       '<div class="md-grid"><section class="md-card"><span class="md-k">TOP OFFICERS THIS WEEK</span>' + (R.board.length ? R.board.map((x, i) => '<div class="md-lb' + (x.me ? " me" : "") + '"><em>' + (i + 1) + "</em><span><b>" + esc(x.name) + "</b><small>" + esc(x.callsign || "") + "</small></span><b>" + x.pts + "</b></div>").join("") : "<small>No division reports yet this week. Be the first.</small>") + "</section>" +
       '<section class="md-card"><span class="md-k">WHAT I EARNED THIS WEEK</span>' + (me.items.filter(x => x.at >= R.weekStart).length ? me.items.filter(x => x.at >= R.weekStart).map(x => '<div class="md-it"><span>' + (x.kind === "filed" ? "📝" : "🤝") + "</span><div><b>" + esc(x.title) + "</b><small>" + esc(x.form) + " · " + esc(ago(x.at)) + (x.grade ? " · graded " + esc(x.grade) : "") + "</small></div><em>+" + x.pts + "</em></div>").join("") :
         "<small>Nothing yet this week. Filing a division report is 10 points (plus a bonus when it's graded A, B or C), being tagged as an assist is 4.</small>") + "</section></div>";
@@ -78,7 +80,7 @@
   function roster(R) {
     const groups = []; R.roster.forEach(o => { const g = o.rank || o.section || "Members"; let x = groups.find(y => y.n === g); if (!x) { x = { n: g, l: [] }; groups.push(x); } x.l.push(o); });
     return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.</p>' +
-      groups.map(g => '<div class="md-rg"><b>' + esc(g.n) + "</b>" + g.l.map(o => '<div class="md-ro' + (o.me ? " me" : "") + '"><code>' + esc(o.callsign || "—") + "</code><span>" + esc(o.name) + (o.staff ? " ⭐" : "") + (o.me ? " (you)" : "") + "</span>" + (o.loa ? "<em>LOA</em>" : "") + "</div>").join("") + "</div>").join("") + "</section>";
+      groups.map(g => '<div class="md-rg"><b>' + esc(g.n) + "</b>" + g.l.map(o => '<div class="md-ro' + (o.me ? " me" : "") + '"><code>' + esc(o.callsign || "—") + "</code><span>" + esc(o.name) + (o.staff ? " ⭐" : "") + (o.me ? " (you)" : "") + "</span>" + '<span class="md-rc">' + (o.certs || []).map(c => "<i>" + esc(c) + "</i>").join("") + "</span>" + (o.loa ? "<em>LOA</em>" : "<em class=\"x\"></em>") + "</div>").join("") + "</div>").join("") + "</section>";
   }
   function gear(R, kind) {
     const L = (R.gear || []).filter(x => x.kind === (kind === "vehicles" ? "vehicle" : "uniform"));

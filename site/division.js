@@ -211,7 +211,7 @@
     document.querySelectorAll("#period [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === PERIOD));
     document.querySelectorAll("#tabs [data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === TAB));
     drawHero(dv, S); drawKpis(S);
-    ({ overview: viewOverview, officers: viewOfficers, board: viewBoard, reports: viewReports, activity: viewActivity, discipline: viewDiscipline, gear: viewGear }[TAB] || viewOverview)(S);
+    ({ overview: viewOverview, officers: viewOfficers, board: viewBoard, reports: viewReports, activity: viewActivity, discipline: viewDiscipline, gear: viewGear, certs: viewCerts }[TAB] || viewOverview)(S);
   }
   // ---------------- Command Center ----------------
   const GLET = v => v == null ? "—" : GL[Math.max(0, Math.min(4, Math.round(v)))];
@@ -782,6 +782,42 @@
       catch (e) { toast(e.message, "bad"); $("rmGo").disabled = false; $("rmGo").textContent = "Remove from division"; }
     };
   }
+  // ---- Certifications: the tick-box columns on the division's roster tab ----
+  const XC = {};
+  async function xCerts(force) {
+    const id = DATA.division.id; if (XBUSY["certs" + id] || (!force && XC[id])) return; XBUSY["certs" + id] = 1;
+    try { XC[id] = await api("divCerts", { division: id }); } catch (e) { XC[id] = { ok: false, error: e.message }; }
+    delete XBUSY["certs" + id]; if (DATA.division.id === id) { if (TAB === "certs") drawAll(); reTool(); }
+  }
+  const certOf = (C, o) => (C.people || []).find(p => (o.id && p.id === o.id) || (!o.id && p.name === o.name));
+  function viewCerts(S) {
+    const C = XC[DATA.division.id]; if (!C) xCerts();
+    if (!C) { $("view").innerHTML = '<div class="dc-empty">Reading the roster tab…</div>'; return; }
+    if (C.ok === false) { $("view").innerHTML = `<div class="dc-empty">${esc(C.error)}</div>`; return; }
+    const N = C.certs, P = S.O.map(o => ({ o, c: certOf(C, o) })).filter(x => x.c);
+    const count = n => P.filter(x => x.c.certs[n]).length;
+    $("view").innerHTML = `<section class="dc-panel"><header><h2>🎓 Certifications</h2><small class="dc-note">These are the tick-box columns on the ${esc(DATA.division.name)} roster tab. ${C.can ? "Click a box to add or remove a certification. It's ticked on the roster sheet straight away and noted on the officer's record." : "Only leaders and assistants can change them."}</small>
+        ${C.can ? '<span style="margin-left:auto"><button class="dc-btn sm ac" data-cdef="manage">Manage certifications</button></span>' : ""}</header>
+      ${N.length ? `<div class="ct-sum">${N.map(n => `<span><b>${count(n)}</b>${esc(n)}</span>`).join("")}</div>
+      <div class="ct-wrap"><table class="ct"><thead><tr><th>Officer</th>${N.map(n => `<th><span>${esc(n)}</span></th>`).join("")}</tr></thead><tbody>
+        ${P.map(x => `<tr><th><button type="button" data-off="${esc(x.o.key)}"><b>${esc(x.o.name)}</b><small>${esc(x.o.callsign || "")}</small></button></th>${N.map(n => { const on = !!x.c.certs[n], has = n in x.c.certs;
+          return `<td>${has ? `<button type="button" class="ct-b${on ? " on" : ""}" ${C.can && x.o.id ? `data-cset="${esc(n)}" data-co="${esc(x.o.key)}"` : "disabled"} aria-label="${esc(n)}: ${on ? "certified" : "not certified"}">${on ? "✓" : ""}</button>` : '<span class="ct-na">·</span>'}</td>`; }).join("")}</tr>`).join("")}
+      </tbody></table></div>` : `<div class="dc-empty">No certification columns found on the roster tab yet.${C.can ? " Press <b>Manage certifications</b> to add the first one." : ""}</div>`}</section>`;
+  }
+  function certModal() {
+    const C = XC[DATA.division.id] || { certs: [] };
+    $("mcard").className = "dc-mcard gx-m";
+    $("mcard").innerHTML = `<header class="gm-h"><h2>Manage certifications</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
+      <div class="gx-form"><p class="ax-note">Each certification is a tick-box column on the ${esc(DATA.division.name)} roster tab. Changes here change the sheet.</p>
+      ${C.certs.map(n => `<div class="cm-r"><input value="${esc(n)}" data-cren="${esc(n)}" aria-label="Name"><button class="dc-btn xs" data-crensave="${esc(n)}">Rename</button><button class="dc-btn xs danger" data-crem="${esc(n)}">Remove</button></div>`).join("") || '<p class="ax-note">None yet.</p>'}
+      <div class="cm-r add"><input id="cmNew" placeholder="New certification, e.g. Marine" maxlength="30"><button class="dc-btn xs ac" data-cadd>Add column</button></div></div>`;
+    $("modal").hidden = false;
+  }
+  async function certDef(op, name, newName, btn) {
+    if (btn) { btn.disabled = true; }
+    try { const r = await api("divCertDef", { division: DATA.division.id, op, name, newName }); toast(r.msg + ".", "ok"); await xCerts(true); xLoad("disc", true); certModal(); }
+    catch (e) { toast(e.message, "bad"); if (btn) btn.disabled = false; }
+  }
   // ---- officer toolbox (the panel that opens when a name is clicked) ----
   const XS = {};   // per division: positions and their next open callsign
   let TB = "";     // which toolbox panel is open
@@ -792,11 +828,16 @@
     let panel = "";
     if (TB === "record") { const E = D ? discFor(D, o) : null;
       panel = !D ? "Loading…" : `<div class="tb-pts"><b>${P}</b><span>active point${P === 1 ? "" : "s"} · ${esc(L.label)}</span></div>` + (E.length ? E.slice(0, 30).map(x => `<div class="tb-e${x.live ? "" : " old"}"><span class="dx-ty t-${esc(x.type)}">${esc(x.label)}</span><small>${esc(fmtD(x.at))}${x.pts ? " · +" + x.pts : ""}${x.live ? "" : " · " + (x.status !== "active" ? esc(x.status) : "expired")}</small><p>${esc(x.reason)}</p></div>`).join("") : '<p class="ax-note">Nothing on their record.</p>'); }
+    if (TB === "certs") { const C = XC[DATA.division.id]; if (!C) xCerts();
+      const c = C && C.ok !== false ? certOf(C, o) : null;
+      panel = !C ? "Reading the roster tab…" : C.ok === false ? esc(C.error) : !c ? "They're not on the roster tab." : !C.certs.length ? "No certification columns on the roster tab yet (Certifications tab → Manage)." :
+        `<div class="tb-cert">${C.certs.filter(n => n in c.certs).map(n => `<button type="button" class="ct-chip${c.certs[n] ? " on" : ""}" ${C.can && o.id ? `data-cset="${esc(n)}" data-co="${esc(o.key)}"` : "disabled"}>${c.certs[n] ? "✓ " : "+ "}${esc(n)}</button>`).join("")}</div>` + (C.can ? '<p class="ax-note">Click to add or remove. It changes the roster sheet.</p>' : ""); }
     if (TB === "move") { const S2 = XS[DATA.division.id]; if (!S2) xSlots();
       panel = !S2 ? "Loading the roster…" : S2.ok === false ? esc(S2.error) : `<p class="ax-note">Pick their new position. They go into its next open callsign; their old spot is emptied.</p>` +
         S2.billets.map(b => `<button type="button" class="tb-mv" data-mv="${esc(b.name)}" data-tbo="${esc(o.key)}"${b.open ? "" : " disabled"}><b>${esc(b.name)}</b><span>${b.open ? "Next: <code>" + esc(b.next) + "</code> · " + b.open + " open" : "Full"}</span></button>`).join(""); }
     return `<div class="tb"><div class="tb-row">
         ${btn("record", "📋", "Record" + (D && P ? " · " + P + " pts" : ""))}
+        ${btn("certs", "🎓", "Certifications")}
         ${can ? btn("move", "🔼", "Move / promote") + btn("disc", "⚖️", "Discipline") : ""}
         ${o.id ? `<button type="button" class="tb-b" data-copyid="${esc(o.id)}"><span>🆔</span>Copy Discord ID</button>` : ""}
         ${can ? btn("remove", "🚪", "Remove", "bad") : ""}</div>${panel ? `<div class="tb-p">${panel}</div>` : ""}</div>`;
@@ -815,6 +856,14 @@
     const t = e.target; if (!DATA || !DATA.division) return;
     const findO = k => stats().O.find(o => o.key === k);
     if (t.closest("[data-gxclose]")) { closeModal(); return; }
+    const cs = t.closest("[data-cset]"); if (cs) { const o = findO(cs.dataset.co), C = XC[DATA.division.id]; if (!o || !C) return; const c = certOf(C, o), n = cs.dataset.cset, on = !(c && c.certs[n]);
+      cs.disabled = true; c.certs[n] = on; if (TAB === "certs") drawAll(); reTool();
+      try { const r = await api("divCertSet", { division: DATA.division.id, discord: o.id, cert: n, on }); toast((on ? "✓ " + o.name + " certified: " : o.name + " no longer ") + n + (on ? "" : " certified") + ".", "ok"); xLoad("disc", true); }
+      catch (err) { c.certs[n] = !on; toast(err.message, "bad"); if (TAB === "certs") drawAll(); reTool(); } return; }
+    if (t.closest("[data-cdef]")) { certModal(); return; }
+    if (t.closest("[data-cadd]")) { const n = $("cmNew").value.trim(); if (!n) return toast("Name it first.", "bad"); certDef("add", n, "", t.closest("[data-cadd]")); return; }
+    const crs = t.closest("[data-crensave]"); if (crs) { const n = crs.dataset.crensave, inp = document.querySelector('[data-cren="' + CSS.escape(n) + '"]'); if (!inp || inp.value.trim() === n) return; certDef("rename", n, inp.value.trim(), crs); return; }
+    const crm = t.closest("[data-crem]"); if (crm) { if (!confirm("Remove the \"" + crm.dataset.crem + "\" column from the roster tab? Everyone's ticks in it are deleted.")) return; certDef("remove", crm.dataset.crem, "", crm); return; }
     const tb = t.closest("[data-tb]"); if (tb) { const o = findO(tb.dataset.tbo); if (!o) return;
       if (tb.dataset.tb === "remove") { removeModal(o); return; }
       if (tb.dataset.tb === "disc") { DX_PRE = o.key; closeDrawer(); TAB = "discipline"; drawAll(); return; }

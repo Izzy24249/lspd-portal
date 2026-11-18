@@ -700,3 +700,19 @@ html,body.dc{overflow-x:hidden}
 .tb-mv{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--text);font:inherit;cursor:pointer;text-align:left}
 .tb-mv:hover:not(:disabled){border-color:rgba(var(--acr),1);background:rgba(var(--acr),.12)}.tb-mv:disabled{opacity:.45;cursor:default}
 .tb-mv span{color:var(--muted);font-size:12px}.tb-mv code{font:700 12px "JetBrains Mono",monospace;color:#7dd3fc}
+/* certifications */
+.ct-sum{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px}.ct-sum span{display:flex;align-items:baseline;gap:6px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;color:var(--muted)}.ct-sum b{color:var(--text);font:700 14px "JetBrains Mono",monospace}
+.ct-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:70vh}
+.ct{border-collapse:collapse;width:100%;font-size:13px}
+.ct th,.ct td{padding:7px 8px;border-bottom:1px solid rgba(140,170,220,.08);text-align:center}
+.ct thead th{position:sticky;top:0;background:#0b1222;z-index:1;font:700 10.5px "JetBrains Mono",monospace;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+.ct thead th:first-child,.ct tbody th{text-align:left;position:sticky;left:0;background:#0b1222;z-index:2}
+.ct tbody th button{all:unset;cursor:pointer;display:grid}.ct tbody th small{font:500 11px "JetBrains Mono",monospace;color:var(--muted)}
+.ct-b{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#0b1222;font:800 15px Inter,sans-serif;cursor:pointer}
+.ct-b.on{background:#34d399;border-color:#34d399}.ct-b:not(:disabled):hover{border-color:rgba(var(--acr),1)}.ct-b:disabled{cursor:default}
+.ct-na{color:#3b4762}
+.tb-cert{display:flex;flex-wrap:wrap;gap:6px}
+.ct-chip{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--muted);font:600 12.5px Inter,sans-serif;cursor:pointer}
+.ct-chip.on{border-color:rgba(52,211,153,.6);background:rgba(52,211,153,.12);color:#a7f3d0}.ct-chip:disabled{cursor:default}
+.cm-r{display:flex;gap:8px;align-items:center}.cm-r input{flex:1;height:38px;border-radius:9px;border:1px solid var(--line);background:rgba(0,0,0,.35);color:var(--text);padding:0 11px;font:14px Inter,sans-serif}
+.cm-r.add{margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
