@@ -522,7 +522,9 @@
     // groups appear in the order they first show up on the roster
     // position/rank column first (K9, CRU…); the roster's section headings only when there's no position column (ASU)
     const gb = DATA.division.groupBy || "auto";
-    const useRank = gb === "position" || (gb === "auto" && S.O.filter(o => o.rank).length >= S.O.length / 2), useSec = !useRank && gb !== "none" && S.O.some(o => o.section);
+    const nSec = new Set(S.O.map(o => o.section).filter(Boolean)).size;
+    // the roster's own rank headings (K9 Patrol III, K9 Patrol II…) win when there are a few of them
+    const useRank = gb === "position" || (gb === "auto" && nSec < 2 && S.O.filter(o => o.rank).length >= S.O.length / 2), useSec = !useRank && gb !== "none" && S.O.some(o => o.section);
     const grp = o => (useRank ? o.rank.split(" · ")[0] : o.section) || "Other";
     if (OFF_SORT === "roster" && (useRank || useSec)) {
       const groups = [], at = {};

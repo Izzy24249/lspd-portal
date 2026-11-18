@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 150;
+const BACKEND_VERSION = 151;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -287,7 +287,7 @@ function rosterBook_() {
 const ROSTER_CACHE_SECONDS_ = 3600;  // kept warm every 10 minutes by warmRosters() so nobody waits on the sheet
 function getRosterTab_(tabId, fresh, cols, cacheOnly, noExclude) {
   cols = (cols || []).filter(c => colIndex_(c) >= 0);
-  const key = "roster_tab_" + tabId + (cols.length ? "_" + cols.join("") : "") + (noExclude ? "_all" : ""), cache = CacheService.getScriptCache();
+  const key = "roster_tab2_" + tabId + (cols.length ? "_" + cols.join("") : "") + (noExclude ? "_all" : ""), cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get(key); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   if (cacheOnly) return null;
   const r = ((getConfig_().settings || {}).roster) || {};
@@ -533,7 +533,7 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
   const head = shown[hr].map(h => String(h).toLowerCase());
   const extraCols = head.map((h, i) => /rank|title|position|role/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol && i !== callCol);
   const statusCols = head.map((h, i) => /status|state|active|standing/.test(h) ? i : -1).filter(i => i >= 0 && i !== idCol && i !== nameCol);
-  let inOutSection = false, section = "";
+  let inOutSection = false, section = "", afterHeading = false;
   const checkHidden = shown.length - hr <= 400;      // hidden rows = left the department (skipped on very long tabs)
   const hiddenRows = checkHidden ? hiddenRowsOf_(sh, shown.length) : {};
   for (let i = hr + 1; i < shown.length; i++) {
@@ -544,9 +544,12 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
       const loud = /[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t);
       const heading = isOut(t) || loud || /member|roster|division|section|command|staff|personnel|active/i.test(t) ||
         (filled === 1 && !str_(shown[i][nameCol]) && /[A-Za-z]{3}/.test(t) && !/\|/.test(t));   // a lone banner row ("Supervisory Pilots") with nothing in the name column
-      if (heading) { inOutSection = isOut(t); if (!inOutSection) section = clip_(t.replace(/\s*[([]\s*\d+\s*[)\]]\s*$/, "").replace(/\s*[-–:]\s*\d+\s*$/, ""), 60); continue; }
+      // the line under a heading that describes the rank ("Advanced Handler: Elite tactical operator…") isn't a new section
+      if (heading && afterHeading && !isOut(t) && (t.length > 40 || /[:.;|]/.test(t))) continue;
+      if (heading) { afterHeading = true; inOutSection = isOut(t); if (!inOutSection) section = clip_(t.replace(/\s*[([]\s*\d+\s*[)\]]\s*$/, "").replace(/\s*[-–:]\s*\d+\s*$/, ""), 60); continue; }
     }
     if (!filled) continue;
+    afterHeading = false;
     const why = inOutSection || statusCols.some(c => isOut(shown[i][c])) ||
       (lines && lines[i] && (lines[i][nameCol] === "line-through" || (callCol >= 0 && lines[i][callCol] === "line-through"))) ||
       !!hiddenRows[i];
@@ -2365,7 +2368,7 @@ function myDivision_(acct, divId) {
   const D = discAll_(dv.id).filter(x => x.discord === acct.id).sort((a, b) => b.at - a.at), live = D.filter(x => x.live).reduce((n, x) => n + x.pts, 0);
   let lad = DISC_LADDER_[0]; DISC_LADDER_.forEach(l => { if (live >= l.min) lad = l; });
   return { ok: true, division: { id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl, tagline: dv.tagline, quotaPts: dv.quotaPts || 0, inactWeeks: NW },
-    me: { name: me.name, callsign: me.callsign, deptCallsign: me.alt || "", rank: me.rank, profile: prof, life: { filed: lf, assists: la, pts: lp, first: first, best: Math.max.apply(null, [ptsW].concat(weeks)) }, place: place, onBoard: board.length, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
+    me: { name: me.name, section: me.section || "", callsign: me.callsign, deptCallsign: me.alt || "", rank: me.rank, profile: prof, life: { filed: lf, assists: la, pts: lp, first: first, best: Math.max.apply(null, [ptsW].concat(weeks)) }, place: place, onBoard: board.length, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
     weekStart: W0, weekEnd: W0 + 7 * DAY, board: board, race: race,
     record: { points: live, ladder: lad.label, entries: D.slice(0, 40).map(discPub_) },
     roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (CERTS.by[o.id] || []) })),

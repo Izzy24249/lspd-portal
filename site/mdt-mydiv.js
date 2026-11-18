@@ -59,7 +59,7 @@
       '<img class="md-badge" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.src=\'img/lspd-badge.png\'">' +
       '<div class="md-idm"><small>' + esc(hi) + ", " + esc(P.billet || me.rank || "Officer") + " " + esc(last) + " · " + esc(dv.name).toUpperCase() + "</small>" +
       '<h1><span class="md-cs">' + esc(P.unit || me.callsign || "—") + "</span> " + esc(me.name) + "</h1>" +
-      "<p>" + esc([P.billet || me.rank, me.deptCallsign ? "Dept " + me.deptCallsign : "", since ? "In " + dv.name + " since " + since : ""].filter(Boolean).join(" · ")) + "</p>" +
+      "<p>" + esc([me.section && me.section !== P.billet ? me.section : "", P.billet || me.rank, me.deptCallsign ? "Dept " + me.deptCallsign : "", since ? "In " + dv.name + " since " + since : ""].filter(Boolean).join(" · ")) + "</p>" +
       '<div class="md-chips">' + chips.map(c => '<span class="' + c[0] + '">' + esc(c[1]) + "</span>").join("") + "</div>" +
       ((P.fields || []).length ? '<dl class="md-pf">' + P.fields.map(f => "<div><dt>" + esc(f.k) + "</dt><dd>" + esc(f.v) + "</dd></div>").join("") + "</dl>" : "") +
       ((R.myCerts || []).length ? '<div class="md-bd">' + R.myCerts.map(c => '<span title="Certified">✓ ' + esc(c) + "</span>").join("") + "</div>" : "") + "</div>" +
@@ -96,7 +96,7 @@
   // short column heads for the cert columns ("SWAT CERT" → "SWAT", "Search & Rescue" → "S&R"); the full name is the tooltip
   const short = n => { const t = String(n).replace(/\b(cert(ified|ification)?s?|qualif\w*|status)\b/ig, "").replace(/\s+/g, " ").trim() || n; return t.length > 9 ? t.split(/[\s/-]+/).map(w => w[0]).join("").toUpperCase().slice(0, 5) : t; };
   function roster(R) {
-    const C = R.certNames || [], groups = []; R.roster.forEach(o => { const g = o.rank || o.section || "Members"; let x = groups.find(y => y.n === g); if (!x) { x = { n: g, l: [] }; groups.push(x); } x.l.push(o); });
+    const C = R.certNames || [], groups = [], bySec = new Set(R.roster.map(o => o.section).filter(Boolean)).size >= 2; R.roster.forEach(o => { const g = (bySec ? o.section : o.rank || o.section) || "Members"; let x = groups.find(y => y.n === g); if (!x) { x = { n: g, l: [] }; groups.push(x); } x.l.push(o); });
     const cols = 3 + C.length;
     return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.' + (C.length ? " ✓ = certified." : "") + "</p>" +
       '<div class="md-tw"><table class="md-rt"><thead><tr><th>Unit</th><th>Name</th>' + C.map(c => '<th class="c" title="' + esc(c) + '">' + esc(short(c)) + "</th>").join("") + "<th></th></tr></thead><tbody>" +
