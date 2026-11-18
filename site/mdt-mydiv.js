@@ -58,7 +58,7 @@
     return '<div class="md-hero md-id" style="--dc:' + esc(dv.color || "#2f7bff") + '"><img class="md-wm" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.remove()">' +
       '<img class="md-badge" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.src=\'img/lspd-badge.png\'">' +
       '<div class="md-idm"><small>' + esc(hi) + ", " + esc(P.billet || me.rank || "Officer") + " " + esc(last) + " · " + esc(dv.name).toUpperCase() + "</small>" +
-      '<h1><span class="md-cs">' + esc(P.unit || me.callsign || "—") + "</span> " + esc(me.name) + "</h1>" +
+      '<h1><span class="md-cs">' + esc(me.callsign || P.unit || "—") + "</span> " + esc(me.name) + "</h1>" +
       "<p>" + esc([me.section && me.section !== P.billet ? me.section : "", P.billet || me.rank, me.deptCallsign ? "Dept " + me.deptCallsign : "", since ? "In " + dv.name + " since " + since : ""].filter(Boolean).join(" · ")) + "</p>" +
       '<div class="md-chips">' + chips.map(c => '<span class="' + c[0] + '">' + esc(c[1]) + "</span>").join("") + "</div>" +
       ((P.fields || []).length ? '<dl class="md-pf">' + P.fields.map(f => "<div><dt>" + esc(f.k) + "</dt><dd>" + esc(f.v) + "</dd></div>").join("") + "</dl>" : "") +

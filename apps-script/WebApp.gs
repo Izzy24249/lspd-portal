@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 152;
+const BACKEND_VERSION = 153;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2022,7 +2022,7 @@ function actSheet_() {
   } else if (sh.getLastColumn() < ACT_HEAD_.length) sh.getRange(1, 1, 1, ACT_HEAD_.length).setValues([ACT_HEAD_]).setFontWeight("bold");   // sheets made before the Report column
   return sh;
 }
-function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view_" + x.id + "_n")); } catch (e) {} }
+function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view2_" + x.id + "_n")); } catch (e) {} }
 // The script cache holds 100 KB per entry: bigger values are split over several entries ("key_n" says how many)
 function bigPut_(key, text, secs) {
   const cache = CacheService.getScriptCache(), size = 90000, n = Math.ceil(text.length / size);
@@ -2284,7 +2284,7 @@ function divExtra_(d, who) {
     });
     if (!res.ok) return res;
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "note", reason: "Moved " + (res.from || "") + " → " + res.to + " (" + res.billet + ").", post: false }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view_" + dv.id + "_n", "roster_tab_" + dv.rosterTabId, "roster_tab_" + dv.rosterTabId + "_all", "div_hq_" + dv.id]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view2_" + dv.id + "_n", "roster_tab2_" + dv.rosterTabId, "roster_tab2_" + dv.rosterTabId + "_all", "roster_tab2_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return res;
   }
   if (a === "divRemove") {   // take them off the division's roster tab (their name and Discord ID cells), and log it
@@ -2304,7 +2304,7 @@ function divExtra_(d, who) {
     if (!res.ok) return res;
     const why = { inactive: "Inactive", discipline: "Discipline", resigned: "Resigned" }[str_(d.kind)] || "";
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: d.kind === "resigned" ? "resigned" : "removal", reason: (why ? why + ": " : "") + (str_(d.reason).trim() || "Removed from " + dv.name + " (row " + res.row + " cleared on the roster)."), post: d.post }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view_" + dv.id + "_n", "roster_tab_" + dv.rosterTabId, "roster_tab_" + dv.rosterTabId + "_all", "div_hq_" + dv.id]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view2_" + dv.id + "_n", "roster_tab2_" + dv.rosterTabId, "roster_tab2_" + dv.rosterTabId + "_all", "roster_tab2_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return { ok: true, row: res.row };
   }
   if (a === "divGearSave") {
@@ -2363,15 +2363,16 @@ function myDivision_(acct, divId) {
     if (i !== -1) race = { rank: i + 1, of: L.length, points: L[i].week.points, last: L[i].lastWeek ? L[i].lastWeek.points : 0, ahead: i ? { name: L[i - 1].name, points: L[i - 1].week.points } : null, weekEnd: W0 + 7 * DAY,
       standings: L.map(x => ({ name: x.name, color: x.color, points: x.week.points, me: x.id === dv.id })) }; } catch (e) {}
   const CERTS = myDivCerts_(dv), prof = myDivProfile_(dv, acct.id), RC = myDivRosterCols_(dv);
+  const DCS = {}; try { promoPeople_().forEach(p => { if (p.id && p.callsign) DCS[p.id] = p.callsign; }); } catch (e) {}
   let lf = 0, la = 0, lp = 0, first = 0; V.reports.forEach(r => { const au = r.author && r.author.key === me.key, as = !au && (r.tagged || []).some(t => t.key === me.key); if (!au && !as) return; if (au) lf++; else la++; if (!first || r.at < first) first = r.at; });
   lp = ptsOf(me.key, 0, Infinity); const place = board.findIndex(x => x.me) + 1;
   const D = discAll_(dv.id).filter(x => x.discord === acct.id).sort((a, b) => b.at - a.at), live = D.filter(x => x.live).reduce((n, x) => n + x.pts, 0);
   let lad = DISC_LADDER_[0]; DISC_LADDER_.forEach(l => { if (live >= l.min) lad = l; });
   return { ok: true, division: { id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl, tagline: dv.tagline, quotaPts: dv.quotaPts || 0, inactWeeks: NW },
-    me: { name: me.name, section: me.section || "", callsign: me.callsign, deptCallsign: me.alt || "", rank: me.rank, profile: prof, life: { filed: lf, assists: la, pts: lp, first: first, best: Math.max.apply(null, [ptsW].concat(weeks)) }, place: place, onBoard: board.length, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
+    me: { name: me.name, section: me.section || "", callsign: me.callsign, deptCallsign: DCS[acct.id] || me.alt || "", rank: me.rank, profile: prof, life: { filed: lf, assists: la, pts: lp, first: first, best: Math.max.apply(null, [ptsW].concat(weeks)) }, place: place, onBoard: board.length, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
     weekStart: W0, weekEnd: W0 + 7 * DAY, board: board, race: race,
     record: { points: live, ladder: lad.label, entries: D.slice(0, 40).map(discPub_) },
-    rosterCols: RC.fields, roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, dept: o.alt || "", id: o.id || "", date: (RC.by[o.id] || {}).date || "", billet: (RC.by[o.id] || {}).billet || "", f: (RC.by[o.id] || {}).f || {}, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (CERTS.by[o.id] || []) })),
+    rosterCols: RC.fields, roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, dept: DCS[o.id] || o.alt || "", id: o.id || "", date: (RC.by[o.id] || {}).date || "", billet: (RC.by[o.id] || {}).billet || "", f: (RC.by[o.id] || {}).f || {}, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (CERTS.by[o.id] || []) })),
     gear: gearAll_(dv.id), certNames: CERTS.names, myCerts: CERTS.by[acct.id] || [] };
 }
 // ---- MDT → My certifications: everything this officer is certified in ----
@@ -2483,19 +2484,26 @@ function rosterVacant_(p) {
   const n = rosterName_(p.name).n.replace(/[()\[\]]/g, "").trim();
   return !n || CS_SEG_.test(n) || /^(vacant|open|opening|available|n\/?a|tbd|tba|none|empty|unassigned|reserved|-+|—+|\.+|x+)$/i.test(n) || (n === p.name.trim() && CS_SEG_.test(n));
 }
+// the column on each division's roster tab that holds the division callsign (K9-04, TEU-12…). Admin → Division Command
+// can set it; otherwise K9 / CID / ASU use column C and TEU / CRU use column G.
+function divUnitCol_(dv) {
+  if (dv.unitCol) return dv.unitCol;
+  const n = (str_(dv.name) + " " + str_(dv.id)).toLowerCase();
+  return /k-?9|canine/.test(n) ? "C" : /\bcid\b|investigat|detective/.test(n) ? "C" : /\bteu\b|traffic/.test(n) ? "G" : /\basu\b|air support|aviation/.test(n) ? "C" : /\bcru\b|crisis|response/.test(n) ? "G" : "";
+}
 function divView_(d, me) {
   const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [];
   const dv = divs.find(x => x.id === str_(d.division)) || divs[0];
   if (!dv) return { ok: true, divisions: [], me: { username: me.username, role: me.role } };
-  const cache = CacheService.getScriptCache(), ck = "div_view_" + dv.id;
+  const cache = CacheService.getScriptCache(), ck = "div_view2_" + dv.id;   // (v153: unit column defaults)
   if (!d.fresh) { const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
   // officers from the division's roster tab
   let officers = [], rosterError = "";
-  const LOA_ = loaIds_();
+  const LOA_ = loaIds_(), UC = divUnitCol_(dv);
   if (dv.rosterTabId != null) {
-    try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [dv.unitCol, dv.positionCol].filter(Boolean), false, false); rosterError = t.error || "";
+    try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [UC, dv.positionCol].filter(Boolean), false, false); rosterError = t.error || "";
       officers = (t.people || []).filter(p => !rosterVacant_(p)).map(p => { const rp = rosterName_(p.name), cs = rp.cs, nm = rp.n;
-        const more = p.more || {}, unit = (dv.unitCol ? str_(more[dv.unitCol]) : "") || rp.unit, rank = (dv.positionCol ? str_(more[dv.positionCol]) : "") || p.extra || "";
+        const more = p.more || {}, unit = (UC ? str_(more[UC]) : "") || rp.unit, rank = (dv.positionCol ? str_(more[dv.positionCol]) : "") || p.extra || "";
         return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: unit || cs, alt: unit && cs ? cs : "", id: p.id || "", section: p.sec || "", rank: rank,
           exempt: exemptHit_(dv.exempt, [p.sec, rank, unit, cs, nm]), loa: !!(p.id && LOA_[p.id]) }; });
     } catch (e) { rosterError = errMsg_(e); }
