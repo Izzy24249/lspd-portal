@@ -36,11 +36,15 @@
   const ME = (() => { try { return (JSON.parse(localStorage.getItem("lspd_prof") || "{}") || {}).discordId || ""; } catch (e) { return ""; } })();
   const keep = (k, v) => { try { v ? localStorage.setItem("mdt:md:" + ME + ":" + k, JSON.stringify(v)) : localStorage.removeItem("mdt:md:" + ME + ":" + k); } catch (e) {} };
   const kept = k => { try { return JSON.parse(localStorage.getItem("mdt:md:" + ME + ":" + k) || "null"); } catch (e) { return null; } };
+  // division callsigns always in capitals (the sheet may say "air-9")
+  const CSRX = /^[a-z][a-z0-9]{0,5}-\d{1,3}[a-z]?$/i, CSK = { callsign: 1, unit: 1, next: 1, open: 1, from: 1, to: 1, cs: 1, alt: 1 };
+  function capCs(x, k) { if (typeof x === "string") return CSK[k] && CSRX.test(x.trim()) ? x.trim().toUpperCase() : x;
+    if (Array.isArray(x)) return x.map(y => capCs(y, k)); if (x && typeof x === "object") Object.keys(x).forEach(q => { x[q] = capCs(x[q], q); }); return x; }
   function load(id, force) {
-    if (!DATA[id]) { const c = kept(id); if (c && c.ok) { c._old = true; DATA[id] = c; } }
+    if (!DATA[id]) { const c = capCs(kept(id), ""); if (c && c.ok) { c._old = true; DATA[id] = c; } }
     if (BUSY[id] || (!force && DATA[id] && !DATA[id]._old && Date.now() - DATA[id]._t < 120000)) return;
     BUSY[id] = 1;
-    Portal.post({ action: "myDivision", session: M().session, division: id }).then(r => { r = r || { ok: false, error: "No answer." }; r._t = Date.now();
+    Portal.post({ action: "myDivision", session: M().session, division: id }).then(r => { r = capCs(r || { ok: false, error: "No answer." }, ""); r._t = Date.now();
         if (r.ok || !DATA[id] || !DATA[id].ok || r.error === "AUTH") DATA[id] = r; else DATA[id]._old = false;   // keep showing the saved copy if Google hiccups
         if (r.ok) keep(id, r); })
       .catch(() => { if (!DATA[id] || !DATA[id].ok) DATA[id] = { ok: false, error: "Couldn't reach the server.", _t: Date.now() }; })

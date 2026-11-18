@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 154;
+const BACKEND_VERSION = 155;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2187,7 +2187,7 @@ function divLayout_(dv) {
     if ((bools >= 3 || (bools >= 1 && /cert|qualif/i.test(name))) && bools > other * 3) certs.push({ col: j, name: name.replace(/\s+/g, " ").slice(0, 30) }); });
   const rows = [], billets = [];
   for (let i = hr + 1; i < v.length; i++) {
-    const r = v[i], unit = C.unit >= 0 ? str_(r[C.unit]).trim() : "", billet = C.billet >= 0 ? str_(r[C.billet]).trim() : "", name = str_(r[C.name]).trim(), id = str_(r[C.id]).replace(/\D/g, "");
+    const r = v[i], unit = C.unit >= 0 ? str_(r[C.unit]).trim().toUpperCase() : "", billet = C.billet >= 0 ? str_(r[C.billet]).trim() : "", name = str_(r[C.name]).trim(), id = str_(r[C.id]).replace(/\D/g, "");
     if (!unit && !name && !id) continue;
     const x = { row: i + 1, unit: unit, billet: billet, name: name, id: id, open: !name && !id && !!unit, certs: {} };
     certs.forEach(c => { const val = raw[i][c.col]; if (val === true || val === false) x.certs[c.name] = val; });
@@ -2491,7 +2491,7 @@ function divView_(d, me) {
   if (dv.rosterTabId != null) {
     try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [UC, dv.positionCol].filter(Boolean), false, false); rosterError = t.error || "";
       officers = (t.people || []).filter(p => !rosterVacant_(p)).map(p => { const rp = rosterName_(p.name), cs = rp.cs, nm = rp.n;
-        const more = p.more || {}, unit = (UC ? str_(more[UC]) : "") || rp.unit, rank = (dv.positionCol ? str_(more[dv.positionCol]) : "") || p.extra || "";
+        const more = p.more || {}, unit = ((UC ? str_(more[UC]) : "") || rp.unit || "").toUpperCase(), rank = (dv.positionCol ? str_(more[dv.positionCol]) : "") || p.extra || "";
         return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: unit || cs, alt: unit && cs ? cs : "", id: p.id || "", section: p.sec || "", rank: rank,
           exempt: exemptHit_(dv.exempt, [p.sec, rank, unit, cs, nm]), loa: !!(p.id && LOA_[p.id]) }; });
     } catch (e) { rosterError = errMsg_(e); }

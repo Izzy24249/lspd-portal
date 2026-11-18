@@ -19,8 +19,12 @@
   let SESSION = ""; try { SESSION = localStorage.getItem("lspd_sess") || ""; } catch (e) {}
   // the officer sign-on comes first (it carries your rank and name); the portal admin login is the fallback
   const OFFICER = () => !!SESSION;
+  // division callsigns always in capitals (the sheet may say "air-9")
+  const CSRX = /^[a-z][a-z0-9]{0,5}-\d{1,3}[a-z]?$/i, CSK = { callsign: 1, unit: 1, next: 1, open: 1, from: 1, to: 1, cs: 1, alt: 1 };
+  function capCs(x, k) { if (typeof x === "string") return CSK[k] && CSRX.test(x.trim()) ? x.trim().toUpperCase() : x;
+    if (Array.isArray(x)) return x.map(y => capCs(y, k)); if (x && typeof x === "object") Object.keys(x).forEach(q => { x[q] = capCs(x[q], q); }); return x; }
   async function api(action, data) {
-    const r = await Portal.post(Object.assign({ action: action }, OFFICER() ? { session: SESSION } : { token: TOKEN }, data || {}));
+    const r = capCs(await Portal.post(Object.assign({ action: action }, OFFICER() ? { session: SESSION } : { token: TOKEN }, data || {})), "");
     if (!r.ok && r.error === "AUTH" && OFFICER() && TOKEN) { SESSION = ""; return api(action, data); }   // MDT sign-on expired: use the admin login instead
     if (!r.ok && r.error === "AUTH") {
       if (OFFICER()) { location.replace("signon.html?next=division.html"); throw new Error("Sign on again."); }
