@@ -95,13 +95,23 @@
   }
   // short column heads for the cert columns ("SWAT CERT" → "SWAT", "Search & Rescue" → "S&R"); the full name is the tooltip
   const short = n => { const t = String(n).replace(/\b(cert(ified|ification)?s?|qualif\w*|status)\b/ig, "").replace(/\s+/g, " ").trim() || n; return t.length > 9 ? t.split(/[\s/-]+/).map(w => w[0]).join("").toUpperCase().slice(0, 5) : t; };
+  // the division roster as one table: division callsign, department callsign, name, the division's own columns (K9 name,
+  // T.I.G., role…), a ✓ column per cert, promotion date, and a copy button for the Discord ID
   function roster(R) {
-    const C = R.certNames || [], groups = [], bySec = new Set(R.roster.map(o => o.section).filter(Boolean)).size >= 2; R.roster.forEach(o => { const g = (bySec ? o.section : o.rank || o.section) || "Members"; let x = groups.find(y => y.n === g); if (!x) { x = { n: g, l: [] }; groups.push(x); } x.l.push(o); });
-    const cols = 3 + C.length;
-    return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.' + (C.length ? " ✓ = certified." : "") + "</p>" +
-      '<div class="md-tw"><table class="md-rt"><thead><tr><th>Unit</th><th>Name</th>' + C.map(c => '<th class="c" title="' + esc(c) + '">' + esc(short(c)) + "</th>").join("") + "<th></th></tr></thead><tbody>" +
-      groups.map(g => '<tr class="g"><td colspan="' + cols + '">' + esc(g.n) + "</td></tr>" + g.l.map(o => '<tr' + (o.me ? ' class="me"' : "") + "><td><code>" + esc(o.callsign || "—") + "</code></td><td>" + esc(o.name) + (o.staff ? " ⭐" : "") + (o.me ? ' <small>(you)</small>' : "") + "</td>" +
-        C.map(c => (o.certs || []).indexOf(c) !== -1 ? '<td class="c y" title="' + esc(c) + '">✓</td>' : '<td class="c n">·</td>').join("") + "<td>" + (o.loa ? "<em>LOA</em>" : "") + "</td></tr>").join("")).join("") + "</tbody></table></div></section>";
+    const C = R.certNames || [], X = R.rosterCols || [], groups = [], bySec = new Set(R.roster.map(o => o.section).filter(Boolean)).size >= 2;
+    R.roster.forEach(o => { const g = (bySec ? o.section : o.rank || o.section) || "Members"; let x = groups.find(y => y.n === g); if (!x) { x = { n: g, l: [] }; groups.push(x); } x.l.push(o); });
+    const cols = 6 + X.length + C.length;
+    return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.' + (C.length ? " ✓ = certified." : "") + " Click an ID to copy it.</p>" +
+      '<div class="md-tw"><table class="md-rt"><thead><tr><th>Div unit</th><th>Callsign</th><th>Name</th>' + X.map(x => "<th>" + esc(x) + "</th>").join("") +
+      C.map(c => '<th class="c" title="' + esc(c) + '">' + esc(short(c)) + "</th>").join("") + "<th>Promoted</th><th>Discord ID</th><th></th></tr></thead><tbody>" +
+      groups.map(g => '<tr class="g"><td colspan="' + cols + '">' + esc(g.n) + "</td></tr>" + g.l.map(o => '<tr' + (o.me ? ' class="me"' : "") + ">" +
+        "<td><code>" + esc(o.callsign || "—") + '</code></td><td><code class="d">' + esc(o.dept || "—") + "</code></td>" +
+        "<td><b>" + esc(o.name) + "</b>" + (o.staff ? " ⭐" : "") + (o.me ? " <small>(you)</small>" : "") + (o.billet && o.billet !== g.n ? "<br><small>" + esc(o.billet) + "</small>" : "") + "</td>" +
+        X.map(x => "<td>" + (o.f && o.f[x] ? esc(o.f[x]) : '<span class="n">—</span>') + "</td>").join("") +
+        C.map(c => (o.certs || []).indexOf(c) !== -1 ? '<td class="c y" title="' + esc(c) + '">✓</td>' : '<td class="c n">·</td>').join("") +
+        "<td>" + (o.date ? esc(o.date) : '<span class="n">—</span>') + "</td>" +
+        "<td>" + (o.id ? '<button class="md-id-cp" data-copy="' + esc(o.id) + '" data-what="Discord ID" title="' + esc(o.id) + '">⧉ …' + esc(o.id.slice(-4)) + "</button>" : '<span class="n">—</span>') + "</td>" +
+        "<td>" + (o.loa ? "<em>LOA</em>" : "") + "</td></tr>").join("")).join("") + "</tbody></table></div></section>";
   }
   // one certification tile: earned, or not yet (with steps when there's a path to it)
   function tile(c) {

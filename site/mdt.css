@@ -1100,3 +1100,7 @@ button.pbx-box:hover{border-color:var(--green)}
 .md-svc b{display:block;font:700 22px Oswald,sans-serif;color:var(--dc)}.md-svc small{font-size:10.5px;color:var(--mute);letter-spacing:.06em;text-transform:uppercase}
 .md-page .md-tabs a.on{border-color:var(--dc);box-shadow:0 0 0 1px color-mix(in srgb,var(--dc) 40%,transparent) inset}
 @media (max-width:900px){.md-id{grid-template-columns:auto 1fr}.md-svc{grid-column:1/-1;grid-template-columns:repeat(4,1fr)}.md-id .md-badge{width:64px;height:64px}}
+.md-rt code.d{color:#c8d3ea;font-weight:600}.md-rt td b{font-weight:600}.md-rt td .n{color:rgba(140,170,220,.3)}
+.md-rt td small{font-size:11.5px}
+.md-id-cp{font:600 11.5px "JetBrains Mono",monospace;color:#9fb3d9;background:rgba(255,255,255,.03);border:1px solid rgba(140,170,220,.2);border-radius:6px;padding:2px 8px;cursor:pointer}
+.md-id-cp:hover{color:#fff;border-color:var(--dc,#2f7bff)}
