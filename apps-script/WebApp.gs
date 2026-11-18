@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 143;
+const BACKEND_VERSION = 144;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -6020,7 +6020,7 @@ function obHandle_(d) {
 }
 // The lists on Onboarding Terminations: blocks of filled rows (A–E) separated by one blank line. Lists more than
 // 42 days old (column F, or worked out from the date in E) are cleared out on the next push and the newer lists
-// slide up (columns A–E only, so the formulas and anything to the right stay put), keeping the one-line gaps.
+// move up (columns A–E only; the formulas from F on are never touched), keeping the one-line gaps.
 const OB_KEEP_DAYS_ = 42;
 function obTermBlocks_(tm) {
   const n = tm.getLastRow(); if (n < 2) return { blocks: [], first: 3 };
@@ -6037,47 +6037,21 @@ function obTermBlocks_(tm) {
   return { blocks: blocks, first: first };
 }
 function obTermExpired_(B) { return B.blocks.filter(b => b.age != null && b.age > OB_KEEP_DAYS_); }
-// clear the old lists: remove their A–E cells (and the blank line after each) with the cells below moving up.
-// Columns after E: if they're formulas (days, dates) they stay put and recalculate for whatever slides into their row;
-// if they're typed values they move up with the rest of the row.
+// clear the old lists: only columns A–E change. The lists that stay are rewritten higher up as plain values
+// (one blank line between lists) and the rows left over at the bottom are emptied. Columns F onward are never
+// touched, so each row's formulas keep pointing at their own row.
 function obTermCleanup_(tm) {
   const B = obTermBlocks_(tm), old = obTermExpired_(B); if (!old.length) return { lists: 0, people: 0 };
-  const lastCol = Math.max(5, tm.getLastColumn()), extra = lastCol - 5;
-  const tmpl = obTermTemplate_(tm, B), hasFx = tmpl.some(Boolean), width = hasFx ? 5 : lastCol;
-  let removed = 0;
-  old.slice().reverse().forEach(b => {
-    const next = B.blocks.find(x => x.from > b.to), rows = (next ? next.from - 1 : b.to) - b.from + 1;   // the list plus its blank line
-    tm.getRange(b.from, 1, rows, width).deleteCells(SpreadsheetApp.Dimension.ROWS); removed += b.to - b.from + 1;
+  const lastRow = tm.getLastRow(), n = lastRow - B.first + 1; if (n < 1) return { lists: 0, people: 0 };
+  const rng = tm.getRange(B.first, 1, n, 5), vals = rng.getValues(), fmts = rng.getNumberFormats();
+  const out = [], outF = [], blank = ["", "", "", "", ""];
+  B.blocks.filter(b => old.indexOf(b) === -1).forEach((b, i) => {
+    if (i) { out.push(blank.slice()); outF.push(fmts[0].map(() => "General")); }
+    for (let r = b.from; r <= b.to; r++) { out.push(vals[r - B.first].slice()); outF.push(fmts[r - B.first].slice()); }
   });
-  if (hasFx) obTermFixFormulas_(tm, tmpl, B.first);
-  return { lists: old.length, people: removed };
-}
-// The formulas after E (F–L: days, dates…) as they should be on any row, in R1C1 so they point at their own row.
-// Taken as the version most rows have, with every relative row reference pointing at the row itself.
-function obTermTemplate_(tm, B) {
-  B = B || obTermBlocks_(tm);
-  const lastCol = Math.max(5, tm.getLastColumn()), extra = lastCol - 5; if (!extra || !B.blocks.length) return [];
-  const rows = []; B.blocks.forEach(b => { for (let r = b.from; r <= b.to; r++) rows.push(r); });
-  const fx = tm.getRange(B.first, 6, tm.getLastRow() - B.first + 1, extra).getFormulasR1C1(), out = [];
-  // a row that slid up keeps pointing at its old row (R[-6]C5…): every relative row reference is put back to "this row" (RC5)
-  const own = f => String(f).replace(/R\[-?\d+\]/g, "R");
-  for (let k = 0; k < extra; k++) { const n = {}; rows.forEach(r => { const f = (fx[r - B.first] || [])[k]; if (f) { const g = own(f); n[g] = (n[g] || 0) + 1; } });
-    out.push(Object.keys(n).sort((a, b) => n[b] - n[a])[0] || ""); }
-  return out;
-}
-// every filled row gets the template formulas (pointing at its own row); empty rows show nothing after E
-function obTermFixFormulas_(tm, tmpl, first) {
-  if (!tmpl || !tmpl.some(Boolean)) return 0;
-  const lastRow = tm.getLastRow(); if (lastRow < first) return 0;
-  const n = lastRow - first + 1, ae = tm.getRange(first, 1, n, 5).getDisplayValues(), filled = ae.map(r => r.some(x => str_(x).trim()));
-  tmpl.forEach((f, k) => { if (!f) return; tm.getRange(first, 6 + k, n, 1).setFormulasR1C1(filled.map(x => [x ? f : ""])); });
-  return filled.filter(Boolean).length;
-}
-// run by hand from the Apps Script editor to repair the Onboarding Terminations formulas right now
-function fixTerminationFormulas() {
-  const tm = rosterBook_().getSheetByName(OB_TERM_TAB_); if (!tm) throw new Error("No \"" + OB_TERM_TAB_ + "\" tab");
-  const B = obTermBlocks_(tm), n = obTermFixFormulas_(tm, obTermTemplate_(tm, B), B.first);
-  Logger.log("Fixed the formulas on " + n + " rows."); return n;
+  while (out.length < n) { out.push(blank.slice()); outF.push(fmts[0].map(() => "General")); }
+  rng.setNumberFormats(outF); rng.setValues(out);
+  return { lists: old.length, people: old.reduce((k, b) => k + b.to - b.from + 1, 0) };
 }
 // where the next list starts once the old ones are gone (for the preview)
 function obTermStartAfter_(tm) {
@@ -6114,7 +6088,6 @@ function obPush_(A) {
     const go = P.plan.filter(p => !p.error), done = [];
     if (go.length) {
       // the formulas the sheet uses after E (days, dates…) follow the last entry down
-      const TB = obTermBlocks_(tm), tmplFx = obTermTemplate_(tm, TB);
       go.forEach(p => {
         const r = R.rows.find(x => x.r === p.fromRow);
         tm.getRange(p.toRow, 4).setNumberFormat("@");
@@ -6127,7 +6100,6 @@ function obPush_(A) {
         done.push(p);
       });
     }
-    if (go.length) { SpreadsheetApp.flush(); const TB = obTermBlocks_(tm); obTermFixFormulas_(tm, obTermTemplate_(tm, TB), TB.first); }   // every row's F–L formulas point at its own row
     P.plan.filter(p => p.error).forEach(p => { const e = E.find(x => x.entry === p.entry); if (e) log.getRange(e.row, 10).setValue(cellSafe_("Not moved: " + p.error)); });
     SpreadsheetApp.flush();
     return { ok: true, done: done, skipped: P.plan.filter(p => p.error), cleaned: cleaned };
