@@ -42,11 +42,29 @@
   function title(v) { const p = v.split(":"), d = LIST.find(x => x.id === p[1]), s = SUB.find(x => x[0] === p[2]); return [d ? d.name.toUpperCase() : "MY DIVISION", s ? s[1] : "Division"]; }
 
   // ---------- pages ----------
+  // the officer's own division ID card: division callsign + name up top, their billet, standing this week, what they've done for the
+  // division, the extra roster columns that are theirs (K9 name, aircraft, role…) and their certs as badges
   function head(R, sub) {
-    const dv = R.division;
-    return '<div class="md-hero" style="--dc:' + esc(dv.color || "#2f7bff") + '"><img src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.src=\'img/lspd-badge.png\'"><div><small>MY DIVISION</small><h1>' + esc(dv.name) + "</h1>" +
-      (dv.tagline ? "<p>" + esc(dv.tagline) + "</p>" : "") + '</div><div class="md-me"><b>' + esc(R.me.callsign || "") + "</b><span>" + esc(R.me.rank || "") + (R.me.staff ? " · leadership" : "") + "</span></div></div>" +
-      '<div class="md-tabs">' + SUB.map(s => '<a data-go="mydiv:' + esc(dv.id) + ":" + s[0] + '" class="' + (s[0] === sub ? "on" : "") + '">' + esc(s[1]) + "</a>").join("") + "</div>";
+    const dv = R.division, me = R.me, P = me.profile || {}, L = me.life || {}, need = dv.quotaPts, hr = new Date().getHours();
+    const hi = hr < 5 ? "Night shift" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
+    const last = String(me.name || "").split(/\s+/).pop();
+    const chips = [];
+    if (me.loa) chips.push(["loa", "On LOA"]); else if (me.exempt) chips.push(["loa", me.exempt]);
+    else if (need) chips.push([me.ptsW >= need ? "ok" : me.stage ? "bad" : "mid", me.ptsW >= need ? "✓ Quota met" : me.ptsW + " / " + need + " pts this week"]);
+    if (me.place) chips.push(["mid", (me.place === 1 ? "👑 " : "#") + (me.place === 1 ? "Top officer" : me.place + " of " + me.onBoard) + " this week"]);
+    chips.push(R.record && R.record.points ? ["bad", R.record.ladder] : ["ok", "Good standing"]);
+    if (me.staff) chips.push(["lead", "⭐ Division leadership"]);
+    const since = P.date || (L.first ? day(L.first) : "");
+    return '<div class="md-hero md-id" style="--dc:' + esc(dv.color || "#2f7bff") + '"><img class="md-wm" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.remove()">' +
+      '<img class="md-badge" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.src=\'img/lspd-badge.png\'">' +
+      '<div class="md-idm"><small>' + esc(hi) + ", " + esc(P.billet || me.rank || "Officer") + " " + esc(last) + " · " + esc(dv.name).toUpperCase() + "</small>" +
+      '<h1><span class="md-cs">' + esc(P.unit || me.callsign || "—") + "</span> " + esc(me.name) + "</h1>" +
+      "<p>" + esc([P.billet || me.rank, me.deptCallsign ? "Dept " + me.deptCallsign : "", since ? "In " + dv.name + " since " + since : ""].filter(Boolean).join(" · ")) + "</p>" +
+      '<div class="md-chips">' + chips.map(c => '<span class="' + c[0] + '">' + esc(c[1]) + "</span>").join("") + "</div>" +
+      ((P.fields || []).length ? '<dl class="md-pf">' + P.fields.map(f => "<div><dt>" + esc(f.k) + "</dt><dd>" + esc(f.v) + "</dd></div>").join("") + "</dl>" : "") +
+      ((R.myCerts || []).length ? '<div class="md-bd">' + R.myCerts.map(c => '<span title="Certified">✓ ' + esc(c) + "</span>").join("") + "</div>" : "") + "</div>" +
+      '<div class="md-svc"><div><b>' + (L.filed || 0) + "</b><small>reports filed</small></div><div><b>" + (L.assists || 0) + "</b><small>assists</small></div><div><b>" + (L.pts || 0) + "</b><small>division points</small></div><div><b>" + (L.best || 0) + "</b><small>best week</small></div></div></div>" +
+      '<div class="md-tabs" style="--dc:' + esc(dv.color || "#2f7bff") + '">' + SUB.map(s => '<a data-go="mydiv:' + esc(dv.id) + ":" + s[0] + '" class="' + (s[0] === sub ? "on" : "") + '">' + esc(s[1]) + "</a>").join("") + "</div>";
   }
   function stats(R) {
     const me = R.me, need = R.division.quotaPts, f = need ? Math.min(1, me.ptsW / need) : 0, NW = R.division.inactWeeks;
@@ -133,7 +151,7 @@
     if (!LIST.some(x => x.id === id) && LIST.length) return '<div class="empty">You\'re not on that division\'s roster.</div>';
     if (!R) return '<div class="empty">Loading your division…</div>';
     if (!R.ok) return '<div class="empty">' + esc(R.error === "AUTH" ? "Your MDT session expired. Sign on again." : R.error || "Couldn't load.") + "</div>";
-    return head(R, sub) + (sub === "record" ? record(R) : sub === "roster" ? roster(R) : sub === "certs" ? divCerts(R) : sub === "vehicles" || sub === "uniforms" ? gear(R, sub) : stats(R));
+    return '<div class="md-page" style="--dc:' + esc(R.division.color || "#2f7bff") + '">' + head(R, sub) + (sub === "record" ? record(R) : sub === "roster" ? roster(R) : sub === "certs" ? divCerts(R) : sub === "vehicles" || sub === "uniforms" ? gear(R, sub) : stats(R));
   }
   window.MDTMyDiv = { nav: nav, html: html, title: title, certsHTML: certsHTML };
 })();

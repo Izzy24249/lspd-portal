@@ -1077,3 +1077,26 @@ button.pbx-box:hover{border-color:var(--green)}
 .mc-hero small{font:700 11px "JetBrains Mono",monospace;letter-spacing:.2em;color:#6ee7b7}.mc-hero h1{margin:4px 0;font:700 28px Oswald,sans-serif;letter-spacing:.04em}.mc-hero p{margin:0;color:var(--mute);font-size:13px}
 .md-card .md-k .md-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dc,#2f7bff);margin-right:8px;vertical-align:middle}
 .mc-sec{margin-bottom:12px}
+
+/* My Division: the officer's division ID card */
+.md-page{--dcs:color-mix(in srgb,var(--dc) 22%,transparent)}
+.md-page .md-card{border-color:color-mix(in srgb,var(--dc) 18%,rgba(140,170,220,.12))}
+.md-id{position:relative;overflow:hidden;display:grid!important;grid-template-columns:auto 1fr auto;gap:22px;align-items:center;padding:22px 24px!important;border:1px solid color-mix(in srgb,var(--dc) 55%,transparent)!important;background:linear-gradient(115deg,color-mix(in srgb,var(--dc) 20%,transparent),rgba(8,12,22,.85) 55%)!important}
+.md-id .md-wm{position:absolute;right:-60px;top:50%;width:300px;height:300px;transform:translateY(-50%);opacity:.06;pointer-events:none;object-fit:contain}
+.md-id .md-badge{width:96px;height:96px;object-fit:contain;filter:drop-shadow(0 0 18px color-mix(in srgb,var(--dc) 55%,transparent));position:relative}
+.md-idm{min-width:0;position:relative}
+.md-idm>small{font:700 11px "JetBrains Mono",monospace;letter-spacing:.16em;color:color-mix(in srgb,var(--dc) 70%,#fff);text-transform:uppercase}
+.md-idm h1{margin:6px 0 4px;font:700 30px/1.1 Oswald,sans-serif;letter-spacing:.04em}
+.md-cs{font-family:"JetBrains Mono",monospace;color:var(--dc);text-shadow:0 0 18px color-mix(in srgb,var(--dc) 60%,transparent);margin-right:6px}
+.md-idm p{margin:0;color:var(--mute);font-size:13px}
+.md-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.md-chips span{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;border:1px solid rgba(140,170,220,.25);color:#c8d3ea}
+.md-chips .ok{border-color:rgba(52,211,153,.5);color:#6ee7b7;background:rgba(52,211,153,.08)}.md-chips .bad{border-color:rgba(248,113,113,.5);color:#fca5a5;background:rgba(248,113,113,.08)}
+.md-chips .mid{border-color:rgba(125,211,252,.4);color:#bae6fd}.md-chips .loa{border-color:rgba(165,180,252,.45);color:#c7d2fe}.md-chips .lead{border-color:rgba(251,191,36,.5);color:#fcd34d;background:rgba(251,191,36,.07)}
+.md-pf{display:flex;flex-wrap:wrap;gap:6px 18px;margin:12px 0 0}.md-pf div{display:flex;gap:6px;align-items:baseline}.md-pf dt{font:700 10.5px "JetBrains Mono",monospace;letter-spacing:.1em;color:var(--mute);text-transform:uppercase}.md-pf dd{margin:0;font-size:13px;font-weight:600}
+.md-bd{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}.md-bd span{font-size:11px;font-weight:800;letter-spacing:.04em;padding:2px 8px;border-radius:6px;background:color-mix(in srgb,var(--dc) 16%,transparent);border:1px solid color-mix(in srgb,var(--dc) 45%,transparent);color:#fff}
+.md-svc{display:grid;grid-template-columns:repeat(2,minmax(84px,auto));gap:8px;position:relative}
+.md-svc div{padding:10px 12px;border-radius:10px;background:rgba(5,8,15,.55);border:1px solid rgba(140,170,220,.12);text-align:center}
+.md-svc b{display:block;font:700 22px Oswald,sans-serif;color:var(--dc)}.md-svc small{font-size:10.5px;color:var(--mute);letter-spacing:.06em;text-transform:uppercase}
+.md-page .md-tabs a.on{border-color:var(--dc);box-shadow:0 0 0 1px color-mix(in srgb,var(--dc) 40%,transparent) inset}
+@media (max-width:900px){.md-id{grid-template-columns:auto 1fr}.md-svc{grid-column:1/-1;grid-template-columns:repeat(4,1fr)}.md-id .md-badge{width:64px;height:64px}}

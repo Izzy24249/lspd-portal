@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 149;
+const BACKEND_VERSION = 150;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2359,11 +2359,13 @@ function myDivision_(acct, divId) {
   try { const ov = divOverview_(null, { username: "", role: "officer", key: acct.id }, true), L = (ov.divisions || []).slice().sort((a, b) => b.week.points - a.week.points), i = L.findIndex(x => x.id === dv.id);
     if (i !== -1) race = { rank: i + 1, of: L.length, points: L[i].week.points, last: L[i].lastWeek ? L[i].lastWeek.points : 0, ahead: i ? { name: L[i - 1].name, points: L[i - 1].week.points } : null, weekEnd: W0 + 7 * DAY,
       standings: L.map(x => ({ name: x.name, color: x.color, points: x.week.points, me: x.id === dv.id })) }; } catch (e) {}
-  const CERTS = myDivCerts_(dv);
+  const CERTS = myDivCerts_(dv), prof = myDivProfile_(dv, acct.id);
+  let lf = 0, la = 0, lp = 0, first = 0; V.reports.forEach(r => { const au = r.author && r.author.key === me.key, as = !au && (r.tagged || []).some(t => t.key === me.key); if (!au && !as) return; if (au) lf++; else la++; if (!first || r.at < first) first = r.at; });
+  lp = ptsOf(me.key, 0, Infinity); const place = board.findIndex(x => x.me) + 1;
   const D = discAll_(dv.id).filter(x => x.discord === acct.id).sort((a, b) => b.at - a.at), live = D.filter(x => x.live).reduce((n, x) => n + x.pts, 0);
   let lad = DISC_LADDER_[0]; DISC_LADDER_.forEach(l => { if (live >= l.min) lad = l; });
   return { ok: true, division: { id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl, tagline: dv.tagline, quotaPts: dv.quotaPts || 0, inactWeeks: NW },
-    me: { name: me.name, callsign: me.callsign, rank: me.rank, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
+    me: { name: me.name, callsign: me.callsign, deptCallsign: me.alt || "", rank: me.rank, profile: prof, life: { filed: lf, assists: la, pts: lp, first: first, best: Math.max.apply(null, [ptsW].concat(weeks)) }, place: place, onBoard: board.length, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
     weekStart: W0, weekEnd: W0 + 7 * DAY, board: board, race: race,
     record: { points: live, ladder: lad.label, entries: D.slice(0, 40).map(discPub_) },
     roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (CERTS.by[o.id] || []) })),
@@ -2397,6 +2399,22 @@ function myCerts_(acct) {
   return { ok: true, rank: o ? o.rank : "", fto: fto, dept: dept, divisions: divs };
 }
 // every member's certifications in a division (from its roster tab's tick boxes), cached a few minutes
+// the officer's own row on the division roster tab: billet, division callsign, joined / promo date, and every other
+// column the division keeps (K9 name, role, aircraft, notes on specialties…) so their division page is about them
+function myDivProfile_(dv, id) {
+  const c = CacheService.getScriptCache(), k = "mydiv_prof_" + dv.id + "_" + id, hit = c.get(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  let out = { fields: [] };
+  try { const L = divLayout_(dv); if (!L.error) { const r = L.rows.find(x => x.id === id);
+    if (r) { const v = L.sh.getRange(r.row, 1, 1, L.sh.getLastColumn()).getDisplayValues()[0], H = L.sh.getRange(L.hr, 1, 1, L.sh.getLastColumn()).getDisplayValues()[0];
+      const skip = {}; Object.keys(L.cols).forEach(q => { if (L.cols[q] >= 0) skip[L.cols[q]] = 1; }); L.certs.forEach(x => { skip[x.col] = 1; });
+      out = { unit: r.unit, billet: r.billet, date: L.cols.date >= 0 ? str_(v[L.cols.date]).trim() : "", fields: [] };
+      H.forEach((h, j) => { const name = str_(h).replace(/\s+/g, " ").trim(), val = str_(v[j]).trim();
+        if (skip[j] || !name || !val || /^(true|false)$/i.test(val) || /strike|discipline|warning|discord|^id$/i.test(name) || val.length > 60) return;
+        out.fields.push({ k: name.slice(0, 24), v: val }); });
+      out.fields = out.fields.slice(0, 8); } } } catch (e) {}
+  try { c.put(k, JSON.stringify(out), 300); } catch (e) {}
+  return out;
+}
 function myDivCerts_(dv) {
   const c = CacheService.getScriptCache(), k = "mydiv_certs_" + dv.id, hit = c.get(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
   let out = { names: [], by: {} }; try { const L = divLayout_(dv); if (!L.error) { out.names = L.certs.map(x => x.name); L.rows.forEach(r => { if (r.id) out.by[r.id] = Object.keys(r.certs).filter(n => r.certs[n]); }); } } catch (e) {}
