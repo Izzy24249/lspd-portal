@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 146;
+const BACKEND_VERSION = 147;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2279,6 +2279,49 @@ function gearAll_(divId, rows) {
   return sh.getRange(2, 1, sh.getLastRow() - 1, GEAR_HEAD_.length).getValues().map((r, i) => { let data = {}; try { data = JSON.parse(r[3] || "{}"); } catch (e) {}
     return Object.assign({ id: str_(r[0]), div: str_(r[1]), kind: str_(r[2]) }, data, rows ? { row: i + 2 } : {}); }).filter(x => x.id && (!divId || x.div === divId));
 }
+// ---- MDT → My Division: what a division member sees about their own division(s) ----
+// the divisions whose roster tab has this officer on it
+function myDivisions_(id) {
+  if (!id) return [];
+  const c = CacheService.getScriptCache(), ck = "mydivs_" + id, hit = c.get(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const out = [];
+  ((getConfig_().settings || {}).divisions || []).forEach(dv => { if (dv.rosterTabId == null) return;
+    try { if ((getRosterTab_(dv.rosterTabId, false, [], false, false).people || []).some(p => p.id === id && !rosterVacant_(p))) out.push({ id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl }); } catch (e) {} });
+  try { c.put(ck, JSON.stringify(out), 900); } catch (e) {}
+  return out;
+}
+function myDivision_(acct, divId) {
+  const mine = myDivisions_(acct.id), dvs = (getConfig_().settings || {}).divisions || [], dv = dvs.find(x => x.id === divId);
+  if (!dv || !mine.some(x => x.id === divId)) return { ok: false, error: "You're not on that division's roster." };
+  const V = divView_({ division: dv.id }, { username: "", role: "officer" }); if (!V || !V.officers) return { ok: false, error: "Couldn't load the division." };
+  const me = V.officers.find(o => o.id === acct.id); if (!me) return { ok: false, error: "You're not on that division's roster." };
+  const P = RACE_PTS_, W0 = raceWeek_(), DAY = 864e5, staff = divStaff_(dv, V.officers);
+  // division race points per officer, between two times (same rules as the Command Center)
+  const ptsOf = (key, from, to, items) => { const cap = {}; let n = 0;
+    V.reports.filter(r => r.at >= from && r.at < to).slice().sort((a, b) => a.at - b.at).forEach(r => {
+      const au = r.author && r.author.key === key, as = !au && (r.tagged || []).some(t => t.key === key); if (!au && !as) return;
+      const k = new Date(r.at).toDateString() + (au ? "r" : "a"); cap[k] = (cap[k] || 0) + 1;
+      const g = cap[k] <= (au ? P.capReports : P.capAssists) ? (au ? P.report + (P[r.grade] || 0) : P.assist) : 0; n += g;
+      if (items) items.push({ at: r.at, kind: au ? "filed" : "assist", title: r.title || r.formTitle, form: r.formTitle, grade: r.grade || "", pts: g }); });
+    return n; };
+  const items = [], ptsW = ptsOf(me.key, W0, Infinity, items), weeks = [];
+  for (let k = 1; k <= 4; k++) weeks.push(ptsOf(me.key, W0 - k * 7 * DAY, W0 - (k - 1) * 7 * DAY));
+  const NW = dv.inactWeeks == null ? 3 : dv.inactWeeks; let stage = 0;
+  if (!ptsW && !me.loa && !me.exempt && NW) for (let k = 0; k < weeks.length && !weeks[k]; k++) stage++;
+  const board = V.officers.map(o => ({ name: o.name, callsign: o.callsign, pts: ptsOf(o.key, W0, Infinity), me: o.id === acct.id })).filter(x => x.pts).sort((a, b) => b.pts - a.pts).slice(0, 10);
+  let race = null;
+  try { const ov = divOverview_(null, { username: "", role: "officer", key: acct.id }, true), L = (ov.divisions || []).slice().sort((a, b) => b.week.points - a.week.points), i = L.findIndex(x => x.id === dv.id);
+    if (i !== -1) race = { rank: i + 1, of: L.length, points: L[i].week.points, last: L[i].lastWeek ? L[i].lastWeek.points : 0, ahead: i ? { name: L[i - 1].name, points: L[i - 1].week.points } : null, weekEnd: W0 + 7 * DAY,
+      standings: L.map(x => ({ name: x.name, color: x.color, points: x.week.points, me: x.id === dv.id })) }; } catch (e) {}
+  const D = discAll_(dv.id).filter(x => x.discord === acct.id).sort((a, b) => b.at - a.at), live = D.filter(x => x.live).reduce((n, x) => n + x.pts, 0);
+  let lad = DISC_LADDER_[0]; DISC_LADDER_.forEach(l => { if (live >= l.min) lad = l; });
+  return { ok: true, division: { id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl, tagline: dv.tagline, quotaPts: dv.quotaPts || 0, inactWeeks: NW },
+    me: { name: me.name, callsign: me.callsign, rank: me.rank, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
+    weekStart: W0, weekEnd: W0 + 7 * DAY, board: board, race: race,
+    record: { points: live, ladder: lad.label, entries: D.slice(0, 40).map(discPub_) },
+    roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id })),
+    gear: gearAll_(dv.id) };
+}
 // MDT Fleet / Uniform pages: every division's own vehicles and outfits
 function gearForMdt_() {
   const c = CacheService.getScriptCache(), hit = c.get("gear_all"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
@@ -3081,7 +3124,7 @@ function acctProfile_(acct) {
     forms: (() => { try { const pr = { level: level }; return getConfig_().forms.filter(f => (f.accessTabs || []).length && formAllowed_(f, acct, pr)).map(f => f.id); } catch (e) { return []; } })() };
 }
 // "View the MDT as…" (Admin → MDT Preview): a 1-hour read-only session that sees exactly what that officer sees
-const PV_READ_ = { gearMdt: 1, divDisc: 1, divGear: 1, divSlots: 1, officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
+const PV_READ_ = { myDivision: 1, gearMdt: 1, divDisc: 1, divGear: 1, divSlots: 1, officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
 function previewOf_(token) {
   const t = offRead_(token, "PV"); if (!t) return null;
   const b = t.id.split(":"); return { id: b[0], level: LEVELS_.indexOf(b[1]) !== -1 ? b[1] : "", by: b.slice(2).join(":") };
@@ -4094,6 +4137,7 @@ function officerHome_(d) {
   out.promoMe = promoMine_(acct); mark_("promo");
   try { const A = pbAccess_(acct); out.pb = A.view ? { hc: A.hc, nominate: A.nominate, editor: A.editor } : null; } catch (e) { out.pb = null; }
   out.cdOwner = cdOwner_(acct);
+  try { out.myDivs = myDivisions_(acct.id); } catch (e) { out.myDivs = []; }
   out.race = officerRace_(acct); mark_("race");
   try { const b = dutyBoard_(); if (b) { const cur = dutyState_()[acct.id]; b.linked = dlinkHas_(acct.id); b.me = b.src === "dp" ? b.list.some(o => o.id === acct.id) : !!cur; b.mine = dutyMine_(acct.id, cur); out.duty = b; } } catch (e) {} mark_("duty");
   return out;
@@ -4497,6 +4541,7 @@ function handleAdmin_(d) {
   if (a === "mdtNoticePost" || a === "mdtNoticeClose") return mdtNotice_(d);
 
   if (d.session && (/^div(View|Report|Grade|Overview|Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
+  if (a === "myDivision") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return myDivision_(acct, str_(d.division)); }
   if (a === "gearMdt") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return { ok: true, divisions: gearForMdt_() }; }
 
   const me = sessionAdmin_(d.token);
