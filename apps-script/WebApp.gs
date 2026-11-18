@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 142;
+const BACKEND_VERSION = 143;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -6042,21 +6042,42 @@ function obTermExpired_(B) { return B.blocks.filter(b => b.age != null && b.age 
 // if they're typed values they move up with the rest of the row.
 function obTermCleanup_(tm) {
   const B = obTermBlocks_(tm), old = obTermExpired_(B); if (!old.length) return { lists: 0, people: 0 };
-  const lastCol = Math.max(5, tm.getLastColumn()), lastRow = tm.getLastRow(), extra = lastCol - 5;
-  const sample = B.blocks.length ? B.blocks[B.blocks.length - 1].from : 0;
-  const tmpl = extra && sample ? tm.getRange(sample, 6, 1, extra).getFormulasR1C1()[0] : [], hasFx = tmpl.some(Boolean), width = hasFx ? 5 : lastCol;
+  const lastCol = Math.max(5, tm.getLastColumn()), extra = lastCol - 5;
+  const tmpl = obTermTemplate_(tm, B), hasFx = tmpl.some(Boolean), width = hasFx ? 5 : lastCol;
   let removed = 0;
   old.slice().reverse().forEach(b => {
     const next = B.blocks.find(x => x.from > b.to), rows = (next ? next.from - 1 : b.to) - b.from + 1;   // the list plus its blank line
     tm.getRange(b.from, 1, rows, width).deleteCells(SpreadsheetApp.Dimension.ROWS); removed += b.to - b.from + 1;
   });
-  if (hasFx) {   // filled rows keep (or get) the formulas; rows that are now empty show nothing after E
-    const n = lastRow - B.first + 1, ae = tm.getRange(B.first, 1, n, 5).getDisplayValues(), fx = tm.getRange(B.first, 6, n, extra).getFormulasR1C1();
-    ae.forEach((r, i) => { const row = B.first + i, filled = r.some(x => str_(x).trim());
-      if (!filled) { if (fx[i].some(Boolean)) tm.getRange(row, 6, 1, extra).clearContent(); return; }
-      tmpl.forEach((f, k) => { if (f && !fx[i][k]) tm.getRange(row, 6 + k).setFormulaR1C1(f); }); });
-  }
+  if (hasFx) obTermFixFormulas_(tm, tmpl, B.first);
   return { lists: old.length, people: removed };
+}
+// The formulas after E (F–L: days, dates…) as they should be on any row, in R1C1 so they point at their own row.
+// Taken as the version most rows have, with every relative row reference pointing at the row itself.
+function obTermTemplate_(tm, B) {
+  B = B || obTermBlocks_(tm);
+  const lastCol = Math.max(5, tm.getLastColumn()), extra = lastCol - 5; if (!extra || !B.blocks.length) return [];
+  const rows = []; B.blocks.forEach(b => { for (let r = b.from; r <= b.to; r++) rows.push(r); });
+  const fx = tm.getRange(B.first, 6, tm.getLastRow() - B.first + 1, extra).getFormulasR1C1(), out = [];
+  // a row that slid up keeps pointing at its old row (R[-6]C5…): every relative row reference is put back to "this row" (RC5)
+  const own = f => String(f).replace(/R\[-?\d+\]/g, "R");
+  for (let k = 0; k < extra; k++) { const n = {}; rows.forEach(r => { const f = (fx[r - B.first] || [])[k]; if (f) { const g = own(f); n[g] = (n[g] || 0) + 1; } });
+    out.push(Object.keys(n).sort((a, b) => n[b] - n[a])[0] || ""); }
+  return out;
+}
+// every filled row gets the template formulas (pointing at its own row); empty rows show nothing after E
+function obTermFixFormulas_(tm, tmpl, first) {
+  if (!tmpl || !tmpl.some(Boolean)) return 0;
+  const lastRow = tm.getLastRow(); if (lastRow < first) return 0;
+  const n = lastRow - first + 1, ae = tm.getRange(first, 1, n, 5).getDisplayValues(), filled = ae.map(r => r.some(x => str_(x).trim()));
+  tmpl.forEach((f, k) => { if (!f) return; tm.getRange(first, 6 + k, n, 1).setFormulasR1C1(filled.map(x => [x ? f : ""])); });
+  return filled.filter(Boolean).length;
+}
+// run by hand from the Apps Script editor to repair the Onboarding Terminations formulas right now
+function fixTerminationFormulas() {
+  const tm = rosterBook_().getSheetByName(OB_TERM_TAB_); if (!tm) throw new Error("No \"" + OB_TERM_TAB_ + "\" tab");
+  const B = obTermBlocks_(tm), n = obTermFixFormulas_(tm, obTermTemplate_(tm, B), B.first);
+  Logger.log("Fixed the formulas on " + n + " rows."); return n;
 }
 // where the next list starts once the old ones are gone (for the preview)
 function obTermStartAfter_(tm) {
@@ -6093,14 +6114,12 @@ function obPush_(A) {
     const go = P.plan.filter(p => !p.error), done = [];
     if (go.length) {
       // the formulas the sheet uses after E (days, dates…) follow the last entry down
-      const tn = tm.getLastRow(); let tmpl = 0; { const dv = tm.getRange(1, 1, Math.max(1, tn), 5).getDisplayValues(); for (let i = dv.length - 1; i >= 0; i--) if (str_(dv[i][0]).trim() && str_(dv[i][2]).trim()) { tmpl = i + 1; break; } }
-      const lastCol = Math.max(5, tm.getLastColumn()), tmplFx = tmpl && lastCol > 5 ? tm.getRange(tmpl, 6, 1, lastCol - 5).getFormulasR1C1()[0] : [];
+      const TB = obTermBlocks_(tm), tmplFx = obTermTemplate_(tm, TB);
       go.forEach(p => {
         const r = R.rows.find(x => x.r === p.fromRow);
         tm.getRange(p.toRow, 4).setNumberFormat("@");
         tm.getRange(p.toRow, 1, 1, 4).setValues([[r.raw[0], r.raw[1], r.raw[2], r.id || str_(r.raw[3])]]);   // A–D as values
         tm.getRange(p.toRow, 5).setValue(today);
-        if (tmplFx.some(Boolean)) tmplFx.forEach((fx, k) => { if (fx && !str_(tm.getRange(p.toRow, 6 + k).getFormula())) tm.getRange(p.toRow, 6 + k).setFormulaR1C1(fx); });
         // empty their onboarding row; drop-downs back to their starting values
         ob.getRange(p.fromRow, 3, 1, 2).clearContent(); ob.getRange(p.fromRow, 11).clearContent();
         ob.getRange(p.fromRow, 9, 1, 2).setValues([[pbDropOpt_(ob.getRange(p.fromRow, 9), "GOOD"), pbDropOpt_(ob.getRange(p.fromRow, 10), "BPA NEEDED")]]);
@@ -6108,6 +6127,7 @@ function obPush_(A) {
         done.push(p);
       });
     }
+    if (go.length) { SpreadsheetApp.flush(); const TB = obTermBlocks_(tm); obTermFixFormulas_(tm, obTermTemplate_(tm, TB), TB.first); }   // every row's F–L formulas point at its own row
     P.plan.filter(p => p.error).forEach(p => { const e = E.find(x => x.entry === p.entry); if (e) log.getRange(e.row, 10).setValue(cellSafe_("Not moved: " + p.error)); });
     SpreadsheetApp.flush();
     return { ok: true, done: done, skipped: P.plan.filter(p => p.error), cleaned: cleaned };
