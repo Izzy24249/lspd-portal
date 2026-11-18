@@ -805,7 +805,27 @@
       });
       h += "</div>";
     });
+    h += divGearHTML("vehicles");
     if ((f.vehicleRules || []).length) h += '<div class="rules"><details open><summary>Vehicle rules</summary><ul>' + f.vehicleRules.map(r => "<li>" + esc(r) + "</li>").join("") + "</ul></details></div>";
+    return h;
+  }
+  // each division's own vehicles / outfits (added by its leaders in Division Command)
+  let DGEAR = null, DGEAR_AT = 0;
+  function divGearHTML(kind) {
+    if (!DGEAR || Date.now() - DGEAR_AT > 300000) { DGEAR_AT = Date.now(); Portal.post({ action: "gearMdt", session: SESSION }).then(r => { if (r && r.ok) { DGEAR = r.divisions || []; if (VIEW === "fleet" || VIEW === "uniforms") draw(); } }).catch(() => {}); }
+    let h = "";
+    (DGEAR || []).forEach(dv => {
+      const L = dv[kind] || []; if (!L.length) return;
+      h += '<div class="sect"><span class="lbl" style="color:' + esc(dv.color || "") + '">' + esc(dv.name).toUpperCase() + " · DIVISION " + (kind === "vehicles" ? "FLEET" : "UNIFORMS") + '</span></div><div class="cards">';
+      L.forEach(x => {
+        const rows = kind === "vehicles" ? [["Livery", x.livery], ["Extras", x.extras], ["Use", x.use]] : [["When", x.when]].concat((x.items || []).map(i => [i.k, i.v]));
+        h += '<div class="card' + (kind === "uniforms" ? " u" : "") + '">' + (x.photo ? '<div class="pic" style="background-image:url(\'' + esc(x.photo) + '\')' + (kind === "uniforms" ? ";height:200px" : "") + '"></div>' : "") +
+          '<div class="top"><span class="rk">' + esc(dv.name).toUpperCase() + (x.rank ? " · " + esc(x.rank).toUpperCase() : "") + "</span><b>" + esc(x.name) + "</b></div>" +
+          '<div class="bd">' + (x.code ? '<button class="code" data-copy="' + esc(x.code) + '" data-what="' + (kind === "vehicles" ? "Spawn code" : "Duplicate code") + '"><span>' + esc(x.code) + "</span><em>COPY " + (kind === "vehicles" ? "SPAWN" : "DUPLICATE") + " CODE</em></button>" : "") +
+          '<dl class="kv">' + rows.filter(r => r[1]).map(r => "<dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd>").join("") + "</dl>" + (x.note ? '<small style="color:var(--mute);font-size:11.5px">' + esc(x.note) + "</small>" : "") + "</div></div>";
+      });
+      h += "</div>";
+    });
     return h;
   }
 
@@ -831,6 +851,7 @@
         })()).join("") + "</div></div>" + (u.locked ? '<div class="lockmsg"><small>For higher ranks</small></div>' : "") + "</div>";
     });
     h += "</div>";
+    h += divGearHTML("uniforms");
     const ins = f.insignia || [];
     h += '<div class="rules">' + ((f.uniformRules || []).length ? '<details open><summary>Uniform rules</summary><ul>' + f.uniformRules.map(r => "<li>" + esc(r) + "</li>").join("") + "</ul></details>" : "") +
       (ins.length ? '<details><summary>Rank insignia chart</summary><table><tr><th>Rank</th><th>Badges &amp; logos</th></tr>' + ins.map(x => '<tr class="' + (rk.idx === x.idx ? "me" : "") + '"><td>' + esc(x.rank) + "</td><td>" + esc(x.badge) + "</td></tr>").join("") + "</table></details>" : "") + "</div>";

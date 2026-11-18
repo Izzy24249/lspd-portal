@@ -144,6 +144,18 @@
   const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + "m ago" : s < 86400 ? Math.round(s / 3600) + "h ago" : s < 86400 * 30 ? Math.round(s / 86400) + "d ago" : new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); };
   const fullTime = t => new Date(t).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 
+  // division race points (same as the Command Center): report filed 10 + grade bonus, assist 4, capped per day
+  const PTS = () => DATA.pts || { report: 10, assist: 4, A: 5, B: 3, C: 1, capReports: 3, capAssists: 6 };
+  function weekStart0() { return DATA.raceWeek || periodStart("week"); }
+  function ptsBetween(o, filedAll, assistAll, from, to) {
+    const P = PTS(), cap = {}; let n = 0;
+    const add = (r, au) => { const k = new Date(r.at).toDateString() + (au ? "r" : "a"); cap[k] = (cap[k] || 0) + 1; if (cap[k] <= (au ? P.capReports : P.capAssists)) n += au ? P.report + (P[r.grade] || 0) : P.assist; };
+    filedAll.filter(r => r.at >= from && r.at < to).sort((a, b) => a.at - b.at).forEach(r => add(r, true));
+    assistAll.filter(r => r.at >= from && r.at < to).sort((a, b) => a.at - b.at).forEach(r => add(r, false));
+    return n;
+  }
+  const qUnit = () => DATA.division.quotaPts ? "pts" : "";
+  const qPer = () => DATA.division.quotaPts ? "week" : DATA.division.quotaPer;
   function stats() {
     const dv = DATA.division, from = periodStart(PERIOD), qFrom = periodStart(dv.quotaPer === "month" ? "month" : "week");
     const inP = DATA.reports.filter(r => r.at >= from);
@@ -157,9 +169,15 @@
       else if (dv.inactiveDays && days >= dv.inactiveDays) status = "bad";
       else if (dv.warnDays && days >= dv.warnDays) status = "warn";
       if (o.exempt) status = "exempt";          // Command / High Command etc.: no report requirement, activity still shown
-      const qCount = filedAll.filter(r => r.at >= qFrom).length + (dv.quotaAssists ? assistAll.filter(r => r.at >= qFrom).length : 0);
+      const W0 = weekStart0(), ptsW = ptsBetween(o, filedAll, assistAll, W0, Infinity);
+      const qCount = dv.quotaPts ? ptsW : filedAll.filter(r => r.at >= qFrom).length + (dv.quotaAssists ? assistAll.filter(r => r.at >= qFrom).length : 0);
+      // inactivity: whole weeks in a row with 0 division points (this week too, so far), LOA and exempt don't count
+      const NW = Math.max(1, dv.inactWeeks == null ? 3 : dv.inactWeeks), weeks = [];
+      for (let k = 1; k <= Math.max(NW, 4); k++) weeks.push(ptsBetween(o, filedAll, assistAll, W0 - k * 7 * DAY, W0 - (k - 1) * 7 * DAY));
+      let stage = 0; if (!ptsW && !o.loa && !o.exempt && dv.inactWeeks !== 0) { for (let k = 0; k < weeks.length && !weeks[k]; k++) stage++; }
       return Object.assign({}, o, { idx, filedAll, assistAll, filed, assists, last, days, status, score: filed.length + assists.length * 0.5, grade: avgGrade(filed), gradeAll: avgGrade(filedAll),
-        quota: dv.quota && !o.exempt ? { n: qCount, need: dv.quota, met: qCount >= dv.quota } : null, qn: qCount });
+        quota: (dv.quotaPts || dv.quota) && !o.exempt && !o.loa ? { n: qCount, need: dv.quotaPts || dv.quota, met: qCount >= (dv.quotaPts || dv.quota), pts: !!dv.quotaPts } : null, qn: qCount,
+        ptsW, weeks, stage: Math.min(stage, NW), stageMax: NW });
     });
     const active = O.filter(o => o.filed.length || o.assists.length).length;
     const assists = inP.reduce((n, r) => n + r.tagged.filter(t => t.key).length, 0);
@@ -193,7 +211,7 @@
     document.querySelectorAll("#period [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === PERIOD));
     document.querySelectorAll("#tabs [data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === TAB));
     drawHero(dv, S); drawKpis(S);
-    ({ overview: viewOverview, officers: viewOfficers, board: viewBoard, reports: viewReports })[TAB](S);
+    ({ overview: viewOverview, officers: viewOfficers, board: viewBoard, reports: viewReports, activity: viewActivity, discipline: viewDiscipline, gear: viewGear }[TAB] || viewOverview)(S);
   }
   // ---------------- Command Center ----------------
   const GLET = v => v == null ? "—" : GL[Math.max(0, Math.min(4, Math.round(v)))];
@@ -366,7 +384,7 @@
   function drawHero(dv, S) {
     $("hero").innerHTML = `<div class="dc-radar"><i></i><img src="${esc(dv.logoUrl || "img/lspd-seal.png")}" alt="" onerror="this.onerror=null;this.src='img/lspd-seal.png'"></div>
       <div class="dc-htxt"><div class="dc-kick">DIVISION</div><h1>${esc(dv.name)}</h1>${dv.tagline ? `<p>${esc(dv.tagline)}</p>` : ""}
-        <div class="dc-hmeta"><span><b>${DATA.officers.length}</b> officers on roster</span><span><b>${DATA.forms.length}</b> report type${DATA.forms.length === 1 ? "" : "s"} tracked</span>${dv.quota ? `<span>Quota <b>${dv.quota}</b> / ${dv.quotaPer}${dv.quotaAssists ? " (assists count)" : ""}</span>` : ""}${dv.inactiveDays ? `<span>Inactive after <b>${dv.inactiveDays}</b> days</span>` : ""}</div>
+        <div class="dc-hmeta"><span><b>${DATA.officers.length}</b> officers on roster</span><span><b>${DATA.forms.length}</b> report type${DATA.forms.length === 1 ? "" : "s"} tracked</span>${dv.quotaPts ? `<span>Quota <b>${dv.quotaPts} pts</b> / week</span>` : dv.quota ? `<span>Quota <b>${dv.quota}</b> / ${dv.quotaPer}${dv.quotaAssists ? " (assists count)" : ""}</span>` : ""}${dv.inactWeeks !== 0 ? `<span>Removal after <b>${dv.inactWeeks == null ? 3 : dv.inactWeeks}</b> inactive weeks</span>` : dv.inactiveDays ? `<span>Inactive after <b>${dv.inactiveDays}</b> days</span>` : ""}</div>
         ${DATA.rosterError ? `<div class="dc-warnline">⚠ ${esc(DATA.rosterError)}</div>` : ""}</div>
       <div class="dc-hring">${ring(DATA.officers.length ? S.active / DATA.officers.length : 0, S.active + "/" + DATA.officers.length, "ACTIVE")}</div>`;
   }
@@ -382,7 +400,7 @@
       ["Active officers", S.active + "/" + DATA.officers.length, "filed or assisted " + PNAME[PERIOD], "🟢"],
       ["Average grade", S.grade ? S.grade.letter : "—", S.grade ? S.grade.n + " graded" : "nothing graded yet", "🏅"],
       ["Awaiting grade", S.ungraded, "in this period", "⚖️", S.ungraded ? "hot" : ""],
-      DATA.division.quota ? ["Behind quota", S.behind, "this " + DATA.division.quotaPer + " (" + DATA.division.quota + " needed)", "🎯", S.behind ? "hot" : ""] : ["Needs attention", S.O.filter(o => o.status === "bad" || o.status === "never").length, "inactive officers", "🚨"]
+      (DATA.division.quota || DATA.division.quotaPts) ? ["Behind quota", S.behind, "this " + qPer() + " (" + (DATA.division.quotaPts || DATA.division.quota) + (qUnit() ? " pts" : "") + " needed)", "🎯", S.behind ? "hot" : ""] : ["Needs attention", S.O.filter(o => o.status === "bad" || o.status === "never").length, "inactive officers", "🚨"]
     ];
     $("kpis").innerHTML = K.map(([l, v, sub, ic, cls]) => `<div class="dc-kpi ${cls || ""}"><span class="ic">${ic}</span><small>${esc(l)}</small><b data-count="${typeof v === "number" ? v : ""}">${esc(v)}</b><em>${esc(sub)}</em></div>`).join("");
     $("kpis").querySelectorAll("[data-count]").forEach(b => { const n = Number(b.dataset.count); if (!b.dataset.count || !n) return; let i = 0; const st = setInterval(() => { i++; b.textContent = Math.round(n * Math.min(1, i / 16)); if (i >= 16) clearInterval(st); }, 28); });
@@ -464,24 +482,25 @@
   }
   const titleCase = t => String(t || "").toLowerCase().replace(/(^|[\s\-/])([a-z])/g, (m, a, b) => a + b.toUpperCase());
   function quotaBar(o) {
-    if (o.exempt && DATA.division.quota) return `<div class="qb ex"><span>Exempt · ${o.qn} this ${esc(DATA.division.quotaPer)}</span></div>`;
+    if (o.exempt && (DATA.division.quota || DATA.division.quotaPts)) return `<div class="qb ex"><span>Exempt · ${o.qn}${qUnit() ? " pts" : ""} this ${esc(qPer())}</span></div>`;
+    if (o.loa && (DATA.division.quota || DATA.division.quotaPts)) return `<div class="qb ex"><span>On LOA · excused</span></div>`;
     if (!o.quota) return "";
     const f = Math.min(1, o.quota.n / o.quota.need);
-    return `<div class="qb${o.quota.met ? " met" : ""}"><div><i style="width:${f * 100}%"></i></div><span>${o.quota.n}/${o.quota.need}</span></div>`;
+    return `<div class="qb${o.quota.met ? " met" : ""}"><div><i style="width:${f * 100}%"></i></div><span>${o.quota.n}/${o.quota.need}${o.quota.pts ? " pts" : ""}</span></div>`;
   }
 
   function viewOverview(S) {
     const feed = S.inP.slice(0, 20);
     const att = S.O.filter(o => o.status === "bad" || o.status === "never" || o.status === "warn").sort((a, b) => (b.days == null ? 1e9 : b.days) - (a.days == null ? 1e9 : a.days)).slice(0, 8);
     const top = S.O.filter(o => o.score).sort((a, b) => b.score - a.score || b.filed.length - a.filed.length).slice(0, 5);
-    const q = DATA.division.quota ? S.O.filter(o => o.quota).sort((a, b) => (a.quota.n / a.quota.need) - (b.quota.n / b.quota.need)).slice(0, 8) : [];
+    const q = (DATA.division.quota || DATA.division.quotaPts) ? S.O.filter(o => o.quota).sort((a, b) => (a.quota.n / a.quota.need) - (b.quota.n / b.quota.need)).slice(0, 8) : [];
     $("view").innerHTML = `<div class="dc-ov">
       <section class="dc-panel"><header><h2><i class="pulse"></i>Live activity</h2><button class="dc-link" data-tab="reports">All reports →</button></header>
         <div class="feed">${feed.length ? cards(feed) : `<div class="dc-empty">No reports ${esc(PNAME[PERIOD])} yet.</div>`}</div></section>
       <div class="dc-side">
         <section class="dc-panel alert"><header><h2>🚨 Needs attention</h2><button class="dc-link" data-tab="officers">Officers →</button></header>
           ${att.length ? att.map(o => `<button type="button" class="arow" data-off="${esc(o.key)}"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.callsign ? o.callsign + " · " : "")}${esc(o.name)}</b>${statusPill(o)}</span><em>${o.days == null ? "never" : o.days + "d"}</em></button>`).join("") : '<div class="dc-empty sm">Everyone is active. 👏</div>'}</section>
-        ${q.length ? `<section class="dc-panel"><header><h2>🎯 Quota · this ${esc(DATA.division.quotaPer)}</h2></header>${q.map(o => `<button type="button" class="qrow" data-off="${esc(o.key)}"><span>${esc(o.callsign ? o.callsign + " · " : "")}${esc(o.name)}</span>${quotaBar(o)}</button>`).join("")}</section>` : ""}
+        ${q.length ? `<section class="dc-panel"><header><h2>🎯 Quota · this ${esc(qPer())}</h2></header>${q.map(o => `<button type="button" class="qrow" data-off="${esc(o.key)}"><span>${esc(o.callsign ? o.callsign + " · " : "")}${esc(o.name)}</span>${quotaBar(o)}</button>`).join("")}</section>` : ""}
         <section class="dc-panel"><header><h2>🏆 Top performers</h2><button class="dc-link" data-tab="board">Leaderboard →</button></header>
           ${top.length ? top.map((o, i) => `<button type="button" class="trow" data-off="${esc(o.key)}"><em class="rk r${i + 1}">${i + 1}</em><span><b>${esc(o.name)}</b><small>${o.filed.length} filed · ${o.assists.length} assist${o.assists.length === 1 ? "" : "s"}</small></span><b class="pts">${fmtPts(o.score)}</b></button>`).join("") : `<div class="dc-empty sm">No activity ${esc(PNAME[PERIOD])}.</div>`}</section>
       </div></div>`;
@@ -555,7 +574,7 @@
     $("dpanel").innerHTML = `<button class="dc-x" data-close aria-label="Close">✕</button>
       <div class="pf-h"><i class="av xl s-${o.status}">${esc(initials(o.name))}</i><div><div class="dc-kick">${esc([o.callsign, o.alt].filter(Boolean).join(" · ") || "OFFICER")}</div><h2>${esc(o.name)}</h2>${statusPill(o)}</div></div>
       <div class="pf-k"><div><small>Filed · ${esc(PNAME[PERIOD])}</small><b>${o.filed.length}</b></div><div><small>Assists · ${esc(PNAME[PERIOD])}</small><b>${o.assists.length}</b></div><div><small>Avg grade (all)</small><b>${o.gradeAll ? `<em class="gb ${GCLS(o.gradeAll.letter)}">${o.gradeAll.letter}</em>` : "—"}</b></div><div><small>Last active</small><b class="sm">${o.last ? esc(ago(o.last)) : "never"}</b></div></div>
-      ${o.quota ? `<div class="pf-q"><small>Quota this ${esc(DATA.division.quotaPer)}</small>${quotaBar(o)}</div>` : ""}
+      ${o.quota ? `<div class="pf-q"><small>Quota this ${esc(qPer())}</small>${quotaBar(o)}</div>` : ""}
       <h3>Last 8 weeks <span class="lg"><i class="lf"></i>filed <i class="ls"></i>assists</span></h3>${chart}
       <h3>Record <small>${o.filedAll.length} filed · ${o.assistAll.length} assists</small></h3>
       <div class="tl">${items.length ? items.slice(0, 120).map(({ r, kind }) => `<div class="ti ${kind}"><div class="ti-dot"></div><div class="ti-b">
@@ -635,6 +654,150 @@
     return list;
   }
   $("modal").addEventListener("mousedown", e => { if (e.target === $("modal")) closeModal(); });
+
+  // ================= Activity & Quota · Discipline · Fleet & Uniforms =================
+  const XD = {}, XG = {}, XBUSY = {};   // per division: discipline record, gear
+  async function xLoad(kind, force) {
+    const id = DATA.division.id, store2 = kind === "disc" ? XD : XG, k = kind + id;
+    if (!force && store2[id]) return store2[id]; if (XBUSY[k]) return XBUSY[k];
+    XBUSY[k] = api(kind === "disc" ? "divDisc" : "divGear", { division: id }).then(r => { store2[id] = r; if (DATA.division.id === id && (TAB === "activity" || TAB === "discipline" || TAB === "gear")) drawAll(); return r; })
+      .catch(e => { store2[id] = { ok: false, error: e.message }; if (DATA.division.id === id) drawAll(); }).finally(() => { delete XBUSY[k]; });
+    return XBUSY[k];
+  }
+  const fmtD = t => t ? new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+  const offKey = o => o.id || o.callsign || o.name;
+  function discFor(D, o) { return ((D && D.entries) || []).filter(x => (o.id && x.discord === o.id) || (!o.id && x.name === o.name)); }
+  const livePts = (D, o) => discFor(D, o).filter(x => x.live).reduce((n, x) => n + x.pts, 0);
+  function ladderOf(D, pts) { const L = (D && D.ladder) || [{ min: 0, label: "Good standing" }]; let cur = L[0]; L.forEach(l => { if (pts >= l.min) cur = l; }); return cur; }
+  const STG = ["", "Week 1 · warning", "Week 2 · final notice", "Week 3 · removal"];
+  function stageLabel(o) { if (!o.stage) return ""; return o.stage >= o.stageMax ? "Week " + o.stage + " · removal due" : o.stage === o.stageMax - 1 && o.stageMax > 1 ? "Week " + o.stage + " · final notice" : "Week " + o.stage + " · warning"; }
+  function stageKind(o) { return !o.stage ? "" : o.stage >= o.stageMax ? "w3" : o.stage === o.stageMax - 1 && o.stageMax > 1 ? "w2" : "w1"; }
+
+  function viewActivity(S) {
+    const dv = DATA.division, D = XD[dv.id]; if (!D) xLoad("disc");
+    const can = !!(D && D.can), need = dv.quotaPts || 0, W0 = weekStart0();
+    const O = S.O.slice().sort((a, b) => (b.stage - a.stage) || ((a.quota ? a.quota.n / a.quota.need : 9) - (b.quota ? b.quota.n / b.quota.need : 9)) || a.idx - b.idx);
+    const met = S.O.filter(o => o.quota && o.quota.met).length, withQ = S.O.filter(o => o.quota).length;
+    const c1 = S.O.filter(o => stageKind(o) === "w1").length, c2 = S.O.filter(o => stageKind(o) === "w2").length, c3 = S.O.filter(o => stageKind(o) === "w3").length;
+    const since = o => W0 - o.stage * 7 * DAY;   // when this run of inactivity started
+    const sent = (o, type) => discFor(D, o).find(x => x.type === type && x.at >= since(o) - DAY && x.status === "active");
+    const row = o => {
+      const k = stageKind(o), wk = o.weeks.slice(0, 3);
+      let act = "";
+      if (can && k === "w1") { const s1 = sent(o, "inact1"); act = s1 ? `<span class="ax-done">✓ Warning sent ${esc(fmtD(s1.at))}</span>` : `<button class="dc-btn xs warn" data-xinact="inact1" data-xo="${esc(o.key)}">Send warning</button>`; }
+      if (can && k === "w2") { const s2 = sent(o, "inact2"); act = s2 ? `<span class="ax-done">✓ Final notice ${esc(fmtD(s2.at))}</span>` : `<button class="dc-btn xs warn2" data-xinact="inact2" data-xo="${esc(o.key)}">Final notice</button>`; }
+      if (can && k === "w3") act = `<button class="dc-btn xs danger" data-xremove="${esc(o.key)}">Remove from division…</button>`;
+      const pill = o.loa ? `<span class="ax-pill loa">On LOA · excused</span>` : o.exempt ? `<span class="ax-pill ex">${esc(titleCase(o.exempt))} · exempt</span>` : k ? `<span class="ax-pill ${k}">${esc(stageLabel(o))}</span>` : o.quota && o.quota.met ? `<span class="ax-pill ok">Met quota</span>` : o.quota ? `<span class="ax-pill low">Behind quota</span>` : `<span class="ax-pill ok">Active</span>`;
+      return `<div class="ax-r ${k}"><button type="button" class="ax-who" data-off="${esc(o.key)}"><b>${esc(o.name)}</b><small>${esc(o.callsign || "")}${o.rank ? " · " + esc(o.rank) : ""}</small></button>
+        <div class="ax-q">${need ? quotaBar(o) || '<span class="ax-dim">—</span>' : `<span class="ax-num">${o.ptsW} pts</span>`}</div>
+        <div class="ax-wk">${wk.map((n, i) => `<span class="${n ? "on" : "off"}" title="${i + 1} week${i ? "s" : ""} ago: ${n} pts">${n}</span>`).join("")}</div>
+        <span class="ax-last">${o.last ? esc(ago(o.last)) : "never"}</span>${pill}<div class="ax-act">${act || '<span class="ax-dim">—</span>'}</div></div>`;
+    };
+    $("view").innerHTML = `<section class="dc-panel ax">
+      <header><h2>🎯 Activity &amp; Quota</h2><small class="dc-note">${need ? `Quota <b>${need} pts</b> a week (report 10 · assist 4 · graded A +5 / B +3 / C +1). ` : "No points quota set (Admin → Division Command). "}Week resets ${esc(new Date(W0 + 7 * DAY).toLocaleString(undefined, { weekday: "long", hour: "numeric" }))}. ${dv.inactWeeks === 0 ? "" : `0 points for ${dv.inactWeeks == null ? 3 : dv.inactWeeks} weeks in a row → removal (LOA weeks don't count).`}</small></header>
+      <div class="ax-k"><div><small>Met quota</small><b class="ok">${met}<i>/${withQ}</i></b></div><div><small>${esc(STG[1].toUpperCase())}</small><b class="w1">${c1}</b></div><div><small>${esc(STG[2].toUpperCase())}</small><b class="w2">${c2}</b></div><div class="${c3 ? "hot" : ""}"><small>REMOVAL DUE</small><b class="w3">${c3}</b></div></div>
+      ${!can && D && D.ok ? `<p class="ax-note">Only this division's leaders and assistants can send warnings or remove officers.</p>` : ""}
+      ${D && D.ok === false ? `<p class="ax-note bad">${esc(D.error)}</p>` : ""}
+      <div class="ax-tbl"><div class="ax-r ax-h"><span>OFFICER</span><span>THIS WEEK</span><span title="Points in each of the last 3 weeks (newest first)">LAST 3 WEEKS</span><span>LAST ACTIVE</span><span>STATUS</span><span>ACTION</span></div>${O.map(row).join("")}</div>
+    </section>`;
+  }
+
+  function viewDiscipline(S) {
+    const dv = DATA.division, D = XD[dv.id]; if (!D) xLoad("disc");
+    if (!D) { $("view").innerHTML = '<div class="dc-empty">Loading the discipline record…</div>'; return; }
+    if (D.ok === false) { $("view").innerHTML = `<div class="dc-empty">${esc(D.error)}</div>`; return; }
+    const pts = S.O.map(o => ({ o, p: livePts(D, o), n: discFor(D, o).length })).filter(x => x.n).sort((a, b) => b.p - a.p);
+    const T = D.types.filter(t => t.id !== "removal");
+    const form = D.can ? `<section class="dc-panel dx-form"><header><h2>⚖️ Issue a discipline</h2></header>
+      <label class="dx-f"><span>Officer</span><select id="dxOff"><option value="">— pick an officer —</option>${S.O.map(o => `<option value="${esc(o.key)}">${esc((o.callsign ? o.callsign + " | " : "") + o.name)}</option>`).join("")}</select></label>
+      <div class="dx-f"><span>Type</span><div class="dx-types">${T.map((t, i) => `<button type="button" class="dx-t${i === 1 ? " on" : ""}" data-dxt="${esc(t.id)}" data-pts="${t.pts}" data-days="${t.days}"><b>${esc(t.label)}</b><small>${t.pts ? t.pts + " pt" + (t.pts === 1 ? "" : "s") + " · " + t.days + " days" : "no points"}</small></button>`).join("")}</div></div>
+      <label class="dx-f"><span>Reason</span><textarea id="dxWhy" rows="4" placeholder="What happened, when, and the report number if there is one."></textarea></label>
+      <div class="dx-two"><label class="dx-f"><span>Points</span><input id="dxPts" type="number" min="0" max="20" value="${T[1] ? T[1].pts : 1}"></label><label class="dx-f"><span>Expires after (days)</span><input id="dxDays" type="number" min="0" max="365" value="${T[1] ? T[1].days : 30}"></label></div>
+      ${D.post ? `<label class="dx-chk"><input type="checkbox" id="dxPost" checked> Post it to the division's Discord channel (the officer is tagged)</label>` : `<p class="ax-note">Not posted to Discord: no channel picked for this division (Admin → Division Command).</p>`}
+      <button class="dc-btn ac big" id="dxGo">Issue</button></section>` : `<section class="dc-panel"><p class="ax-note">Only this division's leaders and assistants can issue discipline. You can still see the record.</p></section>`;
+    const ladder = `<div class="dx-ladder">${D.ladder.map((l, i) => `<div class="l${i}"><b>${l.min}${D.ladder[i + 1] ? "–" + (D.ladder[i + 1].min - 1) : "+"} pts</b><small>${esc(l.label)}</small></div>`).join("")}</div>`;
+    const list = D.entries.length ? D.entries.slice(0, 200).map(x => `<div class="dx-e${x.live ? "" : " old"}"><span class="dx-d">${esc(fmtD(x.at))}</span>
+        <div><span class="dx-ty t-${esc(x.type)}">${esc(x.label)}</span><b>${esc((x.callsign ? x.callsign + " | " : "") + x.name)}</b><p>${esc(x.reason)}</p><small>by ${esc(x.by || "—")}${x.status !== "active" ? " · " + esc(x.status) : x.expires ? (x.live ? " · expires " : " · expired ") + esc(fmtD(x.expires)) : ""}</small></div>
+        <span class="dx-p">${x.pts ? "+" + x.pts : ""}</span>${D.can && x.live && x.status === "active" ? `<button class="dc-link" data-dxrev="${esc(x.id)}">Revoke</button>` : "<span></span>"}</div>`).join("") : '<div class="dc-empty">Nothing on record yet.</div>';
+    $("view").innerHTML = `<div class="dx-grid">${form}
+      <div class="dx-side"><section class="dc-panel"><header><h2>📊 Active points</h2><small class="dc-note">Points count until they expire.</small></header>${ladder}
+        ${pts.length ? pts.map(x => { const l = ladderOf(D, x.p); return `<button type="button" class="dx-o" data-off="${esc(x.o.key)}"><span><b>${esc(x.o.name)}</b><small>${esc(x.o.callsign || "")}</small></span><em>${esc(l.label)}</em><i>${x.p}</i></button>`; }).join("") : '<p class="ax-note">Everyone is in good standing.</p>'}</section>
+      <section class="dc-panel"><header><h2>🗂 Record</h2></header><div class="dx-list">${list}</div></section></div></div>`;
+  }
+
+  function gearCard(x, can) {
+    const ph = x.photo ? `<img src="${esc(x.photo)}" alt="" loading="lazy">` : `<span>${x.kind === "vehicle" ? "VEHICLE" : "OUTFIT"} PHOTO</span>`;
+    const rows = x.kind === "vehicle" ? [["Rank", x.rank], ["Spawn code", x.code], ["Livery", x.livery], ["Extras", x.extras], ["Use", x.use]] : [["Duplicate code", x.code], ["When", x.when]].concat((x.items || []).map(i => [i.k, i.v]));
+    return `<article class="gx-c ${x.kind}"><div class="gx-ph">${ph}</div><div class="gx-b"><div class="gx-t"><b>${esc(x.name)}</b>${can ? `<button class="dc-link" data-gxedit="${esc(x.id)}">Edit</button>` : ""}</div>
+      <dl>${rows.filter(r => r[1]).map(r => `<dt>${esc(r[0])}</dt><dd>${/code/i.test(r[0]) ? `<code>${esc(r[1])}</code>` : esc(r[1])}</dd>`).join("")}</dl>${x.note ? `<p>${esc(x.note)}</p>` : ""}</div></article>`;
+  }
+  function viewGear() {
+    const dv = DATA.division, G = XG[dv.id]; if (!G) xLoad("gear");
+    if (!G) { $("view").innerHTML = '<div class="dc-empty">Loading…</div>'; return; }
+    if (G.ok === false) { $("view").innerHTML = `<div class="dc-empty">${esc(G.error)}</div>`; return; }
+    const V = G.items.filter(x => x.kind === "vehicle"), U = G.items.filter(x => x.kind === "uniform");
+    $("view").innerHTML = `<section class="dc-panel"><header><h2>🚓 ${esc(dv.name)} fleet &amp; uniforms</h2><small class="dc-note">Officers see these on the MDT's Fleet and Uniform pages, in a ${esc(dv.name)} section.</small>
+        ${G.can ? `<span style="margin-left:auto;display:flex;gap:8px"><button class="dc-btn sm" data-gxnew="uniform">+ Add uniform</button><button class="dc-btn sm ac" data-gxnew="vehicle">+ Add vehicle</button></span>` : ""}</header></section>
+      <h3 class="gx-h">DIVISION FLEET <small>${V.length}</small></h3><div class="gx-grid">${V.map(x => gearCard(x, G.can)).join("") || '<div class="dc-empty">No division vehicles yet.</div>'}</div>
+      <h3 class="gx-h">DIVISION UNIFORMS <small>${U.length}</small></h3><div class="gx-grid u">${U.map(x => gearCard(x, G.can)).join("") || '<div class="dc-empty">No division uniforms yet.</div>'}</div>`;
+  }
+  function gearModal(kind, item) {
+    const x = Object.assign({ kind: kind, name: "", photo: "", note: "", items: [] }, item || {}), V = kind === "vehicle";
+    const f = (id, label, v, ph) => `<label class="dx-f"><span>${esc(label)}</span><input id="${id}" value="${esc(v || "")}" placeholder="${esc(ph || "")}"></label>`;
+    $("mcard").className = "dc-mcard gx-m";
+    $("mcard").innerHTML = `<header class="gm-h"><h2>${item ? "Edit" : "Add"} ${V ? "vehicle" : "uniform"}</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
+      <div class="gx-form">${f("gxName", "Name", x.name, V ? "TEU Interceptor" : "TEU Patrol")}${V ? f("gxRank", "Rank required", x.rank, "PO III+") + f("gxCode", "Spawn code", x.code) + f("gxLiv", "Livery", x.livery) + f("gxExt", "Extras", x.extras, "1, 3, 7") + f("gxUse", "Used for", x.use, "Traffic stops") :
+        f("gxCode", "Duplicate code", x.code) + f("gxWhen", "When it's worn", x.when, "Standard shift uniform") + `<label class="dx-f"><span>Items (one per line: Part: item)</span><textarea id="gxItems" rows="6" placeholder="Top: 123 / 2&#10;Pants: 45 / 0">${esc((x.items || []).map(i => i.k + ": " + i.v).join("\n"))}</textarea></label>`}
+        ${f("gxPhoto", "Photo link (https://…, optional)", x.photo)}${f("gxNote", "Note (optional)", x.note)}</div>
+      <footer class="gx-ft">${item ? `<button class="dc-btn sm danger" data-gxdel="${esc(x.id)}">Delete</button>` : "<span></span>"}<button class="dc-btn ac" id="gxSave">Save</button></footer>`;
+    $("modal").hidden = false;
+    $("gxSave").onclick = async () => {
+      const v = id => ($(id) ? $(id).value.trim() : "");
+      const it = { id: x.id || "", kind: kind, name: v("gxName"), photo: v("gxPhoto"), note: v("gxNote"), code: v("gxCode") };
+      if (V) Object.assign(it, { rank: v("gxRank"), livery: v("gxLiv"), extras: v("gxExt"), use: v("gxUse") });
+      else Object.assign(it, { when: v("gxWhen"), items: v("gxItems").split("\n").map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf(":"); return i > 0 ? { k: l.slice(0, i).trim(), v: l.slice(i + 1).trim() } : { k: "", v: l }; }) });
+      $("gxSave").disabled = true;
+      try { await api("divGearSave", { division: DATA.division.id, item: it }); closeModal(); toast("Saved.", "ok"); xLoad("gear", true); } catch (e) { toast(e.message, "bad"); $("gxSave").disabled = false; }
+    };
+  }
+  function removeModal(o) {
+    $("mcard").className = "dc-mcard gx-m";
+    const D = XD[DATA.division.id] || {};
+    $("mcard").innerHTML = `<header class="gm-h"><h2>Remove ${esc(o.name)} from ${esc(DATA.division.name)}?</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
+      <div class="gx-form"><p class="ax-note">${esc(o.callsign || "")} has had <b>0 points for ${o.stage} weeks in a row</b>. Their name and Discord ID are cleared from the <b>${esc(DATA.division.name)}</b> roster tab and a removal is added to their discipline record.</p>
+      <label class="dx-f"><span>Reason</span><textarea id="rmWhy" rows="3">Inactive in ${esc(DATA.division.name)} for ${o.stage} weeks in a row.</textarea></label>
+      ${D.post ? `<label class="dx-chk"><input type="checkbox" id="rmPost" checked> Post it to the division's Discord channel</label>` : ""}</div>
+      <footer class="gx-ft"><button class="dc-btn sm" data-gxclose>Cancel</button><button class="dc-btn danger" id="rmGo">Remove from division</button></footer>`;
+    $("modal").hidden = false;
+    $("rmGo").onclick = async () => {
+      $("rmGo").disabled = true; $("rmGo").textContent = "Removing…";
+      try { const r = await api("divRemove", { division: DATA.division.id, discord: o.id, name: o.name, callsign: o.callsign, reason: $("rmWhy").value.trim(), post: !!($("rmPost") && $("rmPost").checked) });
+        closeModal(); toast(o.name + " removed (roster row " + r.row + " cleared).", "ok"); xLoad("disc", true); load(true, true); }
+      catch (e) { toast(e.message, "bad"); $("rmGo").disabled = false; $("rmGo").textContent = "Remove from division"; }
+    };
+  }
+  async function issue(o, type, reason, pts, days, post) {
+    return api("divDiscIssue", { division: DATA.division.id, discord: o.id, name: o.name, callsign: o.callsign, type: type, reason: reason, pts: pts, days: days, post: post });
+  }
+  document.addEventListener("click", async e => {
+    const t = e.target; if (!DATA || !DATA.division) return;
+    const findO = k => stats().O.find(o => o.key === k);
+    if (t.closest("[data-gxclose]")) { closeModal(); return; }
+    const xi = t.closest("[data-xinact]"); if (xi) { const o = findO(xi.dataset.xo); if (!o) return; const D = XD[DATA.division.id] || {};
+      xi.disabled = true; xi.textContent = "Sending…";
+      try { const r = await issue(o, xi.dataset.xinact, "", null, null, !!D.post); toast((xi.dataset.xinact === "inact1" ? "Warning" : "Final notice") + " logged for " + o.name + (r.posted ? " and posted to Discord" : "") + ".", "ok"); await xLoad("disc", true); }
+      catch (err) { toast(err.message, "bad"); xi.disabled = false; } return; }
+    const xr = t.closest("[data-xremove]"); if (xr) { const o = findO(xr.dataset.xremove); if (o) removeModal(o); return; }
+    const dt = t.closest("[data-dxt]"); if (dt) { document.querySelectorAll("[data-dxt]").forEach(b => b.classList.toggle("on", b === dt)); if ($("dxPts")) $("dxPts").value = dt.dataset.pts; if ($("dxDays")) $("dxDays").value = dt.dataset.days; return; }
+    if (t.closest("#dxGo")) { const o = findO($("dxOff").value), ty = document.querySelector("[data-dxt].on"); if (!o) return toast("Pick the officer.", "bad"); if (!ty) return toast("Pick a type.", "bad");
+      const b = $("dxGo"); b.disabled = true; b.textContent = "Issuing…";
+      try { const r = await issue(o, ty.dataset.dxt, $("dxWhy").value.trim(), $("dxPts").value, $("dxDays").value, !!($("dxPost") && $("dxPost").checked)); toast("Logged for " + o.name + (r.posted ? " and posted to Discord" : "") + ".", "ok"); await xLoad("disc", true); }
+      catch (err) { toast(err.message, "bad"); b.disabled = false; b.textContent = "Issue"; } return; }
+    const rv = t.closest("[data-dxrev]"); if (rv) { if (!confirm("Revoke this entry? Its points stop counting.")) return; try { await api("divDiscRevoke", { division: DATA.division.id, id: rv.dataset.dxrev }); toast("Revoked.", "ok"); await xLoad("disc", true); } catch (err) { toast(err.message, "bad"); } return; }
+    const gn = t.closest("[data-gxnew]"); if (gn) { gearModal(gn.dataset.gxnew); return; }
+    const ge = t.closest("[data-gxedit]"); if (ge) { const G = XG[DATA.division.id], it = G && G.items.find(x => x.id === ge.dataset.gxedit); if (it) gearModal(it.kind, it); return; }
+    const gd = t.closest("[data-gxdel]"); if (gd) { if (!confirm("Delete this for everyone?")) return; try { await api("divGearDel", { division: DATA.division.id, id: gd.dataset.gxdel }); closeModal(); toast("Deleted.", "ok"); xLoad("gear", true); } catch (err) { toast(err.message, "bad"); } return; }
+  });
 
   // ---------------- clicks ----------------
   document.addEventListener("click", e => {

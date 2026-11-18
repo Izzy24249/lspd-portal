@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 144;
+const BACKEND_VERSION = 145;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2007,7 +2007,7 @@ function cidHandle_(d) {
 // =====================================================================
 const ACT_SHEET_ = "Division Activity";
 const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source", "Report", "Data"];
-const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divOverview: 1, hqPost: 1, hqAck: 1, hqReply: 1, hqDelete: 1, hqGoal: 1, divGrade: 1, divReport: 1, changePassword: 1 };
+const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divOverview: 1, hqPost: 1, hqAck: 1, hqReply: 1, hqDelete: 1, hqGoal: 1, divGrade: 1, divReport: 1, changePassword: 1, divDisc: 1, divDiscIssue: 1, divDiscRevoke: 1, divRemove: 1, divGear: 1, divGearSave: 1, divGearDel: 1 };
 const GRADES_ = ["A", "B", "C", "D", "F", "R"];   // R = returned to the officer for correction
 function actSheet_() {
   const ss = ss_();
@@ -2096,7 +2096,9 @@ function cleanDivisions_(list, forms) {
       warnDays: n(d.warnDays), inactiveDays: n(d.inactiveDays), pingTagged: !!d.pingTagged,
       exempt: clip_(str_(d.exempt), 300),
       unitCol: colIndex_(d.unitCol) >= 0 ? str_(d.unitCol).toUpperCase() : "", positionCol: colIndex_(d.positionCol) >= 0 ? str_(d.positionCol).toUpperCase() : "",
-      groupBy: ["position", "headings", "none"].indexOf(d.groupBy) !== -1 ? d.groupBy : "auto" };
+      groupBy: ["position", "headings", "none"].indexOf(d.groupBy) !== -1 ? d.groupBy : "auto",
+      quotaPts: Math.max(0, Math.min(500, parseInt(d.quotaPts, 10) || 0)), inactWeeks: d.inactWeeks == null || d.inactWeeks === "" ? 3 : Math.max(0, Math.min(8, parseInt(d.inactWeeks, 10) || 0)),
+      discWebhookId: clip_(str_(d.discWebhookId), 60), staff: (Array.isArray(d.staff) ? d.staff : []).map(x => str_(x).replace(/\D/g, "")).filter(x => /^\d{15,21}$/.test(x)).slice(0, 12) };
   });
 }
 // "Command, High Command, L-101" -> does any of these words appear in the officer's roster section, rank, callsign or name?
@@ -2105,6 +2107,136 @@ function exemptHit_(rule, fields) {
   const hay = fields.map(x => str_(x).toLowerCase());
   const hit = words.find(w => hay.some(h => h && (callKey_(w) && callKey_(h) ? callKey_(w) === callKey_(h) : new RegExp("(^|[^a-z])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z]|$)").test(h))));
   return hit ? fields.find(x => str_(x).toLowerCase().indexOf(hit) !== -1) || hit : "";
+}
+// =====================================================================
+// Division Command extras: discipline record, inactivity actions, removal from the division, division fleet & uniforms.
+// Quota and inactivity are worked out on the page from the reports it already has (division race points).
+// Leaders & assistants (dv.staff: Discord IDs picked in Admin → Division Command; none picked = the first two on the
+// division roster) and admins can discipline, remove and edit the division's fleet and uniforms.
+// =====================================================================
+const DISC_SHEET_ = "Division Discipline", DISC_HEAD_ = ["ID", "Division", "Discord ID", "Callsign", "Officer", "Type", "Points", "Reason", "By", "At", "Expires", "Status"];
+const DISC_TYPES_ = [
+  { id: "verbal", label: "Verbal warning", pts: 1, days: 30 },
+  { id: "written", label: "Written warning", pts: 2, days: 45 },
+  { id: "strike", label: "Strike", pts: 3, days: 60 },
+  { id: "suspension", label: "Suspension", pts: 4, days: 60 },
+  { id: "inact1", label: "Inactivity · week 1 warning", pts: 1, days: 30 },
+  { id: "inact2", label: "Inactivity · week 2 final notice", pts: 2, days: 30 },
+  { id: "removal", label: "Removed from division", pts: 0, days: 0 },
+  { id: "note", label: "Note (no points)", pts: 0, days: 0 }
+];
+const DISC_LADDER_ = [{ min: 0, label: "Good standing" }, { min: 3, label: "Leader meeting" }, { min: 6, label: "Suspension" }, { min: 8, label: "Removal review" }];
+const GEAR_SHEET_ = "Division Gear", GEAR_HEAD_ = ["ID", "Division", "Kind", "Data", "By", "At"];
+// who's on leave: Personnel roster "Activity" column says LOA, or the Onboarding roster's LOA box is ticked
+function loaIds_() {
+  const c = CacheService.getScriptCache(), hit = c.get("loa_ids"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const out = {}, book = rosterBook_();
+  try { const sh = book.getSheetByName(PERSONNEL_TAB_); if (sh && sh.getLastRow() > 1) sh.getRange(1, 1, sh.getLastRow(), Math.min(14, sh.getLastColumn())).getDisplayValues().forEach(r => {
+      const id = str_(r[5]).replace(/\D/g, ""); if (/^\d{15,21}$/.test(id) && /^\s*(loa|leave of absence|on leave)\s*$/i.test(str_(r[10]))) out[id] = 1; }); } catch (e) {}
+  try { const sh = book.getSheetByName(ONBOARD_TAB_); if (sh && sh.getLastRow() > 1) { const v = sh.getRange(1, 1, sh.getLastRow(), 8).getValues();
+      v.forEach(r => { const id = str_(r[3]).replace(/\D/g, ""); if (/^\d{15,21}$/.test(id) && (r[7] === true || /^(✔|✓|yes|true|x)$/i.test(str_(r[7]).trim()))) out[id] = 1; }); } } catch (e) {}
+  try { c.put("loa_ids", JSON.stringify(out), 600); } catch (e) {}
+  return out;
+}
+// leaders & assistants of a division (Discord IDs)
+function divStaff_(dv, officers) {
+  const picked = (dv.staff || []).map(x => str_(x).replace(/\D/g, "")).filter(Boolean);
+  if (picked.length) return picked;
+  if (!officers) { try { officers = (getRosterTab_(dv.rosterTabId, false, [], false, false).people || []).filter(p => !rosterVacant_(p)); } catch (e) { officers = []; } }
+  return officers.filter(o => o.id).slice(0, 2).map(o => o.id);
+}
+// may this person discipline / remove / edit gear in this division?
+function divCanAct_(dv, who) {
+  if (!who) return false;
+  if (["owner", "admin", "command", "leaderacct"].indexOf(who.role) !== -1) return true;   // leaderacct: a Division Command leader login
+  return !!who.id && divStaff_(dv).indexOf(who.id) !== -1;
+}
+function discAll_(divId) {
+  const sh = ss_().getSheetByName(DISC_SHEET_); if (!sh || sh.getLastRow() < 2) return [];
+  const now = Date.now();
+  return sh.getRange(2, 1, sh.getLastRow() - 1, DISC_HEAD_.length).getValues().map((r, i) => {
+    const at = isDate_(r[9]) ? r[9].getTime() : 0, exp = isDate_(r[10]) ? r[10].getTime() : 0, st = str_(r[11]) || "active";
+    return { row: i + 2, id: str_(r[0]), div: str_(r[1]), discord: str_(r[2]).replace(/^'/, ""), callsign: str_(r[3]), name: str_(r[4]), type: str_(r[5]), pts: Number(r[6]) || 0, reason: str_(r[7]),
+      by: str_(r[8]), at: at, expires: exp, status: st, live: st === "active" && (!exp || exp > now) };
+  }).filter(x => !divId || x.div === divId);
+}
+function discPub_(x) { const t = DISC_TYPES_.find(y => y.id === x.type); return { id: x.id, discord: x.discord, callsign: x.callsign, name: x.name, type: x.type, label: t ? t.label : x.type, pts: x.pts, reason: x.reason, by: x.by, at: x.at, expires: x.expires, status: x.status, live: x.live }; }
+// Division Command actions that come from the page: discipline, removal, fleet & uniforms
+function divExtra_(d, who) {
+  const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [], dv = divs.find(x => x.id === str_(d.division));
+  if (!dv) return { ok: false, error: "That division wasn't found." };
+  const a = d.action, can = divCanAct_(dv, who);
+  if (a === "divDisc") return { ok: true, can: can, types: DISC_TYPES_, ladder: DISC_LADDER_, staff: divStaff_(dv), entries: discAll_(dv.id).sort((x, y) => y.at - x.at).slice(0, 600).map(discPub_),
+    post: !!(dv.discWebhookId && webhookById_(dv.discWebhookId)) };
+  if (a === "divGear") return { ok: true, can: can, items: gearAll_(dv.id) };
+  if (!can) return { ok: false, error: "Only this division's leaders and assistants (or command) can do that." };
+  if (a === "divDiscIssue") {
+    const t = DISC_TYPES_.find(x => x.id === str_(d.type)); if (!t) return { ok: false, error: "Pick a type." };
+    const id = str_(d.discord).replace(/\D/g, ""), name = clip_(str_(d.name).trim(), 60), cs = clip_(str_(d.callsign).trim(), 16), reason = clip_(str_(d.reason).trim(), 1500);
+    if (!name && !id) return { ok: false, error: "Pick the officer." };
+    if (!reason && t.id !== "inact1" && t.id !== "inact2") return { ok: false, error: "Write the reason." };
+    const pts = d.pts != null && d.pts !== "" ? Math.max(0, Math.min(20, Number(d.pts) || 0)) : t.pts, days = d.days != null && d.days !== "" ? Math.max(0, Math.min(365, Number(d.days) || 0)) : t.days;
+    const now = new Date(), rec = { id: "D" + now.getTime().toString(36) + Math.floor(Math.random() * 1296).toString(36), at: now };
+    withLock_(() => { const sh = dpSheet_(DISC_SHEET_, DISC_HEAD_);
+      sh.appendRow([rec.id, dv.id, id ? "'" + id : "", cellSafe_(cs), cellSafe_(name), t.id, pts, cellSafe_(reason || t.label), cellSafe_(clip_(who.name || "", 60)), now, days ? new Date(now.getTime() + days * 864e5) : "", "active"]); return { ok: true }; });
+    let posted = false;
+    if (d.post && dv.discWebhookId) { const wh = webhookById_(dv.discWebhookId);
+      if (wh) { const live = discAll_(dv.id).filter(x => x.live && x.discord === id && id).reduce((n, x) => n + x.pts, 0);
+        const e = { title: t.label + " · " + (cs ? cs + " | " : "") + name, color: t.id === "removal" ? 0xef4444 : pts >= 3 ? 0xf97316 : 0xfbbf24,
+          description: clip_(reason || t.label, 1800), fields: [{ name: "Points", value: pts + (days ? " (expires in " + days + " days)" : ""), inline: true }, { name: "Active points", value: String(live), inline: true }, { name: "Issued by", value: clip_(who.name || "—", 80), inline: true }],
+          footer: { text: dv.name + " · Division Command" }, timestamp: now.toISOString() };
+        const payload = { content: id ? "<@" + id + ">" : "", embeds: [e], allowed_mentions: { users: id ? [id] : [] } }; if (wh.kind === "forum") payload.thread_name = clip_(t.label + " · " + name, 90);
+        try { const r = discordPost_(wh.url, payload); posted = !!(r && r.ok !== false); } catch (e2) {} } }
+    return { ok: true, id: rec.id, posted: posted };
+  }
+  if (a === "divDiscRevoke") return withLock_(() => { const x = discAll_(dv.id).find(y => y.id === str_(d.id)); if (!x) return { ok: false, error: "Not found." };
+    ss_().getSheetByName(DISC_SHEET_).getRange(x.row, 12).setValue("revoked by " + clip_(who.name || "", 50)); return { ok: true }; });
+  if (a === "divRemove") {   // take them off the division's roster tab (their name and Discord ID cells), and log it
+    const id = str_(d.discord).replace(/\D/g, ""), name = str_(d.name).trim(), cs = str_(d.callsign).trim();
+    if (!id && !name) return { ok: false, error: "Pick the officer." };
+    if (dv.rosterTabId == null) return { ok: false, error: "This division has no roster tab picked (Admin → Division Command)." };
+    const res = withLock_(() => {
+      const sh = rosterBook_().getSheets().find(x => x.getSheetId() === Number(dv.rosterTabId)); if (!sh) return { ok: false, error: "The division's roster tab wasn't found." };
+      const v = sh.getDataRange().getDisplayValues(); let hit = -1;
+      for (let i = 0; i < v.length && hit < 0; i++) if (id ? v[i].some(c => str_(c).replace(/\D/g, "") === id) : v[i].some(c => nameKey_(c) && nameKey_(c) === nameKey_(name))) hit = i;
+      if (hit < 0) return { ok: false, error: "Couldn't find them on the " + (dv.rosterTabName || dv.name) + " roster tab." };
+      const nk = nameKey_(name), cols = [];
+      v[hit].forEach((c, j) => { const t = str_(c).trim(); if (!t) return; if ((id && t.replace(/\D/g, "") === id) || (nk && nameKey_(t) && (nameKey_(t) === nk || nameKey_(t).indexOf(nk) !== -1))) cols.push(j); });
+      cols.forEach(j => sh.getRange(hit + 1, j + 1).clearContent());
+      return { ok: true, row: hit + 1, cleared: cols.length };
+    });
+    if (!res.ok) return res;
+    divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "removal", reason: str_(d.reason).trim() || "Removed from " + dv.name + " (row " + res.row + " cleared on the roster).", post: d.post }), who);
+    try { CacheService.getScriptCache().removeAll(["div_view_" + dv.id + "_n", "roster_tab_" + dv.rosterTabId, "roster_tab_" + dv.rosterTabId + "_all", "div_hq_" + dv.id]); } catch (e) {}
+    return { ok: true, row: res.row };
+  }
+  if (a === "divGearSave") {
+    const it = d.item || {}, kind = it.kind === "uniform" ? "uniform" : "vehicle";
+    const clean = { name: clip_(str_(it.name).trim(), 60), photo: clip_(str_(it.photo).trim(), 400), note: clip_(str_(it.note).trim(), 300) };
+    if (!clean.name) return { ok: false, error: "Give it a name." };
+    if (clean.photo && !/^https:\/\//i.test(clean.photo)) clean.photo = "";
+    if (kind === "vehicle") Object.assign(clean, { rank: clip_(str_(it.rank), 30), code: clip_(str_(it.code), 40), livery: clip_(str_(it.livery), 60), extras: clip_(str_(it.extras), 60), use: clip_(str_(it.use), 120) });
+    else Object.assign(clean, { code: clip_(str_(it.code), 40), when: clip_(str_(it.when), 120), items: (Array.isArray(it.items) ? it.items : []).slice(0, 14).map(x => ({ k: clip_(str_(x.k), 30), v: clip_(str_(x.v), 80) })).filter(x => x.k || x.v) });
+    return withLock_(() => { const sh = dpSheet_(GEAR_SHEET_, GEAR_HEAD_), cur = gearAll_(dv.id, true).find(x => x.id === str_(it.id));
+      const row = [cur ? cur.id : "G" + Date.now().toString(36), dv.id, kind, JSON.stringify(clean), cellSafe_(clip_(who.name || "", 60)), new Date()];
+      if (cur) sh.getRange(cur.row, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
+      CacheService.getScriptCache().remove("gear_all"); return { ok: true, id: row[0] }; });
+  }
+  if (a === "divGearDel") return withLock_(() => { const cur = gearAll_(dv.id, true).find(x => x.id === str_(d.id)); if (!cur) return { ok: false, error: "Not found." };
+    ss_().getSheetByName(GEAR_SHEET_).deleteRow(cur.row); CacheService.getScriptCache().remove("gear_all"); return { ok: true }; });
+  return { ok: false, error: "Unknown action." };
+}
+function gearAll_(divId, rows) {
+  const sh = ss_().getSheetByName(GEAR_SHEET_); if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, GEAR_HEAD_.length).getValues().map((r, i) => { let data = {}; try { data = JSON.parse(r[3] || "{}"); } catch (e) {}
+    return Object.assign({ id: str_(r[0]), div: str_(r[1]), kind: str_(r[2]) }, data, rows ? { row: i + 2 } : {}); }).filter(x => x.id && (!divId || x.div === divId));
+}
+// MDT Fleet / Uniform pages: every division's own vehicles and outfits
+function gearForMdt_() {
+  const c = CacheService.getScriptCache(), hit = c.get("gear_all"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const divs = divList_(), all = gearAll_(), out = divs.map(dv => ({ id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl, vehicles: all.filter(x => x.div === dv.id && x.kind === "vehicle"), uniforms: all.filter(x => x.div === dv.id && x.kind === "uniform") })).filter(x => x.vehicles.length || x.uniforms.length);
+  try { c.put("gear_all", JSON.stringify(out), 600); } catch (e) {}
+  return out;
 }
 function divList_() { return ((getConfig_().settings || {}).divisions || []).map(x => ({ id: x.id, name: x.name, color: x.color, logoUrl: x.logoUrl, tagline: x.tagline })); }
 // the report log. Lists only need the first 16 columns; the full report text and data (the big cells) are read
@@ -2148,12 +2280,13 @@ function divView_(d, me) {
   if (!d.fresh) { const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
   // officers from the division's roster tab
   let officers = [], rosterError = "";
+  const LOA_ = loaIds_();
   if (dv.rosterTabId != null) {
     try { const t = getRosterTab_(dv.rosterTabId, !!d.fresh, [dv.unitCol, dv.positionCol].filter(Boolean), false, false); rosterError = t.error || "";
       officers = (t.people || []).filter(p => !rosterVacant_(p)).map(p => { const rp = rosterName_(p.name), cs = rp.cs, nm = rp.n;
         const more = p.more || {}, unit = (dv.unitCol ? str_(more[dv.unitCol]) : "") || rp.unit, rank = (dv.positionCol ? str_(more[dv.positionCol]) : "") || p.extra || "";
         return { key: p.id ? "ID:" + p.id : "CS:" + (callKey_(cs) || nameKey_(nm)), name: nm, callsign: unit || cs, alt: unit && cs ? cs : "", id: p.id || "", section: p.sec || "", rank: rank,
-          exempt: exemptHit_(dv.exempt, [p.sec, rank, unit, cs, nm]) }; });
+          exempt: exemptHit_(dv.exempt, [p.sec, rank, unit, cs, nm]), loa: !!(p.id && LOA_[p.id]) }; });
     } catch (e) { rosterError = errMsg_(e); }
   } else rosterError = "No roster tab picked for this division yet (admin → Division Command).";
   const find = p => (p.i && officers.find(o => o.id === p.i)) || (callKey_(p.n) && officers.find(o => [o.callsign, o.alt].some(c => c && callKey_(c) === callKey_(p.n)))) || (nameKey_(p.n) && officers.find(o => nameKey_(o.name) === nameKey_(p.n))) || null;
@@ -2169,7 +2302,7 @@ function divView_(d, me) {
     return { id: r.id, at: r.at, form: r.form, formTitle: formsById[r.form].title, icon: formsById[r.form].icon || "📄", no: r.no, title: r.title, summary: r.summary, author: author, tagged: tagged,
       grade: r.grade, gradedBy: r.gradedBy, comments: r.comments, gradedAt: r.gradedAt, canPost: !!(r.webhookId && webhookById_(r.webhookId) && (r.messageId || r.threadId)), imported: r.source !== "report" };
   });
-  const out = { ok: true, division: dv, divisions: divList_(), officers: officers, rosterError: rosterError, reports: reports,
+  const out = { ok: true, division: Object.assign({}, dv, { staffIds: divStaff_(dv, officers), discWebhookId: undefined }), divisions: divList_(), officers: officers, rosterError: rosterError, reports: reports, raceWeek: raceWeek_(), pts: RACE_PTS_,
     forms: dv.forms.filter(f => formsById[f.id]).map(f => ({ id: f.id, title: formsById[f.id].title, icon: formsById[f.id].icon || "📄" })),
     weekStart: (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1, at: Date.now() };
   try { bigPut_(ck, JSON.stringify(out), 900); } catch (e) {}   // 15 min; cleared the moment a report is filed or graded
@@ -2900,7 +3033,7 @@ function acctProfile_(acct) {
     forms: (() => { try { const pr = { level: level }; return getConfig_().forms.filter(f => (f.accessTabs || []).length && formAllowed_(f, acct, pr)).map(f => f.id); } catch (e) { return []; } })() };
 }
 // "View the MDT as…" (Admin → MDT Preview): a 1-hour read-only session that sees exactly what that officer sees
-const PV_READ_ = { officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
+const PV_READ_ = { gearMdt: 1, divDisc: 1, divGear: 1, officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
 function previewOf_(token) {
   const t = offRead_(token, "PV"); if (!t) return null;
   const b = t.id.split(":"); return { id: b[0], level: LEVELS_.indexOf(b[1]) !== -1 ? b[1] : "", by: b.slice(2).join(":") };
@@ -3005,6 +3138,8 @@ function divOfficer_(d) {
     return r;
   }
   if (d.action === "divGrade") { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." }; return withLock_(() => divGrade_(d, me)); }
+  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel)$/.test(d.action)) { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." };
+    return divExtra_(d, { id: acct.id, name: name, role: ["owner", "admin", "command"].indexOf(prof.level) !== -1 ? prof.level : "officer" }); }
   me.key = acct.id;
   if (d.action === "divOverview") return divOverview_(allowed, me);
   if (/^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(d.action)) { const r = hqAct_(d, me, allowed); return r.ok ? divOverview_(allowed, me) : r; }
@@ -4313,7 +4448,8 @@ function handleAdmin_(d) {
   if (a === "quickRef") return quickRef_(d);
   if (a === "mdtNoticePost" || a === "mdtNoticeClose") return mdtNotice_(d);
 
-  if (d.session && (/^div(View|Report|Grade|Overview)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
+  if (d.session && (/^div(View|Report|Grade|Overview|Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
+  if (a === "gearMdt") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return { ok: true, divisions: gearForMdt_() }; }
 
   const me = sessionAdmin_(d.token);
   if (!me) return { ok: false, error: "AUTH", message: "Your session expired. Please log in again." };
@@ -4326,6 +4462,7 @@ function handleAdmin_(d) {
   if (/^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a)) { const hm = { username: me.username, role: me.role === "leader" ? "leader" : "admin", key: "admin:" + me.username }; const r = hqAct_(d, hm, me.role === "leader" ? [] : null); return r.ok ? divOverview_(null, hm) : r; }
   if (a === "divReport") return divReport_(d);
   if (a === "divGrade") return withLock_(() => divGrade_(d, me));
+  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel)$/.test(a)) return divExtra_(d, { id: "", name: me.username, role: me.role === "leader" ? "leaderacct" : me.role });
 
   switch (a) {
     case "logout":

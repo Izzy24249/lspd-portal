@@ -277,6 +277,12 @@
   .rpill.owner{color:var(--gold);border-color:rgba(242,182,50,.4)}
   .role-sel{width:auto;height:32px;padding:0 10px;font-size:.8rem}
   @media(max-width:700px){.ulist .urow{grid-template-columns:40px 1fr}.ulist .urow>.acts,.ulist .urow>select,.ulist .urow>.rpill{grid-column:2}}
+  .staff-box{border:1px solid var(--line,rgba(255,255,255,.1));border-radius:12px;padding:12px 14px;display:grid;gap:8px}
+  .staff-hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .staff-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;max-height:260px;overflow:auto}
+  .staff-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;border:1px solid rgba(255,255,255,.08);cursor:pointer;font-size:.86rem}
+  .staff-row.on{border-color:rgba(47,123,255,.7);background:rgba(47,123,255,.1)}
+  .staff-row small{margin-left:auto;color:var(--muted);font-size:.72rem}
   /* MDT Preview */
   .pv-top{display:grid;gap:8px}
   .pv-ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -1630,6 +1636,7 @@ function pageDivisions(page) {
   if (!ROSTER_TABS) api("rosterTabs", {}).then(r => { ROSTER_TABS = { book: r.book, tabs: r.tabs, url: (CFG.settings.roster || {}).url || "" }; if (TAB === "divisions") renderPage(true); }).catch(() => {});
   D.forEach((dv, i) => {
     dv.forms = dv.forms || [];
+    const hookOpts = [["", "— don't post —"]].concat((HOOKS || []).map(w => [w.id, w.name + (w.kind === "text" ? " (text channel)" : " (forum)")]));
     const tabSel = h("select", { onchange: () => { const t = tabs().find(x => String(x.id) === tabSel.value); dv.rosterTabId = t ? t.id : null; dv.rosterTabName = t ? t.name : ""; changed(); } },
       [["", "— pick the division's roster tab —"]].concat(tabs().map(t => [String(t.id), t.name + " (" + t.rows + " rows)"])).map(o => h("option", { value: o[0], text: o[1] })));
     tabSel.value = dv.rosterTabId != null ? String(dv.rosterTabId) : "";
@@ -1663,7 +1670,13 @@ function pageDivisions(page) {
         h("div", { class: "g3" },
           field("Yellow warning after (days with no activity)", bind(dv, "warnDays", { type: "number", set: v => Math.max(0, Number(v) || 0) }), "0 = off."),
           field("Red / inactive after (days)", bind(dv, "inactiveDays", { type: "number", set: v => Math.max(0, Number(v) || 0) }), "0 = off."),
-          h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(dv, "pingTagged", "When grading, also tag the assisting officers by default"))))));
+          h("div", { style: "align-self:end;padding-bottom:10px" }, toggle(dv, "pingTagged", "When grading, also tag the assisting officers by default"))),
+        h("h4", { class: "div-h4", text: "Points quota, discipline & leaders" }),
+        h("div", { class: "g3" },
+          field("Quota in points per week", bind(dv, "quotaPts", { type: "number", set: v => Math.max(0, Math.min(500, Number(v) || 0)) }), "Division race points: report filed 10 · assist 4 · graded A +5 / B +3 / C +1. 20 = two reports a week (or one report and three assists). 0 = use the reports quota above."),
+          field("Inactivity: weeks with 0 points before removal", bind(dv, "inactWeeks", { type: "number", set: v => Math.max(0, Math.min(8, Number(v) || 0)) }), "3 = warning after week 1, final notice after week 2, removal after week 3. LOA weeks don't count. 0 = off."),
+          field("Post discipline to", bind(dv, "discWebhookId", { type: "select", options: hookOpts }), "Optional. Each warning / removal is posted there (the officer is tagged).")),
+        staffPicker(dv))));
   });
   page.append(h("div", { class: "sec", style: "display:grid;gap:10px" }, h("h3", { text: "Past reports" }),
     h("p", { class: "help", text: "Division Command logs every report from now on. To include reports filed before today, import them from each form's sheet tab (they can be graded, but there's no Discord post to reply to). Save & publish your divisions first." }),
@@ -1673,6 +1686,32 @@ function pageDivisions(page) {
       try { const r = await api("divImport", {}); toast(r.added ? "Imported " + r.added + " past report" + (r.added === 1 ? "" : "s") + "." : "Nothing new to import.", "ok"); } catch (err) { toast(err.message, "bad"); }
       e.target.disabled = false;
     } }, "Import past reports"))));
+}
+
+// Division Command → leaders & assistants: they can discipline, remove officers and edit the division's fleet & uniforms
+function staffPicker(dv) {
+  dv.staff = Array.isArray(dv.staff) ? dv.staff : [];
+  const box = h("div", { class: "staff-box" });
+  const draw = (people, err) => {
+    box.innerHTML = "";
+    box.append(h("div", { class: "staff-hd" }, h("b", { text: "Leaders & assistants" }),
+      h("small", { class: "muted", text: dv.staff.length ? dv.staff.length + " picked" : "None picked: the first two officers on the roster tab are used" })));
+    if (err) box.append(h("p", { class: "help", text: err }));
+    if (!people) { box.append(h("button", { class: "btn ghost sm", onclick: load }, dv.staff.length ? "Change (" + dv.staff.length + " picked)" : "Pick from the roster")); return; }
+    const list = h("div", { class: "staff-list" }, people.filter(p => p.id).map((p, i) => {
+      const cb = h("input", { type: "checkbox" }); cb.checked = dv.staff.indexOf(p.id) !== -1 || (!dv.staff.length && i < 2 && false);
+      cb.onchange = () => { dv.staff = cb.checked ? dv.staff.concat(p.id).filter((x, k, a) => a.indexOf(x) === k) : dv.staff.filter(x => x !== p.id); changed(); draw(people); };
+      return h("label", { class: "staff-row" + (cb.checked ? " on" : "") }, cb, h("span", { text: p.name }), h("small", { text: (i < 2 ? "#" + (i + 1) + " on roster · " : "") + p.id }));
+    }));
+    box.append(list, h("div", { style: "display:flex;gap:8px;margin-top:8px" }, h("button", { class: "btn ghost sm", onclick: () => { dv.staff = people.filter(p => p.id).slice(0, 2).map(p => p.id); changed(); draw(people); } }, "Use the first two"), h("button", { class: "btn ghost sm", onclick: () => { dv.staff = []; changed(); draw(people); } }, "Clear")));
+  };
+  const load = async () => {
+    if (dv.rosterTabId == null) return draw(null, "Pick the division's roster tab first.");
+    box.querySelector("button") && (box.querySelector("button").disabled = true);
+    try { const r = await api("rosterPreview", { tabId: dv.rosterTabId }); draw(((r.preview || {}).people || []).filter(p => p.name)); } catch (e) { draw(null, e.message); }
+  };
+  draw(null);
+  return box;
 }
 
 /* ---------------- OFFICER ACCOUNTS (sign in with Discord + 4-digit PIN) ---------------- */
