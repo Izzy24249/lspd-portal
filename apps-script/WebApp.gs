@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 145;
+const BACKEND_VERSION = 146;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2007,7 +2007,7 @@ function cidHandle_(d) {
 // =====================================================================
 const ACT_SHEET_ = "Division Activity";
 const ACT_HEAD_ = ["ID", "Filed", "Form", "Report #", "Title", "People", "Summary", "Thread ID", "Message ID", "Webhook ID", "Content", "Grade", "Graded By", "Comments", "Graded At", "Source", "Report", "Data"];
-const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divOverview: 1, hqPost: 1, hqAck: 1, hqReply: 1, hqDelete: 1, hqGoal: 1, divGrade: 1, divReport: 1, changePassword: 1, divDisc: 1, divDiscIssue: 1, divDiscRevoke: 1, divRemove: 1, divGear: 1, divGearSave: 1, divGearDel: 1 };
+const LEADER_ACTIONS_ = { logout: 1, getAll: 1, divView: 1, divOverview: 1, hqPost: 1, hqAck: 1, hqReply: 1, hqDelete: 1, hqGoal: 1, divGrade: 1, divReport: 1, changePassword: 1, divDisc: 1, divDiscIssue: 1, divDiscRevoke: 1, divRemove: 1, divGear: 1, divGearSave: 1, divGearDel: 1, divSlots: 1, divMove: 1 };
 const GRADES_ = ["A", "B", "C", "D", "F", "R"];   // R = returned to the officer for correction
 function actSheet_() {
   const ss = ss_();
@@ -2119,10 +2119,11 @@ const DISC_TYPES_ = [
   { id: "verbal", label: "Verbal warning", pts: 1, days: 30 },
   { id: "written", label: "Written warning", pts: 2, days: 45 },
   { id: "strike", label: "Strike", pts: 3, days: 60 },
-  { id: "suspension", label: "Suspension", pts: 4, days: 60 },
+  { id: "suspension", label: "Suspension (from division duty)", pts: 0, days: 7 },
   { id: "inact1", label: "Inactivity · week 1 warning", pts: 1, days: 30 },
   { id: "inact2", label: "Inactivity · week 2 final notice", pts: 2, days: 30 },
   { id: "removal", label: "Removed from division", pts: 0, days: 0 },
+  { id: "resigned", label: "Left the division (resigned)", pts: 0, days: 0 },
   { id: "note", label: "Note (no points)", pts: 0, days: 0 }
 ];
 const DISC_LADDER_ = [{ min: 0, label: "Good standing" }, { min: 3, label: "Leader meeting" }, { min: 6, label: "Suspension" }, { min: 8, label: "Removal review" }];
@@ -2161,6 +2162,30 @@ function discAll_(divId) {
   }).filter(x => !divId || x.div === divId);
 }
 function discPub_(x) { const t = DISC_TYPES_.find(y => y.id === x.type); return { id: x.id, discord: x.discord, callsign: x.callsign, name: x.name, type: x.type, label: t ? t.label : x.type, pts: x.pts, reason: x.reason, by: x.by, at: x.at, expires: x.expires, status: x.status, live: x.live }; }
+// A division roster tab's layout, worked out from its header row (each division's tab is laid out a little differently):
+// name, Discord ID, unit callsign, position (billet), promotion date, status and notes columns, and every spot under them.
+function divLayout_(dv) {
+  if (dv.rosterTabId == null) return { error: "This division has no roster tab picked (Admin → Division Command)." };
+  const sh = rosterBook_().getSheets().find(x => x.getSheetId() === Number(dv.rosterTabId)); if (!sh) return { error: "The division's roster tab wasn't found." };
+  const v = sh.getDataRange().getDisplayValues(); let hr = -1;
+  for (let i = 0; i < Math.min(15, v.length) && hr < 0; i++) if (v[i].some(c => /discord/i.test(c)) && v[i].some(c => /name/i.test(c))) hr = i;
+  if (hr < 0) return { error: "Couldn't find the header row (Name / Discord ID) on the " + sh.getName() + " tab." };
+  const H = v[hr].map(x => str_(x).trim().toLowerCase()), find = re => H.findIndex(h => re.test(h));
+  const C = { name: H.findIndex(h => /(officer'?s?\s*)?name/.test(h) && !/k-?9|dog|pilot|horse|unit/.test(h)), id: find(/discord/), unit: find(/callsign|unit/), billet: find(/rank|billet|position/),
+    status: find(/status|activity/), notes: find(/note/), date: find(/promo|date/) };
+  if (C.date < 0) { const tig = find(/t\.?\s*i\.?\s*g/); if (tig > 0 && v.slice(hr + 1, hr + 40).some(r => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str_(r[tig - 1]).trim()))) C.date = tig - 1; }
+  if (C.name < 0 || C.id < 0) return { error: "The " + sh.getName() + " tab needs Name and Discord ID columns." };
+  const rows = [], billets = [];
+  for (let i = hr + 1; i < v.length; i++) {
+    const r = v[i], unit = C.unit >= 0 ? str_(r[C.unit]).trim() : "", billet = C.billet >= 0 ? str_(r[C.billet]).trim() : "", name = str_(r[C.name]).trim(), id = str_(r[C.id]).replace(/\D/g, "");
+    if (!unit && !name && !id) continue;
+    const x = { row: i + 1, unit: unit, billet: billet, name: name, id: id, open: !name && !id && !!unit };
+    rows.push(x);
+    if (billet && unit) { let b = billets.find(y => y.name === billet); if (!b) { b = { name: billet, open: [], filled: 0 }; billets.push(b); } if (x.open) b.open.push(unit); else b.filled++; }
+  }
+  const colNames = {}; Object.keys(C).forEach(k => { if (C[k] >= 0) colNames[k] = String.fromCharCode(65 + C[k]); });
+  return { sh: sh, cols: C, colNames: colNames, rows: rows, billets: billets.map(b => ({ name: b.name, filled: b.filled, open: b.open.length, next: b.open[0] || "" })) };
+}
 // Division Command actions that come from the page: discipline, removal, fleet & uniforms
 function divExtra_(d, who) {
   const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [], dv = divs.find(x => x.id === str_(d.division));
@@ -2169,6 +2194,7 @@ function divExtra_(d, who) {
   if (a === "divDisc") return { ok: true, can: can, types: DISC_TYPES_, ladder: DISC_LADDER_, staff: divStaff_(dv), entries: discAll_(dv.id).sort((x, y) => y.at - x.at).slice(0, 600).map(discPub_),
     post: !!(dv.discWebhookId && webhookById_(dv.discWebhookId)) };
   if (a === "divGear") return { ok: true, can: can, items: gearAll_(dv.id) };
+  if (a === "divSlots") { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error }; return { ok: true, can: can, billets: L.billets, cols: L.colNames }; }
   if (!can) return { ok: false, error: "Only this division's leaders and assistants (or command) can do that." };
   if (a === "divDiscIssue") {
     const t = DISC_TYPES_.find(x => x.id === str_(d.type)); if (!t) return { ok: false, error: "Pick a type." };
@@ -2191,6 +2217,27 @@ function divExtra_(d, who) {
   }
   if (a === "divDiscRevoke") return withLock_(() => { const x = discAll_(dv.id).find(y => y.id === str_(d.id)); if (!x) return { ok: false, error: "Not found." };
     ss_().getSheetByName(DISC_SHEET_).getRange(x.row, 12).setValue("revoked by " + clip_(who.name || "", 50)); return { ok: true }; });
+  if (a === "divMove") {   // move / promote inside the division: into the next open callsign of the picked position
+    const id = str_(d.discord).replace(/\D/g, ""), want = str_(d.billet).trim(); if (!id) return { ok: false, error: "That officer has no Discord ID on the roster, so they can't be moved here." };
+    const res = withLock_(() => {
+      const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
+      const C = L.cols, sh = L.sh, src = L.rows.find(r => r.id === id); if (!src) return { ok: false, error: "Couldn't find them on the " + (dv.rosterTabName || dv.name) + " roster tab." };
+      const dst = L.rows.find(r => r.open && r.billet === want && r.row !== src.row); if (!dst) return { ok: false, error: "No open spot left in " + want + "." };
+      const get = (row, c) => c < 0 ? null : sh.getRange(row, c + 1);
+      const name = get(src.row, C.name).getValue(), notes = C.notes >= 0 ? get(src.row, C.notes).getValue() : "", stat = C.status >= 0 ? str_(get(src.row, C.status).getDisplayValue()) : "";
+      get(dst.row, C.name).setValue(name); get(dst.row, C.id).setNumberFormat("@").setValue(id);
+      if (C.date >= 0) get(dst.row, C.date).setValue(new Date(new Date().setHours(0, 0, 0, 0)));
+      if (C.status >= 0) { const st = get(dst.row, C.status); st.setValue(stat && !/^(n\/?a)?$/i.test(stat.trim()) ? stat : pbDropOpt_(st, "Active")); }
+      if (C.notes >= 0 && notes !== "") get(dst.row, C.notes).setValue(notes);
+      [C.name, C.id, C.date, C.notes].filter(c => c >= 0).forEach(c => get(src.row, c).clearContent());
+      if (C.status >= 0) { const st = get(src.row, C.status); st.setValue(pbDropOpt_(st, "N/A")); }
+      return { ok: true, from: src.unit, to: dst.unit, billet: want, row: dst.row };
+    });
+    if (!res.ok) return res;
+    divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "note", reason: "Moved " + (res.from || "") + " → " + res.to + " (" + res.billet + ").", post: false }), who);
+    try { CacheService.getScriptCache().removeAll(["div_view_" + dv.id + "_n", "roster_tab_" + dv.rosterTabId, "roster_tab_" + dv.rosterTabId + "_all", "div_hq_" + dv.id]); } catch (e) {}
+    return res;
+  }
   if (a === "divRemove") {   // take them off the division's roster tab (their name and Discord ID cells), and log it
     const id = str_(d.discord).replace(/\D/g, ""), name = str_(d.name).trim(), cs = str_(d.callsign).trim();
     if (!id && !name) return { ok: false, error: "Pick the officer." };
@@ -2206,7 +2253,8 @@ function divExtra_(d, who) {
       return { ok: true, row: hit + 1, cleared: cols.length };
     });
     if (!res.ok) return res;
-    divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "removal", reason: str_(d.reason).trim() || "Removed from " + dv.name + " (row " + res.row + " cleared on the roster).", post: d.post }), who);
+    const why = { inactive: "Inactive", discipline: "Discipline", resigned: "Resigned" }[str_(d.kind)] || "";
+    divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: d.kind === "resigned" ? "resigned" : "removal", reason: (why ? why + ": " : "") + (str_(d.reason).trim() || "Removed from " + dv.name + " (row " + res.row + " cleared on the roster)."), post: d.post }), who);
     try { CacheService.getScriptCache().removeAll(["div_view_" + dv.id + "_n", "roster_tab_" + dv.rosterTabId, "roster_tab_" + dv.rosterTabId + "_all", "div_hq_" + dv.id]); } catch (e) {}
     return { ok: true, row: res.row };
   }
@@ -3033,7 +3081,7 @@ function acctProfile_(acct) {
     forms: (() => { try { const pr = { level: level }; return getConfig_().forms.filter(f => (f.accessTabs || []).length && formAllowed_(f, acct, pr)).map(f => f.id); } catch (e) { return []; } })() };
 }
 // "View the MDT as…" (Admin → MDT Preview): a 1-hour read-only session that sees exactly what that officer sees
-const PV_READ_ = { gearMdt: 1, divDisc: 1, divGear: 1, officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
+const PV_READ_ = { gearMdt: 1, divDisc: 1, divGear: 1, divSlots: 1, officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
 function previewOf_(token) {
   const t = offRead_(token, "PV"); if (!t) return null;
   const b = t.id.split(":"); return { id: b[0], level: LEVELS_.indexOf(b[1]) !== -1 ? b[1] : "", by: b.slice(2).join(":") };
@@ -3138,7 +3186,7 @@ function divOfficer_(d) {
     return r;
   }
   if (d.action === "divGrade") { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." }; return withLock_(() => divGrade_(d, me)); }
-  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel)$/.test(d.action)) { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." };
+  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move)$/.test(d.action)) { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." };
     return divExtra_(d, { id: acct.id, name: name, role: ["owner", "admin", "command"].indexOf(prof.level) !== -1 ? prof.level : "officer" }); }
   me.key = acct.id;
   if (d.action === "divOverview") return divOverview_(allowed, me);
@@ -4448,7 +4496,7 @@ function handleAdmin_(d) {
   if (a === "quickRef") return quickRef_(d);
   if (a === "mdtNoticePost" || a === "mdtNoticeClose") return mdtNotice_(d);
 
-  if (d.session && (/^div(View|Report|Grade|Overview|Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
+  if (d.session && (/^div(View|Report|Grade|Overview|Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
   if (a === "gearMdt") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return { ok: true, divisions: gearForMdt_() }; }
 
   const me = sessionAdmin_(d.token);
@@ -4462,7 +4510,7 @@ function handleAdmin_(d) {
   if (/^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a)) { const hm = { username: me.username, role: me.role === "leader" ? "leader" : "admin", key: "admin:" + me.username }; const r = hqAct_(d, hm, me.role === "leader" ? [] : null); return r.ok ? divOverview_(null, hm) : r; }
   if (a === "divReport") return divReport_(d);
   if (a === "divGrade") return withLock_(() => divGrade_(d, me));
-  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel)$/.test(a)) return divExtra_(d, { id: "", name: me.username, role: me.role === "leader" ? "leaderacct" : me.role });
+  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move)$/.test(a)) return divExtra_(d, { id: "", name: me.username, role: me.role === "leader" ? "leaderacct" : me.role });
 
   switch (a) {
     case "logout":

@@ -686,3 +686,17 @@ html,body.dc{overflow-x:hidden}
 .gx-form{padding:16px 18px;display:grid;gap:12px;overflow:auto}
 .gx-ft{display:flex;justify-content:space-between;gap:10px;padding:14px 18px;border-top:1px solid var(--line)}
 @media(max-width:700px){.ax-k{grid-template-columns:repeat(2,minmax(0,1fr))}.dx-ladder{grid-template-columns:repeat(2,minmax(0,1fr))}.dx-types{grid-template-columns:1fr}}
+/* officer toolbox */
+.tb{margin:4px 0 14px;border:1px solid rgba(var(--acr),.35);border-radius:14px;background:rgba(var(--acr),.05);overflow:hidden}
+.tb-row{display:flex;flex-wrap:wrap;gap:6px;padding:10px}
+.tb-b{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font:600 12.5px Inter,sans-serif;cursor:pointer}
+.tb-b span{font-size:14px}.tb-b:hover{border-color:rgba(var(--acr),.7)}
+.tb-b.on{border-color:rgba(var(--acr),1);background:rgba(var(--acr),.18)}
+.tb-b.bad{margin-left:auto;border-color:rgba(248,113,113,.45);color:#fecaca}
+.tb-p{border-top:1px solid var(--line);padding:12px;display:grid;gap:8px;max-height:360px;overflow:auto;font-size:13px}
+.tb-pts{display:flex;align-items:baseline;gap:8px}.tb-pts b{font:700 24px Oswald,sans-serif;color:#fb923c}.tb-pts span{color:var(--muted)}
+.tb-e{display:grid;gap:3px;padding:8px 0;border-top:1px solid rgba(140,170,220,.08)}.tb-e.old{opacity:.55}.tb-e small{color:var(--muted);font-size:11.5px}.tb-e p{margin:0;color:#d6def0;font-size:12.5px}
+.tb-e .dx-ty{justify-self:start}
+.tb-mv{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--text);font:inherit;cursor:pointer;text-align:left}
+.tb-mv:hover:not(:disabled){border-color:rgba(var(--acr),1);background:rgba(var(--acr),.12)}.tb-mv:disabled{opacity:.45;cursor:default}
+.tb-mv span{color:var(--muted);font-size:12px}.tb-mv code{font:700 12px "JetBrains Mono",monospace;color:#7dd3fc}

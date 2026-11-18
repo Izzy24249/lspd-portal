@@ -562,8 +562,10 @@
   }
 
   // ---------------- officer profile ----------------
+  let TB_KEY = "";
   function openOfficer(key) {
     const S = stats(), o = S.O.find(x => x.key === key); if (!o) return;
+    if (TB_KEY !== key) { TB = ""; TB_KEY = key; }
     const items = o.filedAll.map(r => ({ r, kind: "filed" })).concat(o.assistAll.map(r => ({ r, kind: "assist" }))).sort((a, b) => b.r.at - a.r.at);
     // last 8 weeks
     const ws = periodStart("week"), weeks = [];
@@ -573,6 +575,7 @@
       ${weeks.map((w, i) => { const x = 8 + i * 39, hf = w.f / mx * 84, hs = w.s / mx * 84; return `<rect x="${x}" y="${96 - hf}" width="26" height="${hf}" rx="3" class="bf"><title>${w.f} filed</title></rect><rect x="${x}" y="${96 - hf - hs}" width="26" height="${hs}" rx="3" fill="url(#hatch)"><title>${w.s} assists</title></rect><text x="${x + 13}" y="112" text-anchor="middle">${new Date(w.a).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</text>${w.f + w.s ? `<text x="${x + 13}" y="${90 - hf - hs}" text-anchor="middle" class="v">${w.f + w.s}</text>` : ""}`; }).join("")}</svg>`;
     $("dpanel").innerHTML = `<button class="dc-x" data-close aria-label="Close">✕</button>
       <div class="pf-h"><i class="av xl s-${o.status}">${esc(initials(o.name))}</i><div><div class="dc-kick">${esc([o.callsign, o.alt].filter(Boolean).join(" · ") || "OFFICER")}</div><h2>${esc(o.name)}</h2>${statusPill(o)}</div></div>
+      ${toolbox(o)}
       <div class="pf-k"><div><small>Filed · ${esc(PNAME[PERIOD])}</small><b>${o.filed.length}</b></div><div><small>Assists · ${esc(PNAME[PERIOD])}</small><b>${o.assists.length}</b></div><div><small>Avg grade (all)</small><b>${o.gradeAll ? `<em class="gb ${GCLS(o.gradeAll.letter)}">${o.gradeAll.letter}</em>` : "—"}</b></div><div><small>Last active</small><b class="sm">${o.last ? esc(ago(o.last)) : "never"}</b></div></div>
       ${o.quota ? `<div class="pf-q"><small>Quota this ${esc(qPer())}</small>${quotaBar(o)}</div>` : ""}
       <h3>Last 8 weeks <span class="lg"><i class="lf"></i>filed <i class="ls"></i>assists</span></h3>${chart}
@@ -660,7 +663,7 @@
   async function xLoad(kind, force) {
     const id = DATA.division.id, store2 = kind === "disc" ? XD : XG, k = kind + id;
     if (!force && store2[id]) return store2[id]; if (XBUSY[k]) return XBUSY[k];
-    XBUSY[k] = api(kind === "disc" ? "divDisc" : "divGear", { division: id }).then(r => { store2[id] = r; if (DATA.division.id === id && (TAB === "activity" || TAB === "discipline" || TAB === "gear")) drawAll(); return r; })
+    XBUSY[k] = api(kind === "disc" ? "divDisc" : "divGear", { division: id }).then(r => { store2[id] = r; if (DATA.division.id === id && (TAB === "activity" || TAB === "discipline" || TAB === "gear")) drawAll(); if (kind === "disc") reTool(); return r; })
       .catch(e => { store2[id] = { ok: false, error: e.message }; if (DATA.division.id === id) drawAll(); }).finally(() => { delete XBUSY[k]; });
     return XBUSY[k];
   }
@@ -707,18 +710,19 @@
     if (!D) { $("view").innerHTML = '<div class="dc-empty">Loading the discipline record…</div>'; return; }
     if (D.ok === false) { $("view").innerHTML = `<div class="dc-empty">${esc(D.error)}</div>`; return; }
     const pts = S.O.map(o => ({ o, p: livePts(D, o), n: discFor(D, o).length })).filter(x => x.n).sort((a, b) => b.p - a.p);
-    const T = D.types.filter(t => t.id !== "removal");
+    const T = D.types.filter(t => t.id !== "removal" && t.id !== "resigned");
     const form = D.can ? `<section class="dc-panel dx-form"><header><h2>⚖️ Issue a discipline</h2></header>
       <label class="dx-f"><span>Officer</span><select id="dxOff"><option value="">— pick an officer —</option>${S.O.map(o => `<option value="${esc(o.key)}">${esc((o.callsign ? o.callsign + " | " : "") + o.name)}</option>`).join("")}</select></label>
-      <div class="dx-f"><span>Type</span><div class="dx-types">${T.map((t, i) => `<button type="button" class="dx-t${i === 1 ? " on" : ""}" data-dxt="${esc(t.id)}" data-pts="${t.pts}" data-days="${t.days}"><b>${esc(t.label)}</b><small>${t.pts ? t.pts + " pt" + (t.pts === 1 ? "" : "s") + " · " + t.days + " days" : "no points"}</small></button>`).join("")}</div></div>
+      <div class="dx-f"><span>Type</span><div class="dx-types">${T.map((t, i) => `<button type="button" class="dx-t${i === 1 ? " on" : ""}" data-dxt="${esc(t.id)}" data-pts="${t.pts}" data-days="${t.days}"><b>${esc(t.label)}</b><small>${t.pts ? t.pts + " pt" + (t.pts === 1 ? "" : "s") + " · " + t.days + " days" : t.days ? "no points · " + t.days + " days" : "no points"}</small></button>`).join("")}</div></div>
       <label class="dx-f"><span>Reason</span><textarea id="dxWhy" rows="4" placeholder="What happened, when, and the report number if there is one."></textarea></label>
-      <div class="dx-two"><label class="dx-f"><span>Points</span><input id="dxPts" type="number" min="0" max="20" value="${T[1] ? T[1].pts : 1}"></label><label class="dx-f"><span>Expires after (days)</span><input id="dxDays" type="number" min="0" max="365" value="${T[1] ? T[1].days : 30}"></label></div>
+      <div class="dx-two"><label class="dx-f"><span>Points</span><input id="dxPts" type="number" min="0" max="20" value="${T[1] ? T[1].pts : 1}"></label><label class="dx-f"><span>Lasts / expires after (days)</span><input id="dxDays" type="number" min="0" max="365" value="${T[1] ? T[1].days : 30}"></label></div>
       ${D.post ? `<label class="dx-chk"><input type="checkbox" id="dxPost" checked> Post it to the division's Discord channel (the officer is tagged)</label>` : `<p class="ax-note">Not posted to Discord: no channel picked for this division (Admin → Division Command).</p>`}
       <button class="dc-btn ac big" id="dxGo">Issue</button></section>` : `<section class="dc-panel"><p class="ax-note">Only this division's leaders and assistants can issue discipline. You can still see the record.</p></section>`;
     const ladder = `<div class="dx-ladder">${D.ladder.map((l, i) => `<div class="l${i}"><b>${l.min}${D.ladder[i + 1] ? "–" + (D.ladder[i + 1].min - 1) : "+"} pts</b><small>${esc(l.label)}</small></div>`).join("")}</div>`;
     const list = D.entries.length ? D.entries.slice(0, 200).map(x => `<div class="dx-e${x.live ? "" : " old"}"><span class="dx-d">${esc(fmtD(x.at))}</span>
         <div><span class="dx-ty t-${esc(x.type)}">${esc(x.label)}</span><b>${esc((x.callsign ? x.callsign + " | " : "") + x.name)}</b><p>${esc(x.reason)}</p><small>by ${esc(x.by || "—")}${x.status !== "active" ? " · " + esc(x.status) : x.expires ? (x.live ? " · expires " : " · expired ") + esc(fmtD(x.expires)) : ""}</small></div>
         <span class="dx-p">${x.pts ? "+" + x.pts : ""}</span>${D.can && x.live && x.status === "active" ? `<button class="dc-link" data-dxrev="${esc(x.id)}">Revoke</button>` : "<span></span>"}</div>`).join("") : '<div class="dc-empty">Nothing on record yet.</div>';
+    setTimeout(() => { if (DX_PRE && $("dxOff")) { $("dxOff").value = DX_PRE; DX_PRE = ""; $("dxOff").focus(); } }, 0);
     $("view").innerHTML = `<div class="dx-grid">${form}
       <div class="dx-side"><section class="dc-panel"><header><h2>📊 Active points</h2><small class="dc-note">Points count until they expire.</small></header>${ladder}
         ${pts.length ? pts.map(x => { const l = ladderOf(D, x.p); return `<button type="button" class="dx-o" data-off="${esc(x.o.key)}"><span><b>${esc(x.o.name)}</b><small>${esc(x.o.callsign || "")}</small></span><em>${esc(l.label)}</em><i>${x.p}</i></button>`; }).join("") : '<p class="ax-note">Everyone is in good standing.</p>'}</section>
@@ -760,22 +764,50 @@
       try { await api("divGearSave", { division: DATA.division.id, item: it }); closeModal(); toast("Saved.", "ok"); xLoad("gear", true); } catch (e) { toast(e.message, "bad"); $("gxSave").disabled = false; }
     };
   }
-  function removeModal(o) {
+  function removeModal(o, kind) {
+    kind = kind || (o.stage ? "inactive" : "discipline");
     $("mcard").className = "dc-mcard gx-m";
     const D = XD[DATA.division.id] || {};
     $("mcard").innerHTML = `<header class="gm-h"><h2>Remove ${esc(o.name)} from ${esc(DATA.division.name)}?</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
-      <div class="gx-form"><p class="ax-note">${esc(o.callsign || "")} has had <b>0 points for ${o.stage} weeks in a row</b>. Their name and Discord ID are cleared from the <b>${esc(DATA.division.name)}</b> roster tab and a removal is added to their discipline record.</p>
-      <label class="dx-f"><span>Reason</span><textarea id="rmWhy" rows="3">Inactive in ${esc(DATA.division.name)} for ${o.stage} weeks in a row.</textarea></label>
+      <div class="gx-form"><p class="ax-note">Their name and Discord ID are cleared from ${esc(o.callsign || "their spot")} on the <b>${esc(DATA.division.name)}</b> roster tab (the spot stays, empty) and it goes on their record.</p>
+      <label class="dx-f"><span>Why</span><select id="rmKind"><option value="discipline"${kind === "discipline" ? " selected" : ""}>Removed: discipline</option><option value="inactive"${kind === "inactive" ? " selected" : ""}>Removed: inactive</option><option value="resigned"${kind === "resigned" ? " selected" : ""}>Resigned / left on their own (doesn't count against them)</option></select></label>
+      <label class="dx-f"><span>Reason</span><textarea id="rmWhy" rows="3">${o.stage ? "Inactive in " + esc(DATA.division.name) + " for " + o.stage + " weeks in a row." : ""}</textarea></label>
       ${D.post ? `<label class="dx-chk"><input type="checkbox" id="rmPost" checked> Post it to the division's Discord channel</label>` : ""}</div>
       <footer class="gx-ft"><button class="dc-btn sm" data-gxclose>Cancel</button><button class="dc-btn danger" id="rmGo">Remove from division</button></footer>`;
     $("modal").hidden = false;
     $("rmGo").onclick = async () => {
       $("rmGo").disabled = true; $("rmGo").textContent = "Removing…";
-      try { const r = await api("divRemove", { division: DATA.division.id, discord: o.id, name: o.name, callsign: o.callsign, reason: $("rmWhy").value.trim(), post: !!($("rmPost") && $("rmPost").checked) });
-        closeModal(); toast(o.name + " removed (roster row " + r.row + " cleared).", "ok"); xLoad("disc", true); load(true, true); }
+      try { const r = await api("divRemove", { division: DATA.division.id, discord: o.id, name: o.name, callsign: o.callsign, kind: $("rmKind").value, reason: $("rmWhy").value.trim(), post: !!($("rmPost") && $("rmPost").checked) });
+        closeModal(); closeDrawer(); toast(o.name + " removed (roster row " + r.row + " cleared).", "ok"); xLoad("disc", true); XS[DATA.division.id] = null; load(true, true); }
       catch (e) { toast(e.message, "bad"); $("rmGo").disabled = false; $("rmGo").textContent = "Remove from division"; }
     };
   }
+  // ---- officer toolbox (the panel that opens when a name is clicked) ----
+  const XS = {};   // per division: positions and their next open callsign
+  let TB = "";     // which toolbox panel is open
+  function toolbox(o) {
+    const D = XD[DATA.division.id]; if (!D) xLoad("disc");
+    const can = !!(D && D.can), P = D ? livePts(D, o) : 0, L = D ? ladderOf(D, P) : null;
+    const btn = (k, ic, t, cls) => `<button type="button" class="tb-b${TB === k ? " on" : ""}${cls ? " " + cls : ""}" data-tb="${k}" data-tbo="${esc(o.key)}"><span>${ic}</span>${esc(t)}</button>`;
+    let panel = "";
+    if (TB === "record") { const E = D ? discFor(D, o) : null;
+      panel = !D ? "Loading…" : `<div class="tb-pts"><b>${P}</b><span>active point${P === 1 ? "" : "s"} · ${esc(L.label)}</span></div>` + (E.length ? E.slice(0, 30).map(x => `<div class="tb-e${x.live ? "" : " old"}"><span class="dx-ty t-${esc(x.type)}">${esc(x.label)}</span><small>${esc(fmtD(x.at))}${x.pts ? " · +" + x.pts : ""}${x.live ? "" : " · " + (x.status !== "active" ? esc(x.status) : "expired")}</small><p>${esc(x.reason)}</p></div>`).join("") : '<p class="ax-note">Nothing on their record.</p>'); }
+    if (TB === "move") { const S2 = XS[DATA.division.id]; if (!S2) xSlots();
+      panel = !S2 ? "Loading the roster…" : S2.ok === false ? esc(S2.error) : `<p class="ax-note">Pick their new position. They go into its next open callsign; their old spot is emptied.</p>` +
+        S2.billets.map(b => `<button type="button" class="tb-mv" data-mv="${esc(b.name)}" data-tbo="${esc(o.key)}"${b.open ? "" : " disabled"}><b>${esc(b.name)}</b><span>${b.open ? "Next: <code>" + esc(b.next) + "</code> · " + b.open + " open" : "Full"}</span></button>`).join(""); }
+    return `<div class="tb"><div class="tb-row">
+        ${btn("record", "📋", "Record" + (D && P ? " · " + P + " pts" : ""))}
+        ${can ? btn("move", "🔼", "Move / promote") + btn("disc", "⚖️", "Discipline") : ""}
+        ${o.id ? `<button type="button" class="tb-b" data-copyid="${esc(o.id)}"><span>🆔</span>Copy Discord ID</button>` : ""}
+        ${can ? btn("remove", "🚪", "Remove", "bad") : ""}</div>${panel ? `<div class="tb-p">${panel}</div>` : ""}</div>`;
+  }
+  async function xSlots() {
+    const id = DATA.division.id; if (XBUSY["slots" + id]) return; XBUSY["slots" + id] = 1;
+    try { XS[id] = await api("divSlots", { division: id }); } catch (e) { XS[id] = { ok: false, error: e.message }; }
+    delete XBUSY["slots" + id]; reTool();
+  }
+  function reTool() { const k = $("dpanel") && $("dpanel").dataset.key; if (k && !$("drawer").hidden) { const sc = $("dpanel").scrollTop; openOfficer(k); $("dpanel").scrollTop = sc; } }
+  let DX_PRE = "";
   async function issue(o, type, reason, pts, days, post) {
     return api("divDiscIssue", { division: DATA.division.id, discord: o.id, name: o.name, callsign: o.callsign, type: type, reason: reason, pts: pts, days: days, post: post });
   }
@@ -783,6 +815,17 @@
     const t = e.target; if (!DATA || !DATA.division) return;
     const findO = k => stats().O.find(o => o.key === k);
     if (t.closest("[data-gxclose]")) { closeModal(); return; }
+    const tb = t.closest("[data-tb]"); if (tb) { const o = findO(tb.dataset.tbo); if (!o) return;
+      if (tb.dataset.tb === "remove") { removeModal(o); return; }
+      if (tb.dataset.tb === "disc") { DX_PRE = o.key; closeDrawer(); TAB = "discipline"; drawAll(); return; }
+      TB = TB === tb.dataset.tb ? "" : tb.dataset.tb; reTool(); return; }
+    const ci = t.closest("[data-copyid]"); if (ci) { try { await navigator.clipboard.writeText(ci.dataset.copyid); toast("Discord ID copied.", "ok"); } catch (err) { toast(ci.dataset.copyid); } return; }
+    const mv = t.closest("[data-mv]"); if (mv) { const o = findO(mv.dataset.tbo); if (!o) return; const S2 = XS[DATA.division.id] || {}, b = (S2.billets || []).find(x => x.name === mv.dataset.mv);
+      if (!confirm("Move " + o.name + " to " + mv.dataset.mv + (b && b.next ? " (" + b.next + ")" : "") + "?")) return;
+      mv.disabled = true; mv.querySelector("span").textContent = "Moving…";
+      try { const r = await api("divMove", { division: DATA.division.id, discord: o.id, name: o.name, callsign: o.callsign, billet: mv.dataset.mv }); toast(o.name + " moved " + (r.from || "") + " → " + r.to + ".", "ok");
+        XS[DATA.division.id] = null; TB = ""; xLoad("disc", true); await load(true, true); const n = stats().O.find(x => x.id && x.id === o.id); if (n) openOfficer(n.key); }
+      catch (err) { toast(err.message, "bad"); mv.disabled = false; } return; }
     const xi = t.closest("[data-xinact]"); if (xi) { const o = findO(xi.dataset.xo); if (!o) return; const D = XD[DATA.division.id] || {};
       xi.disabled = true; xi.textContent = "Sending…";
       try { const r = await issue(o, xi.dataset.xinact, "", null, null, !!D.post); toast((xi.dataset.xinact === "inact1" ? "Warning" : "Final notice") + " logged for " + o.name + (r.posted ? " and posted to Discord" : "") + ".", "ok"); await xLoad("disc", true); }
