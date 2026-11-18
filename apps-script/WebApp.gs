@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 148;
+const BACKEND_VERSION = 149;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2369,6 +2369,33 @@ function myDivision_(acct, divId) {
     roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (CERTS.by[o.id] || []) })),
     gear: gearAll_(dv.id), certNames: CERTS.names, myCerts: CERTS.by[acct.id] || [] };
 }
+// ---- MDT → My certifications: everything this officer is certified in ----
+//  FTO program: SGT and above are FTOs; a CPL is an FTO in training until they've witnessed one GOM training and led one
+//  (with a SGT+ supervising), then they're a GOM FTO. Plus the tick / ✔ columns on the Personnel roster and every division they're in.
+function myCerts_(acct) {
+  const o = promoPeople_().find(x => x.id === acct.id) || null, fto = [];
+  if (o && !o.trainee) {
+    if (o.idx >= 4) fto.push({ name: "FTO", has: true, how: "Sergeant and above", src: "auto" });
+    else if (o.idx === 3) { const c = o.cpl || {}, done = !!c.certAt;
+      fto.push(done ? { name: "GOM FTO", has: true, how: "Witnessed and led a GOM training", since: c.certAt, src: "auto" }
+        : { name: "FTO in training", has: true, how: "Corporal", src: "auto", steps: [{ t: "Witness a GOM training", done: (c.witness || 0) > 0 }, { t: "Lead a GOM training with a SGT+ supervising", done: (c.lead || 0) > 0 }], next: "GOM FTO" }); }
+  }
+  // Personnel / Onboarding roster: the ✔ / tick-box columns on their row
+  const dept = []; try { const book = rosterBook_();
+    [PERSONNEL_TAB_, ONBOARD_TAB_].some(tab => { const sh = book.getSheetByName(tab); if (!sh || sh.getLastRow() < 2) return false;
+      const v = sh.getDataRange().getValues(), dv = sh.getDataRange().getDisplayValues(); let hr = -1;
+      for (let i = 0; i < Math.min(8, v.length) && hr < 0; i++) if (dv[i].some(c => /discord/i.test(c))) hr = i;
+      if (hr < 0) return false; const idc = dv[hr].findIndex(c => /discord/i.test(c));
+      const row = v.findIndex((r, i) => i > hr && str_(dv[i][idc]).replace(/\D/g, "") === acct.id); if (row < 0) return false;
+      const seen = {};
+      dv[hr].forEach((h, j) => { const name = str_(h).replace(/\s+/g, " ").trim(); if (!name || seen[name] || /loa|leave|status|activ|strike|hold|term|remov|suspend|note|date|discord|name|rank|call/i.test(name)) return;
+        let marks = 0; for (let i = hr + 1; i < Math.min(v.length, hr + 80); i++) { const x = v[i][j]; if (x === true || x === false || /^[✔✓✗✘x]$/i.test(str_(x).trim())) marks++; }
+        if (marks < 3) return; const x = v[row][j], has = x === true || /^[✔✓]$/.test(str_(x).trim()); seen[name] = 1; dept.push({ name: name, has: has, src: tab === PERSONNEL_TAB_ ? "Personnel roster" : "Onboarding roster" }); });
+      return true; }); } catch (e) {}
+  const divs = myDivisions_(acct.id).map(m => { const dv = ((getConfig_().settings || {}).divisions || []).find(x => x.id === m.id); if (!dv) return null;
+    const C = myDivCerts_(dv), mine = C.by[acct.id] || []; return { id: dv.id, name: dv.name, color: dv.color, certs: C.names.map(n => ({ name: n, has: mine.indexOf(n) !== -1 })) }; }).filter(Boolean);
+  return { ok: true, rank: o ? o.rank : "", fto: fto, dept: dept, divisions: divs };
+}
 // every member's certifications in a division (from its roster tab's tick boxes), cached a few minutes
 function myDivCerts_(dv) {
   const c = CacheService.getScriptCache(), k = "mydiv_certs_" + dv.id, hit = c.get(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
@@ -3178,7 +3205,7 @@ function acctProfile_(acct) {
     forms: (() => { try { const pr = { level: level }; return getConfig_().forms.filter(f => (f.accessTabs || []).length && formAllowed_(f, acct, pr)).map(f => f.id); } catch (e) { return []; } })() };
 }
 // "View the MDT as…" (Admin → MDT Preview): a 1-hour read-only session that sees exactly what that officer sees
-const PV_READ_ = { divCerts: 1, myDivision: 1, gearMdt: 1, divDisc: 1, divGear: 1, divSlots: 1, officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
+const PV_READ_ = { myCerts: 1, divCerts: 1, myDivision: 1, gearMdt: 1, divDisc: 1, divGear: 1, divSlots: 1, officerHome: 1, divMine: 1, myReportOpen: 1, cidMine: 1, cidList: 1, promoBoard: 1, pbBoard: 1, pbPreview: 1, obBoard: 1, obPreview: 1, unitView: 1, unitCheckScores: 1, recordsSearch: 1, quickRef: 1, acctMe: 1, acctVoice: 1, divView: 1, divOverview: 1 };
 function previewOf_(token) {
   const t = offRead_(token, "PV"); if (!t) return null;
   const b = t.id.split(":"); return { id: b[0], level: LEVELS_.indexOf(b[1]) !== -1 ? b[1] : "", by: b.slice(2).join(":") };
@@ -4595,6 +4622,7 @@ function handleAdmin_(d) {
   if (a === "mdtNoticePost" || a === "mdtNoticeClose") return mdtNotice_(d);
 
   if (d.session && (/^div(View|Report|Grade|Overview|Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move|Certs|CertSet|CertDef)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
+  if (a === "myCerts") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return myCerts_(acct); }
   if (a === "myDivision") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return myDivision_(acct, str_(d.division)); }
   if (a === "gearMdt") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return { ok: true, divisions: gearForMdt_() }; }
 

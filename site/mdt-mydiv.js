@@ -1,11 +1,11 @@
 /* LSPD MDT — My Division. Every division the officer is on (from the division roster tabs) gets its own entry in the
-   side menu; clicking it opens a drop-down: Division stats, My record, Roster, Vehicles, Uniforms. Only their own divisions. */
+   side menu; clicking it opens a drop-down: Division stats, My record, My certs, Roster, Vehicles, Uniforms. Only their own divisions. */
 (function () {
   "use strict";
   const M = () => window.MDT, esc = s => M().esc(s), DATA = {}, BUSY = {};
   let LIST = [], OPEN = {};
   try { OPEN = JSON.parse(localStorage.getItem("mdt:mydivOpen") || "{}") || {}; } catch (e) {}
-  const SUB = [["stats", "Division stats", "i-chart"], ["record", "My record", "i-shield"], ["roster", "Roster", "i-file"], ["vehicles", "Vehicles", "i-car"], ["uniforms", "Uniforms", "i-shirt"]];
+  const SUB = [["stats", "Division stats", "i-chart"], ["record", "My record", "i-shield"], ["certs", "My certs", "i-cert"], ["roster", "Roster", "i-file"], ["vehicles", "Vehicles", "i-car"], ["uniforms", "Uniforms", "i-shirt"]];
   const ICON = { "i-chart": "i-star" };
   const ago = t => { const s = (Date.now() - t) / 1000; return s < 3600 ? Math.max(1, Math.round(s / 60)) + "m ago" : s < 86400 ? Math.round(s / 3600) + "h ago" : Math.round(s / 86400) + "d ago"; };
   const day = t => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -64,8 +64,6 @@
         (r.ahead ? " · " + (r.ahead.points - r.points) + " behind " + esc(r.ahead.name) : r.points ? " · leading the race" : "") + " · last week " + r.last + "</small>" +
         '<div class="md-race">' + r.standings.map(x => '<div class="' + (x.me ? "me" : "") + '" style="--c:' + esc(x.color || "#888") + '"><span>' + esc(x.name) + "</span><i style=\"width:" + Math.round(x.points / Math.max(1, r.standings[0].points) * 100) + '%"></i><b>' + x.points + "</b></div>").join("") + "</div>"
         : "<small>The race isn't running right now.</small>") + "</section></div>" +
-      ((R.certNames || []).length ? '<section class="md-card md-certs"><span class="md-k">MY CERTIFICATIONS · ' + (R.myCerts || []).length + " OF " + R.certNames.length + '</span><div class="md-cl">' +
-        R.certNames.map(n => '<span class="' + ((R.myCerts || []).indexOf(n) !== -1 ? "on" : "") + '">' + ((R.myCerts || []).indexOf(n) !== -1 ? "✓ " : "") + esc(n) + "</span>").join("") + "</div><small>Ask your division leaders about getting certified.</small></section>" : "") +
       '<div class="md-grid"><section class="md-card"><span class="md-k">TOP OFFICERS THIS WEEK</span>' + (R.board.length ? R.board.map((x, i) => '<div class="md-lb' + (x.me ? " me" : "") + '"><em>' + (i + 1) + "</em><span><b>" + esc(x.name) + "</b><small>" + esc(x.callsign || "") + "</small></span><b>" + x.pts + "</b></div>").join("") : "<small>No division reports yet this week. Be the first.</small>") + "</section>" +
       '<section class="md-card"><span class="md-k">WHAT I EARNED THIS WEEK</span>' + (me.items.filter(x => x.at >= R.weekStart).length ? me.items.filter(x => x.at >= R.weekStart).map(x => '<div class="md-it"><span>' + (x.kind === "filed" ? "📝" : "🤝") + "</span><div><b>" + esc(x.title) + "</b><small>" + esc(x.form) + " · " + esc(ago(x.at)) + (x.grade ? " · graded " + esc(x.grade) : "") + "</small></div><em>+" + x.pts + "</em></div>").join("") :
         "<small>Nothing yet this week. Filing a division report is 10 points (plus a bonus when it's graded A, B or C), being tagged as an assist is 4.</small>") + "</section></div>";
@@ -77,10 +75,46 @@
       (rc.entries.length ? rc.entries.map(x => '<div class="md-rec' + (x.live ? "" : " old") + '"><div><span class="md-ty t-' + esc(x.type) + '">' + esc(x.label) + "</span><small>" + esc(day(x.at)) + (x.pts ? " · +" + x.pts + " pts" : "") +
         (x.status !== "active" ? " · " + esc(x.status) : x.expires ? (x.live ? " · until " : " · ended ") + esc(day(x.expires)) : "") + "</small></div><p>" + esc(x.reason) + "</p><small>by " + esc(x.by || "—") + "</small></div>").join("") : '<p class="md-none">Clean record. Nothing on file.</p>') + "</section>";
   }
+  // short column heads for the cert columns ("SWAT CERT" → "SWAT", "Search & Rescue" → "S&R"); the full name is the tooltip
+  const short = n => { const t = String(n).replace(/\b(cert(ified|ification)?s?|qualif\w*|status)\b/ig, "").replace(/\s+/g, " ").trim() || n; return t.length > 9 ? t.split(/[\s/-]+/).map(w => w[0]).join("").toUpperCase().slice(0, 5) : t; };
   function roster(R) {
-    const groups = []; R.roster.forEach(o => { const g = o.rank || o.section || "Members"; let x = groups.find(y => y.n === g); if (!x) { x = { n: g, l: [] }; groups.push(x); } x.l.push(o); });
-    return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.</p>' +
-      groups.map(g => '<div class="md-rg"><b>' + esc(g.n) + "</b>" + g.l.map(o => '<div class="md-ro' + (o.me ? " me" : "") + '"><code>' + esc(o.callsign || "—") + "</code><span>" + esc(o.name) + (o.staff ? " ⭐" : "") + (o.me ? " (you)" : "") + "</span>" + '<span class="md-rc">' + (o.certs || []).map(c => "<i>" + esc(c) + "</i>").join("") + "</span>" + (o.loa ? "<em>LOA</em>" : "<em class=\"x\"></em>") + "</div>").join("") + "</div>").join("") + "</section>";
+    const C = R.certNames || [], groups = []; R.roster.forEach(o => { const g = o.rank || o.section || "Members"; let x = groups.find(y => y.n === g); if (!x) { x = { n: g, l: [] }; groups.push(x); } x.l.push(o); });
+    const cols = 3 + C.length;
+    return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.' + (C.length ? " ✓ = certified." : "") + "</p>" +
+      '<div class="md-tw"><table class="md-rt"><thead><tr><th>Unit</th><th>Name</th>' + C.map(c => '<th class="c" title="' + esc(c) + '">' + esc(short(c)) + "</th>").join("") + "<th></th></tr></thead><tbody>" +
+      groups.map(g => '<tr class="g"><td colspan="' + cols + '">' + esc(g.n) + "</td></tr>" + g.l.map(o => '<tr' + (o.me ? ' class="me"' : "") + "><td><code>" + esc(o.callsign || "—") + "</code></td><td>" + esc(o.name) + (o.staff ? " ⭐" : "") + (o.me ? ' <small>(you)</small>' : "") + "</td>" +
+        C.map(c => (o.certs || []).indexOf(c) !== -1 ? '<td class="c y" title="' + esc(c) + '">✓</td>' : '<td class="c n">·</td>').join("") + "<td>" + (o.loa ? "<em>LOA</em>" : "") + "</td></tr>").join("")).join("") + "</tbody></table></div></section>";
+  }
+  // one certification tile: earned, or not yet (with steps when there's a path to it)
+  function tile(c) {
+    return '<div class="mc' + (c.has ? " on" : "") + (c.steps ? " mc-p" : "") + '"><i>' + (c.has ? (c.steps ? "◐" : "✓") : "—") + "</i><div><b>" + esc(c.name) + "</b>" +
+      (c.how || c.src ? "<small>" + esc([c.how, c.src && c.src !== "auto" ? c.src : ""].filter(Boolean).join(" · ")) + (c.since ? " · since " + esc(day(c.since)) : "") + "</small>" : "") +
+      (c.steps ? '<ul>' + c.steps.map(x => '<li class="' + (x.done ? "ok" : "") + '">' + (x.done ? "✓ " : "○ ") + esc(x.t) + "</li>").join("") + "</ul>" + (c.next ? "<small>Both done → <b>" + esc(c.next) + "</b></small>" : "") : "") + "</div></div>";
+  }
+  function divCerts(R) {
+    const C = R.certNames || [], mine = R.myCerts || [];
+    if (!C.length) return '<div class="empty">' + esc(R.division.name) + " doesn't track any certifications on its roster yet.</div>";
+    return '<section class="md-card"><span class="md-k">MY ' + esc(R.division.name).toUpperCase() + " CERTIFICATIONS · " + mine.length + " OF " + C.length + '</span><div class="mc-grid">' +
+      C.map(n => tile({ name: n, has: mine.indexOf(n) !== -1, how: mine.indexOf(n) !== -1 ? "Certified" : "Not certified yet" })).join("") + '</div><small class="md-foot">Ask your division leaders about getting certified.</small></section>';
+  }
+  // ---------- MDT → My certifications (every cert, all divisions) ----------
+  let ALL = null, ALLBUSY = false;
+  function loadAll(force) {
+    if (ALLBUSY || (!force && ALL && Date.now() - ALL._t < 120000)) return; ALLBUSY = true;
+    Portal.post({ action: "myCerts", session: M().session }).then(r => { ALL = r || { ok: false, error: "No answer." }; }).catch(() => { ALL = { ok: false, error: "Couldn't reach the server." }; })
+      .finally(() => { ALL._t = Date.now(); ALLBUSY = false; if (M().view() === "mycerts") M().draw(); });
+  }
+  function certsHTML() {
+    loadAll();
+    if (!ALL) return '<div class="empty">Loading your certifications…</div>';
+    if (!ALL.ok) return '<div class="empty">' + esc(ALL.error === "AUTH" ? "Your MDT session expired. Sign on again." : ALL.error || "Couldn't load.") + "</div>";
+    const dept = (ALL.fto || []).concat(ALL.dept || []), got = dept.filter(c => c.has).length + ALL.divisions.reduce((n, d) => n + d.certs.filter(c => c.has).length, 0);
+    let h = '<div class="mc-hero"><div><small>MY CERTIFICATIONS</small><h1>' + got + " held</h1><p>" + esc(ALL.rank || "") + (ALL.divisions.length ? " · " + ALL.divisions.map(d => d.name).join(", ") : "") + "</p></div></div>";
+    h += '<section class="md-card mc-sec"><span class="md-k">DEPARTMENT</span>' + (dept.length ? '<div class="mc-grid">' + dept.map(tile).join("") + "</div>" : '<p class="md-none">No department certifications yet. Corporals start the FTO program; Sergeants and above are FTOs.</p>') + "</section>";
+    ALL.divisions.filter(d => d.certs.length).forEach(d => { const n = d.certs.filter(c => c.has).length;
+      h += '<section class="md-card mc-sec" style="--dc:' + esc(d.color || "#2f7bff") + '"><span class="md-k"><i class="md-dot"></i>' + esc(d.name).toUpperCase() + " · " + n + " OF " + d.certs.length + "</span>" +
+        (d.certs.length ? '<div class="mc-grid">' + d.certs.map(c => tile({ name: c.name, has: c.has, how: c.has ? "Certified" : "Not certified yet" })).join("") + "</div>" : '<p class="md-none">This division doesn\'t track certifications.</p>') + "</section>"; });
+    return h;
   }
   function gear(R, kind) {
     const L = (R.gear || []).filter(x => x.kind === (kind === "vehicles" ? "vehicle" : "uniform"));
@@ -99,7 +133,7 @@
     if (!LIST.some(x => x.id === id) && LIST.length) return '<div class="empty">You\'re not on that division\'s roster.</div>';
     if (!R) return '<div class="empty">Loading your division…</div>';
     if (!R.ok) return '<div class="empty">' + esc(R.error === "AUTH" ? "Your MDT session expired. Sign on again." : R.error || "Couldn't load.") + "</div>";
-    return head(R, sub) + (sub === "record" ? record(R) : sub === "roster" ? roster(R) : sub === "vehicles" || sub === "uniforms" ? gear(R, sub) : stats(R));
+    return head(R, sub) + (sub === "record" ? record(R) : sub === "roster" ? roster(R) : sub === "certs" ? divCerts(R) : sub === "vehicles" || sub === "uniforms" ? gear(R, sub) : stats(R));
   }
-  window.MDTMyDiv = { nav: nav, html: html, title: title };
+  window.MDTMyDiv = { nav: nav, html: html, title: title, certsHTML: certsHTML };
 })();
