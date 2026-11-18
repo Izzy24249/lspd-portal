@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 153;
+const BACKEND_VERSION = 154;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -411,6 +411,7 @@ function warmRosters(opts) {
     step("division rosters", () => divs.forEach(dv => { if (dv.rosterTabId != null) getRosterTab_(dv.rosterTabId, true, [], false, false); }));
     step("race standings", () => { const ck = "div_hq_" + divs.map(x => x.id).join(",").slice(0, 200); CacheService.getScriptCache().remove(ck + "_n"); divOverview_(null, { username: "", role: "officer", key: "warm" }, true); });
   }
+  if (divs.length) step("my division pages", () => divs.forEach(dv => { if (dv.rosterTabId != null) myDivData_(dv, true); }));
   step("form rosters", () => rostersFor_(cfg.forms, { fresh: true }));
   // promotion tracker: rank + time-in-grade columns, everyone's report counts
   step("promotion roster", () => { [PERSONNEL_TAB_, ONBOARD_TAB_].forEach(t => { const tid = rosterTabByName_(t); if (tid != null) getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); }); promoPeople_(true); });
@@ -2249,7 +2250,7 @@ function divExtra_(d, who) {
       if (op === "remove") { sh.deleteColumn(c.col + 1); return { ok: true, msg: "Removed the \"" + name + "\" column" }; }
       return { ok: false, error: "Unknown change." };
     });
-    if (res.ok) { try { CacheService.getScriptCache().remove("mydiv_certs_" + dv.id); } catch (e) {}
+    if (res.ok) { myDivBust_(dv);
       divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "note", discord: "", name: dv.name, callsign: "", reason: res.msg + " on the roster tab.", post: false }), who); }
     return res;
   }
@@ -2263,7 +2264,7 @@ function divExtra_(d, who) {
       if (r.certs[cert] === on) return { ok: true, same: true };
       L.sh.getRange(r.row, c.col + 1).setValue(on); return { ok: true, name: r.name }; });
     if (res.ok && !res.same) { divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "cert", reason: (on ? "Certified: " : "Certification removed: ") + cert + (str_(d.reason).trim() ? " · " + str_(d.reason).trim() : ""), post: false }), who);
-      try { CacheService.getScriptCache().remove("mydiv_certs_" + dv.id); } catch (e) {} }
+      myDivBust_(dv); }
     return res;
   }
   if (a === "divMove") {   // move / promote inside the division: into the next open callsign of the picked position
@@ -2403,46 +2404,33 @@ function myCerts_(acct) {
   return { ok: true, rank: o ? o.rank : "", fto: fto, dept: dept, divisions: divs };
 }
 // every member's certifications in a division (from its roster tab's tick boxes), cached a few minutes
-// the officer's own row on the division roster tab: billet, division callsign, joined / promo date, and every other
-// column the division keeps (K9 name, role, aircraft, notes on specialties…) so their division page is about them
-function myDivProfile_(dv, id) {
-  const c = CacheService.getScriptCache(), k = "mydiv_prof_" + dv.id + "_" + id, hit = c.get(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
-  let out = { fields: [] };
-  try { const L = divLayout_(dv); if (!L.error) { const r = L.rows.find(x => x.id === id);
-    if (r) { const v = L.sh.getRange(r.row, 1, 1, L.sh.getLastColumn()).getDisplayValues()[0], H = L.sh.getRange(L.hr, 1, 1, L.sh.getLastColumn()).getDisplayValues()[0];
-      const skip = {}; Object.keys(L.cols).forEach(q => { if (L.cols[q] >= 0) skip[L.cols[q]] = 1; }); L.certs.forEach(x => { skip[x.col] = 1; });
-      out = { unit: r.unit, billet: r.billet, date: L.cols.date >= 0 ? str_(v[L.cols.date]).trim() : "", fields: [] };
-      H.forEach((h, j) => { const name = str_(h).replace(/\s+/g, " ").trim(), val = str_(v[j]).trim();
-        if (skip[j] || !name || !val || /^(true|false)$/i.test(val) || /strike|discipline|warning|discord|^id$/i.test(name) || val.length > 60) return;
-        out.fields.push({ k: name.slice(0, 24), v: val }); });
-      out.fields = out.fields.slice(0, 8); } } } catch (e) {}
-  try { c.put(k, JSON.stringify(out), 300); } catch (e) {}
-  return out;
-}
-// the division roster's own columns for the MDT roster table: promotion date + whatever else the division keeps
-// (K9 name, T.I.G., role…), keyed by Discord ID. Strikes / discipline / notes / status stay out.
-function myDivRosterCols_(dv) {
-  const c = CacheService.getScriptCache(), k = "mydiv_cols2_" + dv.id, hit = c.get(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
-  let out = { fields: [], by: {} };
+// everything the MDT's My Division pages need from a division's roster tab, read ONCE per division and cached 15 minutes
+// (warmed every 10 minutes in the background): certs, each officer's row (billet, unit, date, extra columns)
+function myDivData_(dv, fresh) {
+  const k = "mydiv_data_" + dv.id;
+  if (!fresh) { const hit = bigGet_(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const out = { names: [], by: {}, fields: [], rc: {}, prof: {} };
   try { const L = divLayout_(dv); if (!L.error) {
+    out.names = L.certs.map(x => x.name);
     const v = L.sh.getDataRange().getDisplayValues(), H = v[L.hr - 1] || [], skip = {};
-    Object.keys(L.cols).forEach(q => { if (L.cols[q] >= 0 && q !== "date") skip[L.cols[q]] = 1; }); L.certs.forEach(x => { skip[x.col] = 1; });
+    Object.keys(L.cols).forEach(q => { if (L.cols[q] >= 0) skip[L.cols[q]] = 1; }); L.certs.forEach(x => { skip[x.col] = 1; });
     const ext = []; H.forEach((h, j) => { const name = str_(h).replace(/\s+/g, " ").trim();
-      if (skip[j] || j === L.cols.date || !name || /strike|discipline|warning|note|status|activity|discord|^id$/i.test(name)) return;
-      if (L.rows.some(r => r.id && str_(v[r.row - 1][j]).trim() && !/^(true|false)$/i.test(str_(v[r.row - 1][j]).trim()))) ext.push({ col: j, name: name.slice(0, 20) }); });
+      if (skip[j] || !name || /strike|discipline|warning|note|status|activity|discord|^id$/i.test(name)) return;
+      if (L.rows.some(r => r.id && str_((v[r.row - 1] || [])[j]).trim() && !/^(true|false)$/i.test(str_(v[r.row - 1][j]).trim()))) ext.push({ col: j, name: name.slice(0, 20) }); });
     out.fields = ext.slice(0, 4).map(x => x.name);
-    L.rows.forEach(r => { if (!r.id) return; const row = v[r.row - 1], f = {};
-      ext.slice(0, 4).forEach(x => { const val = str_(row[x.col]).trim(); if (val && !/^(true|false)$/i.test(val)) f[x.name] = val.slice(0, 40); });
-      out.by[r.id] = { date: L.cols.date >= 0 ? str_(row[L.cols.date]).trim() : "", billet: r.billet, f: f }; }); } } catch (e) {}
-  try { c.put(k, JSON.stringify(out), 300); } catch (e) {}
+    L.rows.forEach(r => { if (!r.id) return; const row = v[r.row - 1] || [], f = {}, pf = [];
+      out.by[r.id] = Object.keys(r.certs).filter(n => r.certs[n]);
+      ext.forEach((x, i) => { const val = str_(row[x.col]).trim(); if (!val || /^(true|false)$/i.test(val)) return; if (i < 4) f[x.name] = val.slice(0, 40); if (val.length <= 60 && pf.length < 8) pf.push({ k: x.name.slice(0, 24), v: val }); });
+      const date = L.cols.date >= 0 ? str_(row[L.cols.date]).trim() : "";
+      out.rc[r.id] = { date: date, billet: r.billet, f: f };
+      out.prof[r.id] = { unit: r.unit, billet: r.billet, date: date, fields: pf }; }); } } catch (e) {}
+  try { bigPut_(k, JSON.stringify(out), 900); } catch (e) {}
   return out;
 }
-function myDivCerts_(dv) {
-  const c = CacheService.getScriptCache(), k = "mydiv_certs_" + dv.id, hit = c.get(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
-  let out = { names: [], by: {} }; try { const L = divLayout_(dv); if (!L.error) { out.names = L.certs.map(x => x.name); L.rows.forEach(r => { if (r.id) out.by[r.id] = Object.keys(r.certs).filter(n => r.certs[n]); }); } } catch (e) {}
-  try { c.put(k, JSON.stringify(out), 300); } catch (e) {}
-  return out;
-}
+function myDivProfile_(dv, id) { return myDivData_(dv).prof[id] || { fields: [] }; }
+function myDivRosterCols_(dv) { const D = myDivData_(dv); return { fields: D.fields, by: D.rc }; }
+function myDivCerts_(dv) { const D = myDivData_(dv); return { names: D.names, by: D.by }; }
+function myDivBust_(dv) { try { CacheService.getScriptCache().removeAll(["mydiv_data_" + dv.id, "mydiv_data_" + dv.id + "_n"]); } catch (e) {} }
 // MDT Fleet / Uniform pages: every division's own vehicles and outfits
 function gearForMdt_() {
   const c = CacheService.getScriptCache(), hit = c.get("gear_all"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }

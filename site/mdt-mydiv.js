@@ -12,7 +12,7 @@
 
   // ---------- side menu ----------
   function nav(list) {
-    LIST = list || [];
+    LIST = list || []; prefetch();
     const grp = document.getElementById("myDivGrp"), box = document.getElementById("myDivNav"); if (!grp || !box) return;
     grp.hidden = !LIST.length; if (!LIST.length) { box.innerHTML = ""; return; }
     const cur = M().view ? M().view() : "";
@@ -32,13 +32,24 @@
   });
 
   // ---------- data ----------
+  // the last copy is kept on this device, so a division page draws instantly and refreshes quietly in the background
+  const ME = (() => { try { return (JSON.parse(localStorage.getItem("lspd_prof") || "{}") || {}).discordId || ""; } catch (e) { return ""; } })();
+  const keep = (k, v) => { try { v ? localStorage.setItem("mdt:md:" + ME + ":" + k, JSON.stringify(v)) : localStorage.removeItem("mdt:md:" + ME + ":" + k); } catch (e) {} };
+  const kept = k => { try { return JSON.parse(localStorage.getItem("mdt:md:" + ME + ":" + k) || "null"); } catch (e) { return null; } };
   function load(id, force) {
-    if (BUSY[id] || (!force && DATA[id] && Date.now() - DATA[id]._t < 120000)) return;
+    if (!DATA[id]) { const c = kept(id); if (c && c.ok) { c._old = true; DATA[id] = c; } }
+    if (BUSY[id] || (!force && DATA[id] && !DATA[id]._old && Date.now() - DATA[id]._t < 120000)) return;
     BUSY[id] = 1;
-    Portal.post({ action: "myDivision", session: M().session, division: id }).then(r => { r = r || { ok: false, error: "No answer." }; r._t = Date.now(); DATA[id] = r; })
-      .catch(() => { DATA[id] = { ok: false, error: "Couldn't reach the server.", _t: Date.now() }; })
-      .finally(() => { delete BUSY[id]; if ((M().view() || "").indexOf("mydiv:" + id + ":") === 0) M().draw(); });
+    Portal.post({ action: "myDivision", session: M().session, division: id }).then(r => { r = r || { ok: false, error: "No answer." }; r._t = Date.now();
+        if (r.ok || !DATA[id] || !DATA[id].ok || r.error === "AUTH") DATA[id] = r; else DATA[id]._old = false;   // keep showing the saved copy if Google hiccups
+        if (r.ok) keep(id, r); })
+      .catch(() => { if (!DATA[id] || !DATA[id].ok) DATA[id] = { ok: false, error: "Couldn't reach the server.", _t: Date.now() }; })
+      .finally(() => { delete BUSY[id]; if (DATA[id]) { DATA[id]._old = false; DATA[id]._t = Date.now(); } if ((M().view() || "").indexOf("mydiv:" + id + ":") === 0) M().draw(); });
   }
+  // after the MDT has loaded, fetch each of their divisions once in the background so opening one is instant
+  let PRE = false;
+  function prefetch() { if (PRE || !LIST.length) return; PRE = true;
+    setTimeout(() => LIST.forEach((d, i) => setTimeout(() => { const c = kept(d.id); if (!c || !c._t || Date.now() - c._t > 10 * 60e3) load(d.id); }, i * 4000)), 6000); }
   function title(v) { const p = v.split(":"), d = LIST.find(x => x.id === p[1]), s = SUB.find(x => x[0] === p[2]); return [d ? d.name.toUpperCase() : "MY DIVISION", s ? s[1] : "Division"]; }
 
   // ---------- pages ----------
@@ -127,9 +138,11 @@
   // ---------- MDT → My certifications (every cert, all divisions) ----------
   let ALL = null, ALLBUSY = false;
   function loadAll(force) {
-    if (ALLBUSY || (!force && ALL && Date.now() - ALL._t < 120000)) return; ALLBUSY = true;
-    Portal.post({ action: "myCerts", session: M().session }).then(r => { ALL = r || { ok: false, error: "No answer." }; }).catch(() => { ALL = { ok: false, error: "Couldn't reach the server." }; })
-      .finally(() => { ALL._t = Date.now(); ALLBUSY = false; if (M().view() === "mycerts") M().draw(); });
+    if (!ALL) { const c = kept("certs"); if (c && c.ok) { ALL = c; ALL._old = true; } }
+    if (ALLBUSY || (!force && ALL && !ALL._old && Date.now() - ALL._t < 120000)) return; ALLBUSY = true;
+    Portal.post({ action: "myCerts", session: M().session }).then(r => { r = r || { ok: false, error: "No answer." }; if (r.ok || !ALL || !ALL.ok) ALL = r; else ALL._old = false; if (r.ok) keep("certs", Object.assign({}, r, { _t: Date.now() })); })
+      .catch(() => { if (!ALL || !ALL.ok) ALL = { ok: false, error: "Couldn't reach the server." }; })
+      .finally(() => { ALL._t = Date.now(); ALL._old = false; ALLBUSY = false; if (M().view() === "mycerts") M().draw(); });
   }
   function certsHTML() {
     loadAll();
@@ -155,10 +168,11 @@
     }).join("") + "</div>";
   }
   function html(v) {
-    const p = v.split(":"), id = p[1], sub = p[2], R = DATA[id];
-    load(id);
+    const p = v.split(":"), id = p[1], sub = p[2];
+    load(id); const R = DATA[id];
     if (!LIST.some(x => x.id === id) && LIST.length) return '<div class="empty">You\'re not on that division\'s roster.</div>';
     if (!R) return '<div class="empty">Loading your division…</div>';
+    if (!R.ok && R.error === "AUTH") keep(id, null);
     if (!R.ok) return '<div class="empty">' + esc(R.error === "AUTH" ? "Your MDT session expired. Sign on again." : R.error || "Couldn't load.") + "</div>";
     return '<div class="md-page" style="--dc:' + esc(R.division.color || "#2f7bff") + '">' + head(R, sub) + (sub === "record" ? record(R) : sub === "roster" ? roster(R) : sub === "certs" ? divCerts(R) : sub === "vehicles" || sub === "uniforms" ? gear(R, sub) : stats(R));
   }
