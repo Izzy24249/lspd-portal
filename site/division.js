@@ -483,7 +483,7 @@
   const titleCase = t => String(t || "").toLowerCase().replace(/(^|[\s\-/])([a-z])/g, (m, a, b) => a + b.toUpperCase());
   function quotaBar(o) {
     if (o.exempt && (DATA.division.quota || DATA.division.quotaPts)) return `<div class="qb ex"><span>Exempt · ${o.qn}${qUnit() ? " pts" : ""} this ${esc(qPer())}</span></div>`;
-    if (o.loa && (DATA.division.quota || DATA.division.quotaPts)) return `<div class="qb ex"><span>On LOA · excused</span></div>`;
+    if (o.loa && (DATA.division.quota || DATA.division.quotaPts)) return `<div class="qb ex loa"><span>🏖 On LOA · excused</span></div>`;
     if (!o.quota) return "";
     const f = Math.min(1, o.quota.n / o.quota.need);
     return `<div class="qb${o.quota.met ? " met" : ""}"><div><i style="width:${f * 100}%"></i></div><span>${o.quota.n}/${o.quota.need}${o.quota.pts ? " pts" : ""}</span></div>`;
@@ -692,7 +692,7 @@
       if (can && k === "w1") { const s1 = sent(o, "inact1"); act = s1 ? `<span class="ax-done">✓ Warning sent ${esc(fmtD(s1.at))}</span>` : `<button class="dc-btn xs warn" data-xinact="inact1" data-xo="${esc(o.key)}">Send warning</button>`; }
       if (can && k === "w2") { const s2 = sent(o, "inact2"); act = s2 ? `<span class="ax-done">✓ Final notice ${esc(fmtD(s2.at))}</span>` : `<button class="dc-btn xs warn2" data-xinact="inact2" data-xo="${esc(o.key)}">Final notice</button>`; }
       if (can && k === "w3") act = `<button class="dc-btn xs danger" data-xremove="${esc(o.key)}">Remove from division…</button>`;
-      const pill = o.loa ? `<span class="ax-pill loa">On LOA · excused</span>` : o.exempt ? `<span class="ax-pill ex">${esc(titleCase(o.exempt))} · exempt</span>` : k ? `<span class="ax-pill ${k}">${esc(stageLabel(o))}</span>` : o.quota && o.quota.met ? `<span class="ax-pill ok">Met quota</span>` : o.quota ? `<span class="ax-pill low">Behind quota</span>` : `<span class="ax-pill ok">Active</span>`;
+      const pill = o.loa ? `<span class="ax-pill loa">🏖 On LOA · excused</span>` : o.exempt ? `<span class="ax-pill ex">${esc(titleCase(o.exempt))} · exempt</span>` : k ? `<span class="ax-pill ${k}">${esc(stageLabel(o))}</span>` : o.quota && o.quota.met ? `<span class="ax-pill ok">Met quota</span>` : o.quota ? `<span class="ax-pill low">Behind quota</span>` : `<span class="ax-pill ok">Active</span>`;
       return `<div class="ax-r ${k}"><button type="button" class="ax-who" data-off="${esc(o.key)}"><b>${esc(o.name)}</b><small>${esc(o.callsign || "")}${o.rank ? " · " + esc(o.rank) : ""}</small></button>
         <div class="ax-q">${need ? quotaBar(o) || '<span class="ax-dim">—</span>' : `<span class="ax-num">${o.ptsW} pts</span>`}</div>
         <div class="ax-wk">${wk.map((n, i) => `<span class="${n ? "on" : "off"}" title="${i + 1} week${i ? "s" : ""} ago: ${n} pts">${n}</span>`).join("")}</div>

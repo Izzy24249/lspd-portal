@@ -716,3 +716,7 @@ html,body.dc{overflow-x:hidden}
 .ct-chip.on{border-color:rgba(52,211,153,.6);background:rgba(52,211,153,.12);color:#a7f3d0}.ct-chip:disabled{cursor:default}
 .cm-r{display:flex;gap:8px;align-items:center}.cm-r input{flex:1;height:38px;border-radius:9px;border:1px solid var(--line);background:rgba(0,0,0,.35);color:var(--text);padding:0 11px;font:14px Inter,sans-serif}
 .cm-r.add{margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
+
+/* LOA stands out for leaders: solid blue */
+.qb.loa{background:#2563eb!important;border-color:#3b82f6!important;color:#fff!important;font-weight:700}.qb.loa span{color:#fff!important}
+.ax-pill.loa{background:#2563eb!important;border-color:#60a5fa!important;color:#fff!important;font-weight:700;box-shadow:0 0 12px rgba(37,99,235,.45)}

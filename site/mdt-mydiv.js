@@ -104,7 +104,7 @@
     return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.' + (C.length ? " ✓ = certified." : "") + " Click an ID to copy it.</p>" +
       '<div class="md-tw"><table class="md-rt"><thead><tr><th>Div unit</th><th>Callsign</th><th>Name</th>' + X.map(x => "<th>" + esc(x) + "</th>").join("") +
       C.map(c => '<th class="c" title="' + esc(c) + '">' + esc(short(c)) + "</th>").join("") + "<th>Discord ID</th><th></th></tr></thead><tbody>" +
-      groups.map(g => '<tr class="g"><td colspan="' + cols + '">' + esc(g.n) + "</td></tr>" + g.l.map(o => '<tr' + (o.me ? ' class="me"' : "") + ">" +
+      groups.map(g => '<tr class="g"><td colspan="' + cols + '">' + esc(g.n) + "</td></tr>" + g.l.map(o => '<tr class="' + (o.me ? "me" : "") + (o.loa ? " loa" : "") + '">' +
         "<td><code>" + esc(o.callsign || "—") + '</code></td><td><code class="d">' + esc(o.dept || "—") + "</code></td>" +
         "<td><b>" + esc(o.name) + "</b>" + (o.staff ? " ⭐" : "") + (o.me ? " <small>(you)</small>" : "") + (o.billet && o.billet !== g.n ? "<br><small>" + esc(o.billet) + "</small>" : "") + "</td>" +
         X.map(x => "<td>" + (o.f && o.f[x] ? esc(o.f[x]) : '<span class="n">—</span>') + "</td>").join("") +
