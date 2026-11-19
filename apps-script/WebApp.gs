@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 155;
+const BACKEND_VERSION = 156;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -540,6 +540,11 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
   for (let i = hr + 1; i < shown.length; i++) {
     const filled = shown[i].filter(c => str_(c)).length;
     const noId = !(idCol >= 0 && str_(shown[i][idCol])), noCall = !(callCol >= 0 && callKey_(shown[i][callCol]));
+    if (filled === 2 && noId && noCall && !str_(shown[i][nameCol])) {   // "Detective" + "Major Crimes Unit": a heading over two cells
+      const two = shown[i].map(c => str_(c).trim()).filter(Boolean);
+      if (two.every(t => !/\d/.test(t) && t.length <= 40 && !/[:.|]/.test(t))) { const t = two.join(" · ");
+        afterHeading = true; inOutSection = isOut(t); if (!inOutSection) section = clip_(t, 60); continue; }
+    }
     if (filled === 1 && noId && noCall) {           // section heading row ("COMMANDING PILOTS", "Senior Pilots (4)", "Trainees")
       const t = str_(shown[i].find(c => str_(c)));
       const loud = /[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t);
@@ -2169,33 +2174,60 @@ function discAll_(divId) {
 function discPub_(x) { const t = DISC_TYPES_.find(y => y.id === x.type); return { id: x.id, discord: x.discord, callsign: x.callsign, name: x.name, type: x.type, label: t ? t.label : x.type, pts: x.pts, reason: x.reason, by: x.by, at: x.at, expires: x.expires, status: x.status, live: x.live }; }
 // A division roster tab's layout, worked out from its header row (each division's tab is laid out a little differently):
 // name, Discord ID, unit callsign, position (billet), promotion date, status and notes columns, and every spot under them.
+// text certifications ("Undercover Ops / Gang Task Force"): the column, the names in a cell, and names leaders added
+// that nobody holds yet (kept in Script Properties so they still show as a column)
+function divTextCertCol_(v, hr, C, certs) {
+  const used = {}; Object.keys(C).forEach(k => { if (C[k] >= 0) used[C[k]] = 1; }); certs.forEach(c => { used[c.col] = 1; });
+  return (v[hr] || []).findIndex((h, j) => !used[j] && /certif/i.test(str_(h)) && v.slice(hr + 1).some(r => certTokens_(r[j]).length));
+}
+function certTokens_(x) {
+  const t = str_(x).trim(); if (!t || /^(n\/?a|none|no|x|-+|—|tbd|pending|true|false)$/i.test(t)) return [];
+  return t.split(/\s*[\/,;+&|]\s*|\s+and\s+/i).map(y => y.replace(/\s+/g, " ").trim()).filter(y => y && !/^(n|a|n\/a|none)$/i.test(y)).map(y => y.slice(0, 30));
+}
+function divCertExtra_(dv, set) {
+  const k = "DIV_CERTX_" + dv.id;
+  if (set) { PROPS_.setProperty(k, JSON.stringify(set.slice(0, 30))); return set; }
+  try { return JSON.parse(PROPS_.getProperty(k) || "[]"); } catch (e) { return []; }
+}
 function divLayout_(dv) {
   if (dv.rosterTabId == null) return { error: "This division has no roster tab picked (Admin → Division Command)." };
   const sh = rosterBook_().getSheets().find(x => x.getSheetId() === Number(dv.rosterTabId)); if (!sh) return { error: "The division's roster tab wasn't found." };
   const v = sh.getDataRange().getDisplayValues(); let hr = -1;
   for (let i = 0; i < Math.min(15, v.length) && hr < 0; i++) if (v[i].some(c => /discord/i.test(c)) && v[i].some(c => /name/i.test(c))) hr = i;
+  // no "Discord" header (CID calls it "Email ID"): the row with a Name header and a few other headers
+  for (let i = 0; i < Math.min(15, v.length) && hr < 0; i++) if (v[i].some(c => /^\s*(officer'?s?\s*)?name\s*$/i.test(c)) && v[i].filter(c => str_(c).trim()).length >= 3) hr = i;
   if (hr < 0) return { error: "Couldn't find the header row (Name / Discord ID) on the " + sh.getName() + " tab." };
   const H = v[hr].map(x => str_(x).trim().toLowerCase()), find = re => H.findIndex(h => re.test(h));
   const C = { name: H.findIndex(h => /(officer'?s?\s*)?name/.test(h) && !/k-?9|dog|pilot|horse|unit/.test(h)), id: find(/discord/), unit: find(/callsign|unit/), billet: find(/rank|billet|position/),
     status: find(/status|activity/), notes: find(/note/), date: find(/promo|date/) };
   if (C.date < 0) { const tig = find(/t\.?\s*i\.?\s*g/); if (tig > 0 && v.slice(hr + 1, hr + 40).some(r => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str_(r[tig - 1]).trim()))) C.date = tig - 1; }
+  { // the Discord ID column by what's in it (17-20 digit numbers), whatever the header says
+    const isId = x => /^\s*\d{17,20}\s*$/.test(str_(x)), body = v.slice(hr + 1), n = c => body.filter(r => isId(r[c])).length;
+    let best = -1, bn = 0; for (let c = 0; c < (v[hr] || []).length; c++) { if (c === C.name) continue; const k = n(c); if (k > bn) { best = c; bn = k; } }
+    if (best >= 0 && bn >= 2 && (C.id < 0 || n(C.id) < bn * 0.6)) C.id = best; }
   if (C.name < 0 || C.id < 0) return { error: "The " + sh.getName() + " tab needs Name and Discord ID columns." };
   // certifications: any column whose cells are tick boxes (TRUE / FALSE) under a header
   const raw = sh.getRange(1, 1, v.length, v[0].length).getValues(), certs = [];
   v[hr].forEach((h, j) => { const name = str_(h).trim(); if (!name || Object.keys(C).some(k => C[k] === j)) return;
     let bools = 0, other = 0; for (let i = hr + 1; i < raw.length; i++) { const x = raw[i][j]; if (x === true || x === false) bools++; else if (str_(x).trim()) other++; }
     if ((bools >= 3 || (bools >= 1 && /cert|qualif/i.test(name))) && bools > other * 3) certs.push({ col: j, name: name.replace(/\s+/g, " ").slice(0, 30) }); });
+  // a "Certifications" column written as text ("Undercover Ops / Gang Task Force", "N/A"): each name in it is a certification
+  const TX = divTextCertCol_(v, hr, C, certs);
+  if (TX >= 0) { const seen = {}; const add = n => { if (n && !seen[n.toLowerCase()]) { seen[n.toLowerCase()] = 1; certs.push({ col: TX, name: n, text: true }); } };
+    for (let i = hr + 1; i < v.length; i++) certTokens_(v[i][TX]).forEach(add); divCertExtra_(dv).forEach(add); }
   const rows = [], billets = [];
   for (let i = hr + 1; i < v.length; i++) {
     const r = v[i], unit = C.unit >= 0 ? str_(r[C.unit]).trim().toUpperCase() : "", billet = C.billet >= 0 ? str_(r[C.billet]).trim() : "", name = str_(r[C.name]).trim(), id = str_(r[C.id]).replace(/\D/g, "");
     if (!unit && !name && !id) continue;
+    if (!name && !id && !/\d/.test(unit)) continue;   // a heading spread over two cells ("Detective" | "Major Crimes Unit"), not an open spot
     const x = { row: i + 1, unit: unit, billet: billet, name: name, id: id, open: !name && !id && !!unit, certs: {} };
-    certs.forEach(c => { const val = raw[i][c.col]; if (val === true || val === false) x.certs[c.name] = val; });
+    certs.forEach(c => { if (c.text) { if (name || id) x.certs[c.name] = certTokens_(v[i][c.col]).some(t => t.toLowerCase() === c.name.toLowerCase()); return; }
+      const val = raw[i][c.col]; if (val === true || val === false) x.certs[c.name] = val; });
     rows.push(x);
     if (billet && unit) { let b = billets.find(y => y.name === billet); if (!b) { b = { name: billet, open: [], filled: 0 }; billets.push(b); } if (x.open) b.open.push(unit); else b.filled++; }
   }
   const colNames = {}; Object.keys(C).forEach(k => { if (C[k] >= 0) colNames[k] = String.fromCharCode(65 + C[k]); });
-  return { sh: sh, hr: hr + 1, cols: C, colNames: colNames, rows: rows, certs: certs, billets: billets.map(b => ({ name: b.name, filled: b.filled, open: b.open.length, next: b.open[0] || "" })) };
+  return { sh: sh, hr: hr + 1, cols: C, colNames: colNames, rows: rows, certs: certs, textCol: TX, billets: billets.map(b => ({ name: b.name, filled: b.filled, open: b.open.length, next: b.open[0] || "" })) };
 }
 // Division Command actions that come from the page: discipline, removal, fleet & uniforms
 function divExtra_(d, who) {
@@ -2234,6 +2266,18 @@ function divExtra_(d, who) {
     const op = str_(d.op), name = clip_(str_(d.name).replace(/\s+/g, " ").trim(), 30), nn = clip_(str_(d.newName).replace(/\s+/g, " ").trim(), 30);
     const res = withLock_(() => { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
       const sh = L.sh, c = L.certs.find(x => x.name === name), taken = n => L.certs.some(x => x.name.toLowerCase() === n.toLowerCase());
+      if (L.textCol >= 0 && (op === "add" || (c && c.text))) {   // certifications written as text in one column: edit the names in the cells
+        const X = divCertExtra_(dv);
+        if (op === "add") { if (!name) return { ok: false, error: "Name the certification." }; if (taken(name)) return { ok: false, error: "There's already a \"" + name + "\" certification." };
+          divCertExtra_(dv, X.concat([name])); return { ok: true, msg: "Added \"" + name + "\" (tick people to write it into column " + String.fromCharCode(65 + L.textCol) + ")" }; }
+        if (op === "rename" && !nn) return { ok: false, error: "Type the new name." };
+        if (op === "rename" && nn.toLowerCase() !== name.toLowerCase() && taken(nn)) return { ok: false, error: "There's already a \"" + nn + "\"." };
+        const rg = sh.getRange(L.hr + 1, L.textCol + 1, Math.max(1, sh.getLastRow() - L.hr), 1), vals = rg.getDisplayValues();
+        rg.setValues(vals.map(r => { const t = certTokens_(r[0]); if (!t.some(x => x.toLowerCase() === name.toLowerCase())) return [r[0]];
+          const out = op === "rename" ? t.map(x => x.toLowerCase() === name.toLowerCase() ? nn : x) : t.filter(x => x.toLowerCase() !== name.toLowerCase());
+          return [out.length ? out.join(" / ") : "N/A"]; }));
+        const X2 = X.filter(x => x.toLowerCase() !== name.toLowerCase()); if (op === "rename") X2.push(nn); divCertExtra_(dv, X2);
+        return { ok: true, msg: op === "rename" ? "Renamed \"" + name + "\" to \"" + nn + "\"" : "Removed \"" + name + "\" from everyone" }; }
       if (op === "add") {
         if (!name) return { ok: false, error: "Name the certification." }; if (taken(name)) return { ok: false, error: "There's already a \"" + name + "\" certification." };
         const last = L.certs.length ? L.certs[L.certs.length - 1].col + 1 : sh.getLastColumn();   // 1-based column to insert after
@@ -2262,6 +2306,9 @@ function divExtra_(d, who) {
       if (!c) return { ok: false, error: "\"" + cert + "\" isn't a certification column on the roster tab." };
       if (!r) return { ok: false, error: "Couldn't find them on the roster tab." };
       if (r.certs[cert] === on) return { ok: true, same: true };
+      if (c.text) { const cell = L.sh.getRange(r.row, c.col + 1); let t = certTokens_(cell.getDisplayValue()).filter(x => x.toLowerCase() !== cert.toLowerCase());
+        if (on) { const order = L.certs.filter(x => x.text).map(x => x.name); t.push(cert); t.sort((p, q) => order.indexOf(p) - order.indexOf(q)); }
+        cell.setValue(t.length ? t.join(" / ") : "N/A"); return { ok: true, name: r.name }; }
       L.sh.getRange(r.row, c.col + 1).setValue(on); return { ok: true, name: r.name }; });
     if (res.ok && !res.same) { divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "cert", reason: (on ? "Certified: " : "Certification removed: ") + cert + (str_(d.reason).trim() ? " · " + str_(d.reason).trim() : ""), post: false }), who);
       myDivBust_(dv); }
@@ -2416,7 +2463,7 @@ function myDivData_(dv, fresh) {
     Object.keys(L.cols).forEach(q => { if (L.cols[q] >= 0) skip[L.cols[q]] = 1; }); L.certs.forEach(x => { skip[x.col] = 1; });
     const ext = []; H.forEach((h, j) => { const name = str_(h).replace(/\s+/g, " ").trim();
       if (skip[j] || !name || /strike|discipline|warning|note|status|activity|discord|^id$/i.test(name)) return;
-      if (L.rows.some(r => r.id && str_((v[r.row - 1] || [])[j]).trim() && !/^(true|false)$/i.test(str_(v[r.row - 1][j]).trim()))) ext.push({ col: j, name: name.slice(0, 20) }); });
+      if (L.rows.some(r => r.id && str_((v[r.row - 1] || [])[j]).trim() && !/^(true|false)$/i.test(str_(v[r.row - 1][j]).trim()))) ext.push({ col: j, name: name.length > 18 ? name.split(" ")[0] : name }); });
     out.fields = ext.slice(0, 4).map(x => x.name);
     L.rows.forEach(r => { if (!r.id) return; const row = v[r.row - 1] || [], f = {}, pf = [];
       out.by[r.id] = Object.keys(r.certs).filter(n => r.certs[n]);
