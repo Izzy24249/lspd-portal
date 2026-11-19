@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 161;
+const BACKEND_VERSION = 162;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -418,6 +418,7 @@ function warmRosters(opts) {
     step("division rosters", () => divs.forEach(dv => { if (dv.rosterTabId != null) getRosterTab_(dv.rosterTabId, true, [], false, false); }));
     step("race standings", () => { const ck = "div_hq_" + divs.map(x => x.id).join(",").slice(0, 200); CacheService.getScriptCache().remove(ck + "_n"); divOverview_(null, { username: "", role: "officer", key: "warm" }, true); });
   }
+  if (divs.length) step("auto certifications", () => divs.forEach(dv => { if (dv.rosterTabId != null) divAutoCertSync_(dv); }));
   if (divs.length) step("my division pages", () => divs.forEach(dv => { if (dv.rosterTabId != null) myDivData_(dv, true); }));
   step("form rosters", () => rostersFor_(cfg.forms, { fresh: true }));
   // promotion tracker: rank + time-in-grade columns, everyone's report counts
@@ -2190,7 +2191,21 @@ function divTextCertCol_(v, hr, C, certs) {
 }
 function divNoNameCerts_(dv) {
   const n = (str_(dv.name) + " " + str_(dv.id)).toLowerCase();
-  return /\bteu\b|traffic/.test(n) ? { M: "RA", N: "FTO", O: "MBU", P: "DUI", Q: "CVE", R: "BPU" } : {};
+  return /\bteu\b|traffic/.test(n) ? { M: "RA", N: "FTO", O: "MBU", P: "DUI", Q: "CVE", R: "BPU" }
+    : /\bcru\b|crisis/.test(n) ? { K: "CRU Certified", M: "FTO", N: "HRO", O: "Marine", P: "Dive", Q: "S&R", R: "FO" } : {};
+}
+// certifications that come with the spot: CRU-01 … CRU-32 are CRU Certified (not the honorary HCRU spots)
+function divAutoCerts_(dv) {
+  const n = (str_(dv.name) + " " + str_(dv.id)).toLowerCase();
+  if (/\bcru\b|crisis/.test(n)) return [{ cert: /cru\s*certif/i, why: "CRU-32 and lower are CRU Certified", test: u => { const m = /^CRU\s*-?\s*(\d{1,3})$/i.exec(str_(u).trim()); return !!m && +m[1] <= 32; } }];
+  return [];
+}
+// tick those boxes on the roster tab too (runs in the background warm-up and after a move / add)
+function divAutoCertSync_(dv) {
+  const A = divAutoCerts_(dv); if (!A.length) return 0; const L = divLayout_(dv); if (L.error) return 0; let n = 0;
+  A.forEach(a => { const c = L.certs.find(x => a.cert.test(x.name) && !x.text && !x.status); if (!c) return;
+    L.rows.forEach(r => { if ((r.name || r.id) && a.test(r.unit) && r.raw && r.raw[c.name] !== true) { L.sh.getRange(r.row, c.col + 1).setValue(true); n++; } }); });
+  if (n) myDivBust_(dv); return n;
 }
 function certTokens_(x) {
   const t = str_(x).trim(); if (!t || /^(n\/?a|none|no|x|-+|—|tbd|pending|true|false)$/i.test(t)) return [];
@@ -2238,7 +2253,7 @@ function divLayout_(dv) {
   const TX = divTextCertCol_(v, hr, C, certs);
   if (TX >= 0) { const seen = {}; const add = n => { if (n && !seen[n.toLowerCase()]) { seen[n.toLowerCase()] = 1; certs.push({ col: TX, name: n, text: true }); } };
     for (let i = hr + 1; i < v.length; i++) certTokens_(v[i][TX]).forEach(add); divCertExtra_(dv).forEach(add); }
-  const rows = [], billets = []; let section = "", prevHead = false;
+  const rows = [], billets = [], AUTO = divAutoCerts_(dv); let section = "", prevHead = false;
   for (let i = hr + 1; i < v.length; i++) {
     { // section headings (the roster's own ranks): a row with text but no unit / name / ID, like the MDT roster reads them
       const r0 = v[i], cells = r0.map(c => str_(c).trim()).filter(Boolean), nm0 = C.name >= 0 ? str_(r0[C.name]).trim() : "", id0 = C.id >= 0 ? str_(r0[C.id]).trim() : "";
@@ -2252,9 +2267,11 @@ function divLayout_(dv) {
     if (!unit && !name && !id) continue;
     if (!name && !id && !/\d/.test(unit)) continue;   // a heading spread over two cells ("Detective" | "Major Crimes Unit"), not an open spot
     const x = { row: i + 1, unit: unit, billet: billet, section: section, name: name, id: id, open: !name && !id && !!unit, certs: {} };
+    x.raw = {}; certs.forEach(c => { if (!c.text && !c.status) x.raw[c.name] = raw[i][c.col]; });
     certs.forEach(c => { if (c.status) { if (name || id) x.certs[c.name] = /^(certified|fto)$/i.test(str_(v[i][c.col]).trim()); return; }
       if (c.text) { if (name || id) x.certs[c.name] = certTokens_(v[i][c.col]).some(t => t.toLowerCase() === c.name.toLowerCase()); return; }
       const val = raw[i][c.col]; if (val === true || val === false) x.certs[c.name] = val; });
+    if (name || id) AUTO.forEach(a => { const c = certs.find(y => a.cert.test(y.name)); if (c && a.test(unit)) { x.certs[c.name] = true; (x.auto = x.auto || {})[c.name] = a.why; } });
     rows.push(x);
     if (billet && unit) { let b = billets.find(y => y.name === billet); if (!b) { b = { name: billet, open: [], filled: 0 }; billets.push(b); } if (x.open) b.open.push(unit); else b.filled++; }
   }
@@ -2272,7 +2289,7 @@ function divExtra_(d, who) {
   if (a === "divGear") return { ok: true, can: can, items: gearAll_(dv.id) };
   if (a === "divCerts") { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
     const cnt = {}; L.rows.forEach(r => { if (r.id) (cnt[r.id] = cnt[r.id] || []).push((r.unit ? r.unit + " " : "") + r.name); });
-    return { ok: true, can: can, dupIds: Object.keys(cnt).filter(k => cnt[k].length > 1).map(k => cnt[k]), certs: L.certs.map(c => c.name), people: L.rows.filter(r => r.id || r.name).map(r => ({ id: r.id, name: r.name, unit: r.unit, billet: r.billet, certs: r.certs })) }; }
+    return { ok: true, can: can, dupIds: Object.keys(cnt).filter(k => cnt[k].length > 1).map(k => cnt[k]), certs: L.certs.map(c => c.name), people: L.rows.filter(r => r.id || r.name).map(r => ({ id: r.id, name: r.name, unit: r.unit, billet: r.billet, certs: r.certs, auto: r.auto || null })) }; }
   if (a === "divSlots") { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error }; return { ok: true, can: can, billets: L.billets, spots: L.spots, cols: L.colNames }; }
   if (!can) return { ok: false, error: "Only this division's leaders and assistants (or command) can do that." };
   if (a === "divDiscIssue") {
@@ -2341,6 +2358,7 @@ function divExtra_(d, who) {
       if (same.length > 1 && !r) return { ok: false, error: "Two people on the roster tab have the same Discord ID (" + same.map(x => x.name).join(" and ") + "). Fix the ID on the sheet first." };
       if (!c) return { ok: false, error: "\"" + cert + "\" isn't a certification column on the roster tab." };
       if (!r) return { ok: false, error: "Couldn't find them on the roster tab." };
+      if (!on && r.auto && r.auto[cert]) return { ok: false, error: r.auto[cert] + " automatically — move them to a higher callsign to take it off." };
       if (r.certs[cert] === on) return { ok: true, same: true };
       if (c.status) { const cell = L.sh.getRange(r.row, c.col + 1), cur = str_(cell.getDisplayValue()).trim();
         if (on && /^fto$/i.test(cur)) return { ok: true, same: true }; cell.setValue(on ? "Certified" : "Not Certified"); return { ok: true, name: r.name }; }
@@ -2375,6 +2393,7 @@ function divExtra_(d, who) {
       return { ok: true, to: dst.unit, billet: want, row: dst.row, name: nm };
     });
     if (!res.ok) return res;
+    try { divAutoCertSync_(dv); } catch (e) {}
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", discord: id, name: nm, callsign: res.to, type: "note", reason: "Added to " + dv.name + " at " + res.to + " (" + res.billet + ").", post: false }), who);
     try { CacheService.getScriptCache().removeAll(["div_view4_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id, "mydivs_" + id]); myDivBust_(dv); } catch (e) {}
     return res;
@@ -2409,6 +2428,7 @@ function divExtra_(d, who) {
       return { ok: true, from: src.unit, to: dst.unit, billet: dst.billet || want, row: dst.row };
     });
     if (!res.ok) return res;
+    try { divAutoCertSync_(dv); } catch (e) {}
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "note", reason: "Moved " + (res.from || "") + " → " + res.to + " (" + res.billet + ").", post: false }), who);
     try { CacheService.getScriptCache().removeAll(["div_view4_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return res;

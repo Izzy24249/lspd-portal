@@ -900,7 +900,7 @@
       ${N.length ? `<div class="ct-sum">${N.map(n => `<span><b>${count(n)}</b>${esc(n)}</span>`).join("")}</div>
       <div class="ct-wrap"><table class="ct"><thead><tr><th>Officer</th>${N.map(n => `<th><span>${esc(n)}</span></th>`).join("")}</tr></thead><tbody>
         ${P.map(x => `<tr><th><button type="button" data-off="${esc(x.o.key)}"><b>${esc(x.o.name)}</b><small>${esc(x.o.callsign || "")}</small></button></th>${N.map(n => { const on = !!x.c.certs[n], has = n in x.c.certs;
-          return `<td>${has ? `<button type="button" class="ct-b${on ? " on" : ""}" ${C.can && x.o.id ? `data-cset="${esc(n)}" data-co="${esc(x.o.key)}"` : "disabled"} aria-label="${esc(n)}: ${on ? "certified" : "not certified"}">${on ? "✓" : ""}</button>` : '<span class="ct-na">·</span>'}</td>`; }).join("")}</tr>`).join("")}
+          return `<td>${has ? `<button type="button" class="ct-b${on ? " on" : ""}${x.c && x.c.auto && x.c.auto[n] ? " auto" : ""}" ${x.c && x.c.auto && x.c.auto[n] ? `disabled title="${esc(x.c.auto[n])} automatically"` : C.can && x.o.id ? `data-cset="${esc(n)}" data-co="${esc(x.o.key)}"` : "disabled"} aria-label="${esc(n)}: ${on ? "certified" : "not certified"}">${on ? "✓" : ""}</button>` : '<span class="ct-na">·</span>'}</td>`; }).join("")}</tr>`).join("")}
       </tbody></table></div>` : `<div class="dc-empty">No certification columns found on the roster tab yet.${C.can ? " Press <b>Manage certifications</b> to add the first one." : ""}</div>`}</section>`;
   }
   function certModal() {
