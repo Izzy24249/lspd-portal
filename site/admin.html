@@ -1695,7 +1695,7 @@ function staffPicker(dv) {
   const draw = (people, err) => {
     box.innerHTML = "";
     box.append(h("div", { class: "staff-hd" }, h("b", { text: "Leaders & assistants" }),
-      h("small", { class: "muted", text: "The first two officers on the roster tab are always leaders" + (dv.staff.length ? " · plus " + dv.staff.length + " picked here" : ". Pick anyone else who should be one.") })));
+      h("small", { class: "muted", text: "Whoever holds the first two callsigns on the roster tab is always a leader" + (dv.staff.length ? " · plus " + dv.staff.length + " picked here" : ". Pick anyone else who should be one.") })));
     if (err) box.append(h("p", { class: "help", text: err }));
     if (!people) { box.append(h("button", { class: "btn ghost sm", onclick: load }, dv.staff.length ? "Change (" + dv.staff.length + " picked)" : "Pick from the roster")); return; }
     const list = h("div", { class: "staff-list" }, people.filter(p => p.id).map((p, i) => {
