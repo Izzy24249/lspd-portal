@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 163;
+const BACKEND_VERSION = 164;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2037,7 +2037,7 @@ function actSheet_() {
   } else if (sh.getLastColumn() < ACT_HEAD_.length) sh.getRange(1, 1, 1, ACT_HEAD_.length).setValues([ACT_HEAD_]).setFontWeight("bold");   // sheets made before the Report column
   return sh;
 }
-function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view5_" + x.id + "_n")); } catch (e) {} }
+function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view6_" + x.id + "_n")); } catch (e) {} }
 // The script cache holds 100 KB per entry: bigger values are split over several entries ("key_n" says how many)
 function bigPut_(key, text, secs) {
   const cache = CacheService.getScriptCache(), size = 90000, n = Math.ceil(text.length / size);
@@ -2395,7 +2395,7 @@ function divExtra_(d, who) {
     if (!res.ok) return res;
     try { divAutoCertSync_(dv); } catch (e) {}
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", discord: id, name: nm, callsign: res.to, type: "note", reason: "Added to " + dv.name + " at " + res.to + " (" + res.billet + ").", post: false }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view5_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id, "mydivs_" + id]); myDivBust_(dv); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view6_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id, "mydivs_" + id]); myDivBust_(dv); } catch (e) {}
     return res;
   }
   if (a === "divMove") {   // move / promote inside the division: into the next open callsign of the picked position
@@ -2430,7 +2430,7 @@ function divExtra_(d, who) {
     if (!res.ok) return res;
     try { divAutoCertSync_(dv); } catch (e) {}
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "note", reason: "Moved " + (res.from || "") + " → " + res.to + " (" + res.billet + ").", post: false }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view5_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view6_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return res;
   }
   if (a === "divRemove") {   // take them off the division's roster tab (their name and Discord ID cells), and log it
@@ -2450,7 +2450,7 @@ function divExtra_(d, who) {
     if (!res.ok) return res;
     const why = { inactive: "Inactive", discipline: "Discipline", resigned: "Resigned" }[str_(d.kind)] || "";
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: d.kind === "resigned" ? "resigned" : "removal", reason: (why ? why + ": " : "") + (str_(d.reason).trim() || "Removed from " + dv.name + " (row " + res.row + " cleared on the roster)."), post: d.post }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view5_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view6_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return { ok: true, row: res.row };
   }
   if (a === "divGearSave") {
@@ -2632,7 +2632,7 @@ function divView_(d, me) {
   const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [];
   const dv = divs.find(x => x.id === str_(d.division)) || divs[0];
   if (!dv) return { ok: true, divisions: [], me: { username: me.username, role: me.role } };
-  const cache = CacheService.getScriptCache(), ck = "div_view5_" + dv.id;   // (v153: unit column defaults)
+  const cache = CacheService.getScriptCache(), ck = "div_view6_" + dv.id;   // (v153: unit column defaults)
   if (!d.fresh) { const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
   // officers from the division's roster tab
   let officers = [], rosterError = "";
@@ -2659,7 +2659,9 @@ function divView_(d, me) {
     return { id: r.id, at: r.at, form: r.form, formTitle: formsById[r.form].title, icon: formsById[r.form].icon || "📄", no: r.no, title: r.title, summary: r.summary, author: author, tagged: tagged,
       grade: r.grade, gradedBy: r.gradedBy, comments: r.comments, gradedAt: r.gradedAt, canPost: !!(r.webhookId && webhookById_(r.webhookId) && (r.messageId || r.threadId)), imported: r.source !== "report" };
   });
-  const out = { ok: true, division: Object.assign({}, dv, { staffIds: divStaff_(dv, officers), discWebhookId: undefined }), divisions: divList_(), officers: officers, rosterError: rosterError, reports: reports, raceWeek: raceWeek_(), pts: RACE_PTS_,
+  // division leaders and assistants don't have a quota or report requirement either
+  const STAFF = divStaff_(dv, officers); officers.forEach(o => { if (!o.exempt && o.id && STAFF.indexOf(o.id) !== -1) o.exempt = "Division leadership"; });
+  const out = { ok: true, division: Object.assign({}, dv, { staffIds: STAFF, discWebhookId: undefined }), divisions: divList_(), officers: officers, rosterError: rosterError, reports: reports, raceWeek: raceWeek_(), pts: RACE_PTS_,
     forms: dv.forms.filter(f => formsById[f.id]).map(f => ({ id: f.id, title: formsById[f.id].title, icon: formsById[f.id].icon || "📄" })),
     weekStart: (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1, at: Date.now() };
   try { bigPut_(ck, JSON.stringify(out), 900); } catch (e) {}   // 15 min; cleared the moment a report is filed or graded
