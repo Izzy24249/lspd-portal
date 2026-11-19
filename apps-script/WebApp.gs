@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 156;
+const BACKEND_VERSION = 157;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -287,7 +287,7 @@ function rosterBook_() {
 const ROSTER_CACHE_SECONDS_ = 3600;  // kept warm every 10 minutes by warmRosters() so nobody waits on the sheet
 function getRosterTab_(tabId, fresh, cols, cacheOnly, noExclude) {
   cols = (cols || []).filter(c => colIndex_(c) >= 0);
-  const key = "roster_tab2_" + tabId + (cols.length ? "_" + cols.join("") : "") + (noExclude ? "_all" : ""), cache = CacheService.getScriptCache();
+  const key = "roster_tab3_" + tabId + (cols.length ? "_" + cols.join("") : "") + (noExclude ? "_all" : ""), cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get(key); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   if (cacheOnly) return null;
   const r = ((getConfig_().settings || {}).roster) || {};
@@ -549,10 +549,11 @@ function readRosterTab_(sh, isOut, info, warnings, opts) {
       const t = str_(shown[i].find(c => str_(c)));
       const loud = /[A-Z]/.test(t) && t === t.toUpperCase() && !/\d/.test(t);
       const heading = isOut(t) || loud || /member|roster|division|section|command|staff|personnel|active/i.test(t) ||
-        (filled === 1 && !str_(shown[i][nameCol]) && /[A-Za-z]{3}/.test(t) && !/\|/.test(t));   // a lone banner row ("Supervisory Pilots") with nothing in the name column
+        (filled === 1 && !str_(shown[i][nameCol]) && /[A-Za-z]{3}/.test(t) && !/\|/.test(t)) ||   // a lone banner row ("Supervisory Pilots") with nothing in the name column
+        (filled === 1 && !str_(shown[i][nameCol]) && (t.match(/\|/g) || []).length === 1 && t.length <= 50 && !afterHeading);   // "Detective | Major Crimes Unit (MCU)"
       // the line under a heading that describes the rank ("Advanced Handler: Elite tactical operator…") isn't a new section
       if (heading && afterHeading && !isOut(t) && (t.length > 40 || /[:.;|]/.test(t))) continue;
-      if (heading) { afterHeading = true; inOutSection = isOut(t); if (!inOutSection) section = clip_(t.replace(/\s*[([]\s*\d+\s*[)\]]\s*$/, "").replace(/\s*[-–:]\s*\d+\s*$/, ""), 60); continue; }
+      if (heading) { afterHeading = true; inOutSection = isOut(t); if (!inOutSection) section = clip_(t.replace(/\s*\|\s*/g, " · ").replace(/\s*[([]\s*\d+\s*[)\]]\s*$/, "").replace(/\s*[-–:]\s*\d+\s*$/, ""), 60); continue; }
     }
     if (!filled) continue;
     afterHeading = false;
@@ -2028,7 +2029,7 @@ function actSheet_() {
   } else if (sh.getLastColumn() < ACT_HEAD_.length) sh.getRange(1, 1, 1, ACT_HEAD_.length).setValues([ACT_HEAD_]).setFontWeight("bold");   // sheets made before the Report column
   return sh;
 }
-function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view2_" + x.id + "_n")); } catch (e) {} }
+function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view3_" + x.id + "_n")); } catch (e) {} }
 // The script cache holds 100 KB per entry: bigger values are split over several entries ("key_n" says how many)
 function bigPut_(key, text, secs) {
   const cache = CacheService.getScriptCache(), size = 90000, n = Math.ceil(text.length / size);
@@ -2332,7 +2333,7 @@ function divExtra_(d, who) {
     });
     if (!res.ok) return res;
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "note", reason: "Moved " + (res.from || "") + " → " + res.to + " (" + res.billet + ").", post: false }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view2_" + dv.id + "_n", "roster_tab2_" + dv.rosterTabId, "roster_tab2_" + dv.rosterTabId + "_all", "roster_tab2_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view3_" + dv.id + "_n", "roster_tab3_" + dv.rosterTabId, "roster_tab3_" + dv.rosterTabId + "_all", "roster_tab3_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return res;
   }
   if (a === "divRemove") {   // take them off the division's roster tab (their name and Discord ID cells), and log it
@@ -2352,7 +2353,7 @@ function divExtra_(d, who) {
     if (!res.ok) return res;
     const why = { inactive: "Inactive", discipline: "Discipline", resigned: "Resigned" }[str_(d.kind)] || "";
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: d.kind === "resigned" ? "resigned" : "removal", reason: (why ? why + ": " : "") + (str_(d.reason).trim() || "Removed from " + dv.name + " (row " + res.row + " cleared on the roster)."), post: d.post }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view2_" + dv.id + "_n", "roster_tab2_" + dv.rosterTabId, "roster_tab2_" + dv.rosterTabId + "_all", "roster_tab2_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view3_" + dv.id + "_n", "roster_tab3_" + dv.rosterTabId, "roster_tab3_" + dv.rosterTabId + "_all", "roster_tab3_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return { ok: true, row: res.row };
   }
   if (a === "divGearSave") {
@@ -2530,7 +2531,7 @@ function divView_(d, me) {
   const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [];
   const dv = divs.find(x => x.id === str_(d.division)) || divs[0];
   if (!dv) return { ok: true, divisions: [], me: { username: me.username, role: me.role } };
-  const cache = CacheService.getScriptCache(), ck = "div_view2_" + dv.id;   // (v153: unit column defaults)
+  const cache = CacheService.getScriptCache(), ck = "div_view3_" + dv.id;   // (v153: unit column defaults)
   if (!d.fresh) { const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
   // officers from the division's roster tab
   let officers = [], rosterError = "";
