@@ -74,9 +74,9 @@
       '<img class="md-badge" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.src=\'img/lspd-badge.png\'">' +
       '<div class="md-idm"><small>' + esc(hi) + ", " + esc(P.billet || me.rank || "Officer") + " " + esc(last) + " · " + esc(dv.name).toUpperCase() + "</small>" +
       '<h1><span class="md-cs">' + esc(me.callsign || P.unit || "—") + "</span> " + esc(me.name) + "</h1>" +
-      "<p>" + esc([me.section && me.section !== P.billet ? me.section : "", P.billet || me.rank, me.deptCallsign ? "Dept " + me.deptCallsign : "", since ? "In " + dv.name + " since " + since : ""].filter(Boolean).join(" · ")) + "</p>" +
+      "<p>" + esc([me.section && me.section !== P.billet ? me.section : "", P.billet || me.rank, ((P.fields || []).find(f => /bi-?weekly|requirement/i.test(f.k) && /\//.test(f.v)) || {}).v, me.deptCallsign ? "Dept " + me.deptCallsign : "", since ? "In " + dv.name + " since " + since : ""].filter(Boolean).join(" · ")) + "</p>" +
       '<div class="md-chips">' + chips.map(c => '<span class="' + c[0] + '">' + esc(c[1]) + "</span>").join("") + "</div>" +
-      ((P.fields || []).length ? '<dl class="md-pf">' + P.fields.map(f => "<div><dt>" + esc(f.k) + "</dt><dd>" + esc(f.v) + "</dd></div>").join("") + "</dl>" : "") +
+      ((P.fields || []).filter(f => !/bi-?weekly|requirement/i.test(f.k)).length ? '<dl class="md-pf">' + P.fields.filter(f => !/bi-?weekly|requirement/i.test(f.k)).map(f => "<div><dt>" + esc(f.k) + "</dt><dd>" + esc(f.v) + "</dd></div>").join("") + "</dl>" : "") +
       ((R.myCerts || []).length ? '<div class="md-bd">' + R.myCerts.map(c => '<span title="Certified">✓ ' + esc(c) + "</span>").join("") + "</div>" : "") + "</div>" +
       '<div class="md-svc"><div><b>' + (L.filed || 0) + "</b><small>reports filed</small></div><div><b>" + (L.assists || 0) + "</b><small>assists</small></div><div><b>" + (L.pts || 0) + "</b><small>division points</small></div><div><b>" + (L.best || 0) + "</b><small>best week</small></div></div></div>" +
       '<div class="md-tabs" style="--dc:' + esc(dv.color || "#2f7bff") + '">' + SUB.map(s => '<a data-go="mydiv:' + esc(dv.id) + ":" + s[0] + '" class="' + (s[0] === sub ? "on" : "") + '">' + esc(s[1]) + "</a>").join("") + "</div>";
@@ -112,8 +112,10 @@
   const short = n => { const t = String(n).replace(/\b(cert(ified|ification)?s?|qualif\w*|status)\b/ig, "").replace(/\s+/g, " ").trim() || n; return t.length > 9 ? t.split(/[\s/-]+/).map(w => w[0]).join("").toUpperCase().slice(0, 5) : t; };
   // the division roster as one table: division callsign, department callsign, name, the division's own columns (K9 name,
   // T.I.G.…), a ✓ column per cert, and a copy button for the Discord ID
+  // CID's "Bi-weekly requirements" holds a duty title for supervisors ("Case Supervisor / Issuer"): shown under the name
+  const duty = (o, k) => { const t = k && o.f ? String(o.f[k] || "") : ""; return /\//.test(t) ? t : ""; };
   function roster(R) {
-    const C = R.certNames || [], X = (R.rosterCols || []).filter(x => !/role|position|duty/i.test(x)), groups = [], bySec = new Set(R.roster.map(o => o.section).filter(Boolean)).size >= 2;
+    const C = R.certNames || [], X = (R.rosterCols || []).filter(x => !/role|position|duty|bi-?weekly|requirement/i.test(x)), DUTY = (R.rosterCols || []).find(x => /bi-?weekly|requirement/i.test(x)), groups = [], bySec = new Set(R.roster.map(o => o.section).filter(Boolean)).size >= 2;
     R.roster.forEach(o => { const g = (bySec ? o.section : o.rank || o.section) || "Members"; let x = groups.find(y => y.n === g); if (!x) { x = { n: g, l: [] }; groups.push(x); } x.l.push(o); });
     const cols = 5 + X.length + C.length;
     return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.' + (C.length ? " ✓ = certified." : "") + " Click an ID to copy it.</p>" +
@@ -121,7 +123,7 @@
       C.map(c => '<th class="c" title="' + esc(c) + '">' + esc(short(c)) + "</th>").join("") + "<th>Discord ID</th><th></th></tr></thead><tbody>" +
       groups.map(g => '<tr class="g"><td colspan="' + cols + '">' + esc(g.n) + "</td></tr>" + g.l.map(o => '<tr class="' + (o.me ? "me" : "") + (o.loa ? " loa" : "") + '">' +
         "<td><code>" + esc(o.callsign || "—") + '</code></td><td><code class="d">' + esc(o.dept || "—") + "</code></td>" +
-        "<td><b>" + esc(o.name) + "</b>" + (o.staff ? " ⭐" : "") + (o.me ? " <small>(you)</small>" : "") + (o.billet && o.billet !== g.n ? "<br><small>" + esc(o.billet) + "</small>" : "") + "</td>" +
+        "<td><b>" + esc(o.name) + "</b>" + (o.staff ? " ⭐" : "") + (o.me ? " <small>(you)</small>" : "") + (duty(o, DUTY) ? "<br><small>" + esc(duty(o, DUTY)) + "</small>" : o.billet && o.billet !== g.n ? "<br><small>" + esc(o.billet) + "</small>" : "") + "</td>" +
         X.map(x => "<td>" + (o.f && o.f[x] ? esc(o.f[x]) : '<span class="n">—</span>') + "</td>").join("") +
         C.map(c => (o.certs || []).indexOf(c) !== -1 ? '<td class="c y" title="' + esc(c) + '">✓</td>' : '<td class="c n">·</td>').join("") +
         "<td>" + (o.id ? '<button class="md-id-cp" data-copy="' + esc(o.id) + '" data-what="Discord ID" title="' + esc(o.id) + '">⧉ …' + esc(o.id.slice(-4)) + "</button>" : '<span class="n">—</span>') + "</td>" +

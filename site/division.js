@@ -795,14 +795,17 @@
     try { XC[id] = await api("divCerts", { division: id }); } catch (e) { XC[id] = { ok: false, error: e.message }; }
     delete XBUSY["certs" + id]; if (DATA.division.id === id) { if (TAB === "certs") drawAll(); reTool(); }
   }
-  const certOf = (C, o) => (C.people || []).find(p => (o.id && p.id === o.id) || (!o.id && p.name === o.name));
+  const nk = n => String(n || "").split("|").pop().toLowerCase().replace(/[^a-z]/g, "");
+  const certOf = (C, o) => { const P = C.people || [], same = o.id ? P.filter(p => p.id === o.id) : [];
+    return same.length > 1 ? same.find(p => nk(p.name) === nk(o.name)) : same[0] || (!o.id ? P.find(p => p.name === o.name) : null); };
   function viewCerts(S) {
     const C = XC[DATA.division.id]; if (!C) xCerts();
     if (!C) { $("view").innerHTML = '<div class="dc-empty">Reading the roster tab…</div>'; return; }
     if (C.ok === false) { $("view").innerHTML = `<div class="dc-empty">${esc(C.error)}</div>`; return; }
     const N = C.certs, P = S.O.map(o => ({ o, c: certOf(C, o) })).filter(x => x.c);
     const count = n => P.filter(x => x.c.certs[n]).length;
-    $("view").innerHTML = `<section class="dc-panel"><header><h2>🎓 Certifications</h2><small class="dc-note">These are the tick-box columns on the ${esc(DATA.division.name)} roster tab. ${C.can ? "Click a box to add or remove a certification. It's ticked on the roster sheet straight away and noted on the officer's record." : "Only leaders and assistants can change them."}</small>
+    const dupW = (C.dupIds || []).length ? `<div class="dc-panel" style="border-color:#f59e0b;background:rgba(245,158,11,.08);padding:12px 16px;margin-bottom:12px">⚠️ <b>Same Discord ID on two rows</b> of the roster tab: ${C.dupIds.map(x => esc(x.join(" and "))).join("; ")}. One of them has the wrong ID in the ID column — fix it on the sheet so their certifications don't get mixed up.</div>` : "";
+    $("view").innerHTML = dupW + `<section class="dc-panel"><header><h2>🎓 Certifications</h2><small class="dc-note">These are the tick-box columns on the ${esc(DATA.division.name)} roster tab. ${C.can ? "Click a box to add or remove a certification. It's ticked on the roster sheet straight away and noted on the officer's record." : "Only leaders and assistants can change them."}</small>
         ${C.can ? '<span style="margin-left:auto"><button class="dc-btn sm ac" data-cdef="manage">Manage certifications</button></span>' : ""}</header>
       ${N.length ? `<div class="ct-sum">${N.map(n => `<span><b>${count(n)}</b>${esc(n)}</span>`).join("")}</div>
       <div class="ct-wrap"><table class="ct"><thead><tr><th>Officer</th>${N.map(n => `<th><span>${esc(n)}</span></th>`).join("")}</tr></thead><tbody>
@@ -864,7 +867,7 @@
     if (t.closest("[data-gxclose]")) { closeModal(); return; }
     const cs = t.closest("[data-cset]"); if (cs) { const o = findO(cs.dataset.co), C = XC[DATA.division.id]; if (!o || !C) return; const c = certOf(C, o), n = cs.dataset.cset, on = !(c && c.certs[n]);
       cs.disabled = true; c.certs[n] = on; if (TAB === "certs") drawAll(); reTool();
-      try { const r = await api("divCertSet", { division: DATA.division.id, discord: o.id, cert: n, on }); toast((on ? "✓ " + o.name + " certified: " : o.name + " no longer ") + n + (on ? "" : " certified") + ".", "ok"); xLoad("disc", true); }
+      try { const r = await api("divCertSet", { division: DATA.division.id, discord: o.id, name: o.name, cert: n, on }); toast((on ? "✓ " + o.name + " certified: " : o.name + " no longer ") + n + (on ? "" : " certified") + ".", "ok"); xLoad("disc", true); }
       catch (err) { c.certs[n] = !on; toast(err.message, "bad"); if (TAB === "certs") drawAll(); reTool(); } return; }
     if (t.closest("[data-cdef]")) { certModal(); return; }
     if (t.closest("[data-cadd]")) { const n = $("cmNew").value.trim(); if (!n) return toast("Name it first.", "bad"); certDef("add", n, "", t.closest("[data-cadd]")); return; }

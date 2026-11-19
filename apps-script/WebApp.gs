@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 157;
+const BACKEND_VERSION = 158;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2239,7 +2239,8 @@ function divExtra_(d, who) {
     post: !!(dv.discWebhookId && webhookById_(dv.discWebhookId)) };
   if (a === "divGear") return { ok: true, can: can, items: gearAll_(dv.id) };
   if (a === "divCerts") { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
-    return { ok: true, can: can, certs: L.certs.map(c => c.name), people: L.rows.filter(r => r.id || r.name).map(r => ({ id: r.id, name: r.name, unit: r.unit, billet: r.billet, certs: r.certs })) }; }
+    const cnt = {}; L.rows.forEach(r => { if (r.id) (cnt[r.id] = cnt[r.id] || []).push((r.unit ? r.unit + " " : "") + r.name); });
+    return { ok: true, can: can, dupIds: Object.keys(cnt).filter(k => cnt[k].length > 1).map(k => cnt[k]), certs: L.certs.map(c => c.name), people: L.rows.filter(r => r.id || r.name).map(r => ({ id: r.id, name: r.name, unit: r.unit, billet: r.billet, certs: r.certs })) }; }
   if (a === "divSlots") { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error }; return { ok: true, can: can, billets: L.billets, cols: L.colNames }; }
   if (!can) return { ok: false, error: "Only this division's leaders and assistants (or command) can do that." };
   if (a === "divDiscIssue") {
@@ -2303,7 +2304,8 @@ function divExtra_(d, who) {
     const id = str_(d.discord).replace(/\D/g, ""), cert = str_(d.cert), on = d.on === true || d.on === "true";
     if (!id) return { ok: false, error: "That officer has no Discord ID on the roster." };
     const res = withLock_(() => { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
-      const c = L.certs.find(x => x.name === cert), r = L.rows.find(x => x.id === id);
+      const same = L.rows.filter(x => x.id === id), c = L.certs.find(x => x.name === cert), r = same.length > 1 ? (same.find(x => dnk_(x.name) === dnk_(d.name)) || null) : same[0];
+      if (same.length > 1 && !r) return { ok: false, error: "Two people on the roster tab have the same Discord ID (" + same.map(x => x.name).join(" and ") + "). Fix the ID on the sheet first." };
       if (!c) return { ok: false, error: "\"" + cert + "\" isn't a certification column on the roster tab." };
       if (!r) return { ok: false, error: "Couldn't find them on the roster tab." };
       if (r.certs[cert] === on) return { ok: true, same: true };
@@ -2411,7 +2413,7 @@ function myDivision_(acct, divId) {
   try { const ov = divOverview_(null, { username: "", role: "officer", key: acct.id }, true), L = (ov.divisions || []).slice().sort((a, b) => b.week.points - a.week.points), i = L.findIndex(x => x.id === dv.id);
     if (i !== -1) race = { rank: i + 1, of: L.length, points: L[i].week.points, last: L[i].lastWeek ? L[i].lastWeek.points : 0, ahead: i ? { name: L[i - 1].name, points: L[i - 1].week.points } : null, weekEnd: W0 + 7 * DAY,
       standings: L.map(x => ({ name: x.name, color: x.color, points: x.week.points, me: x.id === dv.id })) }; } catch (e) {}
-  const CERTS = myDivCerts_(dv), prof = myDivProfile_(dv, acct.id), RC = myDivRosterCols_(dv);
+  const MD = myDivData_(dv), CERTS = myDivCerts_(dv), prof = myDivPick_(MD, "prof", acct.id, me.name) || { fields: [] }, RC = myDivRosterCols_(dv);
   const DCS = {}; try { promoPeople_().forEach(p => { if (p.id && p.callsign) DCS[p.id] = p.callsign; }); } catch (e) {}
   let lf = 0, la = 0, lp = 0, first = 0; V.reports.forEach(r => { const au = r.author && r.author.key === me.key, as = !au && (r.tagged || []).some(t => t.key === me.key); if (!au && !as) return; if (au) lf++; else la++; if (!first || r.at < first) first = r.at; });
   lp = ptsOf(me.key, 0, Infinity); const place = board.findIndex(x => x.me) + 1;
@@ -2421,8 +2423,8 @@ function myDivision_(acct, divId) {
     me: { name: me.name, section: me.section || "", callsign: me.callsign, deptCallsign: DCS[acct.id] || me.alt || "", rank: me.rank, profile: prof, life: { filed: lf, assists: la, pts: lp, first: first, best: Math.max.apply(null, [ptsW].concat(weeks)) }, place: place, onBoard: board.length, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
     weekStart: W0, weekEnd: W0 + 7 * DAY, board: board, race: race,
     record: { points: live, ladder: lad.label, entries: D.slice(0, 40).map(discPub_) },
-    rosterCols: RC.fields, roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, dept: DCS[o.id] || o.alt || "", id: o.id || "", date: (RC.by[o.id] || {}).date || "", billet: (RC.by[o.id] || {}).billet || "", f: (RC.by[o.id] || {}).f || {}, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (CERTS.by[o.id] || []) })),
-    gear: gearAll_(dv.id), certNames: CERTS.names, myCerts: CERTS.by[acct.id] || [] };
+    rosterCols: RC.fields, roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, dept: DCS[o.id] || o.alt || "", id: o.id || "", date: (myDivPick_(MD, "rc", o.id, o.name) || {}).date || "", billet: (myDivPick_(MD, "rc", o.id, o.name) || {}).billet || "", f: (myDivPick_(MD, "rc", o.id, o.name) || {}).f || {}, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (myDivPick_(MD, "by", o.id, o.name) || []) })),
+    gear: gearAll_(dv.id), certNames: CERTS.names, myCerts: myDivPick_(MD, "by", acct.id, me.name) || [], dupIds: Object.keys(MD.dup || {}).map(k => MD.dup[k]) };
 }
 // ---- MDT → My certifications: everything this officer is certified in ----
 //  FTO program: SGT and above are FTOs; a CPL is an FTO in training until they've witnessed one GOM training and led one
@@ -2448,16 +2450,16 @@ function myCerts_(acct) {
         if (marks < 3) return; const x = v[row][j], has = x === true || /^[✔✓]$/.test(str_(x).trim()); seen[name] = 1; dept.push({ name: name, has: has, src: tab === PERSONNEL_TAB_ ? "Personnel roster" : "Onboarding roster" }); });
       return true; }); } catch (e) {}
   const divs = myDivisions_(acct.id).map(m => { const dv = ((getConfig_().settings || {}).divisions || []).find(x => x.id === m.id); if (!dv) return null;
-    const C = myDivCerts_(dv), mine = C.by[acct.id] || []; return { id: dv.id, name: dv.name, color: dv.color, certs: C.names.map(n => ({ name: n, has: mine.indexOf(n) !== -1 })) }; }).filter(Boolean);
+    const MD = myDivData_(dv), C = myDivCerts_(dv), mine = myDivPick_(MD, "by", acct.id, o ? o.name : acct.name) || []; return { id: dv.id, name: dv.name, color: dv.color, certs: C.names.map(n => ({ name: n, has: mine.indexOf(n) !== -1 })) }; }).filter(Boolean);
   return { ok: true, rank: o ? o.rank : "", fto: fto, dept: dept, divisions: divs };
 }
 // every member's certifications in a division (from its roster tab's tick boxes), cached a few minutes
 // everything the MDT's My Division pages need from a division's roster tab, read ONCE per division and cached 15 minutes
 // (warmed every 10 minutes in the background): certs, each officer's row (billet, unit, date, extra columns)
 function myDivData_(dv, fresh) {
-  const k = "mydiv_data_" + dv.id;
+  const k = "mydiv_data2_" + dv.id;
   if (!fresh) { const hit = bigGet_(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
-  const out = { names: [], by: {}, fields: [], rc: {}, prof: {} };
+  const out = { names: [], by: {}, fields: [], rc: {}, prof: {}, dup: {}, byFirst: {}, nm: {}, byN: {}, rcN: {}, profN: {} };
   try { const L = divLayout_(dv); if (!L.error) {
     out.names = L.certs.map(x => x.name);
     const v = L.sh.getDataRange().getDisplayValues(), H = v[L.hr - 1] || [], skip = {};
@@ -2470,15 +2472,19 @@ function myDivData_(dv, fresh) {
       out.by[r.id] = Object.keys(r.certs).filter(n => r.certs[n]);
       ext.forEach((x, i) => { const val = str_(row[x.col]).trim(); if (!val || /^(true|false)$/i.test(val)) return; if (i < 4) f[x.name] = val.slice(0, 40); if (val.length <= 60 && pf.length < 8) pf.push({ k: x.name.slice(0, 24), v: val }); });
       const date = L.cols.date >= 0 ? str_(row[L.cols.date]).trim() : "";
-      out.rc[r.id] = { date: date, billet: r.billet, f: f };
-      out.prof[r.id] = { unit: r.unit, billet: r.billet, date: date, fields: pf }; }); } } catch (e) {}
+      const rc = { date: date, billet: r.billet, f: f }, pr = { unit: r.unit, billet: r.billet, date: date, fields: pf }, ce = out.by[r.id];
+      if (out.rc[r.id]) { out.dup[r.id] = (out.dup[r.id] || [out.rc[r.id]._n]).concat([r.name]); out.by[r.id] = out.byFirst[r.id]; } else { out.rc[r.id] = rc; out.prof[r.id] = pr; out.byFirst[r.id] = ce; rc._n = r.name; }
+      const k = dnk_(r.name); if (k) { out.nm[k] = 1; out.byN[k] = ce; out.rcN[k] = rc; out.profN[k] = pr; } }); } } catch (e) {}
   try { bigPut_(k, JSON.stringify(out), 900); } catch (e) {}
   return out;
 }
+// "1704 | L. Watkins" → "lwatkins": matches a roster row to an officer when two rows share one Discord ID by mistake
+function dnk_(n) { return str_(n).split("|").pop().toLowerCase().replace(/[^a-z]/g, ""); }
+function myDivPick_(D, map, id, name) { if (D.dup && D.dup[id] && name) { const k = dnk_(name), hit = (D.nm || {})[k]; if (hit) return (D[map + "N"] || {})[k]; } return (D[map] || {})[id]; }
 function myDivProfile_(dv, id) { return myDivData_(dv).prof[id] || { fields: [] }; }
 function myDivRosterCols_(dv) { const D = myDivData_(dv); return { fields: D.fields, by: D.rc }; }
 function myDivCerts_(dv) { const D = myDivData_(dv); return { names: D.names, by: D.by }; }
-function myDivBust_(dv) { try { CacheService.getScriptCache().removeAll(["mydiv_data_" + dv.id, "mydiv_data_" + dv.id + "_n"]); } catch (e) {} }
+function myDivBust_(dv) { try { CacheService.getScriptCache().removeAll(["mydiv_data2_" + dv.id, "mydiv_data2_" + dv.id + "_n"]); } catch (e) {} }
 // MDT Fleet / Uniform pages: every division's own vehicles and outfits
 function gearForMdt_() {
   const c = CacheService.getScriptCache(), hit = c.get("gear_all"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
