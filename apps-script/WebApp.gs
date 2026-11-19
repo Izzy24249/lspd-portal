@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 158;
+const BACKEND_VERSION = 159;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -287,7 +287,7 @@ function rosterBook_() {
 const ROSTER_CACHE_SECONDS_ = 3600;  // kept warm every 10 minutes by warmRosters() so nobody waits on the sheet
 function getRosterTab_(tabId, fresh, cols, cacheOnly, noExclude) {
   cols = (cols || []).filter(c => colIndex_(c) >= 0);
-  const key = "roster_tab3_" + tabId + (cols.length ? "_" + cols.join("") : "") + (noExclude ? "_all" : ""), cache = CacheService.getScriptCache();
+  const key = "roster_tab4_" + tabId + (cols.length ? "_" + cols.join("") : "") + (noExclude ? "_all" : ""), cache = CacheService.getScriptCache();
   if (!fresh) { const hit = cache.get(key); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   if (cacheOnly) return null;
   const r = ((getConfig_().settings || {}).roster) || {};
@@ -305,9 +305,16 @@ function getRosterTab_(tabId, fresh, cols, cacheOnly, noExclude) {
       out.left = info.left; out.noId = info.noId;
       const seen = {}, calls = callsignMap_();
       out.withCallsign = 0;
+      // one Discord ID typed on two rows: the main roster says whose it is, the other row is a ghost (wrong ID copied in)
+      const own = p => nameKey_(String(p.name).split("|").pop()), idRows = {};
+      rows.forEach(p => { if (p.id) (idRows[p.id] = idRows[p.id] || []).push(p); });
+      out.ghosts = [];
       rows.forEach(p => {
         if (r.requireId !== false && !p.id) return;                    // only people with a Discord ID
-        const k = p.id || p.name.toLowerCase(); if (seen[k]) return; seen[k] = 1;
+        const same = p.id ? idRows[p.id] : null;
+        if (same && same.length > 1) { const owner = calls && calls.nameId ? same.find(x => calls.nameId[own(x)] === p.id) : null;
+          if (owner && owner !== p) { out.ghosts.push({ name: p.name, owner: owner.name }); return; } }
+        const k = p.id ? p.id + (same && same.length > 1 ? "|" + own(p) : "") : p.name.toLowerCase(); if (seen[k]) return; seen[k] = 1;
         const shownName = withCallsign_(p, calls);
         if (shownName !== p.name) out.withCallsign++;
         const person = { name: clip_(shownName, 80), id: p.id, extra: clip_(p.extra, 80) };
@@ -2029,7 +2036,7 @@ function actSheet_() {
   } else if (sh.getLastColumn() < ACT_HEAD_.length) sh.getRange(1, 1, 1, ACT_HEAD_.length).setValues([ACT_HEAD_]).setFontWeight("bold");   // sheets made before the Report column
   return sh;
 }
-function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view3_" + x.id + "_n")); } catch (e) {} }
+function divClearCache_() { try { CacheService.getScriptCache().removeAll(((getConfig_().settings || {}).divisions || []).map(x => "div_view4_" + x.id + "_n")); } catch (e) {} }
 // The script cache holds 100 KB per entry: bigger values are split over several entries ("key_n" says how many)
 function bigPut_(key, text, secs) {
   const cache = CacheService.getScriptCache(), size = 90000, n = Math.ceil(text.length / size);
@@ -2181,6 +2188,10 @@ function divTextCertCol_(v, hr, C, certs) {
   const used = {}; Object.keys(C).forEach(k => { if (C[k] >= 0) used[C[k]] = 1; }); certs.forEach(c => { used[c.col] = 1; });
   return (v[hr] || []).findIndex((h, j) => !used[j] && /certif/i.test(str_(h)) && v.slice(hr + 1).some(r => certTokens_(r[j]).length));
 }
+function divNoNameCerts_(dv) {
+  const n = (str_(dv.name) + " " + str_(dv.id)).toLowerCase();
+  return /\bteu\b|traffic/.test(n) ? { M: "RA", N: "FTO", O: "MBU", P: "DUI", Q: "CVE", R: "BPU" } : {};
+}
 function certTokens_(x) {
   const t = str_(x).trim(); if (!t || /^(n\/?a|none|no|x|-+|—|tbd|pending|true|false)$/i.test(t)) return [];
   return t.split(/\s*[\/,;+&|]\s*|\s+and\s+/i).map(y => y.replace(/\s+/g, " ").trim()).filter(y => y && !/^(n|a|n\/a|none)$/i.test(y)).map(y => y.slice(0, 30));
@@ -2213,6 +2224,15 @@ function divLayout_(dv) {
     let bools = 0, other = 0; for (let i = hr + 1; i < raw.length; i++) { const x = raw[i][j]; if (x === true || x === false) bools++; else if (str_(x).trim()) other++; }
     if ((bools >= 3 || (bools >= 1 && /cert|qualif/i.test(name))) && bools > other * 3) certs.push({ col: j, name: name.replace(/\s+/g, " ").slice(0, 30) }); });
   // a "Certifications" column written as text ("Undercover Ops / Gang Task Force", "N/A"): each name in it is a certification
+  // tick-box columns with no header text (TEU's headers are pictures): known names by column, else "Cert M"
+  const NONAME = divNoNameCerts_(dv);
+  v[hr].forEach((h, j) => { if (str_(h).trim() || Object.keys(C).some(k => C[k] === j)) return;
+    let bools = 0, other = 0; for (let i = hr + 1; i < raw.length; i++) { const x = raw[i][j]; if (x === true || x === false) bools++; else if (str_(x).trim()) other++; }
+    if (bools >= 3 && bools > other * 3) { const L1 = String.fromCharCode(65 + j); certs.push({ col: j, name: NONAME[L1] || "Cert " + L1, noHead: true }); } });
+  // "Certification Status" (Certified / FTO / Not Certified / N/A): one "Certified" cert, ticked when it says Certified or FTO
+  const ST = (v[hr] || []).findIndex((h, j) => /certif/i.test(str_(h)) && !certs.some(c => c.col === j) && !Object.keys(C).some(k => C[k] === j) &&
+    v.slice(hr + 1).filter(r => str_(r[j]).trim()).every(r => /^(not\s*)?certified$|^fto$|^n\/?a$|^pending$|^entry$|^in training$|^-+$/i.test(str_(r[j]).trim())));
+  if (ST >= 0) certs.unshift({ col: ST, name: "Certified", status: true });
   const TX = divTextCertCol_(v, hr, C, certs);
   if (TX >= 0) { const seen = {}; const add = n => { if (n && !seen[n.toLowerCase()]) { seen[n.toLowerCase()] = 1; certs.push({ col: TX, name: n, text: true }); } };
     for (let i = hr + 1; i < v.length; i++) certTokens_(v[i][TX]).forEach(add); divCertExtra_(dv).forEach(add); }
@@ -2222,7 +2242,8 @@ function divLayout_(dv) {
     if (!unit && !name && !id) continue;
     if (!name && !id && !/\d/.test(unit)) continue;   // a heading spread over two cells ("Detective" | "Major Crimes Unit"), not an open spot
     const x = { row: i + 1, unit: unit, billet: billet, name: name, id: id, open: !name && !id && !!unit, certs: {} };
-    certs.forEach(c => { if (c.text) { if (name || id) x.certs[c.name] = certTokens_(v[i][c.col]).some(t => t.toLowerCase() === c.name.toLowerCase()); return; }
+    certs.forEach(c => { if (c.status) { if (name || id) x.certs[c.name] = /^(certified|fto)$/i.test(str_(v[i][c.col]).trim()); return; }
+      if (c.text) { if (name || id) x.certs[c.name] = certTokens_(v[i][c.col]).some(t => t.toLowerCase() === c.name.toLowerCase()); return; }
       const val = raw[i][c.col]; if (val === true || val === false) x.certs[c.name] = val; });
     rows.push(x);
     if (billet && unit) { let b = billets.find(y => y.name === billet); if (!b) { b = { name: billet, open: [], filled: 0 }; billets.push(b); } if (x.open) b.open.push(unit); else b.filled++; }
@@ -2291,6 +2312,7 @@ function divExtra_(d, who) {
         return { ok: true, msg: "Added \"" + name + "\" (column " + String.fromCharCode(64 + col) + ")" };
       }
       if (!c) return { ok: false, error: "\"" + name + "\" isn't a certification column on the roster tab." };
+      if (c.status) return { ok: false, error: "\"" + name + "\" comes from the Certification Status column (Certified / FTO). Change it on the sheet." };
       if (op === "rename") { if (!nn) return { ok: false, error: "Type the new name." }; if (nn.toLowerCase() !== name.toLowerCase() && taken(nn)) return { ok: false, error: "There's already a \"" + nn + "\"." };
         sh.getRange(L.hr, c.col + 1).setValue(nn); return { ok: true, msg: "Renamed \"" + name + "\" to \"" + nn + "\"" }; }
       if (op === "remove") { sh.deleteColumn(c.col + 1); return { ok: true, msg: "Removed the \"" + name + "\" column" }; }
@@ -2309,6 +2331,8 @@ function divExtra_(d, who) {
       if (!c) return { ok: false, error: "\"" + cert + "\" isn't a certification column on the roster tab." };
       if (!r) return { ok: false, error: "Couldn't find them on the roster tab." };
       if (r.certs[cert] === on) return { ok: true, same: true };
+      if (c.status) { const cell = L.sh.getRange(r.row, c.col + 1), cur = str_(cell.getDisplayValue()).trim();
+        if (on && /^fto$/i.test(cur)) return { ok: true, same: true }; cell.setValue(on ? "Certified" : "Not Certified"); return { ok: true, name: r.name }; }
       if (c.text) { const cell = L.sh.getRange(r.row, c.col + 1); let t = certTokens_(cell.getDisplayValue()).filter(x => x.toLowerCase() !== cert.toLowerCase());
         if (on) { const order = L.certs.filter(x => x.text).map(x => x.name); t.push(cert); t.sort((p, q) => order.indexOf(p) - order.indexOf(q)); }
         cell.setValue(t.length ? t.join(" / ") : "N/A"); return { ok: true, name: r.name }; }
@@ -2335,7 +2359,7 @@ function divExtra_(d, who) {
     });
     if (!res.ok) return res;
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "note", reason: "Moved " + (res.from || "") + " → " + res.to + " (" + res.billet + ").", post: false }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view3_" + dv.id + "_n", "roster_tab3_" + dv.rosterTabId, "roster_tab3_" + dv.rosterTabId + "_all", "roster_tab3_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view4_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return res;
   }
   if (a === "divRemove") {   // take them off the division's roster tab (their name and Discord ID cells), and log it
@@ -2355,7 +2379,7 @@ function divExtra_(d, who) {
     if (!res.ok) return res;
     const why = { inactive: "Inactive", discipline: "Discipline", resigned: "Resigned" }[str_(d.kind)] || "";
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: d.kind === "resigned" ? "resigned" : "removal", reason: (why ? why + ": " : "") + (str_(d.reason).trim() || "Removed from " + dv.name + " (row " + res.row + " cleared on the roster)."), post: d.post }), who);
-    try { CacheService.getScriptCache().removeAll(["div_view3_" + dv.id + "_n", "roster_tab3_" + dv.rosterTabId, "roster_tab3_" + dv.rosterTabId + "_all", "roster_tab3_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
+    try { CacheService.getScriptCache().removeAll(["div_view4_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id]); } catch (e) {}
     return { ok: true, row: res.row };
   }
   if (a === "divGearSave") {
@@ -2457,7 +2481,7 @@ function myCerts_(acct) {
 // everything the MDT's My Division pages need from a division's roster tab, read ONCE per division and cached 15 minutes
 // (warmed every 10 minutes in the background): certs, each officer's row (billet, unit, date, extra columns)
 function myDivData_(dv, fresh) {
-  const k = "mydiv_data2_" + dv.id;
+  const k = "mydiv_data3_" + dv.id;
   if (!fresh) { const hit = bigGet_(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
   const out = { names: [], by: {}, fields: [], rc: {}, prof: {}, dup: {}, byFirst: {}, nm: {}, byN: {}, rcN: {}, profN: {} };
   try { const L = divLayout_(dv); if (!L.error) {
@@ -2484,7 +2508,7 @@ function myDivPick_(D, map, id, name) { if (D.dup && D.dup[id] && name) { const 
 function myDivProfile_(dv, id) { return myDivData_(dv).prof[id] || { fields: [] }; }
 function myDivRosterCols_(dv) { const D = myDivData_(dv); return { fields: D.fields, by: D.rc }; }
 function myDivCerts_(dv) { const D = myDivData_(dv); return { names: D.names, by: D.by }; }
-function myDivBust_(dv) { try { CacheService.getScriptCache().removeAll(["mydiv_data2_" + dv.id, "mydiv_data2_" + dv.id + "_n"]); } catch (e) {} }
+function myDivBust_(dv) { try { CacheService.getScriptCache().removeAll(["mydiv_data3_" + dv.id, "mydiv_data3_" + dv.id + "_n"]); } catch (e) {} }
 // MDT Fleet / Uniform pages: every division's own vehicles and outfits
 function gearForMdt_() {
   const c = CacheService.getScriptCache(), hit = c.get("gear_all"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
@@ -2537,7 +2561,7 @@ function divView_(d, me) {
   const cfg = getConfig_(), divs = (cfg.settings || {}).divisions || [];
   const dv = divs.find(x => x.id === str_(d.division)) || divs[0];
   if (!dv) return { ok: true, divisions: [], me: { username: me.username, role: me.role } };
-  const cache = CacheService.getScriptCache(), ck = "div_view3_" + dv.id;   // (v153: unit column defaults)
+  const cache = CacheService.getScriptCache(), ck = "div_view4_" + dv.id;   // (v153: unit column defaults)
   if (!d.fresh) { const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
   // officers from the division's roster tab
   let officers = [], rosterError = "";
