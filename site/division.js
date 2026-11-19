@@ -516,7 +516,7 @@
     const rank = { never: 0, bad: 1, warn: 2, quiet: 3, ok: 4, exempt: 5 };
     let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign + " " + (o.alt || "") + " " + o.rank + " " + o.section).toLowerCase().includes(OFF_Q.toLowerCase()));
     list.sort(OFF_SORT === "roster" ? (a, b) => a.idx - b.idx : OFF_SORT === "name" ? (a, b) => (a.callsign || a.name).localeCompare(b.callsign || b.name, undefined, { numeric: true }) : OFF_SORT === "activity" ? (a, b) => b.score - a.score : (a, b) => rank[a.status] - rank[b.status] || (b.days || 0) - (a.days || 0));
-    const card = o => `<button type="button" class="oc s-${o.status}" data-off="${esc(o.key)}">
+    const card = o => `<button type="button" class="oc s-${o.status}" data-off="${esc(o.key)}"${canAdd && OFF_SORT === "roster" && o.id ? ' draggable="true" title="Drag to another rank to move them"' : ""}>
         <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${[o.rank ? esc(o.rank === o.rank.toUpperCase() ? titleCase(o.rank) : o.rank) : "", o.alt ? `<span class="oc-alt">${esc(o.alt)}</span>` : ""].filter(Boolean).join(" · ") || "&nbsp;"}</small></span><em class="cs${o.callsign ? "" : " none"}${o.alt ? " unit" : ""}" title="${o.alt ? "Division callsign" : "Callsign"}">${esc(o.callsign || "NO CALLSIGN")}</em>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
         ${statusPill(o)}
         <div class="oc-n"><span><b>${o.filed.length}</b>filed</span><span><b>${o.assists.length}</b>assists</span><span><b>${fmtPts(o.score)}</b>points</span></div>
@@ -534,11 +534,15 @@
     if (OFF_SORT === "roster" && (useRank || useSec)) {
       const groups = [], at = {};
       list.forEach(o => { const k = grp(o); if (!at[k]) { at[k] = { name: k, list: [] }; groups.push(at[k]); } at[k].list.push(o); });
-      body = groups.map(g => `${g.name ? `<div class="og-h"><span>${esc(g.name)}</span><i></i><small>${g.list.length}</small></div>` : ""}<div class="ogrid">${g.list.map(card).join("")}</div>`).join("");
+      // every rank that has open spots is a drop target too, even with nobody in it yet
+      const SL = XS[DATA.division.id]; if (canAdd && !SL) xSlots();
+      if (canAdd && SL && SL.spots) SL.spots.forEach(sp => { const k = groupOf(sp, groups.map(g => g.name), useRank); if (k && !at[k]) { at[k] = { name: k, list: [] }; groups.push(at[k]); } });
+      body = groups.map(g => `<div class="og" data-dz="${esc(g.name)}">${g.name ? `<div class="og-h"><span>${esc(g.name)}</span><i></i><small>${g.list.length}</small></div>` : ""}<div class="ogrid">${g.list.map(card).join("") || '<div class="og-empty">Drop someone here to move them into this rank</div>'}</div></div>`).join("");
     } else body = `<div class="ogrid">${list.map(card).join("")}</div>`;
     $("view").innerHTML = `<div class="dc-tools"><input type="search" id="offQ" placeholder="Search officers…" value="${esc(OFF_Q)}"><div class="dc-seg sm" id="offSort">${[["roster", "Roster order"], ["status", "Needs attention first"], ["activity", "Most active"], ["name", "Callsign"]].map(([k, l]) => `<button data-s="${k}" class="${OFF_SORT === k ? "on" : ""}">${l}</button>`).join("")}</div>${canAdd ? '<button type="button" class="dc-btn sm" data-addoff style="margin-left:auto">＋ Add officer</button>' : ""}</div>
       ${list.length ? body : '<div class="dc-empty">No officers found on the division roster.</div>'}`;
     const q = $("offQ"); q.oninput = () => { OFF_Q = q.value; const pos = q.selectionStart; viewOfficers(S); const n = $("offQ"); n.focus(); n.setSelectionRange(pos, pos); };
+    if (canAdd && OFF_SORT === "roster") dragWire($("view"));
     $("offSort").onclick = e => { const b = e.target.closest("[data-s]"); if (b) { OFF_SORT = b.dataset.s; viewOfficers(S); } };
   }
 
@@ -771,6 +775,57 @@
       try { await api("divGearSave", { division: DATA.division.id, item: it }); closeModal(); toast("Saved.", "ok"); xLoad("gear", true); } catch (e) { toast(e.message, "bad"); $("gxSave").disabled = false; }
     };
   }
+  // ---- Grab & move: drag an officer card onto another rank, then pick the callsign ----
+  const nk2 = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  function groupOf(sp, names, byRank) {   // which roster group an open spot belongs to
+    const keys = byRank ? [sp.billet] : [sp.section, sp.billet];
+    for (const k of keys) { const n = names.find(g => nk2(g) && nk2(g) === nk2(k)); if (n) return n; }
+    for (const k of keys) { const n = names.find(g => nk2(g) && nk2(k) && (nk2(g).includes(nk2(k)) || nk2(k).includes(nk2(g)))); if (n) return n; }
+    return byRank ? sp.billet : (sp.section || sp.billet);
+  }
+  let DRAG = "";
+  function dragWire(root) {
+    root.querySelectorAll(".oc[draggable]").forEach(c => {
+      c.addEventListener("dragstart", e => { DRAG = c.dataset.off; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", DRAG); } catch (x) {} c.classList.add("dragging"); document.body.classList.add("dc-dragging"); });
+      c.addEventListener("dragend", () => { c.classList.remove("dragging"); document.body.classList.remove("dc-dragging"); root.querySelectorAll(".og.over").forEach(x => x.classList.remove("over")); });
+    });
+    root.querySelectorAll("[data-dz]").forEach(z => {
+      z.addEventListener("dragover", e => { if (!DRAG) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; z.classList.add("over"); });
+      z.addEventListener("dragleave", e => { if (!z.contains(e.relatedTarget)) z.classList.remove("over"); });
+      z.addEventListener("drop", e => { e.preventDefault(); z.classList.remove("over"); const k = DRAG; DRAG = ""; const o = stats().O.find(x => x.key === k); if (o) moveModal(o, z.dataset.dz); });
+    });
+  }
+  let MV = null;
+  async function moveModal(o, grp) {
+    MV = { o: o, grp: grp, pick: "", all: false };
+    $("mcard").className = "dc-mcard gx-m"; $("modal").hidden = false; drawMove();
+    if (!XS[DATA.division.id] || !XS[DATA.division.id].spots) { try { XS[DATA.division.id] = await api("divSlots", { division: DATA.division.id }); } catch (e) { XS[DATA.division.id] = { ok: false, error: e.message }; } drawMove(); }
+  }
+  function drawMove() {
+    if (!MV) return; const o = MV.o, SL = XS[DATA.division.id];
+    let body;
+    if (!SL || !SL.spots && SL.ok !== false) body = '<p class="ax-note">Loading open spots…</p>';
+    else if (SL.ok === false) body = `<p class="ax-note">${esc(SL.error)}</p>`;
+    else { const names = [...document.querySelectorAll("[data-dz]")].map(z => z.dataset.dz), byRank = !SL.spots.some(sp => sp.section);
+      const mine = SL.spots.filter(sp => groupOf(sp, names, byRank) === MV.grp), list = MV.all || !mine.length ? SL.spots : mine;
+      const by = {}; list.forEach(sp => { const g = groupOf(sp, names, byRank); (by[g] = by[g] || []).push(sp); });
+      body = (mine.length ? "" : `<p class="ax-note">No open callsigns found under <b>${esc(MV.grp)}</b>. Here's every open spot on the roster:</p>`) +
+        Object.keys(by).map(g => `<div class="mv-g"><small>${esc(g)}</small><div class="mv-sp">${by[g].map(sp => `<button type="button" class="mv-s${MV.pick === sp.unit ? " on" : ""}" data-mvs="${esc(sp.unit)}"><code>${esc(sp.unit)}</code>${sp.billet && nk2(sp.billet) !== nk2(g) ? `<span>${esc(sp.billet)}</span>` : ""}</button>`).join("")}</div></div>`).join("") +
+        (mine.length && !MV.all && SL.spots.length > mine.length ? '<button type="button" class="dc-btn xs" data-mvall style="margin-top:8px">Show open spots in other ranks</button>' : ""); }
+    const sp = MV.pick && SL && SL.spots ? SL.spots.find(x => x.unit === MV.pick) : null;
+    $("mcard").innerHTML = `<header class="gm-h"><h2>Move ${esc(o.name)}${o.callsign ? ` <code class="mv-from">${esc(o.callsign)}</code>` : ""} → ${esc(MV.grp)}</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
+      <div class="gx-form"><p class="ax-note">Pick their new callsign. Their name, Discord ID, status, notes and certifications move with them; the old spot opens up.</p>${body}</div>
+      <footer class="gx-ft"><button class="dc-btn sm" data-gxclose>Cancel</button><button class="dc-btn" id="mvGo"${sp ? "" : " disabled"}>${sp ? "Move to " + esc(sp.unit) : "Pick a callsign"}</button></footer>`;
+    const go = $("mvGo"); if (go) go.onclick = async () => { go.disabled = true; go.textContent = "Moving…";
+      try { const r = await api("divMove", { division: DATA.division.id, discord: o.id, name: o.name, callsign: o.callsign, billet: sp.billet, to: sp.unit });
+        closeModal(); MV = null; toast("✓ " + o.name + " moved " + (r.from || "") + " → " + r.to + ".", "ok"); XS[DATA.division.id] = null; xLoad("disc", true); await load(true, true); }
+      catch (err) { toast(err.message, "bad"); go.disabled = false; go.textContent = "Move to " + sp.unit; } };
+  }
+  document.addEventListener("click", e => {
+    if (!MV || $("modal").hidden) return;
+    const b = e.target.closest("[data-mvs]"); if (b) { MV.pick = b.dataset.mvs; drawMove(); return; }
+    if (e.target.closest("[data-mvall]")) { MV.all = true; drawMove(); }
+  });
   // ---- Add officer: pick someone from the department roster, pick their position, they go into its next open callsign ----
   let ADD = null;
   async function addModal() {
@@ -889,7 +944,7 @@
   async function xSlots() {
     const id = DATA.division.id; if (XBUSY["slots" + id]) return; XBUSY["slots" + id] = 1;
     try { XS[id] = await api("divSlots", { division: id }); } catch (e) { XS[id] = { ok: false, error: e.message }; }
-    delete XBUSY["slots" + id]; reTool();
+    delete XBUSY["slots" + id]; reTool(); if (TAB === "officers" && OFF_SORT === "roster" && DATA.division.id === id) drawAll();
   }
   function reTool() { const k = $("dpanel") && $("dpanel").dataset.key; if (k && !$("drawer").hidden) { const sc = $("dpanel").scrollTop; openOfficer(k); $("dpanel").scrollTop = sc; } }
   let DX_PRE = "";
@@ -899,7 +954,7 @@
   document.addEventListener("click", async e => {
     const t = e.target; if (!DATA || !DATA.division) return;
     const findO = k => stats().O.find(o => o.key === k);
-    if (t.closest("[data-gxclose]")) { closeModal(); ADD = null; return; }
+    if (t.closest("[data-gxclose]")) { closeModal(); ADD = null; MV = null; return; }
     if (t.closest("[data-addoff]")) { addModal(); return; }
     const cs = t.closest("[data-cset]"); if (cs) { const o = findO(cs.dataset.co), C = XC[DATA.division.id]; if (!o || !C) return; const c = certOf(C, o), n = cs.dataset.cset, on = !(c && c.certs[n]);
       cs.disabled = true; c.certs[n] = on; if (TAB === "certs") drawAll(); reTool();

@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 160;
+const BACKEND_VERSION = 161;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2238,12 +2238,20 @@ function divLayout_(dv) {
   const TX = divTextCertCol_(v, hr, C, certs);
   if (TX >= 0) { const seen = {}; const add = n => { if (n && !seen[n.toLowerCase()]) { seen[n.toLowerCase()] = 1; certs.push({ col: TX, name: n, text: true }); } };
     for (let i = hr + 1; i < v.length; i++) certTokens_(v[i][TX]).forEach(add); divCertExtra_(dv).forEach(add); }
-  const rows = [], billets = [];
+  const rows = [], billets = []; let section = "", prevHead = false;
   for (let i = hr + 1; i < v.length; i++) {
+    { // section headings (the roster's own ranks): a row with text but no unit / name / ID, like the MDT roster reads them
+      const r0 = v[i], cells = r0.map(c => str_(c).trim()).filter(Boolean), nm0 = C.name >= 0 ? str_(r0[C.name]).trim() : "", id0 = C.id >= 0 ? str_(r0[C.id]).trim() : "";
+      const un0 = C.unit >= 0 ? str_(r0[C.unit]).trim() : "";
+      if (!nm0 && !id0 && (!un0 || !/\d/.test(un0)) && cells.length && cells.length <= 2 && cells.every(t => !/\d{3,}/.test(t))) {
+        const t = cells.join(" · ").replace(/\s*\|\s*/g, " · ").replace(/^[-–—\s]+|[-–—\s]+$/g, "");
+        if (!(prevHead && (t.length > 40 || /[:.;]/.test(t))) && !((t.match(/·/g) || []).length > 2)) section = t;
+        prevHead = true; continue; }
+      prevHead = false; }
     const r = v[i], unit = C.unit >= 0 ? str_(r[C.unit]).trim().toUpperCase() : "", billet = C.billet >= 0 ? str_(r[C.billet]).trim() : "", name = str_(r[C.name]).trim(), id = str_(r[C.id]).replace(/\D/g, "");
     if (!unit && !name && !id) continue;
     if (!name && !id && !/\d/.test(unit)) continue;   // a heading spread over two cells ("Detective" | "Major Crimes Unit"), not an open spot
-    const x = { row: i + 1, unit: unit, billet: billet, name: name, id: id, open: !name && !id && !!unit, certs: {} };
+    const x = { row: i + 1, unit: unit, billet: billet, section: section, name: name, id: id, open: !name && !id && !!unit, certs: {} };
     certs.forEach(c => { if (c.status) { if (name || id) x.certs[c.name] = /^(certified|fto)$/i.test(str_(v[i][c.col]).trim()); return; }
       if (c.text) { if (name || id) x.certs[c.name] = certTokens_(v[i][c.col]).some(t => t.toLowerCase() === c.name.toLowerCase()); return; }
       const val = raw[i][c.col]; if (val === true || val === false) x.certs[c.name] = val; });
@@ -2251,7 +2259,8 @@ function divLayout_(dv) {
     if (billet && unit) { let b = billets.find(y => y.name === billet); if (!b) { b = { name: billet, open: [], filled: 0 }; billets.push(b); } if (x.open) b.open.push(unit); else b.filled++; }
   }
   const colNames = {}; Object.keys(C).forEach(k => { if (C[k] >= 0) colNames[k] = String.fromCharCode(65 + C[k]); });
-  return { sh: sh, hr: hr + 1, cols: C, colNames: colNames, rows: rows, certs: certs, textCol: TX, billets: billets.map(b => ({ name: b.name, filled: b.filled, open: b.open.length, next: b.open[0] || "" })) };
+  return { sh: sh, hr: hr + 1, cols: C, colNames: colNames, rows: rows, certs: certs, textCol: TX, billets: billets.map(b => ({ name: b.name, filled: b.filled, open: b.open.length, next: b.open[0] || "" })),
+    spots: rows.filter(r => r.open).map(r => ({ unit: r.unit, billet: r.billet, section: r.section })) };
 }
 // Division Command actions that come from the page: discipline, removal, fleet & uniforms
 function divExtra_(d, who) {
@@ -2264,7 +2273,7 @@ function divExtra_(d, who) {
   if (a === "divCerts") { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
     const cnt = {}; L.rows.forEach(r => { if (r.id) (cnt[r.id] = cnt[r.id] || []).push((r.unit ? r.unit + " " : "") + r.name); });
     return { ok: true, can: can, dupIds: Object.keys(cnt).filter(k => cnt[k].length > 1).map(k => cnt[k]), certs: L.certs.map(c => c.name), people: L.rows.filter(r => r.id || r.name).map(r => ({ id: r.id, name: r.name, unit: r.unit, billet: r.billet, certs: r.certs })) }; }
-  if (a === "divSlots") { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error }; return { ok: true, can: can, billets: L.billets, cols: L.colNames }; }
+  if (a === "divSlots") { const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error }; return { ok: true, can: can, billets: L.billets, spots: L.spots, cols: L.colNames }; }
   if (!can) return { ok: false, error: "Only this division's leaders and assistants (or command) can do that." };
   if (a === "divDiscIssue") {
     const t = DISC_TYPES_.find(x => x.id === str_(d.type)); if (!t) return { ok: false, error: "Pick a type." };
@@ -2374,17 +2383,30 @@ function divExtra_(d, who) {
     const id = str_(d.discord).replace(/\D/g, ""), want = str_(d.billet).trim(); if (!id) return { ok: false, error: "That officer has no Discord ID on the roster, so they can't be moved here." };
     const res = withLock_(() => {
       const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
-      const C = L.cols, sh = L.sh, src = L.rows.find(r => r.id === id); if (!src) return { ok: false, error: "Couldn't find them on the " + (dv.rosterTabName || dv.name) + " roster tab." };
-      const dst = L.rows.find(r => r.open && r.billet === want && r.row !== src.row); if (!dst) return { ok: false, error: "No open spot left in " + want + "." };
+      const same = L.rows.filter(r => r.id === id), C = L.cols, sh = L.sh, src = same.length > 1 ? (same.find(r => dnk_(r.name) === dnk_(d.name)) || same[0]) : same[0];
+      if (!src) return { ok: false, error: "Couldn't find them on the " + (dv.rosterTabName || dv.name) + " roster tab." };
+      const to = str_(d.to).trim().toUpperCase();
+      const dst = to ? L.rows.find(r => r.open && r.unit === to && r.row !== src.row) : L.rows.find(r => r.open && r.billet === want && r.row !== src.row);
+      if (!dst) return { ok: false, error: to ? to + " isn't open any more — refresh and pick another spot." : "No open spot left in " + want + "." };
       const get = (row, c) => c < 0 ? null : sh.getRange(row, c + 1);
       const name = get(src.row, C.name).getValue(), notes = C.notes >= 0 ? get(src.row, C.notes).getValue() : "", stat = C.status >= 0 ? str_(get(src.row, C.status).getDisplayValue()) : "";
       get(dst.row, C.name).setValue(name); get(dst.row, C.id).setNumberFormat("@").setValue(id);
       if (C.date >= 0) get(dst.row, C.date).setValue(new Date(new Date().setHours(0, 0, 0, 0)));
       if (C.status >= 0) { const st = get(dst.row, C.status); st.setValue(stat && !/^(n\/?a)?$/i.test(stat.trim()) ? stat : pbDropOpt_(st, "Active")); }
       if (C.notes >= 0 && notes !== "") get(dst.row, C.notes).setValue(notes);
+      // their certifications and the division's own columns (K9 name, Qualification…) go with them; formulas and the rank / unit / T.I.G. stay put
+      const W = sh.getLastColumn(), sv = sh.getRange(src.row, 1, 1, W), dvv = sh.getRange(dst.row, 1, 1, W), sF = sv.getFormulas()[0], dF = dvv.getFormulas()[0], sV = sv.getValues()[0], dV = dvv.getValues()[0], H = sh.getRange(L.hr, 1, 1, W).getDisplayValues()[0];
+      const fixed = {}; [C.unit, C.billet, C.name, C.id, C.date, C.status, C.notes].forEach(c => { if (c >= 0) fixed[c] = 1; });
+      const certCols = {}; L.certs.forEach(c => { certCols[c.col] = c; });
+      for (let j = 0; j < W; j++) { if (fixed[j] || sF[j] || dF[j]) continue; const h = str_(H[j]).trim(), x = sV[j];
+        if (!certCols[j] && (!h || /t\.?\s*i\.?\s*g|strike|rank|billet|position|unit|callsign/i.test(h))) continue;
+        const d0 = dV[j], empty0 = d0 === "" || d0 === null || d0 === false || /^(n\/?a|-+)$/i.test(str_(d0).trim());
+        if (x === "" || x === null || (!certCols[j] && !empty0)) continue;   // a value the open spot already has (its role…) belongs to the position
+        sh.getRange(dst.row, j + 1).setValue(x);
+        const cell = sh.getRange(src.row, j + 1); if (d0 === "" || d0 === null) cell.clearContent(); else cell.setValue(d0); }   // the old spot gets what the open one had
       [C.name, C.id, C.date, C.notes].filter(c => c >= 0).forEach(c => get(src.row, c).clearContent());
       if (C.status >= 0) { const st = get(src.row, C.status); st.setValue(pbDropOpt_(st, "N/A")); }
-      return { ok: true, from: src.unit, to: dst.unit, billet: want, row: dst.row };
+      return { ok: true, from: src.unit, to: dst.unit, billet: dst.billet || want, row: dst.row };
     });
     if (!res.ok) return res;
     divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "note", reason: "Moved " + (res.from || "") + " → " + res.to + " (" + res.billet + ").", post: false }), who);
