@@ -512,6 +512,7 @@
   const fmtPts = n => (Math.round(n * 10) / 10).toString();
 
   function viewOfficers(S) {
+    const DX = XD[DATA.division.id]; if (!DX) xLoad("disc"); const canAdd = !!(DX && DX.can);
     const rank = { never: 0, bad: 1, warn: 2, quiet: 3, ok: 4, exempt: 5 };
     let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign + " " + (o.alt || "") + " " + o.rank + " " + o.section).toLowerCase().includes(OFF_Q.toLowerCase()));
     list.sort(OFF_SORT === "roster" ? (a, b) => a.idx - b.idx : OFF_SORT === "name" ? (a, b) => (a.callsign || a.name).localeCompare(b.callsign || b.name, undefined, { numeric: true }) : OFF_SORT === "activity" ? (a, b) => b.score - a.score : (a, b) => rank[a.status] - rank[b.status] || (b.days || 0) - (a.days || 0));
@@ -535,7 +536,7 @@
       list.forEach(o => { const k = grp(o); if (!at[k]) { at[k] = { name: k, list: [] }; groups.push(at[k]); } at[k].list.push(o); });
       body = groups.map(g => `${g.name ? `<div class="og-h"><span>${esc(g.name)}</span><i></i><small>${g.list.length}</small></div>` : ""}<div class="ogrid">${g.list.map(card).join("")}</div>`).join("");
     } else body = `<div class="ogrid">${list.map(card).join("")}</div>`;
-    $("view").innerHTML = `<div class="dc-tools"><input type="search" id="offQ" placeholder="Search officers…" value="${esc(OFF_Q)}"><div class="dc-seg sm" id="offSort">${[["roster", "Roster order"], ["status", "Needs attention first"], ["activity", "Most active"], ["name", "Callsign"]].map(([k, l]) => `<button data-s="${k}" class="${OFF_SORT === k ? "on" : ""}">${l}</button>`).join("")}</div></div>
+    $("view").innerHTML = `<div class="dc-tools"><input type="search" id="offQ" placeholder="Search officers…" value="${esc(OFF_Q)}"><div class="dc-seg sm" id="offSort">${[["roster", "Roster order"], ["status", "Needs attention first"], ["activity", "Most active"], ["name", "Callsign"]].map(([k, l]) => `<button data-s="${k}" class="${OFF_SORT === k ? "on" : ""}">${l}</button>`).join("")}</div>${canAdd ? '<button type="button" class="dc-btn sm" data-addoff style="margin-left:auto">＋ Add officer</button>' : ""}</div>
       ${list.length ? body : '<div class="dc-empty">No officers found on the division roster.</div>'}`;
     const q = $("offQ"); q.oninput = () => { OFF_Q = q.value; const pos = q.selectionStart; viewOfficers(S); const n = $("offQ"); n.focus(); n.setSelectionRange(pos, pos); };
     $("offSort").onclick = e => { const b = e.target.closest("[data-s]"); if (b) { OFF_SORT = b.dataset.s; viewOfficers(S); } };
@@ -669,7 +670,7 @@
   async function xLoad(kind, force) {
     const id = DATA.division.id, store2 = kind === "disc" ? XD : XG, k = kind + id;
     if (!force && store2[id]) return store2[id]; if (XBUSY[k]) return XBUSY[k];
-    XBUSY[k] = api(kind === "disc" ? "divDisc" : "divGear", { division: id }).then(r => { store2[id] = r; if (DATA.division.id === id && (TAB === "activity" || TAB === "discipline" || TAB === "gear")) drawAll(); if (kind === "disc") reTool(); return r; })
+    XBUSY[k] = api(kind === "disc" ? "divDisc" : "divGear", { division: id }).then(r => { store2[id] = r; if (DATA.division.id === id && (TAB === "activity" || TAB === "discipline" || TAB === "gear" || (TAB === "officers" && kind === "disc" && r && r.can))) drawAll(); if (kind === "disc") reTool(); return r; })
       .catch(e => { store2[id] = { ok: false, error: e.message }; if (DATA.division.id === id) drawAll(); }).finally(() => { delete XBUSY[k]; });
     return XBUSY[k];
   }
@@ -770,6 +771,40 @@
       try { await api("divGearSave", { division: DATA.division.id, item: it }); closeModal(); toast("Saved.", "ok"); xLoad("gear", true); } catch (e) { toast(e.message, "bad"); $("gxSave").disabled = false; }
     };
   }
+  // ---- Add officer: pick someone from the department roster, pick their position, they go into its next open callsign ----
+  let ADD = null;
+  async function addModal() {
+    ADD = { q: "", pick: null, billet: "", data: null };
+    $("mcard").className = "dc-mcard gx-m"; $("modal").hidden = false; drawAdd();
+    try { ADD.data = await api("divPeople", { division: DATA.division.id }); } catch (e) { ADD.data = { ok: false, error: e.message }; }
+    drawAdd();
+  }
+  function drawAdd() {
+    if (!ADD) return; const A = ADD.data, dv = DATA.division;
+    let body;
+    if (!A) body = '<p class="ax-note">Loading the department roster…</p>';
+    else if (A.ok === false) body = `<p class="ax-note">${esc(A.error)}</p>`;
+    else { const q = ADD.q.toLowerCase(), hits = A.people.filter(p => !q || (p.name + " " + p.callsign + " " + p.rank).toLowerCase().includes(q)).slice(0, 40);
+      const B = (A.billets || []).filter(b => b.name);
+      body = `<label class="dx-f"><span>Officer</span><input type="search" id="addQ" placeholder="Search name or callsign…" value="${esc(ADD.q)}" autocomplete="off"></label>
+        <div class="add-list">${hits.length ? hits.map(p => `<button type="button" class="add-p${ADD.pick && ADD.pick.id === p.id ? " on" : ""}" data-addp="${esc(p.id)}"><code>${esc(p.callsign || "—")}</code><b>${esc(p.name)}</b><small>${esc(p.rank || "")}${p.trainee ? " · trainee" : ""}</small></button>`).join("") : '<p class="ax-note">Nobody matches (people already on the ' + esc(dv.name) + ' roster aren\'t listed).</p>'}</div>
+        <label class="dx-f"><span>Position</span></label>
+        <div class="add-bl">${B.length ? B.map(b => `<button type="button" class="tb-mv${ADD.billet === b.name ? " on" : ""}" data-addb="${esc(b.name)}"${b.open ? "" : " disabled"}><b>${esc(b.name)}</b><span>${b.open ? "Next: <code>" + esc(b.next) + "</code> · " + b.open + " open" : "Full"}</span></button>`).join("") : '<p class="ax-note">No positions found on the roster tab.</p>'}</div>`; }
+    const b = A && A.ok !== false ? (A.billets || []).find(x => x.name === ADD.billet) : null;
+    $("mcard").innerHTML = `<header class="gm-h"><h2>Add an officer to ${esc(dv.name)}</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
+      <div class="gx-form"><p class="ax-note">Their name and Discord ID go into the next open callsign of the position you pick on the <b>${esc(dv.name)}</b> roster tab, marked Active with today's date.</p>${body}</div>
+      <footer class="gx-ft"><button class="dc-btn sm" data-gxclose>Cancel</button><button class="dc-btn" id="addGo"${ADD.pick && b && b.open ? "" : " disabled"}>${ADD.pick && b ? "Add " + esc(ADD.pick.name) + " as " + esc(b.next) : "Add officer"}</button></footer>`;
+    const q = $("addQ"); if (q) q.oninput = () => { ADD.q = q.value; const pos = q.selectionStart; drawAdd(); const n = $("addQ"); n.focus(); n.setSelectionRange(pos, pos); };
+    const go = $("addGo"); if (go) go.onclick = async () => { go.disabled = true; go.textContent = "Adding…";
+      try { const r = await api("divAdd", { division: dv.id, discord: ADD.pick.id, name: ADD.pick.name, billet: ADD.billet });
+        closeModal(); ADD = null; toast("✓ " + r.name + " added to " + dv.name + " as " + r.to + ".", "ok"); XS[dv.id] = null; XC[dv.id] = null; xLoad("disc", true); await load(true, true); }
+      catch (err) { toast(err.message, "bad"); go.disabled = false; go.textContent = "Add officer"; } };
+  }
+  document.addEventListener("click", e => {
+    if (!ADD || $("modal").hidden) return;
+    const p = e.target.closest("[data-addp]"); if (p) { ADD.pick = (ADD.data.people || []).find(x => x.id === p.dataset.addp) || null; drawAdd(); return; }
+    const b = e.target.closest("[data-addb]"); if (b) { ADD.billet = b.dataset.addb; drawAdd(); }
+  });
   function removeModal(o, kind) {
     kind = kind || (o.stage ? "inactive" : "discipline");
     $("mcard").className = "dc-mcard gx-m";
@@ -864,7 +899,8 @@
   document.addEventListener("click", async e => {
     const t = e.target; if (!DATA || !DATA.division) return;
     const findO = k => stats().O.find(o => o.key === k);
-    if (t.closest("[data-gxclose]")) { closeModal(); return; }
+    if (t.closest("[data-gxclose]")) { closeModal(); ADD = null; return; }
+    if (t.closest("[data-addoff]")) { addModal(); return; }
     const cs = t.closest("[data-cset]"); if (cs) { const o = findO(cs.dataset.co), C = XC[DATA.division.id]; if (!o || !C) return; const c = certOf(C, o), n = cs.dataset.cset, on = !(c && c.certs[n]);
       cs.disabled = true; c.certs[n] = on; if (TAB === "certs") drawAll(); reTool();
       try { const r = await api("divCertSet", { division: DATA.division.id, discord: o.id, name: o.name, cert: n, on }); toast((on ? "✓ " + o.name + " certified: " : o.name + " no longer ") + n + (on ? "" : " certified") + ".", "ok"); xLoad("disc", true); }

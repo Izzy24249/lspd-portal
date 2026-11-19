@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 159;
+const BACKEND_VERSION = 160;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2212,6 +2212,8 @@ function divLayout_(dv) {
   const H = v[hr].map(x => str_(x).trim().toLowerCase()), find = re => H.findIndex(h => re.test(h));
   const C = { name: H.findIndex(h => /(officer'?s?\s*)?name/.test(h) && !/k-?9|dog|pilot|horse|unit/.test(h)), id: find(/discord/), unit: find(/callsign|unit/), billet: find(/rank|billet|position/),
     status: find(/status|activity/), notes: find(/note/), date: find(/promo|date/) };
+  { const isD = c => c >= 0 && v.slice(hr + 1, hr + 60).some(r => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str_(r[c]).trim()));
+    if (C.date >= 0 && !isD(C.date)) C.date = isD(C.date + 1) && !Object.keys(C).some(k => C[k] === C.date + 1) ? C.date + 1 : -1; }
   if (C.date < 0) { const tig = find(/t\.?\s*i\.?\s*g/); if (tig > 0 && v.slice(hr + 1, hr + 40).some(r => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str_(r[tig - 1]).trim()))) C.date = tig - 1; }
   { // the Discord ID column by what's in it (17-20 digit numbers), whatever the header says
     const isId = x => /^\s*\d{17,20}\s*$/.test(str_(x)), body = v.slice(hr + 1), n = c => body.filter(r => isId(r[c])).length;
@@ -2339,6 +2341,33 @@ function divExtra_(d, who) {
       L.sh.getRange(r.row, c.col + 1).setValue(on); return { ok: true, name: r.name }; });
     if (res.ok && !res.same) { divExtra_(Object.assign({}, d, { action: "divDiscIssue", type: "cert", reason: (on ? "Certified: " : "Certification removed: ") + cert + (str_(d.reason).trim() ? " · " + str_(d.reason).trim() : ""), post: false }), who);
       myDivBust_(dv); }
+    return res;
+  }
+  if (a === "divPeople") {   // department officers who aren't on this division's roster tab yet (for "Add officer")
+    if (!can) return { ok: false, error: "Only this division's leaders and assistants (or command) can do that." };
+    const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
+    const on = {}; L.rows.forEach(r => { if (r.id) on[r.id] = 1; });
+    const P = promoPeople_().filter(o => o.id && !on[o.id]).map(o => ({ id: o.id, name: o.name, callsign: o.callsign, rank: o.rank, trainee: !!o.trainee }));
+    P.sort((x, y) => String(x.callsign).localeCompare(String(y.callsign), undefined, { numeric: true }));
+    return { ok: true, people: P, billets: L.billets };
+  }
+  if (a === "divAdd") {   // put a department officer into the next open callsign of a position on the division's roster tab
+    const id = str_(d.discord).replace(/\D/g, ""), want = str_(d.billet).trim(); if (!id) return { ok: false, error: "Pick the officer." };
+    const who0 = promoPeople_().find(o => o.id === id); if (!who0) return { ok: false, error: "They're not on the department roster." };
+    const nm = str_(d.name).trim() || who0.name;
+    const res = withLock_(() => {
+      const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
+      const have = L.rows.find(r => r.id === id); if (have) return { ok: false, error: nm + " is already on the roster" + (have.unit ? " at " + have.unit : "") + "." };
+      const C = L.cols, sh = L.sh, dst = L.rows.find(r => r.open && r.billet === want); if (!dst) return { ok: false, error: "No open spot left in " + want + "." };
+      const get = c => sh.getRange(dst.row, c + 1);
+      get(C.name).setValue(nm); get(C.id).setNumberFormat("@").setValue(id);
+      if (C.date >= 0) get(C.date).setValue(new Date(new Date().setHours(0, 0, 0, 0)));
+      if (C.status >= 0) { const st = get(C.status); st.setValue(pbDropOpt_(st, "Active")); }
+      return { ok: true, to: dst.unit, billet: want, row: dst.row, name: nm };
+    });
+    if (!res.ok) return res;
+    divExtra_(Object.assign({}, d, { action: "divDiscIssue", discord: id, name: nm, callsign: res.to, type: "note", reason: "Added to " + dv.name + " at " + res.to + " (" + res.billet + ").", post: false }), who);
+    try { CacheService.getScriptCache().removeAll(["div_view4_" + dv.id + "_n", "roster_tab4_" + dv.rosterTabId, "roster_tab4_" + dv.rosterTabId + "_all", "roster_tab4_" + dv.rosterTabId + "_" + [divUnitCol_(dv), dv.positionCol].filter(Boolean).join(""), "div_hq_" + dv.id, "mydivs_" + id]); myDivBust_(dv); } catch (e) {}
     return res;
   }
   if (a === "divMove") {   // move / promote inside the division: into the next open callsign of the picked position
@@ -3423,7 +3452,7 @@ function divOfficer_(d) {
     return r;
   }
   if (d.action === "divGrade") { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." }; return withLock_(() => divGrade_(d, me)); }
-  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move|Certs|CertSet|CertDef)$/.test(d.action)) { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." };
+  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move|Certs|CertSet|CertDef|People|Add)$/.test(d.action)) { if (allowed.indexOf(str_(d.division)) === -1) return { ok: false, error: "That isn't one of your divisions." };
     return divExtra_(d, { id: acct.id, name: name, role: ["owner", "admin", "command"].indexOf(prof.level) !== -1 ? prof.level : "officer" }); }
   me.key = acct.id;
   if (d.action === "divOverview") return divOverview_(allowed, me);
@@ -4734,7 +4763,7 @@ function handleAdmin_(d) {
   if (a === "quickRef") return quickRef_(d);
   if (a === "mdtNoticePost" || a === "mdtNoticeClose") return mdtNotice_(d);
 
-  if (d.session && (/^div(View|Report|Grade|Overview|Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move|Certs|CertSet|CertDef)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
+  if (d.session && (/^div(View|Report|Grade|Overview|Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move|Certs|CertSet|CertDef|People|Add)$/.test(a) || /^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a))) return divOfficer_(d);
   if (a === "myCerts") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return myCerts_(acct); }
   if (a === "myDivision") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return myDivision_(acct, str_(d.division)); }
   if (a === "gearMdt") { const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" }; return { ok: true, divisions: gearForMdt_() }; }
@@ -4750,7 +4779,7 @@ function handleAdmin_(d) {
   if (/^hq(Post|Ack|Reply|Pin|Delete|Goal)$/.test(a)) { const hm = { username: me.username, role: me.role === "leader" ? "leader" : "admin", key: "admin:" + me.username }; const r = hqAct_(d, hm, me.role === "leader" ? [] : null); return r.ok ? divOverview_(null, hm) : r; }
   if (a === "divReport") return divReport_(d);
   if (a === "divGrade") return withLock_(() => divGrade_(d, me));
-  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move|Certs|CertSet|CertDef)$/.test(a)) return divExtra_(d, { id: "", name: me.username, role: me.role === "leader" ? "leaderacct" : me.role });
+  if (/^div(Disc|DiscIssue|DiscRevoke|Remove|Gear|GearSave|GearDel|Slots|Move|Certs|CertSet|CertDef|People|Add)$/.test(a)) return divExtra_(d, { id: "", name: me.username, role: me.role === "leader" ? "leaderacct" : me.role });
 
   switch (a) {
     case "logout":
