@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.5.1
+// @version      1.6.0
 // @description  Reads Duty Portal hours, shifts and reports for the LSPD MDT promotion board, and updates the Duty Portal roster after promotions are marked done in the MDT. Runs in your own logged-in browser; never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
@@ -284,17 +284,31 @@
     if (!(await waitFor(() => { const r = spotRow(d, cs); return r && idIn(r) === op.discord; }, 15000))) throw new Error("assigned, but " + cs + " doesn't show them yet");
     return "assigned " + cs;
   }
+  // ---------- Discord ID check (owner, from the MDT): every filled spot on the Main and Cadets rosters ----------
+  async function idScan(key) {
+    const all = [];
+    for (const tab of ["main"]) {
+      step("reading the " + (tab === "main" ? "Main" : "Cadets") + " roster"); const d = await openRoster(tab);
+      await sleep(1500);
+      rowsOf(d).forEach(r => { const cs = rowCs(r).toUpperCase(), id = idIn(r); if (cs && id && !all.some(x => x.cs === cs)) all.push({ tab: tab, cs: cs, who: holderOf(r), id: id }); });
+    }
+    if (!all.length) throw new Error("couldn't read any filled spots (signed out?)");
+    step("sending " + all.length + " spots to the MDT");
+    const r = await send({ action: "dpIds", key: key, rows: all });
+    if (!r || !r.ok) throw new Error((r && r.error) || "couldn't save the Discord IDs");
+    return all.length + " filled spots read on the Main roster";
+  }
   async function runJobs() {
     const key = get("key", ""); if (!key || RUNNING || get("paused", false)) return;
     const lk = get("lock", null); if (lk && lk.tab !== TAB && Date.now() - lk.at < 3 * 60e3) return;
-    const r = await send({ action: "dpJobs", key: key, v: 151 }); if (!r || !r.ok || !(r.jobs || []).length) return;
+    const r = await send({ action: "dpJobs", key: key, v: 160 }); if (!r || !r.ok || !(r.jobs || []).length) return;
     RUNNING = true; set("lock", { tab: TAB, at: Date.now() }); const beat = setInterval(() => set("lock", { tab: TAB, at: Date.now() }), 30e3);
     try {
       for (const job of r.jobs) {
-        STATUS = "roster: " + (job.kind === "cdscan" ? "reading Cadets" : job.name + " → " + (job.to || "")); draw();
+        STATUS = "roster: " + (job.kind === "idscan" ? "checking Discord IDs" : job.kind === "cdscan" ? "reading Cadets" : job.name + " → " + (job.to || "")); draw();
         let st = "done", msg = "";
         JOBKEY = key; JOBID = job.id;
-        try { msg = job.kind === "cdscan" ? await cadetScan(key) : job.kind === "cdop" ? await cadetOp(job.op || {}) : await doJob(job); } catch (e) { st = "failed"; msg = String(e.message || e); }
+        try { msg = job.kind === "idscan" ? await idScan(key) : job.kind === "cdscan" ? await cadetScan(key) : job.kind === "cdop" ? await cadetOp(job.op || {}) : await doJob(job); } catch (e) { st = "failed"; msg = String(e.message || e); }
         JOBID = "";
         try { if (frame) await escape(frame.contentDocument); } catch (e) {}
         await send({ action: "dpJob", key: key, id: job.id, st: st, msg: msg });

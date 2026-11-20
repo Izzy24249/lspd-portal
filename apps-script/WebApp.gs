@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 166;
+const BACKEND_VERSION = 167;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -4805,9 +4805,11 @@ function handleAdmin_(d) {
   if (a === "dpSync") return dpSync_(d);
   if (a === "rbReport") return rbReport_(d);
   if (a === "dpCadets") return cdScanSave_(d);
+  if (a === "dpIds") return idScanSave_(d);
   if (a === "dpJobs" || a === "dpJob") return dpJobsApi_(d);
   if (/^ob(Board|Add|Unlist|Preview|Push)$/.test(a)) return obHandle_(d);
   if (/^cd(Board|Scan|Apply)$/.test(a)) return cdHandle_(d);
+  if (/^id(Board|Scan|Fix)$/.test(a)) return idHandle_(d);
   if (a === "builderLog") return builderLog_(d);
   if (/^unit(View|Kudos|Award|Session|Join|SessionClose|CheckSave|CheckStart|CheckTake|CheckClose|CheckScores)$/.test(a)) return unitAct_(d);
   if (a === "mdtBriefPost" || a === "mdtBriefAck") return mdtBrief_(d);
@@ -5060,7 +5062,7 @@ function handleAdmin_(d) {
       next.version = Number(cur.version) + 1;
       writeConfig_(next, me.username);
       CacheService.getScriptCache().removeAll(["portal_roster", "roster_calls"]);
-      const tabKeys = []; next.forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") tabKeys.push("roster_tab_" + fd.rosterTabId); })));
+      const tabKeys = []; next.forms.forEach(f => (f.blocks || []).forEach(b => (b.fields || []).forEach(fd => { if (fd.rosterTabId != null && fd.rosterTabId !== "") tabKeys.push("roster_tab4_" + fd.rosterTabId); })));
       if (tabKeys.length) CacheService.getScriptCache().removeAll(tabKeys);
       promoClearCache_();                                  // progression setup may have changed
       divClearCache_();                                    // division setup may have changed
@@ -6187,10 +6189,10 @@ function pbPush_(A) {
   try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "roster_calls", "pb_open"].concat(out.done.map(p => "rp_" + p.id))); } catch (e) {}
   // (callsigns first, so the re-read roster shows the new ones; the other roster copies are dropped and rebuilt on next use)
   try { callsignMap_(true); const tid = rosterTabByName_(PERSONNEL_TAB_); if (tid != null) {
-    CacheService.getScriptCache().removeAll(["roster_tab_" + tid + "_" + RANK_COL_ + "_all", "roster_tab_" + tid, "roster_tab_" + tid + "_" + RANK_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + tid + "_" + RANK_COL_ + TIG_COL_ + "_all"]);
+    CacheService.getScriptCache().removeAll(["roster_tab4_" + tid + "_" + RANK_COL_ + "_all", "roster_tab4_" + tid, "roster_tab4_" + tid + "_" + RANK_COL_, "roster_tab4_" + tid + "_" + RANK_COL_ + TIG_COL_, "roster_tab4_" + tid + "_" + RANK_COL_ + TIG_COL_ + "_all"]);
     getRosterTab_(tid, true, [RANK_COL_, TIG_COL_], false, true); }
     const oid = rosterTabByName_(ONBOARD_TAB_); if (oid != null && out.done.some(p => p.onb)) {
-      CacheService.getScriptCache().removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all", "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_ + "_all", "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_ + OB_DATE_COL_ + "_all"]);
+      CacheService.getScriptCache().removeAll(["roster_tab4_" + oid + "_" + RANK_COL_ + "_all", "roster_tab4_" + oid, "roster_tab4_" + oid + "_" + RANK_COL_, "roster_tab4_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab4_" + oid + "_all", "roster_tab4_" + oid + "_" + RANK_COL_ + TIG_COL_ + "_all", "roster_tab4_" + oid + "_" + RANK_COL_ + TIG_COL_ + OB_DATE_COL_ + "_all"]);
       getRosterTab_(oid, true, [RANK_COL_, TIG_COL_], false, true); } } catch (e) {}
   // the announcement (if High Command picked a channel)
   let warning = "";
@@ -6250,7 +6252,8 @@ function dpJobsApi_(d) {
     const J = dpJobsAll_(), now = Date.now(); let changed = false;
     J.forEach(j => { if (j.st === "working" && now - (j.at || 0) > 10 * 60000) { const where = j.step ? " (last step: " + j.step + ")" : ""; j.st = j.tries >= 2 ? "failed" : "queued"; j.msg = "The add-on went quiet for 10 minutes" + where + (j.st === "failed" ? ". Keep the Duty Portal tab in front (a background tab gets slowed down by the browser), then press Retry." : ", trying again."); j.step = ""; changed = true; } });
     const cdOk = Number(d.v || 0) >= 150;   // cadet roster jobs only go to add-on 1.5.0+ (older ones don't know them)
-    const todo = J.filter(j => j.st === "queued" && (cdOk || !/^cd/.test(j.kind || ""))).sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, 8);
+    const idOk = Number(d.v || 0) >= 160;   // the Discord ID check needs add-on 1.6.0+
+    const todo = J.filter(j => j.st === "queued" && (cdOk || !/^cd/.test(j.kind || "")) && (idOk || j.kind !== "idscan")).sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, 8);
     if (todo.length) { todo.forEach(j => { j.st = "working"; j.at = now; j.step = "picked up by the add-on"; j.tries = (j.tries || 0) + 1; }); changed = true; }
     if (changed) withLock_(() => { const cur = dpJobsAll_(); J.forEach(j => { const i = cur.findIndex(x => x.id === j.id); if (i !== -1) cur[i] = j; }); dpJobsPut_(cur); return { ok: true }; });
     return { ok: true, jobs: todo.map(j => ({ id: j.id, kind: j.kind, discord: j.discord, name: j.name, from: j.from, to: j.to, op: j.op || null })) };
@@ -6453,6 +6456,92 @@ function cdPlan_(sheet, scan) {
   const order = { clear: 0, move: 1, assign: 2, hold: 3 }; ops.sort((a, b) => order[a.type] - order[b.type]);
   return { rows: rows, ops: ops };
 }
+// ---- Discord ID check (owner only): the Duty Portal's Main + Cadets rosters say whose Discord ID sits in each callsign;
+//  the roster sheet's Personnel / Onboarding tabs (and then every division tab, by name) are corrected to match ----
+const DPI_SHEET_ = "Duty Portal IDs", DPI_HEAD_ = ["Tab", "Callsign", "Holder", "Discord ID", "Seen"];
+function idScanSave_(d) {   // from the add-on: every filled spot on the Duty Portal's Main and Cadets rosters
+  const who = dpKeys_().find(k => k.h === dpHash_(d.key)); if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid." };
+  const rows = (Array.isArray(d.rows) ? d.rows : []).slice(0, 600).filter(r => str_(r.id).replace(/\D/g, "")).map(r => [clip_(str_(r.tab), 10), cellSafe_(clip_(str_(r.cs).toUpperCase(), 10)), cellSafe_(clip_(str_(r.who), 80)), "'" + str_(r.id).replace(/\D/g, ""), new Date()]);
+  return withLock_(() => { const sh = dpSheet_(DPI_SHEET_, DPI_HEAD_); if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, DPI_HEAD_.length).clearContent();
+    if (rows.length) sh.getRange(2, 1, rows.length, DPI_HEAD_.length).setValues(rows);
+    PROPS_.setProperty("DP_IDS_META", JSON.stringify({ at: Date.now(), n: rows.length })); return { ok: true }; });
+}
+function idScan_() {
+  const sh = ss_().getSheetByName(DPI_SHEET_), out = {}; if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues().forEach(r => { const cs = str_(r[1]).toUpperCase(); if (cs) out[cs] = { tab: str_(r[0]), cs: cs, who: str_(r[2]), id: str_(r[3]).replace(/\D/g, "") }; });
+  return out;
+}
+// Personnel: D callsign, E name, F Discord ID · Onboarding: A callsign, C name, D Discord ID
+function idSheetRows_() {
+  const book = rosterBook_(), out = [];
+  [[PERSONNEL_TAB_, 3, 4, 5], [ONBOARD_TAB_, 0, 2, 3]].forEach(t => { const sh = book.getSheetByName(t[0]); if (!sh || sh.getLastRow() < 2) return;
+    sh.getRange(1, 1, sh.getLastRow(), t[3] + 1).getDisplayValues().forEach((r, i) => { const cs = str_(r[t[1]]).trim().toUpperCase(), nm = str_(r[t[2]]).trim();
+      if (!/^[A-Z]{1,3}-?\d{2,4}$/.test(cs) || !nm || /^name$/i.test(nm)) return;
+      out.push({ tab: t[0] === PERSONNEL_TAB_ ? "Personnel" : "Onboarding", sheet: t[0], row: i + 1, col: t[3] + 1, cs: cs, name: nm, id: str_(r[t[3]]).replace(/\D/g, "") }); }); });
+  return out;
+}
+function idPlan_() {
+  // step 1: the Main roster (Personnel tab) against the Duty Portal's Main roster. The Onboarding tab isn't checked against the
+  // Duty Portal (not every cadet is on it yet); its IDs are only used to recognize people on the division tabs in step 2
+  const scan = idScan_(), all = idSheetRows_(), dept = all.filter(x => x.tab === "Personnel"), onb = all.filter(x => x.tab === "Onboarding"), items = [], cnt = {}; dept.forEach(x => { if (x.id) cnt[x.id] = (cnt[x.id] || 0) + 1; });
+  const dpBy = {}; Object.keys(scan).forEach(k => { dpBy[scan[k].id] = scan[k]; });
+  const finalId = {}, held = {};   // department row → the ID it will have after the fixes; rows waiting on a look
+
+  dept.forEach(x => {
+    const dp = scan[x.cs]; finalId[x.tab + x.row] = x.id;
+    if (!dp) { if (Object.keys(scan).length) items.push({ key: "n:" + x.tab + x.row, tab: "Main roster", cs: x.cs, name: x.name, from: x.id, to: "", st: "missing", why: "Nobody in " + x.cs + " on the Duty Portal's Main roster" }); return; }
+    if (dp.id === x.id) return;
+    const other = dept.find(y => y !== x && y.id === dp.id), named = sameName_(dp.who, x.name);
+    let st = "fix", why = "";
+    if (other && !sameName_(other.name, x.name)) { st = "review"; why = "The Duty Portal has " + (dp.who || dp.id) + " in " + x.cs + ", but that ID is " + other.name + "'s (" + other.cs + ") on the sheet"; }
+    else if (!x.id) why = "No Discord ID on the sheet";
+    else if (cnt[x.id] > 1) why = "The sheet's ID is on " + cnt[x.id] + " rows (copied by mistake)";
+    else if (named) why = "Same name on the Duty Portal (" + (dp.who || "") + "), different ID";
+    else { st = "review"; why = "The Duty Portal shows " + (dp.who || "someone") + " in " + x.cs + " — check it's the same person"; }
+    items.push({ key: "d:" + x.tab + x.row, tab: "Main roster", sheet: x.sheet, row: x.row, col: x.col, cs: x.cs, name: x.name, from: x.id, to: dp.id, dpWho: dp.who, st: st, why: why });
+    if (st === "fix") finalId[x.tab + x.row] = dp.id; else held[x.tab + x.row] = 1;
+  });
+  // division tabs: match each member to the department roster by name; their ID should be the department's
+  // step 2: every division tab, matched by name to the (corrected) Main roster, then the Onboarding roster
+  const people = dept.map(x => ({ name: x.name, cs: x.cs, id: finalId[x.tab + x.row], held: !!held[x.tab + x.row] })).concat(onb.filter(x => !dept.some(y => y.id && y.id === x.id)).map(x => ({ name: x.name, cs: x.cs, id: x.id }))).filter(x => x.id);
+  ((getConfig_().settings || {}).divisions || []).forEach(dv => { if (dv.rosterTabId == null) return; let L; try { L = divLayout_(dv); } catch (e) { return; } if (L.error) return;
+    L.rows.forEach(r => { if (!r.name) return; const m = people.filter(p => sameName_(p.name, r.name) && nameKey_(p.name).split(" ").pop() === nameKey_(r.name).split(" ").pop());
+      const uniq = m.filter((p, i) => m.findIndex(q => q.id === p.id) === i);
+      if (!uniq.length) { if (r.id && !people.some(p => p.id === r.id)) items.push({ key: "x:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "missing", why: "Not on the Main or Onboarding roster by that name" }); return; }
+      if (uniq.length > 1) { if (!uniq.some(p => p.id === r.id)) items.push({ key: "a:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "review", why: "More than one officer named like " + r.name + " (" + uniq.map(p => p.cs).join(", ") + ")" }); return; }
+      if (uniq[0].id === r.id) return;
+      if (uniq[0].held) { items.push({ key: "h:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "review", why: "Waiting on " + uniq[0].cs + " on the Main roster — sort that one out first, then check again" }); return; }
+      items.push({ key: "v:" + dv.id + ":" + r.row, tab: dv.name, div: dv.id, row: r.row, col: L.cols.id + 1, cs: r.unit, name: r.name, from: r.id, to: uniq[0].id, st: "fix", why: r.id ? "Different from " + uniq[0].cs + "'s ID on the Main roster" : "No Discord ID on the division tab" }); }); });
+  return items;
+}
+function idHandle_(d) {
+  const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
+  if (!cdOwner_(acct)) return { ok: false, error: "The Discord ID check is for the portal owner only." };
+  const a = d.action;
+  if (a === "idScan") return withLock_(() => { const J2 = dpJobsAll_(); let j = J2.find(x => x.id === "idscan");
+    if (j && (j.st === "queued" || j.st === "working")) return { ok: true, queued: true };
+    if (!j) { j = { id: "idscan" }; J2.push(j); } Object.assign(j, { kind: "idscan", name: "Discord ID check", st: "queued", msg: "", step: "", at: Date.now(), tries: 0, by: acct.username || "" });
+    dpJobsPut_(J2); return { ok: true, queued: true }; });
+  if (a === "idFix") {
+    const pick = {}; (d.keys || []).forEach(k => pick[str_(k)] = 1);
+    const todo = idPlan_().filter(x => pick[x.key] && x.to && x.row && x.col); if (!todo.length) return { ok: false, error: "Nothing picked to fix." };
+    const res = withLock_(() => { const book = rosterBook_(), done = [], skipped = [];
+      todo.forEach(x => { let sh; if (x.div) { const dv = ((getConfig_().settings || {}).divisions || []).find(v => v.id === x.div); sh = dv ? book.getSheets().find(z => z.getSheetId() === Number(dv.rosterTabId)) || null : null; } else sh = book.getSheetByName(x.sheet);
+        if (!sh) { skipped.push(x.name + ": tab not found"); return; }
+        const cell = sh.getRange(x.row, x.col), cur = str_(cell.getDisplayValue()).replace(/\D/g, "");
+        if (cur !== x.from) { skipped.push(x.name + " (" + x.tab + "): the cell changed since the check"); return; }
+        cell.setNumberFormat("@").setValue(x.to); done.push(x.tab + " " + (x.cs || "") + " " + x.name); });
+      SpreadsheetApp.flush(); return { ok: true, done: done, skipped: skipped }; });
+    try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "roster_calls", "pb_open"]);
+      rosterBook_().getSheets().forEach(sh => { const t = sh.getSheetId(); c.removeAll(["roster_tab4_" + t, "roster_tab4_" + t + "_all", "roster_tab4_" + t + "_" + RANK_COL_, "roster_tab4_" + t + "_" + RANK_COL_ + "_all", "roster_tab4_" + t + "_" + RANK_COL_ + TIG_COL_, "roster_tab4_" + t + "_" + RANK_COL_ + TIG_COL_ + "_all"]); });
+      ((getConfig_().settings || {}).divisions || []).forEach(dv => { myDivBust_(dv); c.removeAll(["div_view8_" + dv.id + "_n", "div_top2_" + dv.id, "mydiv_certs_" + dv.id]); }); } catch (e) {}
+    return res;
+  }
+  // idBoard
+  const meta = JSON.parse(PROPS_.getProperty("DP_IDS_META") || "{}"), J = dpJobsAll_().find(x => x.id === "idscan");
+  let items = [], err = ""; if (meta.at) { try { items = idPlan_(); } catch (e) { err = errMsg_(e); } }
+  return { ok: true, error: err, scan: meta, items: items, job: J ? dpJobPub_(J) : null, sync: dpKeys_().length > 0 };
+}
 function cdHandle_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
   if (!cdOwner_(acct)) return { ok: false, error: "The cadet roster check is for the portal owner only." };
@@ -6612,6 +6701,6 @@ function obPush_(A) {
   });
   if (!out.ok) return out;
   try { const c = CacheService.getScriptCache(); c.removeAll(["promo_people", "promo_view_onboard", "roster_calls"]); const oid = rosterTabByName_(ONBOARD_TAB_);
-    if (oid != null) { c.removeAll(["roster_tab_" + oid + "_" + RANK_COL_ + "_all", "roster_tab_" + oid, "roster_tab_" + oid + "_" + RANK_COL_, "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab_" + oid + "_all", "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_ + "_all", "roster_tab_" + oid + "_" + RANK_COL_ + TIG_COL_ + OB_DATE_COL_ + "_all"]); } } catch (e) {}
+    if (oid != null) { c.removeAll(["roster_tab4_" + oid + "_" + RANK_COL_ + "_all", "roster_tab4_" + oid, "roster_tab4_" + oid + "_" + RANK_COL_, "roster_tab4_" + oid + "_" + RANK_COL_ + TIG_COL_, "roster_tab4_" + oid + "_all", "roster_tab4_" + oid + "_" + RANK_COL_ + TIG_COL_ + "_all", "roster_tab4_" + oid + "_" + RANK_COL_ + TIG_COL_ + OB_DATE_COL_ + "_all"]); } } catch (e) {}
   return { ok: true, removed: out.done.length, cleaned: out.cleaned, done: out.done.map(p => ({ callsign: p.callsign, officer: p.officer, toRow: p.toRow })), skipped: out.skipped.map(p => ({ callsign: p.callsign, officer: p.officer, error: p.error })) };
 }
