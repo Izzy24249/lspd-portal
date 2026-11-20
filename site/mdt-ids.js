@@ -33,6 +33,10 @@
     h += '<div class="cd-bar"><button class="pbx-btn" data-idscan' + (live(B.job) || !B.sync ? " disabled" : "") + ">" + (live(B.job) ? "CHECKING…" : "🔎 CHECK THE DUTY PORTAL NOW") + "</button>" +
       '<span class="cd-meta">' + (sc.at ? "Last read " + ago(sc.at) + " · " + (sc.n || 0) + " filled spots" : "The Duty Portal hasn't been read yet") + "</span>" + jobChip(B.job) + "</div>";
     if (!B.sync) h += '<div class="cd-warn">The Duty Portal add-on isn\'t set up yet, so it can\'t read the rosters.</div>';
+    { const A = B.addon || {}, ver = A.v ? Math.floor(A.v / 100) + "." + Math.floor(A.v / 10) % 10 + "." + A.v % 10 : "?";
+      const quiet = !A.at || Date.now() - A.at > 3 * 60e3;
+      h += '<div class="' + (quiet || A.v < 160 ? "cd-warn" : "cd-meta id-hb") + '">🤖 Add-on: ' + (A.at ? "version " + ver + ", last checked in " + ago(A.at) : "hasn't checked in yet") +
+        (A.v && A.v < 160 ? " — <b>it needs 1.6.0 for this check.</b> Update it in Tampermonkey, then reload the Duty Portal tab." : quiet ? " — <b>it isn't running right now.</b> Open the Duty Portal (logged in) in the browser where the add-on is installed, and make sure it isn't paused." : " — it picks up the check within a minute.") + "</div>"; }
     if (B.error) h += '<div class="cd-warn">' + esc(B.error) + "</div>";
     if (!sc.at) return h + '<div class="pbx-empty">Press <b>Check the Duty Portal now</b>. The add-on (version 1.6.0 or newer) reads the Main roster, changes nothing there, and the differences show up here in a minute or two.</div></div>';
     const n = k => I.filter(x => x.st === k).length;
