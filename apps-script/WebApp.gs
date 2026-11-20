@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 170;
+const BACKEND_VERSION = 171;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2138,6 +2138,7 @@ const DISC_TYPES_ = [
   { id: "written", label: "Written warning", pts: 2, days: 45 },
   { id: "strike", label: "Strike", pts: 3, days: 60 },
   { id: "suspension", label: "Suspension (from division duty)", pts: 0, days: 7 },
+  { id: "hold", label: "Not cleared to activate", pts: 0, days: 0 },
   { id: "inact1", label: "Inactivity · week 1 warning", pts: 1, days: 30 },
   { id: "inact2", label: "Inactivity · week 2 final notice", pts: 2, days: 30 },
   { id: "removal", label: "Removed from division", pts: 0, days: 0 },
@@ -2186,6 +2187,16 @@ function discAll_(divId) {
     return { row: i + 2, id: str_(r[0]), div: str_(r[1]), discord: str_(r[2]).replace(/^'/, ""), callsign: str_(r[3]), name: str_(r[4]), type: str_(r[5]), pts: Number(r[6]) || 0, reason: str_(r[7]),
       by: str_(r[8]), at: at, expires: exp, status: st, live: st === "active" && (!exp || exp > now) };
   }).filter(x => !divId || x.div === divId);
+}
+// an officer's duty status in a division, from their live record: a suspension (red) wins over "not cleared to activate" (amber)
+function dutyOf_(entries, id) {
+  if (!id) return null; const L = entries.filter(x => x.live && x.discord === id && (x.type === "suspension" || x.type === "hold"));
+  const x = L.find(y => y.type === "suspension") || L[0]; if (!x) return null;
+  return { lvl: x.type === "suspension" ? "red" : "amber", label: x.type === "suspension" ? "Suspended" : "Not cleared to activate", until: x.expires || 0, reason: x.reason, by: x.by, at: x.at, ids: L.map(y => y.id) };
+}
+function dutyAttach_(out, divId) {   // fresh on every view (not cached with the roster)
+  try { const E = discAll_(divId); (out.officers || []).forEach(o => { o.duty = dutyOf_(E, o.id); }); } catch (e) {}
+  return out;
 }
 function discPub_(x) { const t = DISC_TYPES_.find(y => y.id === x.type); return { id: x.id, discord: x.discord, callsign: x.callsign, name: x.name, type: x.type, label: t ? t.label : x.type, pts: x.pts, reason: x.reason, by: x.by, at: x.at, expires: x.expires, status: x.status, live: x.live }; }
 // A division roster tab's layout, worked out from its header row (each division's tab is laid out a little differently):
@@ -2531,10 +2542,10 @@ function myDivision_(acct, divId) {
   const D = discAll_(dv.id).filter(x => x.discord === acct.id).sort((a, b) => b.at - a.at), live = D.filter(x => x.live).reduce((n, x) => n + x.pts, 0);
   let lad = DISC_LADDER_[0]; DISC_LADDER_.forEach(l => { if (live >= l.min) lad = l; });
   return { ok: true, division: { id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl, tagline: dv.tagline, quotaPts: dv.quotaPts || 0, inactWeeks: NW },
-    me: { name: me.name, section: me.section || "", callsign: me.callsign, deptCallsign: DCS[acct.id] || me.alt || "", rank: me.rank, profile: prof, life: { filed: lf, assists: la, pts: lp, first: first, best: Math.max.apply(null, [ptsW].concat(weeks)) }, place: place, onBoard: board.length, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
+    me: { name: me.name, duty: me.duty || null, section: me.section || "", callsign: me.callsign, deptCallsign: DCS[acct.id] || me.alt || "", rank: me.rank, profile: prof, life: { filed: lf, assists: la, pts: lp, first: first, best: Math.max.apply(null, [ptsW].concat(weeks)) }, place: place, onBoard: board.length, loa: !!me.loa, exempt: me.exempt || "", staff: staff.indexOf(acct.id) !== -1, ptsW: ptsW, weeks: weeks, stage: Math.min(stage, NW || 0), items: items.sort((a, b) => b.at - a.at).slice(0, 30) },
     weekStart: W0, weekEnd: W0 + 7 * DAY, board: board, race: race,
     record: { points: live, ladder: lad.label, entries: D.slice(0, 40).map(discPub_) },
-    rosterCols: RC.fields, roster: V.officers.map(o => ({ name: o.name, callsign: o.callsign, dept: DCS[o.id] || o.alt || "", id: o.id || "", date: (myDivPick_(MD, "rc", o.id, o.name) || {}).date || "", billet: (myDivPick_(MD, "rc", o.id, o.name) || {}).billet || "", f: (myDivPick_(MD, "rc", o.id, o.name) || {}).f || {}, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (myDivPick_(MD, "by", o.id, o.name) || []) })),
+    rosterCols: RC.fields, roster: V.officers.map(o => ({ name: o.name, duty: o.duty ? { lvl: o.duty.lvl, label: o.duty.label, until: o.duty.until } : null, callsign: o.callsign, dept: DCS[o.id] || o.alt || "", id: o.id || "", date: (myDivPick_(MD, "rc", o.id, o.name) || {}).date || "", billet: (myDivPick_(MD, "rc", o.id, o.name) || {}).billet || "", f: (myDivPick_(MD, "rc", o.id, o.name) || {}).f || {}, rank: o.rank, section: o.section, loa: !!o.loa, staff: !!o.id && staff.indexOf(o.id) !== -1, me: o.id === acct.id, certs: (myDivPick_(MD, "by", o.id, o.name) || []) })),
     gear: gearAll_(dv.id), certNames: CERTS.names, myCerts: myDivPick_(MD, "by", acct.id, me.name) || [], dupIds: Object.keys(MD.dup || {}).map(k => MD.dup[k]) };
 }
 // ---- MDT → My certifications: everything this officer is certified in ----
@@ -2649,7 +2660,7 @@ function divView_(d, me) {
   const dv = divs.find(x => x.id === str_(d.division)) || divs[0];
   if (!dv) return { ok: true, divisions: [], me: { username: me.username, role: me.role } };
   const cache = CacheService.getScriptCache(), ck = "div_view8_" + dv.id;   // (v153: unit column defaults)
-  if (!d.fresh) { const hit = bigGet_(ck); if (hit) { try { return Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }); } catch (e) {} } }
+  if (!d.fresh) { const hit = bigGet_(ck); if (hit) { try { return dutyAttach_(Object.assign(JSON.parse(hit), { me: { username: me.username, role: me.role }, cached: true }), dv.id); } catch (e) {} } }
   // officers from the division's roster tab
   let officers = [], rosterError = "";
   const LOA_ = loaIds_(), UC = divUnitCol_(dv);
@@ -2682,7 +2693,7 @@ function divView_(d, me) {
     weekStart: (cfg.settings.hours && cfg.settings.hours.weekStart != null) ? cfg.settings.hours.weekStart : 1, at: Date.now() };
   try { bigPut_(ck, JSON.stringify(out), 900); } catch (e) {}   // 15 min; cleared the moment a report is filed or graded
   out.me = { username: me.username, role: me.role };
-  return out;
+  return dutyAttach_(out, dv.id);
 }
 // Discord profile pictures (saved when an officer signs in with Discord)
 function avatarUrl_(id, hash) { return id && hash ? "https://cdn.discordapp.com/avatars/" + id + "/" + hash + ".png?size=128" : ""; }

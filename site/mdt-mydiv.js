@@ -69,8 +69,11 @@
     if (me.place) chips.push(["mid", (me.place === 1 ? "👑 " : "#") + (me.place === 1 ? "Top officer" : me.place + " of " + me.onBoard) + " this week"]);
     chips.push(R.record && R.record.points ? ["bad", R.record.ladder] : ["ok", "Good standing"]);
     if (me.staff) chips.push(["lead", "⭐ Division leadership"]);
+    if (me.duty) chips.unshift([me.duty.lvl === "red" ? "bad" : "amb", me.duty.lvl === "red" ? "⛔ Suspended" : "⚠ Not cleared to activate"]);
     const since = P.date || (L.first ? day(L.first) : "");
-    return '<div class="md-hero md-id" style="--dc:' + esc(dv.color || "#2f7bff") + '"><img class="md-wm" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.remove()">' +
+    const DT = me.duty ? '<div class="md-dtb ' + me.duty.lvl + '"><i></i><div><b>' + (me.duty.lvl === "red" ? "⛔ You're suspended from " + esc(dv.name) + " duty" : "⚠ You're not cleared to activate for " + esc(dv.name)) + "</b><small>" +
+      (me.duty.until ? "Until " + esc(day(me.duty.until)) : "Until a division leader lifts it") + (me.duty.reason ? " · " + esc(me.duty.reason) : "") + " · Talk to your division leaders with questions.</small></div></div>" : "";
+    return DT + '<div class="md-hero md-id' + (me.duty ? " dt-" + me.duty.lvl : "") + '" style="--dc:' + esc(dv.color || "#2f7bff") + '"><img class="md-wm" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.remove()">' +
       '<img class="md-badge" src="' + esc(dv.logoUrl || "img/lspd-badge.png") + '" alt="" onerror="this.src=\'img/lspd-badge.png\'">' +
       '<div class="md-idm"><small>' + esc(hi) + ", " + esc(P.billet || me.rank || "Officer") + " " + esc(last) + " · " + esc(dv.name).toUpperCase() + "</small>" +
       '<h1><span class="md-cs">' + esc(me.callsign || P.unit || "—") + "</span> " + esc(me.name) + "</h1>" +
@@ -121,13 +124,13 @@
     return '<section class="md-card"><span class="md-k">' + esc(R.division.name).toUpperCase() + " · " + R.roster.length + ' MEMBERS</span><p class="md-none" style="margin:4px 0 10px">⭐ = division leadership, the people to go to with questions.' + (C.length ? " ✓ = certified." : "") + " Click an ID to copy it.</p>" +
       '<div class="md-tw"><table class="md-rt"><thead><tr><th>Div unit</th><th>Callsign</th><th>Name</th>' + X.map(x => "<th>" + esc(x) + "</th>").join("") +
       C.map(c => '<th class="c" title="' + esc(c) + '">' + esc(short(c)) + "</th>").join("") + "<th>Discord ID</th><th></th></tr></thead><tbody>" +
-      groups.map(g => '<tr class="g"><td colspan="' + cols + '">' + esc(g.n) + "</td></tr>" + g.l.map(o => '<tr class="' + (o.me ? "me" : "") + (o.loa ? " loa" : "") + '">' +
+      groups.map(g => '<tr class="g"><td colspan="' + cols + '">' + esc(g.n) + "</td></tr>" + g.l.map(o => '<tr class="' + (o.me ? "me" : "") + (o.loa ? " loa" : "") + (o.duty ? " dt-" + o.duty.lvl : "") + '">' +
         "<td><code>" + esc(o.callsign || "—") + '</code></td><td><code class="d">' + esc(o.dept || "—") + "</code></td>" +
-        "<td><b>" + esc(o.name) + "</b>" + (o.staff ? " ⭐" : "") + (o.me ? " <small>(you)</small>" : "") + (duty(o, DUTY) ? "<br><small>" + esc(duty(o, DUTY)) + "</small>" : o.billet && o.billet !== g.n ? "<br><small>" + esc(o.billet) + "</small>" : "") + "</td>" +
+        "<td>" + (o.duty ? '<i class="md-dt ' + o.duty.lvl + '" title="' + esc(o.duty.label + (o.duty.until ? " until " + day(o.duty.until) : "")) + '"></i>' : "") + "<b>" + esc(o.name) + "</b>" + (o.staff ? " ⭐" : "") + (o.me ? " <small>(you)</small>" : "") + (duty(o, DUTY) ? "<br><small>" + esc(duty(o, DUTY)) + "</small>" : o.billet && o.billet !== g.n ? "<br><small>" + esc(o.billet) + "</small>" : "") + "</td>" +
         X.map(x => "<td>" + (o.f && o.f[x] ? esc(o.f[x]) : '<span class="n">—</span>') + "</td>").join("") +
         C.map(c => (o.certs || []).indexOf(c) !== -1 ? '<td class="c y" title="' + esc(c) + '">✓</td>' : '<td class="c n">·</td>').join("") +
         "<td>" + (o.id ? '<button class="md-id-cp" data-copy="' + esc(o.id) + '" data-what="Discord ID" title="' + esc(o.id) + '">⧉ …' + esc(o.id.slice(-4)) + "</button>" : '<span class="n">—</span>') + "</td>" +
-        "<td>" + (o.loa ? "<em>LOA</em>" : "") + "</td></tr>").join("")).join("") + "</tbody></table></div></section>";
+        "<td>" + (o.duty ? '<em class="dt ' + o.duty.lvl + '">' + (o.duty.lvl === "red" ? "SUSPENDED" : "NOT CLEARED") + "</em> " : "") + (o.loa ? "<em>LOA</em>" : "") + "</td></tr>").join("")).join("") + "</tbody></table></div></section>";
   }
   // one certification tile: earned, or not yet (with steps when there's a path to it)
   function tile(c) {

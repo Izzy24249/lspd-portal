@@ -516,9 +516,9 @@
     const rank = { never: 0, bad: 1, warn: 2, quiet: 3, ok: 4, exempt: 5 };
     let list = S.O.filter(o => !OFF_Q || (o.name + " " + o.callsign + " " + (o.alt || "") + " " + o.rank + " " + o.section).toLowerCase().includes(OFF_Q.toLowerCase()));
     list.sort(OFF_SORT === "roster" ? (a, b) => a.idx - b.idx : OFF_SORT === "name" ? (a, b) => (a.callsign || a.name).localeCompare(b.callsign || b.name, undefined, { numeric: true }) : OFF_SORT === "activity" ? (a, b) => b.score - a.score : (a, b) => rank[a.status] - rank[b.status] || (b.days || 0) - (a.days || 0));
-    const card = o => `<button type="button" class="oc s-${o.status}" data-off="${esc(o.key)}"${canAdd && OFF_SORT === "roster" && o.id ? ' draggable="true" title="Drag to another rank to move them"' : ""}>
+    const card = o => `<button type="button" class="oc s-${o.status}${o.duty ? " dt-" + o.duty.lvl : ""}" data-off="${esc(o.key)}"${canAdd && OFF_SORT === "roster" && o.id ? ' draggable="true" title="Drag to another rank to move them"' : ""}>
         <div class="oc-h"><i class="av s-${o.status}">${esc(initials(o.name))}</i><span><b>${esc(o.name)}</b><small>${[o.rank ? esc(o.rank === o.rank.toUpperCase() ? titleCase(o.rank) : o.rank) : "", o.alt ? `<span class="oc-alt">${esc(o.alt)}</span>` : ""].filter(Boolean).join(" · ") || "&nbsp;"}</small></span><em class="cs${o.callsign ? "" : " none"}${o.alt ? " unit" : ""}" title="${o.alt ? "Division callsign" : "Callsign"}">${esc(o.callsign || "NO CALLSIGN")}</em>${o.grade ? `<em class="gb sm ${GCLS(o.grade.letter)}">${o.grade.letter}</em>` : ""}</div>
-        ${statusPill(o)}
+        ${dutyBadge(o)}${statusPill(o)}
         <div class="oc-n"><span><b>${o.filed.length}</b>filed</span><span><b>${o.assists.length}</b>assists</span><span><b>${fmtPts(o.score)}</b>points</span></div>
         ${quotaBar(o)}</button>`;
     // roster order: same order and section headings as the roster sheet
@@ -585,7 +585,7 @@
     const chart = `<svg viewBox="0 0 320 120" class="wchart"><defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="rgba(var(--acr),.12)"/><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(var(--acr),.7)" stroke-width="2"/></pattern></defs>
       ${weeks.map((w, i) => { const x = 8 + i * 39, hf = w.f / mx * 84, hs = w.s / mx * 84; return `<rect x="${x}" y="${96 - hf}" width="26" height="${hf}" rx="3" class="bf"><title>${w.f} filed</title></rect><rect x="${x}" y="${96 - hf - hs}" width="26" height="${hs}" rx="3" fill="url(#hatch)"><title>${w.s} assists</title></rect><text x="${x + 13}" y="112" text-anchor="middle">${new Date(w.a).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}</text>${w.f + w.s ? `<text x="${x + 13}" y="${90 - hf - hs}" text-anchor="middle" class="v">${w.f + w.s}</text>` : ""}`; }).join("")}</svg>`;
     $("dpanel").innerHTML = `<button class="dc-x" data-close aria-label="Close">✕</button>
-      <div class="pf-h"><i class="av xl s-${o.status}">${esc(initials(o.name))}</i><div><div class="dc-kick">${esc([o.callsign, o.alt].filter(Boolean).join(" · ") || "OFFICER")}</div><h2>${esc(o.name)}</h2>${statusPill(o)}</div></div>
+      <div class="pf-h"><i class="av xl s-${o.status}${o.duty ? " dt-" + o.duty.lvl : ""}">${esc(initials(o.name))}</i><div><div class="dc-kick">${esc([o.callsign, o.alt].filter(Boolean).join(" · ") || "OFFICER")}</div><h2>${esc(o.name)}</h2>${dutyBadge(o, true)}${statusPill(o)}</div></div>
       ${toolbox(o)}
       <div class="pf-k"><div><small>Filed · ${esc(PNAME[PERIOD])}</small><b>${o.filed.length}</b></div><div><small>Assists · ${esc(PNAME[PERIOD])}</small><b>${o.assists.length}</b></div><div><small>Avg grade (all)</small><b>${o.gradeAll ? `<em class="gb ${GCLS(o.gradeAll.letter)}">${o.gradeAll.letter}</em>` : "—"}</b></div><div><small>Last active</small><b class="sm">${o.last ? esc(ago(o.last)) : "never"}</b></div></div>
       ${o.quota ? `<div class="pf-q"><small>Quota this ${esc(qPer())}</small>${quotaBar(o)}</div>` : ""}
@@ -920,6 +920,32 @@
   // ---- officer toolbox (the panel that opens when a name is clicked) ----
   const XS = {};   // per division: positions and their next open callsign
   let TB = "";     // which toolbox panel is open
+  // suspended (red) / not cleared to activate (amber): from the officer's live record
+  function dutyBadge(o, big) {
+    const d = o.duty; if (!d) return "";
+    return `<div class="dt-b ${d.lvl}${big ? " big" : ""}" title="${esc((d.reason || "") + (d.by ? " — " + d.by : ""))}"><i></i><b>${d.lvl === "red" ? "⛔" : "⚠"} ${esc(d.label.toUpperCase())}</b><small>${d.until ? "until " + esc(fmtD(d.until)) : "until a leader lifts it"}${big && d.reason ? " · " + esc(d.reason) : ""}</small></div>`;
+  }
+  let DT = null;
+  function dutyModal(o, kind) {
+    DT = { o: o, kind: kind, days: kind === "suspension" ? "7" : "0" };
+    $("mcard").className = "dc-mcard gx-m"; $("modal").hidden = false;
+    const red = kind === "suspension", opts = red ? [["1", "1 day"], ["3", "3 days"], ["7", "7 days"], ["14", "14 days"], ["30", "30 days"], ["0", "Until lifted"]] : [["0", "Until lifted"], ["3", "3 days"], ["7", "7 days"], ["14", "14 days"]];
+    $("mcard").innerHTML = `<header class="gm-h"><h2>${red ? "⛔ Suspend" : "⚠ Not cleared to activate"} · ${esc(o.name)}</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
+      <div class="gx-form"><p class="ax-note">${red ? "They're suspended from " + esc(DATA.division.name) + " duty: a red ring shows on their card, on the roster and on their own MDT division page." : "They can't go on " + esc(DATA.division.name) + " duty until it's lifted: an amber ring shows on their card, on the roster and on their own MDT division page."} It's saved on their division record.</p>
+        <label class="dx-f"><span>How long</span><select id="dtDays">${opts.map(x => `<option value="${x[0]}"${x[0] === DT.days ? " selected" : ""}>${x[1]}</option>`).join("")}</select></label>
+        <label class="dx-f"><span>Reason</span><textarea id="dtWhy" rows="3" placeholder="${red ? "Why they're suspended" : "e.g. needs SOP review / certification first"}"></textarea></label>
+        <label class="dx-ck"><input type="checkbox" id="dtPost" checked> Post it in the division\'s Discord channel (if one is set)</label></div>
+      <footer class="gx-ft"><button class="dc-btn sm" data-gxclose>Cancel</button><button class="dc-btn ${red ? "bad" : ""}" id="dtGo">${red ? "Suspend" : "Set not cleared"}</button></footer>`;
+    $("dtGo").onclick = async () => { const why = $("dtWhy").value.trim(); if (!why) { toast("Write the reason.", "bad"); return; }
+      $("dtGo").disabled = true;
+      try { await issue(o, kind, why, 0, Number($("dtDays").value), $("dtPost").checked); closeModal(); DT = null; toast("✓ " + o.name + (red ? " suspended." : " marked not cleared to activate."), "ok"); xLoad("disc", true); await load(true, true); }
+      catch (e) { toast(e.message, "bad"); $("dtGo").disabled = false; } };
+  }
+  async function dutyLift(o) {
+    const ids = (o.duty && o.duty.ids) || []; if (!ids.length) return;
+    try { for (const id of ids) await api("divDiscRevoke", { division: DATA.division.id, id: id }); toast("✓ " + o.name + " is cleared for duty again.", "ok"); xLoad("disc", true); await load(true, true); }
+    catch (e) { toast(e.message, "bad"); }
+  }
   function toolbox(o) {
     const D = XD[DATA.division.id]; if (!D) xLoad("disc");
     const can = !!(D && D.can), P = D ? livePts(D, o) : 0, L = D ? ladderOf(D, P) : null;
@@ -939,6 +965,9 @@
         ${btn("certs", "🎓", "Certifications")}
         ${can ? btn("move", "🔼", "Move / promote") + btn("disc", "⚖️", "Discipline") : ""}
         ${o.id ? `<button type="button" class="tb-b" data-copyid="${esc(o.id)}"><span>🆔</span>Copy Discord ID</button>` : ""}
+        ${can && o.id ? (o.duty ? `<button type="button" class="tb-b ok" data-dtlift="${esc(o.key)}"><span>✅</span>Lift ${o.duty.lvl === "red" ? "suspension" : "hold"}</button>` : "") +
+          (o.duty && o.duty.lvl === "red" ? "" : `<button type="button" class="tb-b bad" data-dtset="suspension" data-tbo="${esc(o.key)}"><span>⛔</span>Suspend</button>`) +
+          (o.duty ? "" : `<button type="button" class="tb-b warn" data-dtset="hold" data-tbo="${esc(o.key)}"><span>⚠</span>Not cleared to activate</button>`) : ""}
         ${can ? btn("remove", "🚪", "Remove", "bad") : ""}</div>${panel ? `<div class="tb-p">${panel}</div>` : ""}</div>`;
   }
   async function xSlots() {
@@ -954,8 +983,10 @@
   document.addEventListener("click", async e => {
     const t = e.target; if (!DATA || !DATA.division) return;
     const findO = k => stats().O.find(o => o.key === k);
-    if (t.closest("[data-gxclose]")) { closeModal(); ADD = null; MV = null; return; }
+    if (t.closest("[data-gxclose]")) { closeModal(); ADD = null; MV = null; DT = null; return; }
     if (t.closest("[data-addoff]")) { addModal(); return; }
+    { const b = t.closest("[data-dtset]"); if (b) { const o = stats().O.find(x => x.key === b.dataset.tbo); if (o) dutyModal(o, b.dataset.dtset); return; } }
+    { const b = t.closest("[data-dtlift]"); if (b) { const o = stats().O.find(x => x.key === b.dataset.dtlift); if (o) dutyLift(o); return; } }
     const cs = t.closest("[data-cset]"); if (cs) { const o = findO(cs.dataset.co), C = XC[DATA.division.id]; if (!o || !C) return; const c = certOf(C, o), n = cs.dataset.cset, on = !(c && c.certs[n]);
       cs.disabled = true; c.certs[n] = on; if (TAB === "certs") drawAll(); reTool();
       try { const r = await api("divCertSet", { division: DATA.division.id, discord: o.id, name: o.name, cert: n, on }); toast((on ? "✓ " + o.name + " certified: " : o.name + " no longer ") + n + (on ? "" : " certified") + ".", "ok"); xLoad("disc", true); }
