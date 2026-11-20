@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 168;
+const BACKEND_VERSION = 169;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2202,6 +2202,13 @@ function divNoNameCerts_(dv) {
     : /\bcru\b|crisis/.test(n) ? { K: "CRU Certified", M: "FTO", N: "HRO", O: "Marine", P: "Dive", Q: "S&R", R: "FO" } : {};
 }
 // certifications that come with the spot: CRU-01 … CRU-32 are CRU Certified (not the honorary HCRU spots)
+// lowest rank that can join a division (index into PB_ABBR_: PO 0, PO2 1, PO3 2 …): Admin can set dv.minRank, else
+// K9 and TEU take PO2 and above, CID / CRU / ASU take PO3 and above
+function divMinIdx_(dv) {
+  if (dv.minRank) { const i = PB_ABBR_.indexOf(str_(dv.minRank).toUpperCase()); if (i >= 0) return i; }
+  const n = (str_(dv.name) + " " + str_(dv.id)).toLowerCase();
+  return /k-?9|canine|\bteu\b|traffic/.test(n) ? 1 : /\bcid\b|investigat|\bcru\b|crisis|\basu\b|air support|aviation/.test(n) ? 2 : 0;
+}
 function divAutoCerts_(dv) {
   const n = (str_(dv.name) + " " + str_(dv.id)).toLowerCase();
   if (/\bcru\b|crisis/.test(n)) return [{ cert: /cru\s*certif/i, why: "CRU-32 and lower are CRU Certified", test: u => { const m = /^CRU\s*-?\s*(\d{1,3})$/i.exec(str_(u).trim()); return !!m && +m[1] <= 32; } }];
@@ -2381,13 +2388,15 @@ function divExtra_(d, who) {
     if (!can) return { ok: false, error: "Only this division's leaders and assistants (or command) can do that." };
     const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
     const on = {}; L.rows.forEach(r => { if (r.id) on[r.id] = 1; });
-    const P = promoPeople_().filter(o => o.id && !on[o.id]).map(o => ({ id: o.id, name: o.name, callsign: o.callsign, rank: o.rank, trainee: !!o.trainee }));
+    const min = divMinIdx_(dv), all = promoPeople_().filter(o => o.id && !on[o.id]);
+    const P = all.filter(o => !o.trainee && o.idx >= min).map(o => ({ id: o.id, name: o.name, callsign: o.callsign, rank: o.rank, trainee: !!o.trainee }));
     P.sort((x, y) => String(x.callsign).localeCompare(String(y.callsign), undefined, { numeric: true }));
-    return { ok: true, people: P, billets: L.billets };
+    return { ok: true, people: P, billets: L.billets, minRank: PB_ABBR_[min] || "", hidden: all.length - P.length };
   }
   if (a === "divAdd") {   // put a department officer into the next open callsign of a position on the division's roster tab
     const id = str_(d.discord).replace(/\D/g, ""), want = str_(d.billet).trim(); if (!id) return { ok: false, error: "Pick the officer." };
     const who0 = promoPeople_().find(o => o.id === id); if (!who0) return { ok: false, error: "They're not on the department roster." };
+    const min = divMinIdx_(dv); if (who0.trainee || who0.idx < min) return { ok: false, error: dv.name + " is for " + (PB_ABBR_[min] || "") + " and above; " + who0.name + " is " + (who0.rank || "below that") + "." };
     const nm = str_(d.name).trim() || who0.name;
     const res = withLock_(() => {
       const L = divLayout_(dv); if (L.error) return { ok: false, error: L.error };
@@ -6492,11 +6501,12 @@ function idPlan_() {
     const dp = scan[x.cs]; finalId[x.tab + x.row] = x.id;
     if (!dp) { if (Object.keys(scan).length) items.push({ key: "n:" + x.tab + x.row, tab: "Main roster", cs: x.cs, name: x.name, from: x.id, to: "", st: "missing", why: "Nobody in " + x.cs + " on the Duty Portal's Main roster" }); return; }
     if (dp.id === x.id) return;
-    const other = dept.find(y => y !== x && y.id === dp.id), named = sameName_(dp.who, x.name);
+    const other = dept.find(y => y !== x && y.id === dp.id), named = sameName_(idCleanName_(dp.who), idCleanName_(x.name)), twin = dept.filter(y => y !== x && nameKey_(idCleanName_(y.name)) === nameKey_(idCleanName_(x.name)));
     let st = "fix", why = "";
     if (other && !sameName_(other.name, x.name)) { st = "review"; why = "The Duty Portal has " + (dp.who || dp.id) + " in " + x.cs + ", but that ID is " + other.name + "'s (" + other.cs + ") on the sheet"; }
     else if (!x.id) why = "No Discord ID on the sheet";
     else if (cnt[x.id] > 1) why = "The sheet's ID is on " + cnt[x.id] + " rows (copied by mistake)";
+    else if (named && twin.length) { st = "review"; why = "Two officers named " + x.name + " on the Main roster (" + [x.cs].concat(twin.map(y => y.cs)).join(", ") + ") — check the Duty Portal holder is this one"; }
     else if (named) why = "Same name on the Duty Portal (" + (dp.who || "") + "), different ID";
     else { st = "review"; why = "The Duty Portal shows " + (dp.who || "someone") + " in " + x.cs + " — check it's the same person"; }
     items.push({ key: "d:" + x.tab + x.row, tab: "Main roster", sheet: x.sheet, row: x.row, col: x.col, cs: x.cs, name: x.name, from: x.id, to: dp.id, dpWho: dp.who, st: st, why: why });
@@ -6506,14 +6516,23 @@ function idPlan_() {
   // step 2: every division tab, matched by name to the (corrected) Main roster, then the Onboarding roster
   const people = dept.map(x => ({ name: x.name, cs: x.cs, id: finalId[x.tab + x.row], held: !!held[x.tab + x.row] })).concat(onb.filter(x => !dept.some(y => y.id && y.id === x.id)).map(x => ({ name: x.name, cs: x.cs, id: x.id }))).filter(x => x.id);
   ((getConfig_().settings || {}).divisions || []).forEach(dv => { if (dv.rosterTabId == null) return; let L; try { L = divLayout_(dv); } catch (e) { return; } if (L.error) return;
-    L.rows.forEach(r => { if (!r.name) return; const m = people.filter(p => sameName_(p.name, r.name) && nameKey_(p.name).split(" ").pop() === nameKey_(r.name).split(" ").pop());
-      const uniq = m.filter((p, i) => m.findIndex(q => q.id === p.id) === i);
+    L.rows.forEach(r => { if (!r.name) return; const rn = idCleanName_(r.name);
+      // exact name first ("J. Brown"), then the looser initial + last name; two officers with the same name never get guessed
+      let m = people.filter(p => nameKey_(idCleanName_(p.name)) === nameKey_(rn));
+      if (!m.length) m = people.filter(p => sameName_(idCleanName_(p.name), rn) && nameKey_(idCleanName_(p.name)).split(" ").pop() === nameKey_(rn).split(" ").pop());
+      let uniq = m.filter((p, i) => m.findIndex(q => q.id === p.id) === i);
+      if (uniq.length > 1 && r.id && uniq.some(p => p.id === r.id)) return;   // same-name officers: theirs is one of them, fine
       if (!uniq.length) { if (r.id && !people.some(p => p.id === r.id)) items.push({ key: "x:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "missing", why: "Not on the Main or Onboarding roster by that name" }); return; }
-      if (uniq.length > 1) { if (!uniq.some(p => p.id === r.id)) items.push({ key: "a:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "review", why: "More than one officer named like " + r.name + " (" + uniq.map(p => p.cs).join(", ") + ")" }); return; }
+      if (uniq.length > 1) { if (!uniq.some(p => p.id === r.id)) items.push({ key: "a:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "review", why: "Same name as more than one officer (" + uniq.map(p => p.cs + " " + p.name).join(", ") + ") — check which one this is" }); return; }
       if (uniq[0].id === r.id) return;
       if (uniq[0].held) { items.push({ key: "h:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "review", why: "Waiting on " + uniq[0].cs + " on the Main roster — sort that one out first, then check again" }); return; }
       items.push({ key: "v:" + dv.id + ":" + r.row, tab: dv.name, div: dv.id, row: r.row, col: L.cols.id + 1, cs: r.unit, name: r.name, from: r.id, to: uniq[0].id, st: "fix", why: r.id ? "Different from " + uniq[0].cs + "'s ID on the Main roster" : "No Discord ID on the division tab" }); }); });
   return items;
+}
+// "J. Brown | CRU", "L-412 | C. Thornton", "1704 | L. Watkins" → the part that's the person's name
+function idCleanName_(n) {
+  const parts = str_(n).split("|").map(x => x.trim()).filter(x => x && !/^[A-Z]{0,4}-?\d{1,4}[A-Z]?$/i.test(x) && !/^[A-Z0-9&]{2,5}$/.test(x));
+  return parts.sort((a, b) => b.length - a.length)[0] || str_(n).trim();
 }
 function idHandle_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
