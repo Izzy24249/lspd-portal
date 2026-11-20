@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 169;
+const BACKEND_VERSION = 170;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -6501,9 +6501,9 @@ function idPlan_() {
     const dp = scan[x.cs]; finalId[x.tab + x.row] = x.id;
     if (!dp) { if (Object.keys(scan).length) items.push({ key: "n:" + x.tab + x.row, tab: "Main roster", cs: x.cs, name: x.name, from: x.id, to: "", st: "missing", why: "Nobody in " + x.cs + " on the Duty Portal's Main roster" }); return; }
     if (dp.id === x.id) return;
-    const other = dept.find(y => y !== x && y.id === dp.id), named = sameName_(idCleanName_(dp.who), idCleanName_(x.name)), twin = dept.filter(y => y !== x && nameKey_(idCleanName_(y.name)) === nameKey_(idCleanName_(x.name)));
+    const other = dept.find(y => y !== x && y.id === dp.id), named = idNameOk_(dp.who, x.name), twin = dept.filter(y => y !== x && idNameOk_(y.name, x.name));
     let st = "fix", why = "";
-    if (other && !sameName_(other.name, x.name)) { st = "review"; why = "The Duty Portal has " + (dp.who || dp.id) + " in " + x.cs + ", but that ID is " + other.name + "'s (" + other.cs + ") on the sheet"; }
+    if (other && !idNameOk_(other.name, x.name)) { st = "review"; why = "The Duty Portal has " + (dp.who || dp.id) + " in " + x.cs + ", but that ID is " + other.name + "'s (" + other.cs + ") on the sheet"; }
     else if (!x.id) why = "No Discord ID on the sheet";
     else if (cnt[x.id] > 1) why = "The sheet's ID is on " + cnt[x.id] + " rows (copied by mistake)";
     else if (named && twin.length) { st = "review"; why = "Two officers named " + x.name + " on the Main roster (" + [x.cs].concat(twin.map(y => y.cs)).join(", ") + ") — check the Duty Portal holder is this one"; }
@@ -6517,11 +6517,11 @@ function idPlan_() {
   const people = dept.map(x => ({ name: x.name, cs: x.cs, id: finalId[x.tab + x.row], held: !!held[x.tab + x.row] })).concat(onb.filter(x => !dept.some(y => y.id && y.id === x.id)).map(x => ({ name: x.name, cs: x.cs, id: x.id }))).filter(x => x.id);
   ((getConfig_().settings || {}).divisions || []).forEach(dv => { if (dv.rosterTabId == null) return; let L; try { L = divLayout_(dv); } catch (e) { return; } if (L.error) return;
     L.rows.forEach(r => { if (!r.name) return; const rn = idCleanName_(r.name);
-      // exact name first ("J. Brown"), then the looser initial + last name; two officers with the same name never get guessed
-      let m = people.filter(p => nameKey_(idCleanName_(p.name)) === nameKey_(rn));
-      if (!m.length) m = people.filter(p => sameName_(idCleanName_(p.name), rn) && nameKey_(idCleanName_(p.name)).split(" ").pop() === nameKey_(rn).split(" ").pop());
+      // 1) the ID already there belongs to someone with a matching name ("A. GarciaRM" on the Main roster = "A. Garcia"): fine
+      if (r.id && people.some(p => p.id === r.id && idNameOk_(p.name, rn))) return;
+      // 2) every officer whose name matches (exact or initial + last name); two different people never get guessed between
+      const m = people.filter(p => idNameOk_(p.name, rn));
       let uniq = m.filter((p, i) => m.findIndex(q => q.id === p.id) === i);
-      if (uniq.length > 1 && r.id && uniq.some(p => p.id === r.id)) return;   // same-name officers: theirs is one of them, fine
       if (!uniq.length) { if (r.id && !people.some(p => p.id === r.id)) items.push({ key: "x:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "missing", why: "Not on the Main or Onboarding roster by that name" }); return; }
       if (uniq.length > 1) { if (!uniq.some(p => p.id === r.id)) items.push({ key: "a:" + dv.id + r.row, tab: dv.name, cs: r.unit, name: r.name, from: r.id, to: "", st: "review", why: "Same name as more than one officer (" + uniq.map(p => p.cs + " " + p.name).join(", ") + ") — check which one this is" }); return; }
       if (uniq[0].id === r.id) return;
@@ -6533,6 +6533,12 @@ function idPlan_() {
 function idCleanName_(n) {
   const parts = str_(n).split("|").map(x => x.trim()).filter(x => x && !/^[A-Z]{0,4}-?\d{1,4}[A-Z]?$/i.test(x) && !/^[A-Z0-9&]{2,5}$/.test(x));
   return parts.sort((a, b) => b.length - a.length)[0] || str_(n).trim();
+}
+// could these be the same person's name? same first initial, and the last names match (or one is the other plus a tag, "GarciaRM")
+function idNameOk_(a, b) {
+  const x = nameKey_(idCleanName_(a)).split(" ").filter(Boolean), y = nameKey_(idCleanName_(b)).split(" ").filter(Boolean); if (!x.length || !y.length) return false;
+  const lx = x[x.length - 1], ly = y[y.length - 1], last = lx === ly || (Math.min(lx.length, ly.length) >= 4 && (lx.indexOf(ly) === 0 || ly.indexOf(lx) === 0));
+  return last && (x.length < 2 || y.length < 2 || x[0][0] === y[0][0]);
 }
 function idHandle_(d) {
   const acct = officerSession_(d.session); if (!acct) return { ok: false, error: "AUTH" };
