@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 172;
+const BACKEND_VERSION = 173;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -2481,11 +2481,14 @@ function divExtra_(d, who) {
     return { ok: true, row: res.row };
   }
   if (a === "divGearSave") {
-    const it = d.item || {}, kind = it.kind === "uniform" ? "uniform" : "vehicle";
+    const it = d.item || {}, kind = it.kind === "uniform" ? "uniform" : it.kind === "rules" ? "rules" : "vehicle";
     const clean = { name: clip_(str_(it.name).trim(), 60), photo: clip_(str_(it.photo).trim(), 400), note: clip_(str_(it.note).trim(), 300) };
     if (!clean.name) return { ok: false, error: "Give it a name." };
     if (clean.photo && !/^https:\/\//i.test(clean.photo)) clean.photo = "";
-    if (kind === "vehicle") Object.assign(clean, { rank: clip_(str_(it.rank), 30), code: clip_(str_(it.code), 40), livery: clip_(str_(it.livery), 60), extras: clip_(str_(it.extras), 60), use: clip_(str_(it.use), 120) });
+    if (kind === "rules") { clean.name = clean.name || "Fleet rules"; clean.lines = (Array.isArray(it.lines) ? it.lines : []).slice(0, 20).map(x => clip_(str_(x).trim(), 160)).filter(Boolean); }
+    else if (kind === "vehicle") Object.assign(clean, { rank: clip_(str_(it.rank), 30), code: clip_(str_(it.code), 40), livery: clip_(str_(it.livery), 60), extras: clip_(str_(it.extras), 60), use: clip_(str_(it.use), 120),
+      // what each officer title is allowed to run on this vehicle
+      tiers: (Array.isArray(it.tiers) ? it.tiers : []).slice(0, 8).map(t => ({ who: clip_(str_(t.who).trim(), 50), livery: clip_(str_(t.livery).trim(), 60), color: clip_(str_(t.color).trim(), 60), extras: clip_(str_(t.extras).trim(), 80), opt: clip_(str_(t.opt).trim(), 80) })).filter(t => t.who) });
     else Object.assign(clean, { code: clip_(str_(it.code), 40), when: clip_(str_(it.when), 120), items: (Array.isArray(it.items) ? it.items : []).slice(0, 14).map(x => ({ k: clip_(str_(x.k), 30), v: clip_(str_(x.v), 80) })).filter(x => x.k || x.v) });
     return withLock_(() => { const sh = dpSheet_(GEAR_SHEET_, GEAR_HEAD_), cur = gearAll_(dv.id, true).find(x => x.id === str_(it.id));
       const row = [cur ? cur.id : "G" + Date.now().toString(36), dv.id, kind, JSON.stringify(clean), cellSafe_(clip_(who.name || "", 60)), new Date()];
@@ -2497,9 +2500,35 @@ function divExtra_(d, who) {
   return { ok: false, error: "Unknown action." };
 }
 function gearAll_(divId, rows) {
+  gearSeedTeu_();
   const sh = ss_().getSheetByName(GEAR_SHEET_); if (!sh || sh.getLastRow() < 2) return [];
   return sh.getRange(2, 1, sh.getLastRow() - 1, GEAR_HEAD_.length).getValues().map((r, i) => { let data = {}; try { data = JSON.parse(r[3] || "{}"); } catch (e) {}
     return Object.assign({ id: str_(r[0]), div: str_(r[1]), kind: str_(r[2]) }, data, rows ? { row: i + 2 } : {}); }).filter(x => x.id && (!divId || x.div === divId));
+}
+// one time: the TEU Vehicle Roster 1.2 sheet, loaded into TEU's division fleet (leaders edit it in Division Command after this)
+function gearSeedTeu_() {
+  if (PROPS_.getProperty("PATCH_TEUFLEET")) return;
+  const dv = ((getConfig_().settings || {}).divisions || []).find(x => /\bteu\b|traffic/i.test(str_(x.name) + " " + str_(x.id))); if (!dv) return;
+  PROPS_.setProperty("PATCH_TEUFLEET", "1");
+  const T = (who, livery, color, extras, opt) => ({ who: who, livery: livery, color: color, extras: extras, opt: opt });
+  const V = (name, code, rank, tiers, note) => ({ kind: "vehicle", name: name, code: code, rank: rank, livery: "", extras: "", use: "", photo: "", note: note || "", tiers: tiers });
+  const items = [
+    { kind: "rules", name: "Fleet rules", photo: "", note: "", lines: ["No suspension modifications allowed", "\"Keep Vehicle Clean\" must be selected", "No changes to headlight color allowed"] },
+    V("Wide Body Charger", "lspd_c3vcat", "TEU Probationary Officer+", [T("TEU Probationary Officer", "Livery #1", "Galaxy Blue #31", "1 / 5 / 7 / 8 / 12", "Extra #10"), T("TEU Officer", "Livery #1 or #2", "White #65", "1 / 5 / 7 / 8 / 13", "Extra #10"), T("TEU Officer II to Senior Officer", "Livery #1 or #2", "Black #1 or #31", "1 / 5 / 7 / 8 / 14", "Extra #10"), T("TEU FTO", "Any livery", "#1, #31 or #65", "Any configuration", "Slick top authorized")]),
+    V("TEU Camaro", "lspd_c3exorcistp", "TEU Officer+", [T("TEU Officer", "Livery #1", "White #65", "1 / 5 / 8 / 12", "Extra #10"), T("TEU Officer II to Senior Officer", "Livery #1", "Black #1 or #31", "1 / 5 / 8 / 13", "Extra #11"), T("TEU FTO", "Livery #2 or #1", "#1, #31 or #65", "Any configuration", "Slick top authorized")]),
+    V("23 Charger", "1135", "TEU Officer+", [T("TEU Officer", "Livery #3", "White #65", "1 / 4 / 5 / 7 / 8 / 9 / 10", "No optionals"), T("TEU Officer II to Senior Officer", "Livery #3", "Black #1", "1 / 4 / 5 / 7 / 8 / 9 / 11", "No optionals"), T("TEU FTO", "Livery #3", "#1, #31 or #65", "Any configuration", "Slick top authorized")]),
+    V("2020 F-250", "1394", "TEU Senior Officer+", [T("TEU Senior Officer", "Livery #2", "No color needed", "1 / 3 / 11", "5 / 6 / 8 / 9 / 10 / 12"), T("TEU FTO", "Livery #2", "No color needed", "1 / 3 / 11", "5 / 6 / 8 / 9 / 10 / 13"), T("CVE Certified", "Livery #1", "No color needed", "3 / 11", "#12")]),
+    V("DUI 2024 F-250", "1397", "DUI Certified", [T("DUI Certified", "Livery #4", "No color", "#7", "No extras")]),
+    V("MBU BMW", "1670", "MBU", [T("MBU", "B/W LSPD livery", "Black or white", "All extras", "No optionals")]),
+    V("MBU Harley", "1671", "MBU", [T("MBU", "B/W LSPD livery", "Black or white", "All extras", "No optionals")]),
+    V("MW", "lspd_22gscrb", "TEU FTO + Command", [T("TEU FTO + Command", "Livery #0 or #1", "#1, #31, #65 or #74", "3 / 4 / 5 / 6 / 7 / 8 / 9 / 10", "No optionals")]),
+    V("TEU Bicycle", "LSPD_c3policebike", "Bicycle Patrol Certified", [T("Bicycle Patrol Certified", "N/A", "#1 Black", "N/A", "Extra #1")]),
+    V("2025 Durango Pursuit", "lspd_25ValorDur", "TEU Senior Officer+", [T("TEU Senior Officer", "Livery #1, #2, #3 or unmarked", "No color", "5 / 6 / 7 / 11", ""), T("TEU FTO", "Livery #1, #2, #3 or unmarked", "No color", "5 / 6 / 7 / 11", ""), T("TEU Command", "Livery #1, #2, #3 or unmarked", "No color", "5 / 6 / 7 / 11", "")], "Hardtop only. 32 siren.")
+  ];
+  try { const sh = dpSheet_(GEAR_SHEET_, GEAR_HEAD_), now = new Date(), base = Date.now();
+    sh.getRange(sh.getLastRow() + 1, 1, items.length, GEAR_HEAD_.length).setValues(items.map((x, i) => { const kind = x.kind; const data = Object.assign({}, x); delete data.kind;
+      return ["G" + (base + i).toString(36), dv.id, kind, JSON.stringify(data), "TEU Vehicle Roster 1.2", now]; }));
+    CacheService.getScriptCache().remove("gear_all"); } catch (e) { PROPS_.deleteProperty("PATCH_TEUFLEET"); }
 }
 // ---- MDT → My Division: what a division member sees about their own division(s) ----
 // the divisions whose roster tab has this officer on it
@@ -2610,7 +2639,7 @@ function myDivBust_(dv) { try { CacheService.getScriptCache().removeAll(["mydiv_
 // MDT Fleet / Uniform pages: every division's own vehicles and outfits
 function gearForMdt_() {
   const c = CacheService.getScriptCache(), hit = c.get("gear_all"); if (hit) { try { return JSON.parse(hit); } catch (e) {} }
-  const divs = divList_(), all = gearAll_(), out = divs.map(dv => ({ id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl, vehicles: all.filter(x => x.div === dv.id && x.kind === "vehicle"), uniforms: all.filter(x => x.div === dv.id && x.kind === "uniform") })).filter(x => x.vehicles.length || x.uniforms.length);
+  const divs = divList_(), all = gearAll_(), out = divs.map(dv => ({ id: dv.id, name: dv.name, color: dv.color, logoUrl: dv.logoUrl, vehicles: all.filter(x => x.div === dv.id && x.kind === "vehicle"), uniforms: all.filter(x => x.div === dv.id && x.kind === "uniform"), rules: (all.find(x => x.div === dv.id && x.kind === "rules") || {}).lines || [] })).filter(x => x.vehicles.length || x.uniforms.length);
   try { c.put("gear_all", JSON.stringify(out), 600); } catch (e) {}
   return out;
 }

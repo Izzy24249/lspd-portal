@@ -740,28 +740,40 @@
       <section class="dc-panel"><header><h2>🗂 Record</h2></header><div class="dx-list">${list}</div></section></div></div>`;
   }
 
+  const VTIERS = function (x, esc) { const T = x.tiers || []; if (!T.length) return "";
+    return '<div class="vt"><div class="vt-k">BY OFFICER TITLE</div>' + T.map(t => '<div class="vt-r"><b>' + esc(t.who) + '</b><dl>' + [["Livery", t.livery], ["Color", t.color], ["Extras", t.extras], ["Optional", t.opt]].filter(r => r[1]).map(r => "<dt>" + r[0] + "</dt><dd>" + esc(r[1]) + "</dd>").join("") + "</dl></div>").join("") + "</div>"; };
   function gearCard(x, can) {
     const ph = x.photo ? `<img src="${esc(x.photo)}" alt="" loading="lazy">` : `<span>${x.kind === "vehicle" ? "VEHICLE" : "OUTFIT"} PHOTO</span>`;
     const rows = x.kind === "vehicle" ? [["Rank", x.rank], ["Spawn code", x.code], ["Livery", x.livery], ["Extras", x.extras], ["Use", x.use]] : [["Duplicate code", x.code], ["When", x.when]].concat((x.items || []).map(i => [i.k, i.v]));
     return `<article class="gx-c ${x.kind}"><div class="gx-ph">${ph}</div><div class="gx-b"><div class="gx-t"><b>${esc(x.name)}</b>${can ? `<button class="dc-link" data-gxedit="${esc(x.id)}">Edit</button>` : ""}</div>
-      <dl>${rows.filter(r => r[1]).map(r => `<dt>${esc(r[0])}</dt><dd>${/code/i.test(r[0]) ? `<code>${esc(r[1])}</code>` : esc(r[1])}</dd>`).join("")}</dl>${x.note ? `<p>${esc(x.note)}</p>` : ""}</div></article>`;
+      <dl>${rows.filter(r => r[1]).map(r => `<dt>${esc(r[0])}</dt><dd>${/code/i.test(r[0]) ? `<code>${esc(r[1])}</code>` : esc(r[1])}</dd>`).join("")}</dl>${VTIERS(x, esc)}${x.note ? `<p>${esc(x.note)}</p>` : ""}</div></article>`;
   }
   function viewGear() {
     const dv = DATA.division, G = XG[dv.id]; if (!G) xLoad("gear");
     if (!G) { $("view").innerHTML = '<div class="dc-empty">Loading…</div>'; return; }
     if (G.ok === false) { $("view").innerHTML = `<div class="dc-empty">${esc(G.error)}</div>`; return; }
-    const V = G.items.filter(x => x.kind === "vehicle"), U = G.items.filter(x => x.kind === "uniform");
+    const V = G.items.filter(x => x.kind === "vehicle"), U = G.items.filter(x => x.kind === "uniform"), RU = G.items.find(x => x.kind === "rules");
     $("view").innerHTML = `<section class="dc-panel"><header><h2>🚓 ${esc(dv.name)} fleet &amp; uniforms</h2><small class="dc-note">Officers see these on the MDT's Fleet and Uniform pages, in a ${esc(dv.name)} section.</small>
         ${G.can ? `<span style="margin-left:auto;display:flex;gap:8px"><button class="dc-btn sm" data-gxnew="uniform">+ Add uniform</button><button class="dc-btn sm ac" data-gxnew="vehicle">+ Add vehicle</button></span>` : ""}</header></section>
-      <h3 class="gx-h">DIVISION FLEET <small>${V.length}</small></h3><div class="gx-grid">${V.map(x => gearCard(x, G.can)).join("") || '<div class="dc-empty">No division vehicles yet.</div>'}</div>
+      <h3 class="gx-h">DIVISION FLEET <small>${V.length}</small>${G.can ? `<button class="dc-link" data-gxrules style="margin-left:auto">${RU ? "Edit fleet rules" : "+ Fleet rules"}</button>` : ""}</h3>
+      ${RU && RU.lines && RU.lines.length ? `<div class="vt-rules"><b>⚠ FLEET RULES</b><ul>${RU.lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul></div>` : ""}<div class="gx-grid">${V.map(x => gearCard(x, G.can)).join("") || '<div class="dc-empty">No division vehicles yet.</div>'}</div>
       <h3 class="gx-h">DIVISION UNIFORMS <small>${U.length}</small></h3><div class="gx-grid u">${U.map(x => gearCard(x, G.can)).join("") || '<div class="dc-empty">No division uniforms yet.</div>'}</div>`;
+  }
+  function rulesModal(item) {
+    $("mcard").className = "dc-mcard gx-m"; $("modal").hidden = false;
+    $("mcard").innerHTML = `<header class="gm-h"><h2>Fleet rules</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
+      <div class="gx-form"><p class="ax-note">Shown above the division fleet for everyone, on the MDT too. One rule per line.</p><label class="dx-f"><span>Rules</span><textarea id="gxRules" rows="6">${esc(((item && item.lines) || []).join("\n"))}</textarea></label></div>
+      <footer class="gx-ft">${item ? `<button class="dc-btn sm danger" data-gxdel="${esc(item.id)}">Delete</button>` : "<span></span>"}<button class="dc-btn ac" id="gxRSave">Save</button></footer>`;
+    $("gxRSave").onclick = async () => { $("gxRSave").disabled = true;
+      try { await api("divGearSave", { division: DATA.division.id, item: { id: item ? item.id : "", kind: "rules", name: "Fleet rules", lines: $("gxRules").value.split("\n").map(l => l.trim()).filter(Boolean) } }); closeModal(); toast("Saved.", "ok"); xLoad("gear", true); }
+      catch (e) { toast(e.message, "bad"); $("gxRSave").disabled = false; } };
   }
   function gearModal(kind, item) {
     const x = Object.assign({ kind: kind, name: "", photo: "", note: "", items: [] }, item || {}), V = kind === "vehicle";
     const f = (id, label, v, ph) => `<label class="dx-f"><span>${esc(label)}</span><input id="${id}" value="${esc(v || "")}" placeholder="${esc(ph || "")}"></label>`;
     $("mcard").className = "dc-mcard gx-m";
     $("mcard").innerHTML = `<header class="gm-h"><h2>${item ? "Edit" : "Add"} ${V ? "vehicle" : "uniform"}</h2><button class="dc-ibtn" data-gxclose aria-label="Close">✕</button></header>
-      <div class="gx-form">${f("gxName", "Name", x.name, V ? "TEU Interceptor" : "TEU Patrol")}${V ? f("gxRank", "Rank required", x.rank, "PO III+") + f("gxCode", "Spawn code", x.code) + f("gxLiv", "Livery", x.livery) + f("gxExt", "Extras", x.extras, "1, 3, 7") + f("gxUse", "Used for", x.use, "Traffic stops") :
+      <div class="gx-form">${f("gxName", "Name", x.name, V ? "TEU Interceptor" : "TEU Patrol")}${V ? f("gxRank", "Rank required", x.rank, "PO III+") + f("gxCode", "Spawn code", x.code) + f("gxLiv", "Livery", x.livery) + f("gxExt", "Extras", x.extras, "1, 3, 7") + f("gxUse", "Used for", x.use, "Traffic stops") + `<label class="dx-f"><span>Requirements by officer title — one line each: Title | Livery | Color | Extras | Optional</span><textarea id="gxTiers" rows="5" placeholder="TEU Officer | Livery #1 | White #65 | 1 / 5 / 8 / 12 | Extra #10&#10;TEU FTO | Any livery | #1, #31 or #65 | Any configuration | Slick top authorized">${esc((x.tiers || []).map(t => [t.who, t.livery, t.color, t.extras, t.opt].join(" | ")).join("\n"))}</textarea></label>` :
         f("gxCode", "Duplicate code", x.code) + f("gxWhen", "When it's worn", x.when, "Standard shift uniform") + `<label class="dx-f"><span>Items (one per line: Part: item)</span><textarea id="gxItems" rows="6" placeholder="Top: 123 / 2&#10;Pants: 45 / 0">${esc((x.items || []).map(i => i.k + ": " + i.v).join("\n"))}</textarea></label>`}
         ${f("gxPhoto", "Photo link (https://…, optional)", x.photo)}${f("gxNote", "Note (optional)", x.note)}</div>
       <footer class="gx-ft">${item ? `<button class="dc-btn sm danger" data-gxdel="${esc(x.id)}">Delete</button>` : "<span></span>"}<button class="dc-btn ac" id="gxSave">Save</button></footer>`;
@@ -769,7 +781,8 @@
     $("gxSave").onclick = async () => {
       const v = id => ($(id) ? $(id).value.trim() : "");
       const it = { id: x.id || "", kind: kind, name: v("gxName"), photo: v("gxPhoto"), note: v("gxNote"), code: v("gxCode") };
-      if (V) Object.assign(it, { rank: v("gxRank"), livery: v("gxLiv"), extras: v("gxExt"), use: v("gxUse") });
+      if (V) Object.assign(it, { rank: v("gxRank"), livery: v("gxLiv"), extras: v("gxExt"), use: v("gxUse"),
+        tiers: v("gxTiers").split("\n").map(l => l.split("|").map(c => c.trim())).filter(c => c[0]).map(c => ({ who: c[0], livery: c[1] || "", color: c[2] || "", extras: c[3] || "", opt: c[4] || "" })) });
       else Object.assign(it, { when: v("gxWhen"), items: v("gxItems").split("\n").map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf(":"); return i > 0 ? { k: l.slice(0, i).trim(), v: l.slice(i + 1).trim() } : { k: "", v: l }; }) });
       $("gxSave").disabled = true;
       try { await api("divGearSave", { division: DATA.division.id, item: it }); closeModal(); toast("Saved.", "ok"); xLoad("gear", true); } catch (e) { toast(e.message, "bad"); $("gxSave").disabled = false; }
@@ -985,6 +998,7 @@
     const findO = k => stats().O.find(o => o.key === k);
     if (t.closest("[data-gxclose]")) { closeModal(); ADD = null; MV = null; DT = null; return; }
     if (t.closest("[data-addoff]")) { addModal(); return; }
+    if (t.closest("[data-gxrules]")) { const G = XG[DATA.division.id]; rulesModal(G && G.items ? G.items.find(x => x.kind === "rules") : null); return; }
     { const b = t.closest("[data-dtset]"); if (b) { const o = stats().O.find(x => x.key === b.dataset.tbo); if (o) dutyModal(o, b.dataset.dtset); return; } }
     { const b = t.closest("[data-dtlift]"); if (b) { const o = stats().O.find(x => x.key === b.dataset.dtlift); if (o) dutyLift(o); return; } }
     const cs = t.closest("[data-cset]"); if (cs) { const o = findO(cs.dataset.co), C = XC[DATA.division.id]; if (!o || !C) return; const c = certOf(C, o), n = cs.dataset.cset, on = !(c && c.certs[n]);

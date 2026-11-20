@@ -815,18 +815,21 @@
   }
   // each division's own vehicles / outfits (added by its leaders in Division Command)
   let DGEAR = null, DGEAR_AT = 0;
+  const VTIERS = function (x, esc) { const T = x.tiers || []; if (!T.length) return "";
+    return '<div class="vt"><div class="vt-k">BY OFFICER TITLE</div>' + T.map(t => '<div class="vt-r"><b>' + esc(t.who) + '</b><dl>' + [["Livery", t.livery], ["Color", t.color], ["Extras", t.extras], ["Optional", t.opt]].filter(r => r[1]).map(r => "<dt>" + r[0] + "</dt><dd>" + esc(r[1]) + "</dd>").join("") + "</dl></div>").join("") + "</div>"; }, VRULES = function (lines, esc) { return lines && lines.length ? '<div class="vt-rules"><b>⚠ FLEET RULES</b><ul>' + lines.map(l => "<li>" + esc(l) + "</li>").join("") + "</ul></div>" : ""; };
   function divGearHTML(kind) {
     if (!DGEAR || Date.now() - DGEAR_AT > 300000) { DGEAR_AT = Date.now(); Portal.post({ action: "gearMdt", session: SESSION }).then(r => { if (r && r.ok) { DGEAR = r.divisions || []; if (VIEW === "fleet" || VIEW === "uniforms") draw(); } }).catch(() => {}); }
     let h = "";
     (DGEAR || []).forEach(dv => {
       const L = dv[kind] || []; if (!L.length) return;
       h += '<div class="sect"><span class="lbl" style="color:' + esc(dv.color || "") + '">' + esc(dv.name).toUpperCase() + " · DIVISION " + (kind === "vehicles" ? "FLEET" : "UNIFORMS") + '</span></div><div class="cards">';
+      if (kind === "vehicles") h += VRULES(dv.rules, esc);
       L.forEach(x => {
         const rows = kind === "vehicles" ? [["Livery", x.livery], ["Extras", x.extras], ["Use", x.use]] : [["When", x.when]].concat((x.items || []).map(i => [i.k, i.v]));
-        h += '<div class="card' + (kind === "uniforms" ? " u" : "") + '">' + (x.photo ? '<div class="pic" style="background-image:url(\'' + esc(x.photo) + '\')' + (kind === "uniforms" ? ";height:200px" : "") + '"></div>' : "") +
+        h += '<div class="card' + (kind === "uniforms" ? " u" : "") + (x.photo ? "" : " np") + '">' + (x.photo ? '<div class="pic" style="background-image:url(\'' + esc(x.photo) + '\')' + (kind === "uniforms" ? ";height:200px" : "") + '"></div>' : "") +
           '<div class="top"><span class="rk">' + esc(dv.name).toUpperCase() + (x.rank ? " · " + esc(x.rank).toUpperCase() : "") + "</span><b>" + esc(x.name) + "</b></div>" +
           '<div class="bd">' + (x.code ? '<button class="code" data-copy="' + esc(x.code) + '" data-what="' + (kind === "vehicles" ? "Spawn code" : "Duplicate code") + '"><span>' + esc(x.code) + "</span><em>COPY " + (kind === "vehicles" ? "SPAWN" : "DUPLICATE") + " CODE</em></button>" : "") +
-          '<dl class="kv">' + rows.filter(r => r[1]).map(r => "<dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd>").join("") + "</dl>" + (x.note ? '<small style="color:var(--mute);font-size:11.5px">' + esc(x.note) + "</small>" : "") + "</div></div>";
+          '<dl class="kv">' + rows.filter(r => r[1]).map(r => "<dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd>").join("") + "</dl>" + VTIERS(x, esc) + (x.note ? '<small style="color:var(--mute);font-size:11.5px">' + esc(x.note) + "</small>" : "") + "</div></div>";
       });
       h += "</div>";
     });

@@ -755,3 +755,12 @@ html,body.dc{overflow-x:hidden}
 .dt-b.big{font-size:13px;padding:8px 12px}.dt-b.big b{font-size:13px}
 @keyframes dtp{0%,100%{opacity:1}50%{opacity:.35}}
 .tb-b.warn{border-color:rgba(245,158,11,.5);color:#fde68a}.tb-b.ok{border-color:rgba(52,211,153,.5);color:#6ee7b7}
+
+/* vehicle requirements by officer title */
+.vt{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.vt-k{font:700 10px "JetBrains Mono",monospace;letter-spacing:.16em;color:#8a9bbd}
+.vt-r{border:1px solid rgba(140,170,220,.16);border-radius:9px;padding:7px 10px;background:rgba(255,255,255,.02)}
+.vt-r>b{display:block;font-size:12.5px;color:#bfdbfe;margin-bottom:3px}
+.vt-r dl{display:grid;grid-template-columns:64px 1fr;gap:2px 8px;margin:0;font-size:12px}.vt-r dt{color:#8a9bbd}.vt-r dd{margin:0}
+.vt-rules{grid-column:1/-1;margin:4px 0 12px;padding:10px 14px;border-radius:10px;border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.08);color:#fde68a;font-size:13px}
+.vt-rules b{font:700 11px "JetBrains Mono",monospace;letter-spacing:.14em}.vt-rules ul{margin:6px 0 0;padding-left:18px}
