@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 171;
+const BACKEND_VERSION = 172;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -4433,6 +4433,9 @@ function officerHome_(d) {
   try { const A = pbAccess_(acct); out.pb = A.view ? { hc: A.hc, nominate: A.nominate, editor: A.editor } : null; } catch (e) { out.pb = null; }
   out.cdOwner = cdOwner_(acct);
   try { out.myDivs = myDivisions_(acct.id); } catch (e) { out.myDivs = []; }
+  // suspended / not cleared to activate in any of their divisions (fresh from the division records)
+  try { const E = out.myDivs.length ? discAll_() : []; out.duties = out.myDivs.map(m => { const x = dutyOf_(E.filter(y => y.div === m.id), acct.id);
+    return x ? { div: m.id, name: m.name, color: m.color, lvl: x.lvl, label: x.label, until: x.until, reason: x.reason } : null; }).filter(Boolean); } catch (e) { out.duties = []; }
   out.race = officerRace_(acct); mark_("race");
   try { const b = dutyBoard_(); if (b) { const cur = dutyState_()[acct.id]; b.linked = dlinkHas_(acct.id); b.me = b.src === "dp" ? b.list.some(o => o.id === acct.id) : !!cur; b.mine = dutyMine_(acct.id, cur); out.duty = b; } } catch (e) {} mark_("duty");
   return out;

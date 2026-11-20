@@ -19,7 +19,8 @@
     if (LIST.length === 1 && OPEN[LIST[0].id] == null) OPEN[LIST[0].id] = true;
     box.innerHTML = LIST.map(d => {
       const on = !!OPEN[d.id] || cur.indexOf("mydiv:" + d.id + ":") === 0;
-      return '<button type="button" class="fa md-dv' + (on ? " open" : "") + '" data-mdtog="' + esc(d.id) + '" style="--dc:' + esc(d.color || "#2f7bff") + '" aria-expanded="' + on + '"><i class="md-dot"></i><span>' + esc(d.name) + '</span><svg class="md-car" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>' +
+      const dt = ((M().data && M().data().duties) || []).find(x => x.div === d.id);
+      return '<button type="button" class="fa md-dv' + (on ? " open" : "") + (dt ? " dt-" + dt.lvl : "") + '" data-mdtog="' + esc(d.id) + '" style="--dc:' + esc(d.color || "#2f7bff") + '" aria-expanded="' + on + '"><i class="md-dot"></i><span>' + esc(d.name) + '</span><svg class="md-car" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>' +
         '<div class="md-sub"' + (on ? "" : " hidden") + ">" + SUB.map(s => '<a data-go="mydiv:' + esc(d.id) + ":" + s[0] + '" class="' + (cur === "mydiv:" + d.id + ":" + s[0] ? "on" : "") + '"><svg><use href="#' + (ICON[s[2]] || s[2]) + '"/></svg><span>' + esc(s[1]) + "</span></a>").join("") + "</div>";
     }).join("");
   }

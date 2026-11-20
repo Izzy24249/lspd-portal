@@ -1133,3 +1133,5 @@ button.pbx-box:hover{border-color:var(--green)}
 .md-rt tr.dt-red td{background:rgba(239,68,68,.08)}.md-rt tr.dt-red td:first-child{box-shadow:inset 3px 0 0 #ef4444}
 .md-rt tr.dt-amber td{background:rgba(245,158,11,.07)}.md-rt tr.dt-amber td:first-child{box-shadow:inset 3px 0 0 #f59e0b}
 .md-rt em.dt.red{background:#dc2626;border-color:#f87171;color:#fff;box-shadow:0 0 10px rgba(220,38,38,.5)}.md-rt em.dt.amber{background:#d97706;border-color:#fbbf24;color:#fff;box-shadow:0 0 10px rgba(217,119,6,.5)}
+.md-dtb.home{margin:0 0 14px}.md-dtb.home>div{flex:1}.md-dtb .btn{flex:none}
+.md-dv.dt-red .md-dot{background:#ef4444!important;box-shadow:0 0 8px #ef4444;animation:mddt 1.6s ease-in-out infinite}.md-dv.dt-amber .md-dot{background:#f59e0b!important;box-shadow:0 0 8px #f59e0b;animation:mddt 1.6s ease-in-out infinite}

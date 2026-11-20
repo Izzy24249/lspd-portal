@@ -124,7 +124,7 @@
     t.hidden = false; t.innerHTML = '<div class="live"><i></i>LIVE</div><div class="tk-run">' + list.concat(list).map(x => "<span>" + esc(x.t) + " · " + ago(x.at) + "</span>").join("") + "</div>";
   }
   // the promotion board (mdt-board.js) borrows these
-  window.MDT = { esc: esc, toast: t => toast(t), modal: h => modal(h), draw: () => draw(), blip: f => blip(f), session: SESSION, go: v => go(v), view: () => VIEW, copy: (t, w) => copy(t, w) };
+  window.MDT = { esc: esc, toast: t => toast(t), modal: h => modal(h), draw: () => draw(), blip: f => blip(f), session: SESSION, go: v => go(v), view: () => VIEW, data: () => DATA, copy: (t, w) => copy(t, w) };
   function modal(html) { const m = $("modal"); m.classList.remove("cc", "quiz"); m.innerHTML = '<div class="md-box">' + html + "</div>"; m.hidden = false; m.onclick = e => { if (e.target === m || e.target.closest("[data-close]")) m.hidden = true; }; return m; }
   // the SOP as an embeddable page: Google Docs block /edit inside frames, /preview is the read-only view that allows it
   function sopEmbed(u) {
@@ -269,7 +269,9 @@
     const p = DATA.profile || {}, f = DATA.fleet || {}, B = DATA.board || {}, trainee = f.rank && f.rank.trainee, mine = B.mine || [];
     const waiting = mine.filter(r => !r.grade).length;
     const D0 = B.dept || {}, NB0 = B.notices || [], st = (STATUSES.find(x => x[0] === LS.get("mdt:status")) || STATUSES[0]);
-    let h = '<section class="hero"><div><div class="kick">' + esc((p.callsign ? p.callsign + " · " : "") + st[0] + " " + st[1].toUpperCase()) + "</div><h1><span class='hero-name'>Good " + esc(greet().toLowerCase()) + ", " + esc(last(p.name) || "Officer") + "." + '</span><br><span>' + esc(trainee ? "Welcome to the academy." : NB0.length ? NB0.length + " active BOLO" + (NB0.length > 1 ? "s" : "") + " on the board." : "All quiet on the board.") + "</span></h1>" +
+    // suspended / not cleared to activate in a division: right at the top of the dashboard
+    let h = (DATA.duties || []).map(d => '<div class="md-dtb ' + esc(d.lvl) + ' home"><i></i><div><b>' + (d.lvl === "red" ? "⛔ You're suspended from " + esc(d.name) + " duty" : "⚠ You're not cleared to activate for " + esc(d.name)) + "</b><small>" +
+      (d.until ? "Until " + esc(new Date(d.until).toLocaleDateString(undefined, { month: "short", day: "numeric" })) : "Until a division leader lifts it") + (d.reason ? " · " + esc(d.reason) : "") + '</small></div><button class="btn ghost sm" data-go="mydiv:' + esc(d.div) + ':stats">OPEN ' + esc(d.name).toUpperCase() + "</button></div>").join("") + '<section class="hero"><div><div class="kick">' + esc((p.callsign ? p.callsign + " · " : "") + st[0] + " " + st[1].toUpperCase()) + "</div><h1><span class='hero-name'>Good " + esc(greet().toLowerCase()) + ", " + esc(last(p.name) || "Officer") + "." + '</span><br><span>' + esc(trainee ? "Welcome to the academy." : NB0.length ? NB0.length + " active BOLO" + (NB0.length > 1 ? "s" : "") + " on the board." : "All quiet on the board.") + "</span></h1>" +
       '<p>' + esc(who(p)) + (mine.length ? " · last report <b>" + ago(mine[0].at) + " ago</b>" + (waiting ? " · <b>" + waiting + "</b> waiting on a grade" : "") : " · no reports on file yet") + '</p><div class="acts"><button class="btn" data-go="reports">FILE A REPORT <kbd>F</kbd></button><button class="btn ghost" data-go="records">RUN A RECORD</button><button class="btn ghost" id="palHero">SEARCH <kbd>Ctrl K</kbd></button></div></div>' +
       heroRackHTML() + '<div class="radar"><img src="img/lspd-badge.png" alt=""><i class="blip" style="left:30%;top:28%"></i><i class="blip" style="left:68%;top:62%;animation-delay:1.4s"></i><i class="blip" style="left:56%;top:22%;animation-delay:2.4s"></i></div></section>' +
       topRowHTML(B) +
