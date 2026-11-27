@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 174;
+const BACKEND_VERSION = 175;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3760,7 +3760,7 @@ function promoReqParse_(fresh) {
 // officer since they reached their rank, division reports included).  Everything else is ticked by command.
 // Ticks live in the "Promotion Checks" tab; a promotion starts a fresh checklist (the rank is part of each key).
 const OB_DATE_COL_ = "K";   // Onboarding roster: date the trainee was added
-const PCHK_SHEET_ = "Promotion Checks", PCHK_HEAD_ = ["Discord ID", "Officer", "Rank", "Key", "Requirement", "Checked by", "Checked at"], TIG_COL_ = "H";   // Main roster "T.I.G." column: a date 14 days before their first day in the rank
+const PCHK_SHEET_ = "Promotion Checks", PCHK_HEAD_ = ["Discord ID", "Officer", "Rank", "Key", "Requirement", "Checked by", "Checked at"], TIG_COL_ = "H";   // Main roster "T.I.G." column (the date time in grade is counted from)
 function pchkSheet_() {
   const ss = ss_(); let sh = ss.getSheetByName(PCHK_SHEET_);
   if (!sh) { sh = ss.insertSheet(PCHK_SHEET_); sh.appendRow(PCHK_HEAD_); sh.setFrozenRows(1); sh.getRange(1, 1, 1, PCHK_HEAD_.length).setFontWeight("bold"); }
@@ -3829,7 +3829,7 @@ function promoPeopleRead_() {
       const idx = pair[1] ? 0 : rankIndex_(str_(p.more && p.more[RANK_COL_]) || p.extra || "");
       const raw = str_(p.more && p.more[pair[1] ? OB_DATE_COL_ : TIG_COL_]).trim(); let since = 0;   // trainees (PO): the date they were added to the Onboarding roster (column K)
       if (/^\d{1,4}$/.test(raw)) since = now - Number(raw) * 864e5;
-      else if (raw) { const d = new Date(raw); if (!isNaN(d)) since = d.getTime() + (pair[1] ? 0 : 14 * 864e5); }   // Main roster: T.I.G. date + 14 days = first day in the rank
+      else if (raw) { const d = new Date(raw); if (!isNaN(d)) since = d.getTime(); }   // Main roster: counted from the T.I.G. date
       if (since > now) since = now;
       out.push({ v138: 1, id: p.id, callsign: cs || (pair[1] ? callsignIn_(p.more && p.more[RANK_COL_]) : ""), name: name, rank: pair[1] ? rankShown_(p.more && p.more[RANK_COL_], true) : str_(p.more && p.more[RANK_COL_]), idx: idx, trainee: pair[1], since: since });
     });
