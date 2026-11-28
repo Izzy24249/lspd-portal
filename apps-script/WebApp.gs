@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 177;
+const BACKEND_VERSION = 178;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3917,7 +3917,7 @@ var SOP_MEMO_ = null, REP_MEMO_ = null;
 function repSources_() {
   if (REP_MEMO_) return REP_MEMO_;
   const lead = {}; (getConfig_().forms || []).forEach(f => { lead[f.id] = [str_(f.meField), autoAuthor_(f)].filter(Boolean); });
-  const repM = {}; actRows_().forEach(r => { const L0 = lead[r.form] || [], x = (r.people || []).find(p => p.i && L0.indexOf(p.f) !== -1); if (x) (repM[x.i] = repM[x.i] || []).push({ at: r.at, title: r.title }); });
+  const repM = {}; actRows_().forEach(r => { const L0 = lead[r.form] || [], x = (r.people || []).find(p => p.i && L0.indexOf(p.f) !== -1); if (x) (repM[x.i] = repM[x.i] || []).push({ at: r.at, title: r.title, form: r.form }); });
   let dp = {}; try { if (dpState_().at) dp = dpReports_(); } catch (e) {}
   let rb = {}; try { rb = rbReports_(); } catch (e) {}
   return (REP_MEMO_ = { mdt: repM, dp: dp, rb: rb });
@@ -3928,11 +3928,20 @@ function repFiledSince_(id, since) {
   ev.forEach(x => { const g = G.find(g0 => !g0.s[x.s] && Math.abs(g0.at - x.at) <= 90 * 60000); if (g) g.s[x.s] = 1; else { const s0 = {}; s0[x.s] = 1; G.push({ at: x.at, s: s0 }); } });
   return G.length;
 }
+// what kind of report an MDT form is: a division's own report (its color), a training (GOM / Academy), or a regular MDT report
+var REPKIND_MEMO_ = null;
+function repKindOf_(formId) {
+  if (!REPKIND_MEMO_) { REPKIND_MEMO_ = {}; const cfg = getConfig_();
+    (cfg.forms || []).forEach(f => { if (/global operation|\bgom\b|academy|training|evaluation/i.test(str_(f.title))) REPKIND_MEMO_[f.id] = { k: "train", n: "Training" }; });
+    ((cfg.settings || {}).divisions || []).forEach(dv => (dv.forms || []).forEach(f => { if (!REPKIND_MEMO_[f.id]) REPKIND_MEMO_[f.id] = { k: "div", n: dv.name, c: dv.color || "#22c55e" }; })); }
+  return REPKIND_MEMO_[formId] || { k: "mdt", n: "MDT" };
+}
 function repFiledDetail_(id, since) {   // the same count, with where each report came from (for the requirement's breakdown)
   const R = repSources_(), now = Date.now(), inR = t => t >= since && t <= now;
   const m = (R.mdt[id] || []).filter(x => inR(x.at)), dp = (R.dp[id] || []).filter(x => inR(x.at)), rb = (R.rb[id] || []).filter(x => inR(x.at)), n = repFiledSince_(id, since);
-  return { n: n, split: { mdt: m.length, dp: dp.length, rb: rb.length, both: m.length + dp.length + rb.length - n },
-    list: m.map(x => ({ at: x.at, t: x.title, src: "MDT" })).concat(dp.map(x => ({ at: x.at, t: x.title, src: "Duty Portal" })), rb.map(x => ({ at: x.at, t: x.title, src: "Report Builder" }))).sort((a, b) => b.at - a.at).slice(0, 15) };
+  const list = m.map(x => Object.assign({ at: x.at, t: x.title }, repKindOf_(x.form))).concat(dp.map(x => ({ at: x.at, t: x.title, k: "dp", n: "Duty Portal" })), rb.map(x => ({ at: x.at, t: x.title, k: "rb", n: "Report Builder" }))).sort((a, b) => b.at - a.at);
+  const by = {}; list.forEach(x => { const key = x.k + "|" + x.n; (by[key] = by[key] || { k: x.k, n: x.n, c: x.c, count: 0 }).count++; });
+  return { n: n, split: { mdt: m.length, dp: dp.length, rb: rb.length, both: m.length + dp.length + rb.length - n, kinds: Object.keys(by).map(k => by[k]) }, list: list.slice(0, 15) };
 }
 function promoEval_(o, rankReqs, checks) {
   const mine = checks || {};
@@ -6075,7 +6084,8 @@ function pbEval_(o, R, L, checks, duty, rep, now) {
   const low = rule.weekMin > 0 ? weeks.filter(w => done(w) && w.min < rule.weekMin * 60) : [];
   if (rule.hours > 0) items.push({ key: "pb:hours", t: rule.hours + " hours on duty in the " + weeks.length + " weeks before promotion day" + (rule.weekMin ? " (" + rule.weekMin + "+ each week)" : ""), auto: "hours", need: rule.hours * 60, have: total, done: total >= rule.hours * 60, src: SR.src,
     weeks: weeks.map(w => ({ from: w.from, to: w.to, min: w.min, cur: w.cur, low: rule.weekMin > 0 && done(w) && w.min < rule.weekMin * 60 })), warn: total >= rule.hours * 60 && low.length ? low.length + " week" + (low.length > 1 ? "s were" : " was") + " under " + rule.weekMin + " hours" : "" });
-  if (rule.reports > 0) {   // reports they filed themselves: MDT forms + Duty Portal, a report in both counted once (same officer, within 90 min)
+  const rr0 = (L.ranks || []).find(x => x.idx === o.idx), docReports = !!(rr0 && rr0.reqs.some(q => q.auto && q.auto.type === "reports"));
+  if (rule.reports > 0 && !docReports) {   // reports they filed themselves: MDT forms + Duty Portal, a report in both counted once (same officer, within 90 min)
     const inP = t => t >= from && t < P.end, m = (rep.mdt[o.id] || []).filter(x => inP(x.at)), dp = (rep.dp[o.id] || []).filter(x => inP(x.at)), rb = ((rep.rb || {})[o.id] || []).filter(x => inP(x.at));
     // the same report showing up from more than one place (Report Builder copy -> CAD/Duty Portal -> MDT) counts once: same officer, within 90 min, different sources
     const ev = m.map(x => ({ at: x.at, s: "mdt" })).concat(dp.map(x => ({ at: x.at, s: "dp" })), rb.map(x => ({ at: x.at, s: "rb" }))).sort((a, b) => a.at - b.at), G = [];

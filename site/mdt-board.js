@@ -27,7 +27,7 @@
       '<text x="20" y="21">' + (ready ? "✓" : done + "/" + total) + "</text></svg>";
   }
   function chips(o) {
-    const it = k => o.items.find(x => x.auto === k), h = it("hours"), r = it("reports14"), t = it("tig"), out = [];
+    const it = k => o.items.find(x => x.auto === k), h = it("hours"), r = it("reports14") || it("reports"), t = it("tig"), out = [];
     if (o.linked === false) out.push('<span class="pbx-chip nolink" title="Not matched by the Duty Portal sync and never signed in with Discord, so their duty hours aren\'t counted yet.">🔗 NOT TRACKED</span>');
     if (h) out.push('<span class="pbx-chip ' + (h.done ? (h.warn ? "warn" : "ok") : "no") + '" title="' + esc(h.t + (h.warn ? " · " + h.warn : "")) + '">⏱ ' + H(h.have) + "/" + H(h.need) + "h" + (h.warn ? " ⚠" : "") + "</span>");
     if (r) out.push('<span class="pbx-chip ' + (r.done ? "ok" : "no") + '" title="' + esc(r.t) + '">📝 ' + r.have + "/" + r.need + "</span>");
@@ -44,7 +44,10 @@
     return '<div class="pbx-det">' + o.items.map(x => {
       const man = !x.auto, can = man && canTick, by = x.manual && x.by ? "Signed off by " + x.by : x.auto && x.done ? "Counted by the terminal" : "";
       let extra = "";
-      if ((x.auto === "reports14" || x.auto === "reports") && x.split && "dp" in x.split) extra = '<div class="pbx-src">' + (x.auto === "reports" ? "<b>" + x.have + " total</b> since reaching the rank · " : "") + x.split.mdt + " from MDT forms · " + x.split.dp + " from the Duty Portal" + (x.split.rb ? " · " + x.split.rb + " from the Report Builder" : "") + (x.split.both ? " · " + x.split.both + " seen twice (counted once)" : "") + "</div>" +
+      if (x.auto === "reports" && x.split && x.split.kinds) extra = '<div class="pbx-src"><b>' + x.have + " total</b> since reaching the rank" + (x.split.both ? " · " + x.split.both + " seen twice (counted once)" : "") + "</div>" +
+        '<div class="pbx-lg">' + x.split.kinds.map(k => '<span><i class="rd ' + esc(k.k) + '"' + (k.c ? ' style="--c:' + esc(k.c) + '"' : "") + "></i>" + k.count + " " + esc(k.n) + "</span>").join("") + "</div>" +
+        (x.list && x.list.length ? '<div class="pbx-rl dots">' + x.list.map(r => '<span title="' + esc(r.n) + '"><i class="rd ' + esc(r.k) + '"' + (r.c ? ' style="--c:' + esc(r.c) + '"' : "") + "></i>" + day(r.at) + " · " + esc(r.t || "Report") + "</span>").join("") + "</div>" : "");
+      else if ((x.auto === "reports14") && x.split && "dp" in x.split) extra = '<div class="pbx-src">' + (x.auto === "reports" ? "<b>" + x.have + " total</b> since reaching the rank · " : "") + x.split.mdt + " from MDT forms · " + x.split.dp + " from the Duty Portal" + (x.split.rb ? " · " + x.split.rb + " from the Report Builder" : "") + (x.split.both ? " · " + x.split.both + " seen twice (counted once)" : "") + "</div>" +
         (x.list && x.list.length ? '<div class="pbx-rl">' + x.list.map(r => "<span><i>" + esc(r.src) + "</i>" + day(r.at) + " · " + esc(r.t || "Report") + "</span>").join("") + "</div>" : "");
       else if (x.auto === "hours" && o.linked === false) extra = '<div class="pbx-warn">🔗 Not tracked: the Duty Portal sync hasn\'t matched them and they\'ve never signed in to the portal with Discord, so on-duty time isn\'t being counted yet.</div>';
       if (x.auto === "hours" && x.src && o.linked !== false) extra = '<div class="pbx-src">' + (x.src === "dp" ? "From the Duty Portal (in-game clock-in/out)" : x.src === "role" ? "From the On Duty Discord role (Duty Portal hasn't seen them yet)" : "No duty time recorded yet") + "</div>";
