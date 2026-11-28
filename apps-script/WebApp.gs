@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 176;
+const BACKEND_VERSION = 177;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3928,6 +3928,12 @@ function repFiledSince_(id, since) {
   ev.forEach(x => { const g = G.find(g0 => !g0.s[x.s] && Math.abs(g0.at - x.at) <= 90 * 60000); if (g) g.s[x.s] = 1; else { const s0 = {}; s0[x.s] = 1; G.push({ at: x.at, s: s0 }); } });
   return G.length;
 }
+function repFiledDetail_(id, since) {   // the same count, with where each report came from (for the requirement's breakdown)
+  const R = repSources_(), now = Date.now(), inR = t => t >= since && t <= now;
+  const m = (R.mdt[id] || []).filter(x => inR(x.at)), dp = (R.dp[id] || []).filter(x => inR(x.at)), rb = (R.rb[id] || []).filter(x => inR(x.at)), n = repFiledSince_(id, since);
+  return { n: n, split: { mdt: m.length, dp: dp.length, rb: rb.length, both: m.length + dp.length + rb.length - n },
+    list: m.map(x => ({ at: x.at, t: x.title, src: "MDT" })).concat(dp.map(x => ({ at: x.at, t: x.title, src: "Duty Portal" })), rb.map(x => ({ at: x.at, t: x.title, src: "Report Builder" }))).sort((a, b) => b.at - a.at).slice(0, 15) };
+}
 function promoEval_(o, rankReqs, checks) {
   const mine = checks || {};
   const items = (rankReqs ? rankReqs.reqs : []).map(q => {
@@ -3936,7 +3942,8 @@ function promoEval_(o, rankReqs, checks) {
     if (a && a.type === "tig") { have = o.tigDays; auto = have != null && (have >= a.need || (o.since > 0 && Date.now() - o.since >= a.need * 864e5 - 12 * 36e5)); if (auto && have < a.need) have = a.need; }
     // "(5) reports" since reaching the rank: the reports that credit them on the MDT, or the ones they filed across the MDT, the Duty Portal
     // and the Report Builder (the same report in more than one place counted once), whichever is more
-    if (a && a.type === "reports") { have = Math.max(o.reports || 0, repFiledSince_(o.id, o.since || Date.now() - 28 * 864e5)); auto = have >= a.need; }
+    let rsplit = null, rlist = null;
+    if (a && a.type === "reports") { const D = repFiledDetail_(o.id, o.since || Date.now() - 28 * 864e5); have = Math.max(o.reports || 0, D.n); auto = have >= a.need; rsplit = D.split; rlist = D.list; }
     let split = null, parts = null, locked = false;
     if (a && a.type === "cplcert") { const C = o.cpl || {}; parts = [{ t: "Witness a Basic Training (in the Witness box)", done: (C.witness || 0) >= 1 }, { t: "Lead a Basic Training with a SGT+ in the Supervising box", done: (C.lead || 0) >= 1 }];
       have = parts.filter(x => x.done).length; auto = have >= 2; }
@@ -3948,7 +3955,7 @@ function promoEval_(o, rankReqs, checks) {
     if (a && a.type === "pora") { have = (o.po || {}).ra || 0; auto = have >= a.need; }
     if (a && a.type === "poroster") { have = o.callsign ? 1 : 0; auto = have >= 1; }
     if (a && a.type === "sop") { have = (o.po && o.po.sop) ? 1 : SOP_MEMO_ ? (SOP_MEMO_[o.id] ? 1 : 0) : (sopIds_()[o.id] ? 1 : 0); auto = have >= 1; }
-    return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, split: split, parts: parts, locked: locked, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
+    return { key: q.key, t: q.t, auto: a ? a.type : "", need: a ? a.need : 0, have: have, split: split || rsplit, list: rlist || undefined, parts: parts, locked: locked, done: auto || !!c, by: c ? c.by : (auto ? "auto" : ""), at: c ? c.at : 0, manual: !!c };
   });
   return { items: items, done: items.filter(x => x.done).length, total: items.length, ready: items.length > 0 && items.every(x => x.done) };
 }
