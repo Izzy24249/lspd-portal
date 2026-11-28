@@ -28,7 +28,7 @@
   }
   function chips(o) {
     const it = k => o.items.find(x => x.auto === k), h = it("hours"), r = it("reports14") || it("reports"), t = it("tig"), out = [];
-    if (o.linked === false) out.push('<span class="pbx-chip nolink" title="Not matched by the Duty Portal sync and never signed in with Discord, so their duty hours aren\'t counted yet.">🔗 NOT TRACKED</span>');
+    if (o.linked === false) out.push('<span class="pbx-chip nolink" title="Not matched by the Data Link sync and never signed in with Discord, so their duty hours aren\'t counted yet.">🔗 NOT TRACKED</span>');
     if (h) out.push('<span class="pbx-chip ' + (h.done ? (h.warn ? "warn" : "ok") : "no") + '" title="' + esc(h.t + (h.warn ? " · " + h.warn : "")) + '">⏱ ' + H(h.have) + "/" + H(h.need) + "h" + (h.warn ? " ⚠" : "") + "</span>");
     if (r) out.push('<span class="pbx-chip ' + (r.done ? "ok" : "no") + '" title="' + esc(r.t) + '">📝 ' + r.have + "/" + r.need + "</span>");
     if (t) out.push('<span class="pbx-chip ' + (t.done ? "ok" : "no") + '" title="Time in grade">TIG ' + (t.have == null ? "—" : t.have) + "/" + t.need + "d</span>");
@@ -47,10 +47,10 @@
       if (x.auto === "reports" && x.split && x.split.kinds) extra = '<div class="pbx-src"><b>' + x.have + " total</b> since reaching the rank" + (x.split.both ? " · " + x.split.both + " seen twice (counted once)" : "") + "</div>" +
         '<div class="pbx-lg">' + x.split.kinds.map(k => '<span><i class="rd ' + esc(k.k) + '"' + (k.c ? ' style="--c:' + esc(k.c) + '"' : "") + "></i>" + k.count + " " + esc(k.n) + "</span>").join("") + "</div>" +
         (x.list && x.list.length ? '<div class="pbx-rl dots">' + x.list.map(r => '<span title="' + esc(r.n) + '"><i class="rd ' + esc(r.k) + '"' + (r.c ? ' style="--c:' + esc(r.c) + '"' : "") + "></i>" + day(r.at) + " · " + esc(r.t || "Report") + "</span>").join("") + "</div>" : "");
-      else if ((x.auto === "reports14") && x.split && "dp" in x.split) extra = '<div class="pbx-src">' + (x.auto === "reports" ? "<b>" + x.have + " total</b> since reaching the rank · " : "") + x.split.mdt + " from MDT forms · " + x.split.dp + " from the Duty Portal" + (x.split.rb ? " · " + x.split.rb + " from the Report Builder" : "") + (x.split.both ? " · " + x.split.both + " seen twice (counted once)" : "") + "</div>" +
+      else if ((x.auto === "reports14") && x.split && "dp" in x.split) extra = '<div class="pbx-src">' + (x.auto === "reports" ? "<b>" + x.have + " total</b> since reaching the rank · " : "") + x.split.mdt + " from MDT forms · " + x.split.dp + " from the Data Link" + (x.split.rb ? " · " + x.split.rb + " from the Report Builder" : "") + (x.split.both ? " · " + x.split.both + " seen twice (counted once)" : "") + "</div>" +
         (x.list && x.list.length ? '<div class="pbx-rl">' + x.list.map(r => "<span><i>" + esc(r.src) + "</i>" + day(r.at) + " · " + esc(r.t || "Report") + "</span>").join("") + "</div>" : "");
-      else if (x.auto === "hours" && o.linked === false) extra = '<div class="pbx-warn">🔗 Not tracked: the Duty Portal sync hasn\'t matched them and they\'ve never signed in to the portal with Discord, so on-duty time isn\'t being counted yet.</div>';
-      if (x.auto === "hours" && x.src && o.linked !== false) extra = '<div class="pbx-src">' + (x.src === "dp" ? "From the Duty Portal (in-game clock-in/out)" : x.src === "role" ? "From the On Duty Discord role (Duty Portal hasn't seen them yet)" : "No duty time recorded yet") + "</div>";
+      else if (x.auto === "hours" && o.linked === false) extra = '<div class="pbx-warn">🔗 Not tracked: the Data Link sync hasn\'t matched them and they\'ve never signed in to the portal with Discord, so on-duty time isn\'t being counted yet.</div>';
+      if (x.auto === "hours" && x.src && o.linked !== false) extra = '<div class="pbx-src">' + (x.src === "dp" ? "From the Data Link (in-game clock-in/out)" : x.src === "role" ? "From the On Duty Discord role (Data Link hasn't seen them yet)" : "No duty time recorded yet") + "</div>";
       if (x.auto === "hours" && o.linked === false) {}
       else if (x.auto === "hours" && x.weeks) extra += '<div class="pbx-wk">' + x.weeks.slice().reverse().map(w => '<span class="' + (w.low ? "low" : w.cur ? "cur" : "") + '">' + (w.to ? day(w.from) + " – " + day(w.to) : "Week of " + day(w.from)) + (w.cur ? " (this week)" : "") + ": <b>" + H(w.min) + "h</b></span>").join("") + "</div>" + (x.warn ? '<div class="pbx-warn">⚠ Total met, but ' + esc(x.warn) + ".</div>" : "");
       const val = x.auto === "hours" ? H(x.have) + " / " + H(x.need) + " h" : x.auto && x.need ? (x.have == null ? "—" : x.have) + " / " + x.need : "";
@@ -120,25 +120,25 @@
     h += followUps() + unlinkedHTML();
     return h;
   }
-  // Duty Portal sync status (the browser add-on that reads portal.vanitydesigns.cloud)
+  // Data Link sync status (the browser add-on that reads portal.vanitydesigns.cloud)
   function dpBar() {
     const D = B.dp, mins = D ? Math.round((Date.now() - D.at) / 60000) : 0, stale = D && mins > 60, can = !!B.me.dpOwner;
     const when = !D ? "" : mins < 1 ? "just now" : mins < 60 ? mins + " min ago" : mins < 1440 ? Math.round(mins / 60) + " h ago" : Math.round(mins / 1440) + " days ago";
     return '<div class="pbx-dp' + (!D ? " off" : stale ? " stale" : "") + '"><span>' + (!D ? "🔌" : stale ? "⏳" : "🛰️") + "</span><div><b>" +
-      (!D ? "Duty Portal sync isn't set up" : "Duty Portal data updated " + when + (D.by ? " · by " + esc(D.by) : "")) + "</b><small>" +
-      (!D ? "Hours come only from the On Duty role for officers who signed in with Discord. Set up the sync to count every officer's in-game hours and Duty Portal reports."
-        : D.matched + " officers matched by Discord ID" + (D.officers ? " · " + D.onDuty + " on duty of " + D.officers + " active" : "") + (stale ? " · Open the Duty Portal in a browser with the add-on to refresh, especially before a Friday push." : "")) +
+      (!D ? "Data Link sync isn't set up" : "Data Link data updated " + when + (D.by ? " · by " + esc(D.by) : "")) + "</b><small>" +
+      (!D ? "Hours come only from the On Duty role for officers who signed in with Discord. Set up the sync to count every officer's in-game hours and Data Link reports."
+        : D.matched + " officers matched by Discord ID" + (D.officers ? " · " + D.onDuty + " on duty of " + D.officers + " active" : "") + (stale ? " · Open the Data Link in a browser with the add-on to refresh, especially before a Friday push." : "")) +
       "</small></div>" + (can ? '<button class="pbx-btn ghost" data-dpsetup>' + (D ? "SYNC SETUP" : "SET UP") + "</button>" : "") + "</div>";
   }
   function dpSetup() {
-    const m = M().modal('<h3 style="font:700 24px Barlow Condensed,sans-serif;letter-spacing:.05em">DUTY PORTAL SYNC</h3>' +
-      '<p style="color:var(--mute);font-size:13.5px;line-height:1.5">A small add-on reads the Duty Portal in <b>your own browser</b>, where you\'re already signed in, and sends hours, shifts and reports here every 10 minutes while a Duty Portal tab is open. It never sees your password.</p>' +
+    const m = M().modal('<h3 style="font:700 24px Barlow Condensed,sans-serif;letter-spacing:.05em">DATA LINK SYNC</h3>' +
+      '<p style="color:var(--mute);font-size:13.5px;line-height:1.5">A small add-on reads the Data Link in <b>your own browser</b>, where you\'re already signed in, and sends hours, shifts and reports here every 10 minutes while a Data Link tab is open. It never sees your password.</p>' +
       '<ol class="pbx-steps"><li>Install <b>Tampermonkey</b> in Chrome: <a href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" rel="noopener">Chrome Web Store</a>. Then in Chrome\'s extension settings, turn on <b>Allow user scripts</b> for Tampermonkey if Chrome asks.</li>' +
       '<li><a href="tools/lspd-duty-sync.user.js" target="_blank" rel="noopener"><b>Install the LSPD sync script</b></a> and press <b>Install</b> in Tampermonkey.</li>' +
       '<li>Make your sync key and copy it:<div class="pbx-key"><code id="dpKey">Not made yet</code><button class="pbx-btn go" id="dpMake">MAKE A SYNC KEY</button></div><small>Keep it private: anyone with it can send duty data to the board. If a key ever leaks, revoke it below.</small></li>' +
-      '<li>Open the <a href="https://portal.vanitydesigns.cloud/portal/lspd/officers" target="_blank" rel="noopener">Duty Portal</a>, click the <b>LSPD sync</b> badge in the bottom-right corner and paste the key. The first sync reads every active officer (a few minutes), then it keeps up on its own.</li></ol>' +
+      '<li>Open the <a href="https://portal.vanitydesigns.cloud/portal/lspd/officers" target="_blank" rel="noopener">Data Link</a>, click the <b>LSPD sync</b> badge in the bottom-right corner and paste the key. The first sync reads every active officer (a few minutes), then it keeps up on its own.</li></ol>' +
       '<div class="pbx-keys"><b>Sync keys in use</b><div id="dpKeys"><small>Loading…</small></div></div>' +
-      '<p style="color:var(--mute);font-size:12.5px">Leave a Duty Portal tab open (pinned) while you play. If the computer is off, nothing is lost: the next sync picks up the shifts it missed.</p>' +
+      '<p style="color:var(--mute);font-size:12.5px">Leave a Data Link tab open (pinned) while you play. If the computer is off, nothing is lost: the next sync picks up the shifts it missed.</p>' +
       '<div style="display:flex;justify-content:flex-end"><button class="btn" data-close>DONE</button></div>');
     m.querySelector(".md-box").style.width = "min(640px,100%)";
     const keysBox = m.querySelector("#dpKeys"), when = t => t ? new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "never";
@@ -168,7 +168,7 @@
     const U = B.unlinked || []; if (!U.length) return "";
     const txt = U.map(u => (u.callsign ? u.callsign + " | " : "") + u.name).join("\n");
     return '<div class="sect"><span class="lbl">Not tracked · ' + U.length + "</span></div>" +
-      '<details class="pbx-nl"' + (LS_NL ? " open" : "") + '><summary><span>🔗</span><div><b>' + U.length + " officer" + (U.length === 1 ? " isn't" : "s aren't") + " being tracked</b><small>The Duty Portal sync hasn't matched them" + (B.dp ? "" : " (it isn't set up yet)") + " and they've never signed in to the portal with Discord, so their hours show 0 here. Either fixes it: the sync matches anyone active on the Duty Portal, or they sign in once (portal → Sign in with Discord → set a PIN).</small></div>" +
+      '<details class="pbx-nl"' + (LS_NL ? " open" : "") + '><summary><span>🔗</span><div><b>' + U.length + " officer" + (U.length === 1 ? " isn't" : "s aren't") + " being tracked</b><small>The Data Link sync hasn't matched them" + (B.dp ? "" : " (it isn't set up yet)") + " and they've never signed in to the portal with Discord, so their hours show 0 here. Either fixes it: the sync matches anyone active on the Data Link, or they sign in once (portal → Sign in with Discord → set a PIN).</small></div>" +
       '<button class="pbx-btn ghost" data-copy="' + esc(txt) + '" data-what="Not-linked list">COPY LIST</button></summary>' +
       '<div class="pbx-nl-list">' + U.map(u => "<span>" + (u.callsign ? "<code>" + esc(u.callsign) + "</code>" : "") + esc(u.name) + "<small>" + esc(u.rank) + "</small></span>").join("") + "</div></details>";
   }
@@ -210,12 +210,12 @@
     try { navigator.clipboard.writeText(txt).then(done, () => annBox(txt)); } catch (e) { annBox(txt); }
   }
   function annBox(txt) { const m = M().modal('<h3 style="font:700 22px Barlow Condensed,sans-serif">PROMOTION ANNOUNCEMENT</h3><textarea style="width:100%;height:50vh;border-radius:10px;background:#0b1220;color:var(--tx);border:1px solid var(--line2);padding:10px;font:12px JetBrains Mono,monospace">' + esc(txt) + '</textarea><div style="display:flex;justify-content:flex-end"><button class="btn" data-close>DONE</button></div>'); const t = m.querySelector("textarea"); t.focus(); t.select(); }
-  // the Duty Portal add-on updating the Duty Portal roster after "Mark done"
+  // the Data Link add-on updating the Data Link roster after "Mark done"
   function dpChip(r, canTick) {
     const j = r.dpJob; if (!j) return "";
     const what = j.kind === "move" ? "move to " + (r.newCs || "the new spot") : "assign " + (r.newCs || "") + " · clear " + (r.oldCs || "cadet spot");
-    const T = { queued: ["wait", "🤖 Duty Portal roster: waiting for the add-on (" + what + ")" + (j.msg ? " · " + j.msg : "")], working: ["work", "🤖 Duty Portal roster: updating now" + (j.step ? " · " + j.step : "…") + (j.at ? " (" + Math.max(0, Math.round((Date.now() - j.at) / 1000)) + "s ago)" : "")],
-      done: ["ok", "🤖 Duty Portal roster updated" + (j.msg ? " · " + j.msg : "")], failed: ["bad", "🤖 Duty Portal roster: couldn't finish · " + (j.msg || "unknown problem")] }[j.st] || ["wait", j.st];
+    const T = { queued: ["wait", "🤖 Data Link roster: waiting for the add-on (" + what + ")" + (j.msg ? " · " + j.msg : "")], working: ["work", "🤖 Data Link roster: updating now" + (j.step ? " · " + j.step : "…") + (j.at ? " (" + Math.max(0, Math.round((Date.now() - j.at) / 1000)) + "s ago)" : "")],
+      done: ["ok", "🤖 Data Link roster updated" + (j.msg ? " · " + j.msg : "")], failed: ["bad", "🤖 Data Link roster: couldn't finish · " + (j.msg || "unknown problem")] }[j.st] || ["wait", j.st];
     return '<div class="pbx-dp ' + T[0] + '"><span>' + esc(T[1]) + "</span>" + (j.st === "failed" && canTick ? '<button class="pbx-btn ghost" data-dpretry="' + esc(r.entry) + '">RETRY</button>' : "") + "</div>";
   }
   // while an update is waiting, check back every 20 s so the chip turns green by itself

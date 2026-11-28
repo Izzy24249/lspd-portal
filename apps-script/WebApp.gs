@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 178;
+const BACKEND_VERSION = 179;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3913,7 +3913,7 @@ function sopLive_(id) {
   return out;
 }
 var SOP_MEMO_ = null, REP_MEMO_ = null;
-// every report each officer filed: MDT forms (as the form's own officer), the Duty Portal, the Report Builder — read once per request
+// every report each officer filed: MDT forms (as the form's own officer), the Data Link, the Report Builder — read once per request
 function repSources_() {
   if (REP_MEMO_) return REP_MEMO_;
   const lead = {}; (getConfig_().forms || []).forEach(f => { lead[f.id] = [str_(f.meField), autoAuthor_(f)].filter(Boolean); });
@@ -3939,7 +3939,7 @@ function repKindOf_(formId) {
 function repFiledDetail_(id, since) {   // the same count, with where each report came from (for the requirement's breakdown)
   const R = repSources_(), now = Date.now(), inR = t => t >= since && t <= now;
   const m = (R.mdt[id] || []).filter(x => inR(x.at)), dp = (R.dp[id] || []).filter(x => inR(x.at)), rb = (R.rb[id] || []).filter(x => inR(x.at)), n = repFiledSince_(id, since);
-  const list = m.map(x => Object.assign({ at: x.at, t: x.title }, repKindOf_(x.form))).concat(dp.map(x => ({ at: x.at, t: x.title, k: "dp", n: "Duty Portal" })), rb.map(x => ({ at: x.at, t: x.title, k: "rb", n: "Report Builder" }))).sort((a, b) => b.at - a.at);
+  const list = m.map(x => Object.assign({ at: x.at, t: x.title }, repKindOf_(x.form))).concat(dp.map(x => ({ at: x.at, t: x.title, k: "dp", n: "Data Link" })), rb.map(x => ({ at: x.at, t: x.title, k: "rb", n: "Report Builder" }))).sort((a, b) => b.at - a.at);
   const by = {}; list.forEach(x => { const key = x.k + "|" + x.n; (by[key] = by[key] || { k: x.k, n: x.n, c: x.c, count: 0 }).count++; });
   return { n: n, split: { mdt: m.length, dp: dp.length, rb: rb.length, both: m.length + dp.length + rb.length - n, kinds: Object.keys(by).map(k => by[k]) }, list: list.slice(0, 15) };
 }
@@ -3949,7 +3949,7 @@ function promoEval_(o, rankReqs, checks) {
     const c = mine[q.key], a = q.auto; let have = null, auto = false;
     // time in grade: counts as met up to 12 hours early
     if (a && a.type === "tig") { have = o.tigDays; auto = have != null && (have >= a.need || (o.since > 0 && Date.now() - o.since >= a.need * 864e5 - 12 * 36e5)); if (auto && have < a.need) have = a.need; }
-    // "(5) reports" since reaching the rank: the reports that credit them on the MDT, or the ones they filed across the MDT, the Duty Portal
+    // "(5) reports" since reaching the rank: the reports that credit them on the MDT, or the ones they filed across the MDT, the Data Link
     // and the Report Builder (the same report in more than one place counted once), whichever is more
     let rsplit = null, rlist = null;
     if (a && a.type === "reports") { const D = repFiledDetail_(o.id, o.since || Date.now() - 28 * 864e5); have = Math.max(o.reports || 0, D.n); auto = have >= a.need; rsplit = D.split; rlist = D.list; }
@@ -6085,14 +6085,14 @@ function pbEval_(o, R, L, checks, duty, rep, now) {
   if (rule.hours > 0) items.push({ key: "pb:hours", t: rule.hours + " hours on duty in the " + weeks.length + " weeks before promotion day" + (rule.weekMin ? " (" + rule.weekMin + "+ each week)" : ""), auto: "hours", need: rule.hours * 60, have: total, done: total >= rule.hours * 60, src: SR.src,
     weeks: weeks.map(w => ({ from: w.from, to: w.to, min: w.min, cur: w.cur, low: rule.weekMin > 0 && done(w) && w.min < rule.weekMin * 60 })), warn: total >= rule.hours * 60 && low.length ? low.length + " week" + (low.length > 1 ? "s were" : " was") + " under " + rule.weekMin + " hours" : "" });
   const rr0 = (L.ranks || []).find(x => x.idx === o.idx), docReports = !!(rr0 && rr0.reqs.some(q => q.auto && q.auto.type === "reports"));
-  if (rule.reports > 0 && !docReports) {   // reports they filed themselves: MDT forms + Duty Portal, a report in both counted once (same officer, within 90 min)
+  if (rule.reports > 0 && !docReports) {   // reports they filed themselves: MDT forms + Data Link, a report in both counted once (same officer, within 90 min)
     const inP = t => t >= from && t < P.end, m = (rep.mdt[o.id] || []).filter(x => inP(x.at)), dp = (rep.dp[o.id] || []).filter(x => inP(x.at)), rb = ((rep.rb || {})[o.id] || []).filter(x => inP(x.at));
-    // the same report showing up from more than one place (Report Builder copy -> CAD/Duty Portal -> MDT) counts once: same officer, within 90 min, different sources
+    // the same report showing up from more than one place (Report Builder copy -> CAD/Data Link -> MDT) counts once: same officer, within 90 min, different sources
     const ev = m.map(x => ({ at: x.at, s: "mdt" })).concat(dp.map(x => ({ at: x.at, s: "dp" })), rb.map(x => ({ at: x.at, s: "rb" }))).sort((a, b) => a.at - b.at), G = [];
     ev.forEach(x => { const g = G.find(g0 => !g0.s[x.s] && Math.abs(g0.at - x.at) <= 90 * 60000); if (g) g.s[x.s] = 1; else { const s0 = {}; s0[x.s] = 1; G.push({ at: x.at, s: s0 }); } });
     const n = G.length, both = m.length + dp.length + rb.length - n;
     items.push({ key: "pb:reports", t: rule.reports + " reports they filed in the same " + weeks.length + " weeks", auto: "reports14", need: rule.reports, have: n, done: n >= rule.reports,
-      split: { mdt: m.length, dp: dp.length, rb: rb.length, both: both }, list: m.map(x => ({ at: x.at, t: x.title, src: "MDT" })).concat(dp.map(x => ({ at: x.at, t: x.title, src: "Duty Portal" })), rb.map(x => ({ at: x.at, t: x.title, src: "Report Builder" }))).sort((a, b) => b.at - a.at).slice(0, 12) }); }
+      split: { mdt: m.length, dp: dp.length, rb: rb.length, both: both }, list: m.map(x => ({ at: x.at, t: x.title, src: "MDT" })).concat(dp.map(x => ({ at: x.at, t: x.title, src: "Data Link" })), rb.map(x => ({ at: x.at, t: x.title, src: "Report Builder" }))).sort((a, b) => b.at - a.at).slice(0, 12) }); }
   // the rank's requirements from the Promotion Guidelines doc (time in grade, trainings, SOP… and command sign-offs)
   const rr = (L.ranks || []).find(x => x.idx === o.idx);
   promoEval_(o, rr, checks).items.forEach(x => items.push(Object.assign({}, x, { doc: true })));
@@ -6125,10 +6125,10 @@ function pbDropOpt_(cell, want) {
 function pbOpenSlot_(S, idx) { return S.rows.find(x => x.idx === idx && !x.head && !x.name && !x.id && !x.fx); }
 function pbView_(acct, A) {
   const now = Date.now(), R = pbRules_(), L = promoLadderKeys_(), checks = pchkAll_(), duty = dutySums_(); SOP_MEMO_ = sopIds_();
-  // reports each officer FILED on the MDT (the form's own officer box / lead officer), and the Duty Portal's
+  // reports each officer FILED on the MDT (the form's own officer box / lead officer), and the Data Link's
   REP_MEMO_ = null; const DS = dpState_(), dpOn = !!DS.at, dps = dpOn ? dpShifts_() : {}, rep = repSources_();
   const dpIds = {}; if (dpOn) { const P0 = dpPids_(); Object.keys(P0).forEach(k => dpIds[P0[k]] = 1); }
-  // hours: Duty Portal shifts where we have them (every officer, exact clock-in/out); before its first known shift, the On Duty role log
+  // hours: Data Link shifts where we have them (every officer, exact clock-in/out); before its first known shift, the On Duty role log
   const role = duty, dutyOf = id => { const d0 = dps[id] || [], r0 = role[id] || [];
     if (!d0.length) return { list: r0, src: dpIds[id] ? "dp" : r0.length ? "role" : "none" };
     const first = Math.min.apply(null, d0.map(x => x[0])); return { list: r0.filter(x => x[0] < first).concat(d0), src: "dp" }; };
@@ -6211,7 +6211,7 @@ function pbHandle_(d) {
     if (A.hc) { R.editors = (Array.isArray(inR.editors) ? inR.editors : []).map(x => clip_(str_(x), 40)).filter(Boolean).slice(0, 20); R.webhookId = str_(inR.webhookId); }
     PROPS_.setProperty("PB_RULES", JSON.stringify(R));
   } else if (a === "pbSyncKey") {
-    if (!dpIsOwner_(acct, A)) return { ok: false, error: "Only the portal owner can set up the Duty Portal sync." };
+    if (!dpIsOwner_(acct, A)) return { ok: false, error: "Only the portal owner can set up the Data Link sync." };
     return { ok: true, key: dpNewKey_(A), keys: dpKeyList_() };
   } else if (a === "pbSyncKeys" || a === "pbSyncRevoke") {
     if (!dpIsOwner_(acct, A)) return { ok: false, error: "Only the portal owner can manage sync keys." };
@@ -6224,7 +6224,7 @@ function pbHandle_(d) {
       return { ok: true, dpJob: job }; });
   } else if (a === "pbDpRetry") {
     if (!A.editor && !A.hc) return { ok: false, error: "Only High Command can do this." };
-    return withLock_(() => { const J = dpJobsAll_(), j = J.find(x => x.id === str_(d.entry)); if (!j) return { ok: false, error: "That Duty Portal update isn't in the queue any more." };
+    return withLock_(() => { const J = dpJobsAll_(), j = J.find(x => x.id === str_(d.entry)); if (!j) return { ok: false, error: "That Data Link update isn't in the queue any more." };
       j.st = "queued"; j.msg = ""; j.tries = 0; j.at = Date.now(); dpJobsPut_(J); return { ok: true, dpJob: dpJobPub_(j) }; });
   } else if (a === "pbPreview" || a === "pbPush") {
     if (!A.hc) return { ok: false, error: "Only High Command can push promotions." };
@@ -6299,10 +6299,10 @@ function pbPush_(A) {
 }
 
 // =====================================================================================================================
-// ---- Duty Portal sync (portal.vanitydesigns.cloud) ----
-// The server's Duty Portal tracks every officer's in-game shifts and reports. It has no API, so a small browser add-on
+// ---- Data Link sync (portal.vanitydesigns.cloud) ----
+// The server's Data Link tracks every officer's in-game shifts and reports. It has no API, so a small browser add-on
 // (site/tools/lspd-duty-sync.user.js) reads it in a command member's own logged-in browser and posts what it sees here.
-// Auth is a sync key made on the promotion board (stored hashed). Nothing here can log in to the Duty Portal.
+// Auth is a sync key made on the promotion board (stored hashed). Nothing here can log in to the Data Link.
 // =====================================================================================================================
 const DP_SHIFTS_ = "Duty Portal Shifts", DP_SHIFTS_HEAD_ = ["Discord ID", "Officer", "Start", "Minutes", "Key", "Synced"];
 const DP_REPS_ = "Duty Portal Reports", DP_REPS_HEAD_ = ["Discord ID", "Officer", "At", "Approx", "Type", "Title", "Report ID", "Key", "Synced"];
@@ -6316,14 +6316,14 @@ function dpHash_(k) { return Utilities.computeDigest(Utilities.DigestAlgorithm.S
 function dpKeys_() { try { return JSON.parse(PROPS_.getProperty("DP_KEYS") || "[]") || []; } catch (e) { return []; } }
 function dpState_() { try { return JSON.parse(PROPS_.getProperty("DP_STATE") || "{}") || {}; } catch (e) { return {}; } }
 function dpPids_() { try { return JSON.parse(PROPS_.getProperty("DP_PIDS") || "{}") || {}; } catch (e) { return {}; } }
-// ---- Duty Portal roster jobs: after a promotion is marked done, the add-on updates the Duty Portal roster for us ----
+// ---- Data Link roster jobs: after a promotion is marked done, the add-on updates the Data Link roster for us ----
 //  "assign" (PO -> PO II): Main roster -> the new callsign's spot -> Assign -> the officer; then Cadets roster -> their old spot -> Clear assignment
 //  "move"   (everyone else): Main roster -> their spot -> Move spot -> the new callsign
 function dpJobsAll_() { try { return JSON.parse(PROPS_.getProperty("DP_JOBS") || "[]") || []; } catch (e) { return []; } }
 function dpJobsPut_(J) { const keep = J.filter(j => j.st === "queued" || j.st === "working" || Date.now() - (j.at || 0) < 14 * 864e5).slice(-80); PROPS_.setProperty("DP_JOBS", JSON.stringify(keep)); }
 function dpJobPub_(j) { return j ? { st: j.st, msg: j.msg || "", at: j.at || 0, kind: j.kind, step: j.step || "", tries: j.tries || 0 } : null; }
 function dpJobAdd_(e, who) {
-  if (!dpKeys_().length || !e.newCs || !e.id) return null;   // no Duty Portal sync set up, or nothing to move
+  if (!dpKeys_().length || !e.newCs || !e.id) return null;   // no Data Link sync set up, or nothing to move
   const J = dpJobsAll_(); let j = J.find(x => x.id === e.entry);
   if (j && (j.st === "done" || j.st === "working")) return dpJobPub_(j);
   if (!j) { j = { id: e.entry }; J.push(j); }
@@ -6337,7 +6337,7 @@ function dpJobsApi_(d) {
   if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid." };
   if (d.action === "dpJobs") {
     const J = dpJobsAll_(), now = Date.now(); let changed = false;
-    J.forEach(j => { if (j.st === "working" && now - (j.at || 0) > 10 * 60000) { const where = j.step ? " (last step: " + j.step + ")" : ""; j.st = j.tries >= 2 ? "failed" : "queued"; j.msg = "The add-on went quiet for 10 minutes" + where + (j.st === "failed" ? ". Keep the Duty Portal tab in front (a background tab gets slowed down by the browser), then press Retry." : ", trying again."); j.step = ""; changed = true; } });
+    J.forEach(j => { if (j.st === "working" && now - (j.at || 0) > 10 * 60000) { const where = j.step ? " (last step: " + j.step + ")" : ""; j.st = j.tries >= 2 ? "failed" : "queued"; j.msg = "The add-on went quiet for 10 minutes" + where + (j.st === "failed" ? ". Keep the Data Link tab in front (a background tab gets slowed down by the browser), then press Retry." : ", trying again."); j.step = ""; changed = true; } });
     const cdOk = Number(d.v || 0) >= 150;   // cadet roster jobs only go to add-on 1.5.0+ (older ones don't know them)
     const idOk = Number(d.v || 0) >= 160;   // the Discord ID check needs add-on 1.6.0+
     try { const hb = JSON.parse(PROPS_.getProperty("DP_ADDON") || "{}"); if (now - (hb.at || 0) > 20000 || hb.v !== Number(d.v || 0)) PROPS_.setProperty("DP_ADDON", JSON.stringify({ v: Number(d.v || 0), at: now })); } catch (e) {}
@@ -6355,7 +6355,7 @@ function dpJobsApi_(d) {
 // the add-on's post: { key, officers:[{pid,name,status,total,week,seen}], profiles:[{pid,discord,name,shifts:[{s,m}],reports:[{id,at,approx,type,title}]}] }
 function dpSync_(d) {
   const K = dpKeys_(), h = dpHash_(d.key), who = K.find(k => k.h === h);
-  if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid. Make a new one on the MDT promotion board (⚙ Requirements → Duty Portal sync)." };
+  if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid. Make a new one on the MDT promotion board (⚙ Requirements → Data Link sync)." };
   const now = Date.now(), officers = Array.isArray(d.officers) ? d.officers.slice(0, 600) : null, profiles = Array.isArray(d.profiles) ? d.profiles.slice(0, 200) : [];
   return withLock_(() => {
     const pids = dpPids_(); let nS = 0, nR = 0;
@@ -6371,7 +6371,7 @@ function dpSync_(d) {
         if (h0) { if (m > h0.m) { ssh.getRange(h0.row, 6).setValue(m); h0.m = m; nS++; } return; }
         have[key] = { row: -1, m: m }; addS.push(["'" + id, cellSafe_(clip_(str_(p.name), 80)), new Date(st), m, key, new Date()]); nS++; }); });
     if (addS.length) ssh.getRange(ssh.getLastRow() + 1, 1, addS.length, addS[0].length).setValues(addS);
-    // reports: by the Duty Portal's report id (else title) per officer
+    // reports: by the Data Link's report id (else title) per officer
     const rsh = dpSheet_(DP_REPS_, DP_REPS_HEAD_), haveR = {}, r0 = rsh.getLastRow();
     if (r0 > 1) { const from = Math.max(2, r0 - 6000 + 1); rsh.getRange(from, 8, r0 - from + 1, 1).getValues().forEach(r => { haveR[str_(r[0])] = 1; }); }
     const addR = [];
@@ -6452,7 +6452,7 @@ function dpReports_() {
   return out;
 }
 function dpKeyList_() { return dpKeys_().map(k => ({ id: k.h.slice(0, 10), by: k.by || "", at: k.at || 0, used: k.used || 0 })).reverse(); }
-// Duty Portal sync setup belongs to one person (the portal owner). It's claimed by whoever made the existing keys
+// Data Link sync setup belongs to one person (the portal owner). It's claimed by whoever made the existing keys
 // (or, before any key exists, whoever makes the first one); change DP_OWNER in Script Properties to hand it over.
 function dpIsOwner_(acct, A) {
   const own = PROPS_.getProperty("DP_OWNER");
@@ -6490,10 +6490,10 @@ function obrEntries_() {
     status: str_(r[5]), by: str_(r[6]), at: isDate_(r[7]) ? r[7].getTime() : 0, doneAt: isDate_(r[8]) ? r[8].getTime() : 0, result: str_(r[9]) })).filter(e => e.entry);
 }
 // the Onboarding Roster as rows: A callsign, B forced nickname, C name, D Discord ID, I status, J training status, K date
-// ---- Cadet roster check (owner only): the Google Sheet's Onboarding roster is the truth, the Duty Portal's Cadets roster is fixed to match ----
+// ---- Cadet roster check (owner only): the Google Sheet's Onboarding roster is the truth, the Data Link's Cadets roster is fixed to match ----
 //  the add-on reads the Cadets roster (cadetScan), the owner reviews the differences here, then the add-on makes each change (cadet jobs)
 const DPC_SHEET_ = "Duty Portal Cadets", DPC_HEAD_ = ["Callsign", "Holder", "Discord ID", "State", "Seen"];
-function cdOwner_(acct) {   // the Duty Portal add-on's owner (DP_OWNER), or, before that's recorded, whoever made the add-on's sync keys
+function cdOwner_(acct) {   // the Data Link add-on's owner (DP_OWNER), or, before that's recorded, whoever made the add-on's sync keys
   if (!acct) return false; const own = PROPS_.getProperty("DP_OWNER"); if (own) return own === acct.id;
   try { const K = dpKeys_(), who = pbAccess_(acct).who; if (K.length && who && K.some(k => k.by && k.by === who)) { PROPS_.setProperty("DP_OWNER", acct.id); return true; } } catch (e) {}
   return false;
@@ -6504,7 +6504,7 @@ function cdSheetRows_() {   // every L-8## spot on the Onboarding roster, filled
   d.forEach(r => { const cs = str_(r[0]).trim(); if (!/^L-?8\d\d$/i.test(cs)) return; const nm = str_(r[2]).trim(); out.push({ cs: cs.toUpperCase(), name: /^name$/i.test(nm) ? "" : nm, id: str_(r[3]).replace(/\D/g, "") }); });
   return out;
 }
-function cdScanSave_(d) {   // from the add-on: what the Duty Portal's Cadets roster shows right now
+function cdScanSave_(d) {   // from the add-on: what the Data Link's Cadets roster shows right now
   const who = dpKeys_().find(k => k.h === dpHash_(d.key)); if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid." };
   const rows = (Array.isArray(d.rows) ? d.rows : []).slice(0, 300).map(r => [cellSafe_(clip_(str_(r.cs).toUpperCase(), 10)), cellSafe_(clip_(str_(r.who), 80)), str_(r.id).replace(/\D/g, "") ? "'" + str_(r.id).replace(/\D/g, "") : "", clip_(str_(r.st), 12), new Date()]);
   return withLock_(() => { const sh = dpSheet_(DPC_SHEET_, DPC_HEAD_); if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, DPC_HEAD_.length).clearContent();
@@ -6524,30 +6524,30 @@ function cdPlan_(sheet, scan) {
   sheet.forEach(s => {
     const dp = scan[s.cs] || null, row = { cs: s.cs, sheet: { name: s.name, id: s.id }, dp: dp ? { who: dp.who, id: dp.id, st: dp.st } : null, ok: false, ops: [] };
     const add = (type, extra, why) => { const op = Object.assign({ id: type + ":" + s.cs, type: type, cs: s.cs, why: why }, extra); row.ops.push(op.id); ops.push(op); };
-    if (!dp) { row.note = Object.keys(scan).length ? "Not on the Duty Portal's Cadets roster" : ""; rows.push(row); return; }
+    if (!dp) { row.note = Object.keys(scan).length ? "Not on the Data Link's Cadets roster" : ""; rows.push(row); return; }
     if (s.id) {
-      if (dp.id === s.id) { row.ok = true; if (s.name && dp.who && nameKey_(dp.who).indexOf(nameKey_(s.name.replace(/^.*\|\s*/, ""))) === -1 && !sameName_(dp.who, s.name)) row.note = "Same person; the Duty Portal shows their Discord name"; rows.push(row); return; }
+      if (dp.id === s.id) { row.ok = true; if (s.name && dp.who && nameKey_(dp.who).indexOf(nameKey_(s.name.replace(/^.*\|\s*/, ""))) === -1 && !sameName_(dp.who, s.name)) row.note = "Same person; the Data Link shows their Discord name"; rows.push(row); return; }
       if (dp.id && !want[dp.id]) add("clear", { discord: dp.id, name: dp.who }, "Wrong person in " + s.cs + " (" + (dp.who || dp.id) + "), not on the Onboarding roster");
       else if (dp.id) row.note = (dp.who || dp.id) + " is moved out to " + want[dp.id] + " first";
       const other = (byId[s.id] || []).find(k => k !== s.cs);
-      if (other) add("move", { from: other, discord: s.id, name: s.name }, s.name + " is in " + other + " on the Duty Portal: move them to " + s.cs);
-      else add("assign", { discord: s.id, name: s.name }, "Assign " + s.name + " to " + s.cs + " (if they're not in the Duty Portal, the spot is put on hold)");
+      if (other) add("move", { from: other, discord: s.id, name: s.name }, s.name + " is in " + other + " on the Data Link: move them to " + s.cs);
+      else add("assign", { discord: s.id, name: s.name }, "Assign " + s.name + " to " + s.cs + " (if they're not in the Data Link, the spot is put on hold)");
     } else if (s.name) {
       if (!/hold|reserv/i.test(dp.st)) add("hold", { name: s.name }, s.name + " has no Discord ID on the sheet: hold " + s.cs);
       else row.ok = true;
     } else if (dp.id && want[dp.id]) { row.note = (dp.who || dp.id) + " is moved from here to " + want[dp.id];
     } else if (dp.id) {
-      add("clear", { discord: dp.id, name: dp.who }, s.cs + " is empty on the sheet but the Duty Portal has " + (dp.who || dp.id));
+      add("clear", { discord: dp.id, name: dp.who }, s.cs + " is empty on the sheet but the Data Link has " + (dp.who || dp.id));
     } else row.ok = true;
     rows.push(row);
   });
   const order = { clear: 0, move: 1, assign: 2, hold: 3 }; ops.sort((a, b) => order[a.type] - order[b.type]);
   return { rows: rows, ops: ops };
 }
-// ---- Discord ID check (owner only): the Duty Portal's Main + Cadets rosters say whose Discord ID sits in each callsign;
+// ---- Discord ID check (owner only): the Data Link's Main + Cadets rosters say whose Discord ID sits in each callsign;
 //  the roster sheet's Personnel / Onboarding tabs (and then every division tab, by name) are corrected to match ----
 const DPI_SHEET_ = "Duty Portal IDs", DPI_HEAD_ = ["Tab", "Callsign", "Holder", "Discord ID", "Seen"];
-function idScanSave_(d) {   // from the add-on: every filled spot on the Duty Portal's Main and Cadets rosters
+function idScanSave_(d) {   // from the add-on: every filled spot on the Data Link's Main and Cadets rosters
   const who = dpKeys_().find(k => k.h === dpHash_(d.key)); if (!str_(d.key) || !who) return { ok: false, error: "This sync key isn't valid." };
   const rows = (Array.isArray(d.rows) ? d.rows : []).slice(0, 600).filter(r => str_(r.id).replace(/\D/g, "")).map(r => [clip_(str_(r.tab), 10), cellSafe_(clip_(str_(r.cs).toUpperCase(), 10)), cellSafe_(clip_(str_(r.who), 80)), "'" + str_(r.id).replace(/\D/g, ""), new Date()]);
   return withLock_(() => { const sh = dpSheet_(DPI_SHEET_, DPI_HEAD_); if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, DPI_HEAD_.length).clearContent();
@@ -6569,24 +6569,24 @@ function idSheetRows_() {
   return out;
 }
 function idPlan_() {
-  // step 1: the Main roster (Personnel tab) against the Duty Portal's Main roster. The Onboarding tab isn't checked against the
-  // Duty Portal (not every cadet is on it yet); its IDs are only used to recognize people on the division tabs in step 2
+  // step 1: the Main roster (Personnel tab) against the Data Link's Main roster. The Onboarding tab isn't checked against the
+  // Data Link (not every cadet is on it yet); its IDs are only used to recognize people on the division tabs in step 2
   const scan = idScan_(), all = idSheetRows_(), dept = all.filter(x => x.tab === "Personnel"), onb = all.filter(x => x.tab === "Onboarding"), items = [], cnt = {}; dept.forEach(x => { if (x.id) cnt[x.id] = (cnt[x.id] || 0) + 1; });
   const dpBy = {}; Object.keys(scan).forEach(k => { dpBy[scan[k].id] = scan[k]; });
   const finalId = {}, held = {};   // department row → the ID it will have after the fixes; rows waiting on a look
 
   dept.forEach(x => {
     const dp = scan[x.cs]; finalId[x.tab + x.row] = x.id;
-    if (!dp) { if (Object.keys(scan).length) items.push({ key: "n:" + x.tab + x.row, tab: "Main roster", cs: x.cs, name: x.name, from: x.id, to: "", st: "missing", why: "Nobody in " + x.cs + " on the Duty Portal's Main roster" }); return; }
+    if (!dp) { if (Object.keys(scan).length) items.push({ key: "n:" + x.tab + x.row, tab: "Main roster", cs: x.cs, name: x.name, from: x.id, to: "", st: "missing", why: "Nobody in " + x.cs + " on the Data Link's Main roster" }); return; }
     if (dp.id === x.id) return;
     const other = dept.find(y => y !== x && y.id === dp.id), named = idNameOk_(dp.who, x.name), twin = dept.filter(y => y !== x && idNameOk_(y.name, x.name));
     let st = "fix", why = "";
-    if (other && !idNameOk_(other.name, x.name)) { st = "review"; why = "The Duty Portal has " + (dp.who || dp.id) + " in " + x.cs + ", but that ID is " + other.name + "'s (" + other.cs + ") on the sheet"; }
+    if (other && !idNameOk_(other.name, x.name)) { st = "review"; why = "The Data Link has " + (dp.who || dp.id) + " in " + x.cs + ", but that ID is " + other.name + "'s (" + other.cs + ") on the sheet"; }
     else if (!x.id) why = "No Discord ID on the sheet";
     else if (cnt[x.id] > 1) why = "The sheet's ID is on " + cnt[x.id] + " rows (copied by mistake)";
-    else if (named && twin.length) { st = "review"; why = "Two officers named " + x.name + " on the Main roster (" + [x.cs].concat(twin.map(y => y.cs)).join(", ") + ") — check the Duty Portal holder is this one"; }
-    else if (named) why = "Same name on the Duty Portal (" + (dp.who || "") + "), different ID";
-    else { st = "review"; why = "The Duty Portal shows " + (dp.who || "someone") + " in " + x.cs + " — check it's the same person"; }
+    else if (named && twin.length) { st = "review"; why = "Two officers named " + x.name + " on the Main roster (" + [x.cs].concat(twin.map(y => y.cs)).join(", ") + ") — check the Data Link holder is this one"; }
+    else if (named) why = "Same name on the Data Link (" + (dp.who || "") + "), different ID";
+    else { st = "review"; why = "The Data Link shows " + (dp.who || "someone") + " in " + x.cs + " — check it's the same person"; }
     items.push({ key: "d:" + x.tab + x.row, tab: "Main roster", sheet: x.sheet, row: x.row, col: x.col, cs: x.cs, name: x.name, from: x.id, to: dp.id, dpWho: dp.who, st: st, why: why });
     if (st === "fix") finalId[x.tab + x.row] = dp.id; else held[x.tab + x.row] = 1;
   });

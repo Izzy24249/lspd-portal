@@ -962,7 +962,7 @@ button.pbx-box:hover{border-color:var(--green)}
 .ob-clean{font-size:13px;color:#fcd34d;background:rgba(255,190,61,.08);border:1px solid rgba(255,190,61,.3);border-radius:10px;padding:9px 12px}
 .sect .ann-btn{order:2;height:30px;font-size:11px}
 
-/* Duty Portal roster update status (promotion follow-ups) */
+/* Data Link roster update status (promotion follow-ups) */
 .pbx-dp{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;padding:7px 11px;border-radius:9px;font:600 12px Inter,system-ui,sans-serif;border:1px solid var(--line2,rgba(255,255,255,.12));background:rgba(255,255,255,.03);color:#b9c6e4}
 .pbx-dp span{flex:1;min-width:0}
 .pbx-dp.wait{border-color:rgba(250,204,21,.35);color:#fde68a}
@@ -1146,7 +1146,7 @@ button.pbx-box:hover{border-color:var(--green)}
 .vt-rules b{font:700 11px "JetBrains Mono",monospace;letter-spacing:.14em}.vt-rules ul{margin:6px 0 0;padding-left:18px}
 .card.np .top{position:static;padding:16px 16px 0;display:grid;gap:6px}.card.np .top .rk{position:static;justify-self:start}.card.np .top b{font:700 20px/1.1 "Barlow Condensed",sans-serif;letter-spacing:.03em}
 
-/* report source dots: Duty Portal blue, a division's own color, trainings purple, other MDT reports green, Report Builder amber */
+/* report source dots: Data Link blue, a division's own color, trainings purple, other MDT reports green, Report Builder amber */
 .rd{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle;flex:none;background:var(--c,#94a3b8);box-shadow:0 0 6px var(--c,#94a3b8)}
 .rd.dp{--c:#3b82f6}.rd.train{--c:#a855f7}.rd.mdt{--c:#22d3ee}.rd.rb{--c:#f59e0b}
 .pbx-lg{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0 4px;font-size:12.5px;color:var(--mute)}.pbx-lg span{display:inline-flex;align-items:center}

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         LSPD MDT · Duty Portal sync
 // @namespace    https://lspdisthebest.net/
-// @version      1.6.0
-// @description  Reads Duty Portal hours, shifts and reports for the LSPD MDT promotion board, and updates the Duty Portal roster after promotions are marked done in the MDT. Runs in your own logged-in browser; never sees your password.
+// @version      1.6.1
+// @description  Reads Data Link hours, shifts and reports for the LSPD MDT promotion board, and updates the Data Link roster after promotions are marked done in the MDT. Runs in your own logged-in browser; never sees your password.
 // @match        https://portal.vanitydesigns.cloud/portal/lspd*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
@@ -21,7 +21,7 @@
   const BASE = "/portal/lspd", REVISIT = 24 * 3600e3, ONDUTY_REVISIT = 3 * 3600e3, TAB = Math.random().toString(36).slice(2);
   const get = (k, d) => { try { const v = GM_getValue(k); return v === undefined ? d : v; } catch (e) { return d; } };
   const set = (k, v) => { try { GM_setValue(k, v); } catch (e) {} };
-  // timers from a tiny worker: a Duty Portal tab in the background gets its own timers slowed to once a minute by the browser, workers don't
+  // timers from a tiny worker: a Data Link tab in the background gets its own timers slowed to once a minute by the browser, workers don't
   const WT = (() => { try { const w = new Worker(URL.createObjectURL(new Blob(["onmessage=e=>setTimeout(()=>postMessage(e.data[0]),e.data[1])"], { type: "text/javascript" }))), cb = {}; let n = 0;
     w.onmessage = e => { const f = cb[e.data]; delete cb[e.data]; if (f) f(); }; return (f, ms) => { cb[++n] = f; w.postMessage([n, ms]); }; } catch (e) { return null; } })();
   const sleep = ms => new Promise(r => (WT || setTimeout)(r, ms));
@@ -52,19 +52,19 @@
     else if (c === "4") { set("seen", {}); alert("Done. The next sync reads every officer again."); }
   };
   function askKey() {
-    const k = prompt("Paste the sync key from the MDT promotion board\n(⚙ Requirements → Duty Portal sync → Make a sync key):", "");
+    const k = prompt("Paste the sync key from the MDT promotion board\n(⚙ Requirements → Data Link sync → Make a sync key):", "");
     if (k && /^lspd-[a-z0-9]{10,}$/i.test(k.trim())) { set("key", k.trim()); set("err", ""); draw(); run(true); }
     else if (k) alert("That doesn't look like a sync key. It starts with \"lspd-\".");
   }
 
-  // ---------- one hidden frame we load Duty Portal pages into ----------
+  // ---------- one hidden frame we load Data Link pages into ----------
   let frame = null;
   function freeFrame() { if (!frame) return; try { frame.src = "about:blank"; } catch (e) {} frame.remove(); frame = null; }   // blank it first so the browser lets go of the page
   function load(path) {
     return new Promise(res => {
       freeFrame();
       frame = document.createElement("iframe");
-      // kept on screen (but invisible, behind the page): the Duty Portal only loads more rows for frames the browser is drawing
+      // kept on screen (but invisible, behind the page): the Data Link only loads more rows for frames the browser is drawing
       frame.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;opacity:0.01;z-index:-1;pointer-events:none;border:0";
       const t = setTimeout(() => res(frame ? frame.contentDocument : document), 30000);   // never wait forever for a page
       frame.onload = () => { clearTimeout(t); res(frame.contentDocument); };
@@ -83,7 +83,7 @@
     const empty = () => /no officers found/i.test((d.querySelector("main") || d.body || {}).innerText || "");
     const got = await waitFor(() => Object.keys(rows()).length ? "rows" : empty() ? "empty" : null, 25000);
     if (got === "empty") return [];   // nobody on duty right now (or nobody matches): that's fine, not an error
-    if (!got) throw new Error(/sign[- ]?in|log ?in/i.test((d.location && d.location.pathname) || "") ? "signed out of the Duty Portal: sign in again in this tab" : "couldn't read the officer list (signed out?)");
+    if (!got) throw new Error(/sign[- ]?in|log ?in/i.test((d.location && d.location.pathname) || "") ? "signed out of the Data Link: sign in again in this tab" : "couldn't read the officer list (signed out?)");
     let n = 0, same = 0;
     for (let i = 0; i < (full ? 80 : 6) && same < (full ? 4 : 2); i++) {
       d.querySelectorAll("main *").forEach(el => { if (el.scrollHeight > el.clientHeight + 40 && /auto|scroll/.test(getComputedStyle(el).overflowY)) el.scrollTop = el.scrollHeight; });
@@ -136,7 +136,7 @@
     }
     return { pid: pid, discord: disc, name: name, shifts: shifts, reports: reports };
   }
-  // ---------- Duty Portal roster jobs (after a promotion is marked done in the MDT) ----------
+  // ---------- Data Link roster jobs (after a promotion is marked done in the MDT) ----------
   const csRe = cs => new RegExp("^\\s*" + String(cs).replace(/[-]/g, "\\-") + "\\b", "i");
   const rowsOf = d => [...d.querySelectorAll("tbody tr, tr")].filter((r, i, a) => a.indexOf(r) === i);
   const spotRow = (d, cs) => rowsOf(d).find(r => csRe(cs).test(r.innerText || ""));
@@ -199,7 +199,7 @@
       step("searching for " + job.name + " by Discord ID"); typeIn(inp, job.discord);
       await sleep(1200);
       const opts = await waitFor(() => { const o = [...x.querySelectorAll("[role=option],[cmdk-item]")].filter(e => (e.innerText || "").trim()); return o.length ? o : null; }, 8000);
-      if (!opts) { await escape(d); throw new Error("no member with Discord ID " + job.discord + " in the Duty Portal"); }
+      if (!opts) { await escape(d); throw new Error("no member with Discord ID " + job.discord + " in the Data Link"); }
       if (opts.length > 1) { await escape(d); throw new Error("more than one member matched Discord ID " + job.discord); }
       if (/already on this roster/i.test(opts[0].innerText)) { await escape(d); throw new Error("they're already on the main roster at another spot"); }
       step("picking " + job.name + " for " + job.to); press(opts[0]); await confirmAny(d);
@@ -264,7 +264,7 @@
       step("moving " + op.name + " " + op.from + " → " + cs); await moveTo(d, { to: cs, discord: op.discord }, row); return "moved " + op.from + " → " + cs;
     }
     if (op.type === "hold") { step("holding " + cs + " for " + (op.name || "")); return await holdSpot(d, cs, op.name); }
-    // assign (falls back to a hold when the officer isn't in the Duty Portal at all)
+    // assign (falls back to a hold when the officer isn't in the Data Link at all)
     let row = spotRow(d, cs); if (!row) throw new Error(cs + " isn't on the Cadets roster");
     if (idIn(row) === op.discord) return "already in " + cs;
     if (idIn(row)) throw new Error(cs + " has someone else in it now; check again first");
@@ -277,7 +277,7 @@
     const inp = x.querySelector("input"); if (!inp) { await escape(d); throw new Error("no search box in the Assign window"); }
     typeIn(inp, op.discord); await sleep(1500);
     const opts = await waitFor(() => { const o = [...x.querySelectorAll("[role=option],[cmdk-item]")].filter(e => (e.innerText || "").trim()); return o.length ? o : null; }, 6000);
-    if (!opts) { await escape(d); step(op.name + " isn't in the Duty Portal: holding " + cs); const h = await holdSpot(await openRoster("cadets"), cs, op.name); return "not in the Duty Portal yet · " + h; }
+    if (!opts) { await escape(d); step(op.name + " isn't in the Data Link: holding " + cs); const h = await holdSpot(await openRoster("cadets"), cs, op.name); return "not in the Data Link yet · " + h; }
     if (opts.length > 1) { await escape(d); throw new Error("more than one member matched Discord ID " + op.discord); }
     if (/already on this roster/i.test(opts[0].innerText)) { await escape(d); throw new Error(op.name + " is already on the Cadets roster in another spot; check again"); }
     step("assigning " + op.name + " to " + cs); press(opts[0]); await confirmAny(d);

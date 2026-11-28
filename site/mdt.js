@@ -262,7 +262,7 @@
     h += L.length ? '<div class="ds-list">' + L.map(o => '<div class="ds-row' + (o.sup ? " sup" : "") + '" title="' + esc((o.rank ? o.rank + " · " : "") + o.name) + '"><code>' + esc(o.callsign || "—") + "</code><span>" + esc(o.name || "Officer") + "</span><em>" + durTxt(o.minutes) + "</em></div>").join("") + "</div>" : "";
     if (M) { const left = Math.max(0, M.goalMinutes - M.window), pct = Math.min(100, Math.round(M.window / Math.max(1, M.goalMinutes) * 100));
       h += '<div class="ds-me"><div><small>' + (du.me ? "This shift" : "Last shift") + "</small><b>" + (du.me ? durTxt(M.live) : M.last ? durTxt(M.last.minutes) : "—") + "</b></div><div><small>Week</small><b>" + durTxt(M.week) + "</b></div><div><small>" + M.goalDays + " days</small><b>" + durTxt(M.window) + '</b></div></div><div class="shift-bar' + (left ? "" : " ok") + '"><i style="width:' + pct + '%"></i></div><p class="duty-note">' + (left ? durTxt(left) + " to go for " + durTxt(M.goalMinutes) : "✓ " + durTxt(M.goalMinutes) + " minimum met") + "</p>"; }
-    h += '<p class="duty-note">' + (du.src === "dp" ? "From the Duty Portal" : "From the On Duty role") + (du.checkedAt ? " · checked " + (ago(du.checkedAt) === "now" ? "just now" : ago(du.checkedAt) + " ago") : "") + "</p></section>";
+    h += '<p class="duty-note">' + (du.src === "dp" ? "From the Data Link" : "From the On Duty role") + (du.checkedAt ? " · checked " + (ago(du.checkedAt) === "now" ? "just now" : ago(du.checkedAt) + " ago") : "") + "</p></section>";
     return h;
   }
   function homeHTML() {

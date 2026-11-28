@@ -1,5 +1,5 @@
 /* LSPD MDT — Discord ID check (portal owner only).
-   The Duty Portal add-on reads who holds each callsign on the Duty Portal's Main and Cadets rosters (with their Discord IDs).
+   The Data Link add-on reads who holds each callsign on the Data Link's Main and Cadets rosters (with their Discord IDs).
    The roster sheet's Personnel / Onboarding tabs are compared callsign by callsign, then every division tab by name,
    and the IDs you leave ticked are corrected on the roster sheet. */
 (function () {
@@ -26,28 +26,28 @@
   const picked = x => x.to && x.row !== undefined && (x.st === "fix" ? !OFF[x.key] : !!ON[x.key]);
   function html() {
     if (!B && !LOADING) load();
-    let h = '<div class="cd-wrap id-wrap"><div class="h2"><div><h1>DISCORD ID CHECK</h1><p><b>Step 1:</b> the Duty Portal add-on reads who holds each callsign on the Duty Portal\'s <b>Main</b> roster, with their Discord IDs, and every callsign on the roster sheet\'s Main (Personnel) roster is compared with it. <b>Step 2:</b> everyone on each division tab is matched by name to the corrected Main roster (or the Onboarding roster) and their Discord ID is checked. The Onboarding roster itself isn\'t checked against the Duty Portal, since not every cadet is on it. The IDs you leave ticked are corrected on the roster sheet.</p></div></div>';
+    let h = '<div class="cd-wrap id-wrap"><div class="h2"><div><h1>DISCORD ID CHECK</h1><p><b>Step 1:</b> the Data Link add-on reads who holds each callsign on the Data Link\'s <b>Main</b> roster, with their Discord IDs, and every callsign on the roster sheet\'s Main (Personnel) roster is compared with it. <b>Step 2:</b> everyone on each division tab is matched by name to the corrected Main roster (or the Onboarding roster) and their Discord ID is checked. The Onboarding roster itself isn\'t checked against the Data Link, since not every cadet is on it. The IDs you leave ticked are corrected on the roster sheet.</p></div></div>';
     if (!B) return h + '<div class="pbx-empty">Loading…</div></div>';
     if (!B.ok) return h + '<div class="pbx-empty">' + esc(B.error === "AUTH" ? "Your MDT session expired. Sign on again." : B.error || "Couldn't load.") + "</div></div>";
     const sc = B.scan || {}, I = B.items || [];
-    h += '<div class="cd-bar"><button class="pbx-btn" data-idscan' + (live(B.job) || !B.sync ? " disabled" : "") + ">" + (live(B.job) ? "CHECKING…" : "🔎 CHECK THE DUTY PORTAL NOW") + "</button>" +
-      '<span class="cd-meta">' + (sc.at ? "Last read " + ago(sc.at) + " · " + (sc.n || 0) + " filled spots" : "The Duty Portal hasn't been read yet") + "</span>" + jobChip(B.job) + "</div>";
-    if (!B.sync) h += '<div class="cd-warn">The Duty Portal add-on isn\'t set up yet, so it can\'t read the rosters.</div>';
+    h += '<div class="cd-bar"><button class="pbx-btn" data-idscan' + (live(B.job) || !B.sync ? " disabled" : "") + ">" + (live(B.job) ? "CHECKING…" : "🔎 CHECK THE DATA LINK NOW") + "</button>" +
+      '<span class="cd-meta">' + (sc.at ? "Last read " + ago(sc.at) + " · " + (sc.n || 0) + " filled spots" : "The Data Link hasn't been read yet") + "</span>" + jobChip(B.job) + "</div>";
+    if (!B.sync) h += '<div class="cd-warn">The Data Link add-on isn\'t set up yet, so it can\'t read the rosters.</div>';
     { const A = B.addon || {}, ver = A.v ? Math.floor(A.v / 100) + "." + Math.floor(A.v / 10) % 10 + "." + A.v % 10 : "?";
       const quiet = !A.at || Date.now() - A.at > 3 * 60e3;
       h += '<div class="' + (quiet || A.v < 160 ? "cd-warn" : "cd-meta id-hb") + '">🤖 Add-on: ' + (A.at ? "version " + ver + ", last checked in " + ago(A.at) : "hasn't checked in yet") +
-        (A.v && A.v < 160 ? " — <b>it needs 1.6.0 for this check.</b> Update it in Tampermonkey, then reload the Duty Portal tab." : quiet ? " — <b>it isn't running right now.</b> Open the Duty Portal (logged in) in the browser where the add-on is installed, and make sure it isn't paused." : " — it picks up the check within a minute.") + "</div>"; }
+        (A.v && A.v < 160 ? " — <b>it needs 1.6.0 for this check.</b> Update it in Tampermonkey, then reload the Data Link tab." : quiet ? " — <b>it isn't running right now.</b> Open the Data Link (logged in) in the browser where the add-on is installed, and make sure it isn't paused." : " — it picks up the check within a minute.") + "</div>"; }
     if (B.error) h += '<div class="cd-warn">' + esc(B.error) + "</div>";
-    if (!sc.at) return h + '<div class="pbx-empty">Press <b>Check the Duty Portal now</b>. The add-on (version 1.6.0 or newer) reads the Main roster, changes nothing there, and the differences show up here in a minute or two.</div></div>';
+    if (!sc.at) return h + '<div class="pbx-empty">Press <b>Check the Data Link now</b>. The add-on (version 1.6.0 or newer) reads the Main roster, changes nothing there, and the differences show up here in a minute or two.</div></div>';
     const n = k => I.filter(x => x.st === k).length;
     h += '<div class="cd-sum"><span class="pbx-chip info">🔧 ' + n("fix") + ' to correct</span><span class="pbx-chip warn">👀 ' + n("review") + ' to look at</span><span class="pbx-chip no">❔ ' + n("missing") + " not matched</span>" +
       '<span class="id-tabs">' + [["todo", "To correct & review"], ["missing", "Not matched"], ["all", "Everything"]].map(t => '<button class="' + (SHOW === t[0] ? "on" : "") + '" data-idshow="' + t[0] + '">' + t[1] + "</button>").join("") + "</span></div>";
     const list = I.filter(x => SHOW === "all" || (SHOW === "todo" ? x.st !== "missing" : x.st === "missing"));
-    if (!list.length) h += '<div class="pbx-empty">' + (SHOW === "missing" ? "Everyone was matched." : "Every Discord ID on the roster sheet matches the Duty Portal.") + "</div>";
+    if (!list.length) h += '<div class="pbx-empty">' + (SHOW === "missing" ? "Everyone was matched." : "Every Discord ID on the roster sheet matches the Data Link.") + "</div>";
     else h += '<div class="cd-tbl id-tbl"><div class="cd-hd"><span></span><span>TAB · SPOT</span><span>OFFICER</span><span>ON THE SHEET</span><span>SHOULD BE</span><span>WHY</span></div>' + list.map(x => {
       const can = x.to && x.row !== undefined, on = picked(x);
       return '<label class="cd-r id-r ' + x.st + '"><span>' + (can ? '<input type="checkbox" data-idk="' + esc(x.key) + '" data-st="' + x.st + '"' + (on ? " checked" : "") + ">" : "") + "</span>" +
-        "<span><small>" + esc(x.tab) + "</small><code>" + esc(x.cs || "—") + "</code></span><span><b>" + esc(x.name) + "</b>" + (x.dpWho ? "<small>Duty Portal: " + esc(x.dpWho) + "</small>" : "") + "</span>" +
+        "<span><small>" + esc(x.tab) + "</small><code>" + esc(x.cs || "—") + "</code></span><span><b>" + esc(x.name) + "</b>" + (x.dpWho ? "<small>Data Link: " + esc(x.dpWho) + "</small>" : "") + "</span>" +
         '<span class="id-v' + (x.to ? " old" : "") + '">' + (x.from ? esc(x.from) : "<i>blank</i>") + "</span>" +
         '<span class="id-v new">' + (x.to ? esc(x.to) : "—") + "</span><span class=\"id-why\">" + (x.st === "review" ? "👀 " : x.st === "missing" ? "❔ " : "") + esc(x.why) + "</span></label>";
     }).join("") + "</div>";
@@ -65,7 +65,7 @@
     const t = e.target; if (!t.closest || !document.querySelector(".id-wrap")) return;
     const sh = t.closest("[data-idshow]"); if (sh) { SHOW = sh.dataset.idshow; M().draw(); return; }
     if (t.closest("[data-idscan]")) { B.job = { st: "queued" }; M().draw();
-      call("idScan").then(r => { if (!r.ok) { M().toast(r.error || "Couldn't start the check."); B.job = null; M().draw(); return; } M().toast("Sent to the Duty Portal add-on. It usually takes a minute or two."); load(); }); return; }
+      call("idScan").then(r => { if (!r.ok) { M().toast(r.error || "Couldn't start the check."); B.job = null; M().draw(); return; } M().toast("Sent to the Data Link add-on. It usually takes a minute or two."); load(); }); return; }
     if (t.closest("[data-idfix]")) {
       const keys = (B.items || []).filter(picked).map(x => x.key); if (!keys.length || BUSY) return;
       BUSY = true; M().draw();
