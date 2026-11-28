@@ -21,7 +21,7 @@
  */
 
 // Bump when the website needs something new from this file. admin.html warns if this is behind.
-const BACKEND_VERSION = 175;
+const BACKEND_VERSION = 176;
 
 const PROPS_ = PropertiesService.getScriptProperties();
 const CONFIG_SHEET_ = "Portal Config";
@@ -3912,13 +3912,31 @@ function sopLive_(id) {
   } catch (e) {}
   return out;
 }
-var SOP_MEMO_ = null;
+var SOP_MEMO_ = null, REP_MEMO_ = null;
+// every report each officer filed: MDT forms (as the form's own officer), the Duty Portal, the Report Builder — read once per request
+function repSources_() {
+  if (REP_MEMO_) return REP_MEMO_;
+  const lead = {}; (getConfig_().forms || []).forEach(f => { lead[f.id] = [str_(f.meField), autoAuthor_(f)].filter(Boolean); });
+  const repM = {}; actRows_().forEach(r => { const L0 = lead[r.form] || [], x = (r.people || []).find(p => p.i && L0.indexOf(p.f) !== -1); if (x) (repM[x.i] = repM[x.i] || []).push({ at: r.at, title: r.title }); });
+  let dp = {}; try { if (dpState_().at) dp = dpReports_(); } catch (e) {}
+  let rb = {}; try { rb = rbReports_(); } catch (e) {}
+  return (REP_MEMO_ = { mdt: repM, dp: dp, rb: rb });
+}
+function repFiledSince_(id, since) {
+  const R = repSources_(), now = Date.now(), inR = t => t >= since && t <= now;
+  const ev = ((R.mdt[id] || []).filter(x => inR(x.at)).map(x => ({ at: x.at, s: "mdt" }))).concat((R.dp[id] || []).filter(x => inR(x.at)).map(x => ({ at: x.at, s: "dp" })), (R.rb[id] || []).filter(x => inR(x.at)).map(x => ({ at: x.at, s: "rb" }))).sort((a, b) => a.at - b.at), G = [];
+  ev.forEach(x => { const g = G.find(g0 => !g0.s[x.s] && Math.abs(g0.at - x.at) <= 90 * 60000); if (g) g.s[x.s] = 1; else { const s0 = {}; s0[x.s] = 1; G.push({ at: x.at, s: s0 }); } });
+  return G.length;
+}
 function promoEval_(o, rankReqs, checks) {
   const mine = checks || {};
   const items = (rankReqs ? rankReqs.reqs : []).map(q => {
     const c = mine[q.key], a = q.auto; let have = null, auto = false;
-    if (a && a.type === "tig") { have = o.tigDays; auto = have != null && have >= a.need; }
-    if (a && a.type === "reports") { have = o.reports; auto = have >= a.need; }
+    // time in grade: counts as met up to 12 hours early
+    if (a && a.type === "tig") { have = o.tigDays; auto = have != null && (have >= a.need || (o.since > 0 && Date.now() - o.since >= a.need * 864e5 - 12 * 36e5)); if (auto && have < a.need) have = a.need; }
+    // "(5) reports" since reaching the rank: the reports that credit them on the MDT, or the ones they filed across the MDT, the Duty Portal
+    // and the Report Builder (the same report in more than one place counted once), whichever is more
+    if (a && a.type === "reports") { have = Math.max(o.reports || 0, repFiledSince_(o.id, o.since || Date.now() - 28 * 864e5)); auto = have >= a.need; }
     let split = null, parts = null, locked = false;
     if (a && a.type === "cplcert") { const C = o.cpl || {}; parts = [{ t: "Witness a Basic Training (in the Witness box)", done: (C.witness || 0) >= 1 }, { t: "Lead a Basic Training with a SGT+ in the Supervising box", done: (C.lead || 0) >= 1 }];
       have = parts.filter(x => x.done).length; auto = have >= 2; }
@@ -3935,7 +3953,7 @@ function promoEval_(o, rankReqs, checks) {
   return { items: items, done: items.filter(x => x.done).length, total: items.length, ready: items.length > 0 && items.every(x => x.done) };
 }
 function promoBoard_() {
-  const L = promoLadderKeys_(), people = promoPeople_(), checks = pchkAll_(); SOP_MEMO_ = sopIds_();
+  const L = promoLadderKeys_(), people = promoPeople_(), checks = pchkAll_(); SOP_MEMO_ = sopIds_(); REP_MEMO_ = null;
   const byIdx = {}; (L.ranks || []).forEach(r => byIdx[r.idx] = r);
   const nextName = idx => { const n = (L.ranks || []).find(x => x.idx > idx); return n ? n.name : "High Command"; };
   return { ok: true, error: L.error || "", doc: L.doc, ranks: (L.ranks || []).map(r => ({ idx: r.idx, label: r.label, name: r.name, next: nextName(r.idx), tig: r.tig, group: r.group })),
@@ -6091,9 +6109,7 @@ function pbOpenSlot_(S, idx) { return S.rows.find(x => x.idx === idx && !x.head 
 function pbView_(acct, A) {
   const now = Date.now(), R = pbRules_(), L = promoLadderKeys_(), checks = pchkAll_(), duty = dutySums_(); SOP_MEMO_ = sopIds_();
   // reports each officer FILED on the MDT (the form's own officer box / lead officer), and the Duty Portal's
-  const lead = {}; (getConfig_().forms || []).forEach(f => { lead[f.id] = [str_(f.meField), autoAuthor_(f)].filter(Boolean); });
-  const repM = {}; actRows_().forEach(r => { const L0 = lead[r.form] || [], x = (r.people || []).find(p => p.i && L0.indexOf(p.f) !== -1); if (x) (repM[x.i] = repM[x.i] || []).push({ at: r.at, title: r.title }); });
-  const DS = dpState_(), dpOn = !!DS.at, dps = dpOn ? dpShifts_() : {}, rep = { mdt: repM, dp: dpOn ? dpReports_() : {}, rb: rbReports_() };
+  REP_MEMO_ = null; const DS = dpState_(), dpOn = !!DS.at, dps = dpOn ? dpShifts_() : {}, rep = repSources_();
   const dpIds = {}; if (dpOn) { const P0 = dpPids_(); Object.keys(P0).forEach(k => dpIds[P0[k]] = 1); }
   // hours: Duty Portal shifts where we have them (every officer, exact clock-in/out); before its first known shift, the On Duty role log
   const role = duty, dutyOf = id => { const d0 = dps[id] || [], r0 = role[id] || [];
